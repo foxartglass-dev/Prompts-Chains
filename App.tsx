@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { LogEntry, LogStatus, PromptTemplate, Result, Service, Placeholder, TaggedSnippet, Tag, WpStatus, WpContentType, Project } from './types.ts';
+import { LogEntry, LogStatus, PromptTemplate, Result, WorkflowItem, Placeholder, TaggedSnippet, Tag, WpStatus, WpContentType, Project } from './types.ts';
 import { generateLlmContent, LlmProvider } from './services/geminiService.ts';
 import { checkAiScore } from './services/zeroGptService.ts';
 import { parseCsv, downloadFile } from './services/fileUtils.ts';
@@ -46,8 +46,8 @@ const App: React.FC = () => {
         }
     };
     
-    const [services, setServices] = useState<Service[]>([]);
-    const [manualServices, setManualServices] = useState('');
+    const [items, setItems] = useState<WorkflowItem[]>([]);
+    const [manualItems, setManualItems] = useState('');
     
     // UI State
     const [isProcessing, setIsProcessing] = useState(false);
@@ -70,8 +70,8 @@ const App: React.FC = () => {
             
             // If the project ID has changed, reset the workspace.
             if (prevId !== null && prevId !== currentId) {
-                setServices([]);
-                setManualServices('');
+                setItems([]);
+                setManualItems('');
                 setLogs([]);
                 setResults([]);
                 setFileName('');
@@ -101,9 +101,9 @@ const App: React.FC = () => {
         }
     };
     
-    const addLog = useCallback((message: string, status: LogStatus, serviceId?: number) => {
+    const addLog = useCallback((message: string, status: LogStatus, itemId?: number) => {
         setLogs(prevLogs => {
-            const newLog = { id: prevLogs.length, message, status, serviceId, timestamp: new Date().toLocaleTimeString() };
+            const newLog = { id: prevLogs.length, message, status, itemId, timestamp: new Date().toLocaleTimeString() };
             const updatedLogs = [...prevLogs, newLog];
             setTimeout(() => { logContainerRef.current?.scrollTo(0, logContainerRef.current.scrollHeight); }, 0);
             return updatedLogs;
@@ -230,11 +230,11 @@ const App: React.FC = () => {
 
     // --- End of Data Mutation Handlers ---
 
-    const loadServices = (servicesData: Service[]) => {
-        setServices(servicesData);
-        addLog(`Successfully loaded ${servicesData.length} services.`, LogStatus.SUCCESS);
-        if (servicesData.length > 0) {
-            setActiveCollapsible('loadedServices');
+    const loadItems = (itemsData: WorkflowItem[]) => {
+        setItems(itemsData);
+        addLog(`Successfully loaded ${itemsData.length} items.`, LogStatus.SUCCESS);
+        if (itemsData.length > 0) {
+            setActiveCollapsible('loadedItems');
         }
     };
 
@@ -244,8 +244,8 @@ const App: React.FC = () => {
             setFileName(file.name);
             const text = await file.text();
             try {
-                const parsedServices = parseCsv(text);
-                loadServices(parsedServices);
+                const parsedItems = parseCsv(text);
+                loadItems(parsedItems);
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error parsing CSV.';
                 addLog(`Error parsing CSV: ${errorMessage}`, LogStatus.ERROR);
@@ -253,46 +253,36 @@ const App: React.FC = () => {
         }
     };
     
-    const handleManualAddServices = () => {
-        if (!currentProject || !manualServices.trim()) {
-            addLog('Text area is empty. Please paste service names.', LogStatus.ERROR);
+    const handleManualAddItems = () => {
+        if (!currentProject || !manualItems.trim()) {
+            addLog('Text area is empty. Please paste items.', LogStatus.ERROR);
             return;
         }
 
-        const serviceNames = manualServices.split(/\r?\n/).filter(line => line.trim() !== '');
+        const itemNames = manualItems.split(/\r?\n/).filter(line => line.trim() !== '');
 
-        const categoryMap = currentProject.state.tags.reduce((acc, tag) => {
-            let category = 'Service';
-            if (tag.name === 'H') category = 'House Cleaning Service';
-            if (tag.name === 'J') category = 'Janitorial Service';
-            if (tag.name === 'C') category = 'Construction Site Cleaning';
-            acc[tag.name] = category;
-            return acc;
-        }, {} as Record<string, string>);
-
-        const parsedServices: Service[] = serviceNames.map((serviceName, index) => {
-            const tagMatch = serviceName.match(/\((H|J|C)\)/);
-            const tag = tagMatch ? tagMatch[1] as 'H' | 'J' | 'C' : null;
-            const category = tag ? categoryMap[tag] || 'General Service' : 'General Service';
-            return { id: index, service_name: serviceName, tag, category };
+        const parsedItems: WorkflowItem[] = itemNames.map((itemName, index) => {
+            const tagMatch = itemName.match(/\(([^)]+)\)/);
+            const tag = tagMatch ? tagMatch[1] : null;
+            return { id: index, name: itemName, tag };
         });
         
-        loadServices(parsedServices);
+        loadItems(parsedItems);
     };
 
-    const fillPrompt = (template: string, service: Service, dynamicVars: Record<string, string>): string => {
+    const fillPrompt = (template: string, item: WorkflowItem, dynamicVars: Record<string, string>): string => {
         if (!currentProject) return template;
         let filledTemplate = template;
 
         const universalPlaceholders = currentProject.state.placeholders.filter(p => !p.tag);
-        const taggedPlaceholders = currentProject.state.placeholders.filter(p => p.tag === service.tag);
+        const taggedPlaceholders = currentProject.state.placeholders.filter(p => p.tag === item.tag);
         
         filledTemplate = filledTemplate.replace(/\[([^\]]+)\]/g, (_, key) => dynamicVars[key.trim()] || `[${key.trim()}]`);
         
-        if(service.tag) {
-            const serviceTag = service.tag;
+        if(item.tag) {
+            const itemTag = item.tag;
             currentProject.state.taggedSnippets.forEach(s => {
-                const snippetValue = s.values[serviceTag] || '';
+                const snippetValue = s.values[itemTag] || '';
                 filledTemplate = filledTemplate.replace(new RegExp(`{{{${s.key}}}}`, 'g'), snippetValue);
             });
         }
@@ -305,17 +295,16 @@ const App: React.FC = () => {
              filledTemplate = filledTemplate.replace(new RegExp(`{${p.key}}`, 'g'), p.value);
         });
 
-        filledTemplate = filledTemplate.replace(/{service_name}/g, service.service_name);
-        filledTemplate = filledTemplate.replace(/{category}/g, service.category || '');
+        filledTemplate = filledTemplate.replace(/{item_name}/g, item.name);
 
         return filledTemplate;
     };
     
-    const parseArticleOutput = (text: string) => {
+    const parseFinalOutput = (text: string) => {
         const metaTitlesSeparator = '---META TITLES---';
         const metaDescriptionsSeparator = '---META DESCRIPTIONS---';
         const articleEnd = text.indexOf(metaTitlesSeparator);
-        const article = articleEnd !== -1 ? text.substring(0, articleEnd).trim() : text;
+        const finalOutput = articleEnd !== -1 ? text.substring(0, articleEnd).trim() : text;
         const titlesStart = text.indexOf(metaTitlesSeparator);
         const descriptionsStart = text.indexOf(metaDescriptionsSeparator);
         let metaTitles: string[] = [];
@@ -328,32 +317,32 @@ const App: React.FC = () => {
             const descriptionsBlock = text.substring(descriptionsStart + metaDescriptionsSeparator.length).trim();
             metaDescriptions = descriptionsBlock.split('\n').map(line => line.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
         }
-        return { article, metaTitles, metaDescriptions };
+        return { finalOutput, metaTitles, metaDescriptions };
     };
 
     const processWorkflow = async () => {
-        if (!currentProject || !services.length || !currentProject.state.promptTemplates.length) {
-            addLog('Prerequisites not met: Add services and define at least one prompt.', LogStatus.ERROR);
+        if (!currentProject || !items.length || !currentProject.state.promptTemplates.length) {
+            addLog('Prerequisites not met: Add items and define at least one prompt.', LogStatus.ERROR);
             return;
         }
 
         setIsProcessing(true);
         setResults([]);
         setLogs([]);
-        addLog(`Starting batch processing for ${services.length} services using ${currentProject.state.selectedModel}...`, LogStatus.INFO);
+        addLog(`Starting batch processing for ${items.length} items using ${currentProject.state.selectedModel}...`, LogStatus.INFO);
         const startTime = Date.now();
 
-        for (const service of services) {
+        for (const item of items) {
             const promptOutputs: Record<string, string> = {};
             try {
-                if (!service.tag) throw new Error(`Service "${service.service_name}" is missing a tag.`);
-                if (!currentProject.state.tags.find(t => t.name === service.tag)) throw new Error(`Tag "${service.tag}" is not defined.`);
+                if (!item.tag) throw new Error(`Item "${item.name}" is missing a tag.`);
+                if (!currentProject.state.tags.find(t => t.name === item.tag)) throw new Error(`Tag "${item.tag}" is not defined.`);
                 
-                addLog(`[${service.service_name}] Starting process...`, LogStatus.WORKING, service.id);
+                addLog(`[${item.name}] Starting process...`, LogStatus.WORKING, item.id);
 
                 for (const prompt of currentProject.state.promptTemplates) {
-                    addLog(`[${service.service_name}] Running prompt: "${prompt.name}"...`, LogStatus.INFO, service.id);
-                    const filledPrompt = fillPrompt(prompt.template, service, promptOutputs);
+                    addLog(`[${item.name}] Running prompt: "${prompt.name}"...`, LogStatus.INFO, item.id);
+                    const filledPrompt = fillPrompt(prompt.template, item, promptOutputs);
                     const output = await generateLlmContent(filledPrompt, currentProject.state.selectedModel, { claude: currentProject.state.apiKeys.claude });
                     if (output.startsWith('Error:')) throw new Error(output);
                     promptOutputs[prompt.outputKey] = output;
@@ -364,28 +353,28 @@ const App: React.FC = () => {
                 
                 const combinedOutput = mainContentKeys.map(key => promptOutputs[key]).join('\n\n---\n\n');
                 
-                const { article, metaTitles, metaDescriptions } = parseArticleOutput(combinedOutput);
-                addLog(`[${service.service_name}] Generated final content.`, LogStatus.INFO, service.id);
+                const { finalOutput, metaTitles, metaDescriptions } = parseFinalOutput(combinedOutput);
+                addLog(`[${item.name}] Generated final content.`, LogStatus.INFO, item.id);
 
-                addLog(`[${service.service_name}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, service.id);
-                const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, article);
-                addLog(`[${service.service_name}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, service.id);
+                addLog(`[${item.name}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, item.id);
+                const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
+                addLog(`[${item.name}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
 
                 const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
                 const timestamp = new Date().toISOString();
                 
-                const txtContent = `${article}\n\n---META TITLES---\n${metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
+                const txtContent = `${finalOutput}\n\n---META TITLES---\n${metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
                 
                 const jsonContent = JSON.stringify({
-                    service_name: service.service_name, tag: service.tag, category: service.category, article, meta_titles: metaTitles,
-                    meta_descriptions: metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp,
+                    item_name: item.name, tag: item.tag, final_output: finalOutput, parsed_titles: metaTitles,
+                    parsed_summaries: metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp,
                 }, null, 2);
 
-                setResults(prev => [...prev, { service, article, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
-                addLog(`[${service.service_name}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, service.id);
+                setResults(prev => [...prev, { item, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
+                addLog(`[${item.name}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-                addLog(`[${service.service_name}] Failed: ${errorMessage}`, LogStatus.ERROR, service.id);
+                addLog(`[${item.name}] Failed: ${errorMessage}`, LogStatus.ERROR, item.id);
             }
         }
         
@@ -406,16 +395,16 @@ const App: React.FC = () => {
         if (!currentProject) return;
         const { url, user, password } = currentProject.state.wpCredentials;
         if (!url || !user || !password) {
-            addLog(`[${result.service.service_name}] WordPress credentials are not set.`, LogStatus.ERROR, result.service.id);
+            addLog(`[${result.item.name}] WordPress credentials are not set.`, LogStatus.ERROR, result.item.id);
             return;
         }
 
-        const updateResultStatus = (serviceId: number, status: WpStatus, link?: string, error?: string) => {
-            setResults(prev => prev.map(r => r.service.id === serviceId ? { ...r, wpStatus: status, wpLink: link, wpError: error } : r));
+        const updateResultStatus = (itemId: number, status: WpStatus, link?: string, error?: string) => {
+            setResults(prev => prev.map(r => r.item.id === itemId ? { ...r, wpStatus: status, wpLink: link, wpError: error } : r));
         };
         
-        updateResultStatus(result.service.id, 'publishing');
-        addLog(`[${result.service.service_name}] Publishing to WordPress...`, LogStatus.WORKING, result.service.id);
+        updateResultStatus(result.item.id, 'publishing');
+        addLog(`[${result.item.name}] Publishing to WordPress...`, LogStatus.WORKING, result.item.id);
 
         try {
             const placeholderData = currentProject.state.placeholders.reduce((acc, p) => {
@@ -427,14 +416,13 @@ const App: React.FC = () => {
 
             const templateData = {
                 ...placeholderData,
-                service_name: result.service.service_name,
-                category: result.service.category,
-                tag: result.service.tag,
+                item_name: result.item.name,
+                tag: result.item.tag,
                 status: result.status,
             };
             
             const generatedTitle = fillSimpleTemplate(currentProject.state.wpTitleTemplate, templateData);
-            const title = generatedTitle.trim() ? generatedTitle : (result.metaTitles[0] || result.service.service_name);
+            const title = generatedTitle.trim() ? generatedTitle : (result.metaTitles[0] || result.item.name);
 
             const endpoint = `${url.replace(/\/$/, '')}/wp-json/wp/v2/${currentProject.state.wpContentType}`;
             const headers = new Headers();
@@ -443,7 +431,7 @@ const App: React.FC = () => {
 
             const body = JSON.stringify({
                 title: title,
-                content: result.article,
+                content: result.finalOutput,
                 status: 'publish', // Or 'draft'
             });
 
@@ -459,22 +447,22 @@ const App: React.FC = () => {
             }
 
             const newPage = await response.json();
-            updateResultStatus(result.service.id, 'published', newPage.link);
-            addLog(`[${result.service.service_name}] Successfully published to WordPress!`, LogStatus.SUCCESS, result.service.id);
+            updateResultStatus(result.item.id, 'published', newPage.link);
+            addLog(`[${result.item.name}] Successfully published to WordPress!`, LogStatus.SUCCESS, result.item.id);
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during publishing.';
-            addLog(`[${result.service.service_name}] Failed to publish: ${errorMessage}`, LogStatus.ERROR, result.service.id);
-            updateResultStatus(result.service.id, 'error', undefined, errorMessage);
+            addLog(`[${result.item.name}] Failed to publish: ${errorMessage}`, LogStatus.ERROR, result.item.id);
+            updateResultStatus(result.item.id, 'error', undefined, errorMessage);
         }
     };
 
-    const getFilename = (service: Service, status: string, extension: string) => {
+    const getFilename = (item: WorkflowItem, status: string, extension: string) => {
         if (!currentProject) return `error.${extension}`;
-        const sanitizedName = service.service_name.replace(/\(.\)$/, '').replace(/[^a-z0-9]/gi, '-').toLowerCase();
+        const sanitizedName = item.name.replace(/\(.\)$/, '').replace(/[^a-z0-9]/gi, '-').toLowerCase();
         const data = {
-            tag: service.tag?.toLowerCase() || 'x',
-            service_name: sanitizedName,
+            tag: item.tag?.toLowerCase() || 'x',
+            item_name: sanitizedName,
             status: status.toLowerCase(),
         };
         return fillSimpleTemplate(currentProject.state.fileNameTemplate, data) + `.${extension}`;
@@ -488,19 +476,21 @@ const App: React.FC = () => {
         if (results.length === 0) return;
         const zip = new JSZip();
         results.forEach(result => {
-            zip.file(getFilename(result.service, result.status, 'txt'), result.txtContent);
-            zip.file(getFilename(result.service, result.status, 'json'), result.jsonContent);
+            zip.file(getFilename(result.item, result.status, 'txt'), result.txtContent);
+            zip.file(getFilename(result.item, result.status, 'json'), result.jsonContent);
         });
         zip.generateAsync({ type: "blob" }).then((content: Blob) => {
             const a = document.createElement('a');
             const url = URL.createObjectURL(content);
             a.href = url;
-            a.download = `content-batch-${new Date().toISOString().split('T')[0]}.zip`;
+            a.download = `output-batch-${new Date().toISOString().split('T')[0]}.zip`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }).catch((error: unknown) => {
+            // FIX: The `addLog` function was being called with an `unknown` error object instead of a string message.
+            // This fix ensures a proper string message is constructed from the error before logging.
             let errorMessage: string;
             if (error instanceof Error) {
                 errorMessage = `Failed to generate zip file: ${error.message}`;
@@ -547,13 +537,13 @@ const App: React.FC = () => {
     );
     
     const isClaudeKeyMissing = currentProject.state.selectedModel === 'claude' && !currentProject.state.apiKeys.claude;
-    const isRunDisabled = isProcessing || !services.length || isClaudeKeyMissing;
+    const isRunDisabled = isProcessing || !items.length || isClaudeKeyMissing;
 
     const getRunButtonText = () => {
         if (isProcessing) return 'Processing...';
         if (isClaudeKeyMissing) return 'Enter Claude API Key to Start';
-        if (!services.length) return 'Add Services to Start';
-        return `Start Workflow (${services.length} services)`;
+        if (!items.length) return 'Add Items to Start';
+        return `Start Workflow (${items.length} items)`;
     };
 
     return (
@@ -566,8 +556,8 @@ const App: React.FC = () => {
             <ProjectTracker isOpen={isTrackerOpen} onClose={() => setIsTrackerOpen(false)} />
             <header className="mb-8 flex items-center justify-between">
                 <div className="text-left">
-                    <h1 className="text-4xl font-bold text-white tracking-tight">SEO Content Workflow Automator</h1>
-                    <p className="text-gray-400 mt-2">Dynamic, multi-model content creation from CSV to final articles.</p>
+                    <h1 className="text-4xl font-bold text-white tracking-tight">PromptFlow: Advanced Workflow Automator</h1>
+                    <p className="text-gray-400 mt-2">Visually chain AI prompts, use variables, and process lists of data to generate customized content at scale.</p>
                 </div>
                 <button 
                     onClick={() => setIsTrackerOpen(true)}
@@ -642,25 +632,25 @@ const App: React.FC = () => {
                             </div>
 
 
-                            {/* Service Input */}
+                            {/* Item Input */}
                             <div>
-                                <label htmlFor="manual-services" className="block text-sm font-medium text-gray-400 mb-1">
-                                    Add Services (one per line)
+                                <label htmlFor="manual-items" className="block text-sm font-medium text-gray-400 mb-1">
+                                    Add Items (one per line)
                                 </label>
                                 <textarea
-                                    id="manual-services"
+                                    id="manual-items"
                                     rows={6}
                                     className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white font-mono text-sm focus:ring-2 focus:ring-cyan-500"
-                                    placeholder="Standard Cleaning(H)&#10;Deep Cleaning(H)&#10;Office Cleaning(J)"
-                                    value={manualServices}
-                                    onChange={(e) => setManualServices(e.target.value)}
+                                    placeholder="Topic A(H)&#10;Topic B(H)&#10;Product X(J)"
+                                    value={manualItems}
+                                    onChange={(e) => setManualItems(e.target.value)}
                                 />
                                 <div className="mt-2 flex items-center justify-between">
                                     <button
-                                        onClick={handleManualAddServices}
+                                        onClick={handleManualAddItems}
                                         className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-md transition text-sm"
                                     >
-                                        Add Services from Text
+                                        Add Items from Text
                                     </button>
                                     <label htmlFor="file-upload" className="cursor-pointer text-sm text-cyan-400 hover:text-cyan-300">
                                         {fileName ? `File: ${fileName}` : 'Or, upload a CSV file'}
@@ -675,24 +665,22 @@ const App: React.FC = () => {
                         </div>
                     , true)}
                     
-                    {services.length > 0 && renderSection('2. Loaded Services Preview', 'loadedServices', <Icon type="document" className="h-6 w-6"/>,
+                    {items.length > 0 && renderSection('2. Loaded Items', 'loadedItems', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-2">
-                            <p className="text-gray-300">{services.length} service(s) loaded.</p>
+                            <p className="text-gray-300">{items.length} item(s) loaded.</p>
                             <div className="max-h-60 overflow-y-auto bg-gray-900/50 rounded-md p-2 border border-gray-700">
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-xs text-gray-400 uppercase bg-gray-700/50">
                                         <tr>
-                                            <th scope="col" className="px-4 py-2">Service Name</th>
+                                            <th scope="col" className="px-4 py-2">Item Name</th>
                                             <th scope="col" className="px-4 py-2">Tag</th>
-                                            <th scope="col" className="px-4 py-2">Category</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {services.map(s => (
+                                        {items.map(s => (
                                             <tr key={s.id} className="border-b border-gray-700 hover:bg-gray-800/50">
-                                                <td className="px-4 py-2 font-medium text-white">{s.service_name}</td>
+                                                <td className="px-4 py-2 font-medium text-white">{s.name}</td>
                                                 <td className="px-4 py-2">{s.tag || 'N/A'}</td>
-                                                <td className="px-4 py-2">{s.category || 'N/A'}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -701,7 +689,7 @@ const App: React.FC = () => {
                         </div>
                     , true)}
                     
-                    {renderSection('WordPress Integration (Test Only)', 'wordpress', <Icon type="upload" className="h-6 w-6"/>,
+                    {renderSection('Publishing (Example: WordPress)', 'wordpress', <Icon type="upload" className="h-6 w-6"/>,
                         <div className="space-y-4 p-4 bg-yellow-900/20 border border-yellow-700 rounded-lg">
                             <p className="text-yellow-300 text-sm">
                                 <strong className="font-bold">Security Warning:</strong> This is for testing only. Application Passwords should be handled by a secure backend in a real application, not entered in the browser.
@@ -728,7 +716,7 @@ const App: React.FC = () => {
                                     className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-cyan-500"
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Use placeholders like {'{service_name}'} or {'{city}'}.
+                                    Use variables like {'{item_name}'} or {'{city}'}.
                                 </p>
                             </div>
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -755,10 +743,10 @@ const App: React.FC = () => {
                         </div>
                      )}
 
-                    {renderSection('4. Business Placeholders', 'placeholders', <Icon type="info" className="h-6 w-6"/>, 
+                    {renderSection('4. Workflow Variables', 'placeholders', <Icon type="info" className="h-6 w-6"/>, 
                         <div className="space-y-6">
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-300 mb-2 border-b border-gray-700 pb-1">Universal Placeholders</h3>
+                                <h3 className="text-lg font-semibold text-gray-300 mb-2 border-b border-gray-700 pb-1">Global Variables</h3>
                                 {selectedPlaceholders.size > 0 && (
                                     <div className="bg-gray-900/50 p-3 rounded-md mb-3 flex items-center gap-3">
                                         <span className="text-sm font-semibold">{selectedPlaceholders.size} selected</span>
@@ -778,10 +766,10 @@ const App: React.FC = () => {
  0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                 </div>))}
                                 </div>
-                                <button onClick={() => handleAddPlaceholder()} className="mt-2 text-cyan-400 hover:text-cyan-300 font-semibold text-sm">+ Add Universal Placeholder</button>
+                                <button onClick={() => handleAddPlaceholder()} className="mt-2 text-cyan-400 hover:text-cyan-300 font-semibold text-sm">+ Add Global Variable</button>
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-300 mb-2 border-b border-gray-700 pb-1">Tagged Placeholders</h3>
+                                <h3 className="text-lg font-semibold text-gray-300 mb-2 border-b border-gray-700 pb-1">Tagged Variables</h3>
                                 {currentProject.state.tags.map(tag => (
                                     <div key={tag.id} className="mb-4">
                                         <p className="font-bold text-cyan-400 text-sm mb-2">Tag: {tag.name}</p>
@@ -794,25 +782,25 @@ const App: React.FC = () => {
                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
                                                     </button>
                                                     <div className="absolute right-0 bottom-full z-10 mb-2 w-max bg-gray-900 border border-gray-700 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
-                                                        <button onClick={() => handleMakePlaceholderUniversal(p.id)} className="block w-full text-left px-3 py-2 hover:bg-gray-700 rounded-t">Make Universal</button>
-                                                        <button onClick={() => handleDeletePlaceholder(p.id)} className="block w-full text-left px-3 py-2 hover:bg-gray-700 rounded-b text-red-400">Delete Placeholder</button>
+                                                        <button onClick={() => handleMakePlaceholderUniversal(p.id)} className="block w-full text-left px-3 py-2 hover:bg-gray-700 rounded-t">Make Global</button>
+                                                        <button onClick={() => handleDeletePlaceholder(p.id)} className="block w-full text-left px-3 py-2 hover:bg-gray-700 rounded-b text-red-400">Delete Variable</button>
                                                     </div>
                                                 </div>
                                             </div>))}
                                         </div>
-                                        <button onClick={() => handleAddPlaceholder(tag.name)} className="mt-2 text-cyan-400 hover:text-cyan-300 font-semibold text-sm ml-1">+ Add Placeholder for Tag: {tag.name}</button>
+                                        <button onClick={() => handleAddPlaceholder(tag.name)} className="mt-2 text-cyan-400 hover:text-cyan-300 font-semibold text-sm ml-1">+ Add Variable for Tag: {tag.name}</button>
                                     </div>
                                 ))}
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-300 mb-2 border-b border-gray-700 pb-1">Prompt Output Placeholders <span className="text-xs text-gray-500">(Read-only)</span></h3>
+                                <h3 className="text-lg font-semibold text-gray-300 mb-2 border-b border-gray-700 pb-1">Prompt Output Variables <span className="text-xs text-gray-500">(Read-only)</span></h3>
                                 <p className="text-xs text-gray-400 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-gray-900/50 p-1 rounded">[output_key]</span></p>
                                 <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-gray-700 rounded-full px-3 py-1 text-sm font-mono">[{p.outputKey}]</div>))}</div>
                             </div>
                         </div>
                     )}
                     
-                    {renderSection('5. Tagged Content Snippets', 'snippets', <Icon type="document" className="h-6 w-6"/>, 
+                    {renderSection('5. Conditional Snippets', 'snippets', <Icon type="document" className="h-6 w-6"/>, 
                         <div className="space-y-4">
                              {currentProject.state.taggedSnippets.map(s => (
                                 <div key={s.id} className="bg-gray-900/50 p-4 rounded-lg space-y-2">
@@ -897,18 +885,18 @@ const App: React.FC = () => {
                                         }
                                     };
                                     return (
-                                        <div key={result.service.id} className="bg-gray-700 p-4 rounded-md">
+                                        <div key={result.item.id} className="bg-gray-700 p-4 rounded-md">
                                             <div className="flex items-center justify-between">
                                                 <div>
-                                                    <p className="font-bold text-white">{result.service.service_name}</p>
+                                                    <p className="font-bold text-white">{result.item.name}</p>
                                                     <div className="flex items-center text-xs text-gray-400 mt-1">
                                                         <span className={`px-2 py-0.5 rounded-full mr-2 text-white ${result.status === 'PASSED' ? 'bg-green-600' : 'bg-red-600'}`}>{result.status}</span>
                                                         <span>AI: {result.aiScore}%</span><span className="mx-2">|</span><span>{result.wordCount} words</span>
                                                     </div>
                                                 </div>
                                                 <div className="flex space-x-2">
-                                                    <button onClick={() => handleDownload(result.txtContent, getFilename(result.service, result.status, 'txt'), 'text/plain')} className="p-2 bg-gray-600 hover:bg-cyan-600 rounded-md transition" title="Download Combined .txt"><Icon type="document" className="h-5 w-5"/></button>
-                                                    <button onClick={() => handleDownload(result.jsonContent, getFilename(result.service, result.status, 'json'), 'application/json')} className="p-2 bg-gray-600 hover:bg-cyan-600 rounded-md transition" title="Download .json"><Icon type="json" className="h-5 w-5"/></button>
+                                                    <button onClick={() => handleDownload(result.txtContent, getFilename(result.item, result.status, 'txt'), 'text/plain')} className="p-2 bg-gray-600 hover:bg-cyan-600 rounded-md transition" title="Download Combined .txt"><Icon type="document" className="h-5 w-5"/></button>
+                                                    <button onClick={() => handleDownload(result.jsonContent, getFilename(result.item, result.status, 'json'), 'application/json')} className="p-2 bg-gray-600 hover:bg-cyan-600 rounded-md transition" title="Download .json"><Icon type="json" className="h-5 w-5"/></button>
                                                     <PublishButton />
                                                 </div>
                                             </div>

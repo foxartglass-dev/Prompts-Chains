@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "https://aistudiocdn.com/@google/genai@^1.27.0";
+import { GoogleGenAI } from "@google/genai";
 
 export type LlmProvider = 'gemini' | 'claude';
 

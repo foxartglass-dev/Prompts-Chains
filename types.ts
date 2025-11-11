@@ -1,9 +1,8 @@
 
-export interface Service {
+export interface WorkflowItem {
   id: number;
-  service_name: string;
+  name: string;
   tag: string | null;
-  category: string | null;
 }
 
 export interface PromptTemplate {
@@ -41,7 +40,7 @@ export enum LogStatus {
 
 export interface LogEntry {
   id: number;
-  serviceId?: number;
+  itemId?: number;
   message: string;
   status: LogStatus;
   timestamp: string;
@@ -51,8 +50,8 @@ export type WpStatus = 'idle' | 'publishing' | 'published' | 'error';
 export type WpContentType = 'pages' | 'posts';
 
 export interface Result {
-  service: Service;
-  article: string;
+  item: WorkflowItem;
+  finalOutput: string;
   metaTitles: string[];
   metaDescriptions: string[];
   aiScore: number;

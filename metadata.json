@@ -1,5 +1,5 @@
 {
-  "name": "SEO Wizard Ai",
-  "description": "An application to automate SEO content generation by chaining AI prompts. Users can upload a list of services, configure prompts, and generate articles, which are then checked for AI content and prepared for download.",
+  "name": "PromptFlow",
+  "description": "An advanced application for creating, managing, and executing chained AI prompt workflows. Users can process lists of items with complex, conditional logic to generate customized outputs at scale.",
   "requestFramePermissions": []
 }

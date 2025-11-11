@@ -1,36 +1,36 @@
 import { useState, useEffect } from 'react';
 import { Project, ProjectState } from '../types.ts';
 
-const STORAGE_KEY = 'seoWorkflowProjects';
+const STORAGE_KEY = 'promptFlowProjects';
 
 const initialPromptTemplates: Project['state']['promptTemplates'] = [
-    { id: 1, name: 'Generate PAA', template: `Generate 12 'People Also Ask' (PAA) questions for the service "{service_name}" in the "{category}" category. The questions should be relevant to a potential customer looking for '{main_category}' in {city}.`, outputKey: 'paa_questions' },
-    { id: 2, name: 'Create Outline', template: `Based on these PAA questions:\n[paa_questions]\n\nCreate a detailed article outline for a webpage about "{service_name}" in {city_state}. The main service category is "{main_category}".\n\nThe target audience profile is:\n{{{customer_avatar_details}}}\n\nStructure it with H2s and H3s.`, outputKey: 'outline' },
-    { id: 3, name: 'Write Article', template: `Write a full, high-quality article (~1000 words) based on this outline:\n[outline]\n\nThe article is about "{service_name}" which is a type of "{main_category}" service in {city_state}.\n\nIt should be written for the following customer avatar:\n{{{customer_avatar_details}}}\n\nUse the tone and address the pain points described for the avatar.\n\nAfter the article, provide 5 unique meta titles (50-60 chars) and 5 unique meta descriptions (150-168 chars). Format the output strictly as:\n[Full Article Content]\n\n---META TITLES---\n1. [Title 1]\n2. [Title 2]\n3. [Title 3]\n4. [Title 4]\n5. [Title 5]\n\n---META DESCRIPTIONS---\n1. [Description 1]\n2. [Description 2]\n3. [Description 3]\n4. [Description 4]\n5. [Description 5]`, outputKey: 'final_article', outputAction: 'addToFinal' },
+    { id: 1, name: '1. Analyze Input', template: `Generate 5 key talking points for the topic "{item_name}". The primary keyword is "{primary_keyword}".`, outputKey: 'talking_points' },
+    { id: 2, name: '2. Create Outline', template: `Based on these talking points:\n[talking_points]\n\nCreate a detailed outline for a document about "{item_name}".\n\nThe target audience is:\n{{{audience_profile}}}\n\nStructure it with sections and sub-sections.`, outputKey: 'outline' },
+    { id: 3, name: '3. Write Document', template: `Write a full, high-quality document (~500 words) based on this outline:\n[outline]\n\nThe document is about "{item_name}".\n\nIt should be written for the following audience:\n{{{audience_profile}}}\n\nAfter the document, provide 3 potential titles and 3 short summaries. Format the output strictly as:\n[Full Document Content]\n\n---META TITLES---\n1. [Title 1]\n2. [Title 2]\n3. [Title 3]\n\n---META DESCRIPTIONS---\n1. [Summary 1]\n2. [Summary 2]\n3. [Summary 3]`, outputKey: 'final_document', outputAction: 'addToFinal' },
 ];
 
 const initialPlaceholders: Project['state']['placeholders'] = [
-    { id: 1, key: 'city', value: 'Hendersonville' },
-    { id: 2, key: 'city_state', value: 'Hendersonville, TN' },
-    { id: 3, key: 'main_category', value: 'Cleaners' },
-    { id: 4, key: 'deep_cleaning_service', value: 'Deep Cleaning', tag: 'H' },
+    { id: 1, key: 'city', value: 'Austin' },
+    { id: 2, key: 'primary_keyword', value: 'Data Science' },
+    { id: 3, key: 'topic_variant', value: 'Machine Learning', tag: 'B' },
+    { id: 4, key: 'topic_variant', value: 'Deep Learning', tag: 'E' },
 ];
 
 const initialTags: Project['state']['tags'] = [
-    { id: 1, name: 'H' }, { id: 2, name: 'J' }, { id: 3, name: 'C' },
+    { id: 1, name: 'B' }, { id: 2, name: 'E' }, { id: 3, name: 'G' },
 ];
 
 const initialTaggedSnippets: Project['state']['taggedSnippets'] = [
-    { id: 1, key: 'customer_avatar_details', values: { 'H': 'For Homeowners: busy, family-oriented, values a clean and safe home environment.', 'J': 'For Businesses: focused on professionalism, reliability, and maintaining a pristine image for clients.', 'C': 'For Contractors: needs rapid, compliant, and thorough cleanup to keep projects on schedule.' } }
+    { id: 1, key: 'audience_profile', values: { 'B': 'For Beginners: Students and enthusiasts new to the topic, avoid jargon.', 'E': 'For Experts: Professionals with deep domain knowledge, use technical terms.', 'G': 'For a General Audience: Everyday people interested in the basics.' } }
 ];
 
 const initialProjectState: ProjectState = {
   apiKeys: { zeroGpt: '', claude: '' },
   selectedModel: 'gemini',
-  fileNameTemplate: '{tag}-{service_name}-final',
+  fileNameTemplate: '{tag}-{item_name}-output',
   wpCredentials: { url: '', user: '', password: '' },
-  wpContentType: 'pages',
-  wpTitleTemplate: '{service_name} {city}',
+  wpContentType: 'posts',
+  wpTitleTemplate: 'An Introduction to {item_name}',
   tags: initialTags,
   placeholders: initialPlaceholders,
   taggedSnippets: initialTaggedSnippets,
