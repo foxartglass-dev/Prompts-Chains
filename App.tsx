@@ -5,6 +5,8 @@ import { checkAiScore } from './services/zeroGptService.ts';
 import { parseCsv, downloadFile } from './services/fileUtils.ts';
 import Icon from './components/Icon.tsx';
 import useProjectManager from './hooks/useProjectManager.ts';
+import SettingsPanel from './components/SettingsPanel.tsx';
+import useAppSettings from './hooks/useAppSettings.ts';
 
 // Make JSZip available from the global scope
 declare const JSZip: any;
@@ -26,14 +28,18 @@ const App: React.FC = () => {
     };
 
     // App State
-    const { 
-      projects, 
-      currentProject, 
-      setCurrentProject, 
-      saveCurrentProject: saveProjectHook, 
+    const {
+      projects,
+      currentProject,
+      setCurrentProject,
+      saveCurrentProject: saveProjectHook,
       createNewProject: createNewProjectHook,
       deleteProject: deleteProjectHook
     } = useProjectManager(showNotification);
+
+    // Settings State
+    const { settings, updateSettings, resetSettings } = useAppSettings();
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     // Helper function to update the current project's state
     const setCurrentProjectState = (updater: (prevState: Project['state']) => Project['state']) => {
@@ -341,6 +347,7 @@ const App: React.FC = () => {
                 for (const prompt of currentProject.state.promptTemplates) {
                     addLog(`[${item.name}] Running prompt: "${prompt.name}"...`, LogStatus.INFO, item.id);
                     const filledPrompt = fillPrompt(prompt.template, item, promptOutputs);
+                    // TODO: Use settings.providers.defaultProvider and settings.providers.apiKeys instead of currentProject.state
                     const output = await generateLlmContent(filledPrompt, currentProject.state.selectedModel, { claude: currentProject.state.apiKeys.claude });
                     if (output.startsWith('Error:')) throw new Error(output);
                     promptOutputs[prompt.outputKey] = output;
@@ -358,6 +365,7 @@ const App: React.FC = () => {
                 const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
                 addLog(`[${item.name}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
 
+                // TODO: Use settings.zeroGpt.threshold instead of hardcoded 40
                 const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
                 const timestamp = new Date().toISOString();
                 
@@ -430,6 +438,7 @@ const App: React.FC = () => {
             const body = JSON.stringify({
                 title: title,
                 content: result.finalOutput,
+                // TODO: Use settings.wordpress.defaultStatus instead of hardcoded 'publish'
                 status: 'publish', // Or 'draft'
             });
 
@@ -551,11 +560,26 @@ const App: React.FC = () => {
                     {notification.message}
                 </div>
             )}
+            <SettingsPanel
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                settings={settings}
+                onSave={updateSettings}
+                onReset={resetSettings}
+            />
             <header className="mb-8 flex items-center justify-between">
                 <div className="text-left">
                     <h1 className="text-4xl font-bold text-white tracking-tight">PromptFlow: Advanced Workflow Automator</h1>
                     <p className="text-gray-400 mt-2">Visually chain AI prompts, use variables, and process lists of data to generate customized content at scale.</p>
                 </div>
+                <button
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-cyan-300 font-bold py-2 px-4 rounded-lg transition"
+                    title="Settings"
+                >
+                    <Icon type="settings" className="h-5 w-5" />
+                    <span>Settings</span>
+                </button>
             </header>
 
             <main className="grid grid-cols-1 xl:grid-cols-2 gap-8">
