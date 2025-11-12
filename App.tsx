@@ -5,7 +5,6 @@ import { checkAiScore } from './services/zeroGptService.ts';
 import { parseCsv, downloadFile } from './services/fileUtils.ts';
 import Icon from './components/Icon.tsx';
 import useProjectManager from './hooks/useProjectManager.ts';
-import ProjectTracker from './components/ProjectTracker.tsx';
 
 // Make JSZip available from the global scope
 declare const JSZip: any;
@@ -58,7 +57,6 @@ const App: React.FC = () => {
     const [newTagName, setNewTagName] = useState('');
     const [selectedPlaceholders, setSelectedPlaceholders] = useState<Set<number>>(new Set());
     const [bulkActionTag, setBulkActionTag] = useState('');
-    const [isTrackerOpen, setIsTrackerOpen] = useState(false);
     
     const prevProjectIdRef = useRef<string | null>(null);
 
@@ -553,20 +551,11 @@ const App: React.FC = () => {
                     {notification.message}
                 </div>
             )}
-            <ProjectTracker isOpen={isTrackerOpen} onClose={() => setIsTrackerOpen(false)} />
             <header className="mb-8 flex items-center justify-between">
                 <div className="text-left">
                     <h1 className="text-4xl font-bold text-white tracking-tight">PromptFlow: Advanced Workflow Automator</h1>
                     <p className="text-gray-400 mt-2">Visually chain AI prompts, use variables, and process lists of data to generate customized content at scale.</p>
                 </div>
-                <button 
-                    onClick={() => setIsTrackerOpen(true)}
-                    className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-cyan-300 font-bold py-2 px-4 rounded-lg transition"
-                    title="Show Project Tracker"
-                >
-                    <Icon type="document" className="h-5 w-5" />
-                    <span>Project Tracker</span>
-                </button>
             </header>
 
             <main className="grid grid-cols-1 xl:grid-cols-2 gap-8">
