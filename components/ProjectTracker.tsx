@@ -17,62 +17,89 @@ const ProjectTracker: React.FC<ProjectTrackerProps> = ({ isOpen, onClose }) => {
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/60"
       onClick={handleBackdropClick}
     >
-      <div className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-cyan-500/30">
-        <header className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-2xl font-bold text-cyan-400 flex items-center gap-3">
-            <Icon type="document" className="h-6 w-6" />
-            Project Tracker & Changelog
-          </h2>
+      <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+          <div className="flex items-center gap-2">
+            <Icon type="info" className="h-5 w-5 text-cyan-400" />
+            <h2 className="text-lg font-semibold text-cyan-400">
+              Project Tracker &amp; Changelog
+            </h2>
+          </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white transition"
+            className="text-gray-400 hover:text-white"
+            aria-label="Close project tracker"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
+            ✕
           </button>
-        </header>
+        </div>
 
-        <main className="p-6 overflow-y-auto space-y-6">
+        <div className="p-4 space-y-6 text-sm text-gray-200">
           <section>
-            <h3 className="text-xl font-semibold text-white mb-3 border-b border-gray-600 pb-2">To-Do List</h3>
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-bold text-green-400 mb-2">Easy</h4>
-                <ul className="list-none space-y-2 text-gray-300 pl-4 border-l-2 border-green-400/30">
-                   <li className="flex items-start gap-3"><span className="text-xl mt-px">⚫</span><div><strong className="text-white">Auto-Save Drafts:</strong> Implement auto-save to local storage for the current project to prevent data loss.</div></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-bold text-yellow-400 mb-2">Medium</h4>
-                <ul className="list-none space-y-2 text-gray-300 pl-4 border-l-2 border-yellow-400/30">
-                  <li className="flex items-start gap-3"><span className="text-xl mt-px">⚫</span><div><strong className="text-white">Undo/Redo Functionality:</strong> Implement a simple undo/redo stack for minor edits within a project session.</div></li>
-                  <li className="flex items-start gap-3"><span className="text-xl mt-px">⚫</span><div><strong className="text-white">Create Settings Page:</strong> Relocate API Keys and other global settings to a dedicated settings page to declutter the main UI.</div></li>
-                  <li className="flex items-start gap-3"><span cams-start gap-3"><span className="text-xl mt-px">⚫</span><div><strong className="text-white">Sub-projects:</strong> Allow nesting projects within other projects (e.g., Client > Website 1, Website 2).</div></li>
-                   <li className="flex items-start gap-3"><span className="text-xl mt-px">⚫</span><div><strong className="text-white">SaaS UI (Payments):</strong> Build the frontend components for Square integration (API key input, subscription status).</div></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-bold text-red-400 mb-2">Hard</h4>
-                <ul className="list-none space-y-2 text-gray-300 pl-4 border-l-2 border-red-400/30">
-                  <li className="flex items-start gap-3"><span className="text-xl mt-px">⚫</span><div><strong className="text-white">Advanced Workflow Modules:</strong> Add support for non-prompt "Action Steps" (e.g., calling ZeroGPT mid-workflow) and conditional logic (if/then branching).</div></li>
-                </ul>
-              </div>
-            </div>
-          </section>
+            <h3 className="text-base font-semibold text-gray-300 mb-2">To-Do List</h3>
 
-          <section>
-            <h3 className="text-xl font-semibold text-white mb-3 border-b border-gray-600 pb-2">Completed Tasks</h3>
-            <ul className="list-none space-y-2 text-gray-300">
-               <li className="flex items-start gap-3 text-gray-400"><span className="text-green-400 text-xl mt-px">✔</span><div><strong className="text-gray-200">Project Management System:</strong> Replaced versioning with a robust system to create, save, and load multiple, independent projects.</div></li>
-              <li className="flex items-start gap-3 text-gray-400"><span className="text-green-400 text-xl mt-px">✔</span><div><strong className="text-gray-200">Project Tracker UI:</strong> Added this panel to keep a persistent log of our to-do list and changelog.</div></li>
-              <li className="flex items-start gap-3 text-gray-400"><span className="text-green-400 text-xl mt-px">✔</span><div><strong className="text-gray-200">UI/UX Fixes:</strong> Fixed the disappearing menu on tagged placeholders, added a "Duplicate" button to prompts, and added an "Add Prompt Step" button to the bottom of the workflow.</div></li>
+            <h4 className="text-sm font-semibold text-gray-400">Easy</h4>
+            <ul className="list-disc list-inside space-y-1 mb-3">
+              <li>
+                Auto-Save Drafts: Implement auto-save to local storage for the current
+                project to prevent data loss.
+              </li>
+            </ul>
+
+            <h4 className="text-sm font-semibold text-gray-400">Medium</h4>
+            <ul className="list-disc list-inside space-y-1 mb-3">
+              <li>
+                Undo/Redo Functionality: Implement a simple undo/redo stack for minor
+                edits within a project session.
+              </li>
+              <li>
+                Create Settings Page: Relocate API keys and other global settings to a
+                dedicated settings page to declutter the main UI.
+              </li>
+              <li>
+                Sub-projects: Allow nesting projects within other projects (e.g., Client
+                &gt; Website 1, Website 2).
+              </li>
+              <li>
+                SaaS UI (Payments): Build the frontend components for Square integration
+                (API key input, subscription status).
+              </li>
+            </ul>
+
+            <h4 className="text-sm font-semibold text-gray-400">Hard</h4>
+            <ul className="list-disc list-inside space-y-1">
+              <li>
+                Advanced Workflow Modules: Add support for non-prompt “Action Steps”
+                (e.g., calling ZeroGPT mid-workflow) and conditional logic (if/then
+                branching).
+              </li>
             </ul>
           </section>
-        </main>
+
+          <section>
+            <h3 className="text-base font-semibold text-gray-300 mb-2">
+              Completed Tasks
+            </h3>
+            <ul className="list-disc list-inside space-y-1">
+              <li>
+                Project Management System: Replaced versioning with a robust system to
+                create, save, and load multiple independent projects.
+              </li>
+              <li>
+                Project Tracker UI: Added this panel to keep a persistent log of our
+                to-do list and changelog.
+              </li>
+              <li>
+                UI/UX Fixes: Fixed the disappearing menu on tagged placeholders, added a
+                “Duplicate” button to prompts, and added an “Add Prompt Step” button to
+                the bottom of the workflow.
+              </li>
+            </ul>
+          </section>
+        </div>
       </div>
     </div>
   );

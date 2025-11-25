@@ -13,7 +13,7 @@ async function generateWithGemini(prompt: string): Promise<string> {
   } catch (error) {
     console.error("Error generating content with Gemini:", error);
     if (error instanceof Error) {
-        return `Error: Gemini API call failed. ${error.message}`;
+      return `Error: Gemini API call failed. ${error.message}`;
     }
     return "Error: An unknown error occurred with the Gemini API.";
   }
@@ -23,9 +23,9 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<strin
   if (!apiKey) {
     return "Error: Anthropic API key is not provided.";
   }
-  
-  const API_URL = "https://api.anthropic.com/v1/messages";
-  const MODEL_NAME = "claude-3-sonnet-20240229";
+
+  const API_URL = "http://localhost:3001/api/claude";
+  const MODEL_NAME = "claude-sonnet-4-5";
 
   try {
     const response = await fetch(API_URL, {
