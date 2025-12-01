@@ -69,7 +69,7 @@ export interface Result {
 // Types for Project State Management
 export interface ProjectState {
   apiKeys: { zeroGpt: string; claude: string; };
-  selectedModel: 'gemini' | 'claude';
+  selectedModel: 'gemini' | 'claude-sonnet-4-5-20250514';
   fileNameTemplate: string;
   wpCredentials: { url: string; user: string; password: string; };
   wpContentType: WpContentType;

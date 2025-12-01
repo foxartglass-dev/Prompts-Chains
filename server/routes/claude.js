@@ -3,7 +3,7 @@ import express from 'express';
 const router = express.Router();
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const DEFAULT_MODEL = 'claude-3-sonnet-20240229';
+const DEFAULT_MODEL = 'claude-sonnet-4-5-20250514';
 
 // POST /api/claude - Proxy requests to Anthropic API
 router.post('/', async (req, res) => {

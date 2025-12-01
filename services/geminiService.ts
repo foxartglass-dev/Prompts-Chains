@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-export type LlmProvider = 'gemini' | 'claude';
+export type LlmProvider = 'gemini' | 'claude-sonnet-4-5-20250514';
 
 async function generateWithGemini(prompt: string): Promise<string> {
   try {
@@ -19,14 +19,13 @@ async function generateWithGemini(prompt: string): Promise<string> {
   }
 }
 
-async function generateWithClaude(prompt: string, apiKey: string): Promise<string> {
+async function generateWithClaude(prompt: string, apiKey: string, model: string): Promise<string> {
   if (!apiKey) {
     return "Error: Anthropic API key is not provided.";
   }
 
   // Use backend proxy to avoid CORS issues with direct Anthropic API calls
   const PROXY_URL = "/api/claude";
-  const MODEL_NAME = "claude-3-sonnet-20240229";
 
   try {
     const response = await fetch(PROXY_URL, {
@@ -36,7 +35,7 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<strin
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: MODEL_NAME,
+        model,
         max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -71,8 +70,8 @@ export async function generateLlmContent(
   switch (provider) {
     case 'gemini':
       return generateWithGemini(prompt);
-    case 'claude':
-      return generateWithClaude(prompt, apiKeys.claude);
+    case 'claude-sonnet-4-5-20250514':
+      return generateWithClaude(prompt, apiKeys.claude, provider);
     default:
       throw new Error(`Unsupported LLM provider: ${provider}`);
   }
