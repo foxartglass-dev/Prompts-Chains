@@ -1,28 +1,36 @@
+ // services/claudeService.ts
+//------------------------------------------------------
+// CLAUDE-ONLY SERVICE — CLEAN, CORRECT, FINAL VERSION
+//------------------------------------------------------
+
 export type LlmProvider = 'claude-sonnet-4-5';
 
-const PROXY_URL = "/api/claude";
-const MODEL_ID = "claude-sonnet-4-5-20250514";
+const PROXY_URL = "/api/claude";          // ← Frontend hits Vite proxy
+const MODEL_ID  = "claude-sonnet-4-5-20250514"; // ← Latest Claude Sonnet 4.5 model
 
 export async function generateLlmContent(
   prompt: string,
   model: string,
   apiKeys: { claude: string }
 ): Promise<string> {
-  if (!apiKeys.claude) {
+
+  if (!apiKeys.claude || apiKeys.claude.trim() === "") {
     return "Error: Anthropic API key is not provided.";
   }
 
   try {
     const response = await fetch(PROXY_URL, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'x-api-key': apiKeys.claude,
-        'Content-Type': 'application/json',
+        "x-api-key": apiKeys.claude,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: MODEL_ID,
         max_tokens: 8000,
-        messages: [{ role: 'user', content: prompt }],
+        messages: [
+          { role: "user", content: prompt }
+        ],
       }),
     });
 
@@ -33,16 +41,20 @@ export async function generateLlmContent(
     }
 
     const data = await response.json();
-    if (data.content && data.content.length > 0 && data.content[0].text) {
+
+    // Claude returns: { content: [ { text: "..." } ] }
+    if (data?.content?.[0]?.text) {
       return data.content[0].text;
-    } else {
-      return "Error: Received an unexpected response format from Anthropic API.";
     }
-  } catch (error) {
-    console.error("Error generating content with Claude:", error);
+
+    return "Error: Unexpected Claude API response format.";
+  }
+
+  catch (error) {
+    console.error("Claude fetch error:", error);
     if (error instanceof Error) {
       return `Error: Claude API call failed. ${error.message}`;
     }
-    return "Error: An unknown error occurred with the Claude API.";
+    return "Error: Unknown Claude API failure.";
   }
 }
