@@ -1,11 +1,53 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { LogEntry, LogStatus, PromptTemplate, Result, WorkflowItem, Placeholder, TaggedSnippet, Tag, WpStatus, WpContentType, Project } from './types.ts';
-import { generateLlmContent, LlmProvider } from './services/claudeService.ts';
-import { checkAiScore } from './services/zeroGptService.ts';
-import { parseCsv, downloadFile } from './services/fileUtils.ts';
-import Icon from './components/Icon.tsx';
-import useProjectManager from './hooks/useProjectManager.ts';
-import ProjectTracker from './components/ProjectTracker.tsx';
+import useProjectManager, {
+  PromptTemplate, Placeholder, TaggedSnippet, Tag, WpContentType, Project
+} from './src/hooks/useProjectManager';
+import { generateLlmContent } from './src/services/llm-service';
+import { checkAiScore } from './src/services/zerogpt-service';
+import { parseCsv, downloadFile, downloadProjectConfig, loadProjectConfigFromFile } from './src/services/file-utils';
+import Icon from './src/components/Icon';
+import ProjectTracker from './src/components/ProjectTracker';
+
+// Types for workflow
+interface WorkflowItem {
+  id: number;
+  name: string;
+  tag: string | null;
+}
+
+enum LogStatus {
+  INFO = 'INFO',
+  SUCCESS = 'SUCCESS',
+  ERROR = 'ERROR',
+  WORKING = 'WORKING',
+}
+
+interface LogEntry {
+  id: number;
+  itemId?: number;
+  message: string;
+  status: LogStatus;
+  timestamp: string;
+}
+
+type WpStatus = 'idle' | 'publishing' | 'published' | 'error';
+
+interface Result {
+  item: WorkflowItem;
+  finalOutput: string;
+  metaTitles: string[];
+  metaDescriptions: string[];
+  aiScore: number;
+  wordCount: number;
+  status: 'PASSED' | 'FLAGGED';
+  timestamp: string;
+  jsonContent: string;
+  txtContent: string;
+  allOutputs: Record<string, string>;
+  wpStatus?: WpStatus;
+  wpLink?: string;
+  wpError?: string;
+}
 
 // Make JSZip available from the global scope
 declare const JSZip: any;
@@ -27,13 +69,15 @@ const App: React.FC = () => {
     };
 
     // App State
-    const { 
-      projects, 
-      currentProject, 
-      setCurrentProject, 
-      saveCurrentProject: saveProjectHook, 
+    const {
+      projects,
+      currentProject,
+      setCurrentProject,
+      saveCurrentProject: saveProjectHook,
       createNewProject: createNewProjectHook,
-      deleteProject: deleteProjectHook
+      deleteProject: deleteProjectHook,
+      importProject: importProjectHook,
+      exportCurrentProject: exportProjectHook,
     } = useProjectManager(showNotification);
 
     // Helper function to update the current project's state
@@ -329,7 +373,7 @@ const App: React.FC = () => {
         setIsProcessing(true);
         setResults([]);
         setLogs([]);
-        addLog(`Starting batch processing for ${items.length} items using ${currentProject.state.selectedModel}...`, LogStatus.INFO);
+        addLog(`Starting batch processing for ${items.length} items using ${currentProject.state.provider}/${currentProject.state.model}...`, LogStatus.INFO);
         const startTime = Date.now();
 
         for (const item of items) {
@@ -343,7 +387,12 @@ const App: React.FC = () => {
                 for (const prompt of currentProject.state.promptTemplates) {
                     addLog(`[${item.name}] Running prompt: "${prompt.name}"...`, LogStatus.INFO, item.id);
                     const filledPrompt = fillPrompt(prompt.template, item, promptOutputs);
-                    const output = await generateLlmContent(filledPrompt, currentProject.state.selectedModel, { claude: currentProject.state.apiKeys.claude });
+                    const output = await generateLlmContent(
+                        filledPrompt,
+                        currentProject.state.provider,
+                        currentProject.state.model,
+                        { anthropic: currentProject.state.apiKeys.anthropic }
+                    );
                     if (output.startsWith('Error:')) throw new Error(output);
                     promptOutputs[prompt.outputKey] = output;
                 }
@@ -536,12 +585,12 @@ const App: React.FC = () => {
       </div>
     );
     
-    const isClaudeKeyMissing = !currentProject.state.apiKeys.claude;
-    const isRunDisabled = isProcessing || !items.length || isClaudeKeyMissing;
+    const isApiKeyMissing = currentProject.state.provider === 'anthropic' && !currentProject.state.apiKeys.anthropic;
+    const isRunDisabled = isProcessing || !items.length || isApiKeyMissing;
 
     const getRunButtonText = () => {
         if (isProcessing) return 'Processing...';
-        if (isClaudeKeyMissing) return 'Enter Claude API Key to Start';
+        if (isApiKeyMissing) return 'Enter Anthropic API Key to Start';
         if (!items.length) return 'Add Items to Start';
         return `Start Workflow (${items.length} items)`;
     };
@@ -581,14 +630,21 @@ const App: React.FC = () => {
                                     <input type="password" placeholder="ZeroGPT API Key" value={currentProject.state.apiKeys.zeroGpt} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, zeroGpt: e.target.value}}))} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-400 mb-1">Anthropic API Key (Optional)</label>
-                                    <input type="password" placeholder="Anthropic Claude API Key" value={currentProject.state.apiKeys.claude} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, claude: e.target.value}}))} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500" />
+                                    <label className="block text-sm font-medium text-gray-400 mb-1">Anthropic API Key (Required)</label>
+                                    <input type="password" placeholder="sk-ant-..." value={currentProject.state.apiKeys.anthropic} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, anthropic: e.target.value}}))} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500" />
                                 </div>
                             </div>
                              <div>
                                 <label className="block text-sm font-medium text-gray-400 mb-1">AI Model</label>
-                                <select value={currentProject.state.selectedModel} onChange={e => setCurrentProjectState(p => ({...p, selectedModel: e.target.value as LlmProvider}))} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500">
-                                    <option value="claude-sonnet-4-5">Anthropic Claude Sonnet 4.5</option>
+                                <select
+                                    value={currentProject.state.model}
+                                    onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
+                                    className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500"
+                                >
+                                    <option value="claude-sonnet-4-5-20250514">Claude Sonnet 4.5 (Latest)</option>
+                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                    <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                    <option value="claude-3-haiku-20240307">Claude 3 Haiku (Fast)</option>
                                 </select>
                             </div>
                             <div>
@@ -627,6 +683,44 @@ const App: React.FC = () => {
                                     <button onClick={handleDeleteProject} className="p-2 bg-red-600 hover:bg-red-700 rounded-md text-white transition" title="Delete current project">
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                     </button>
+                                </div>
+                                {/* JSON Export/Import */}
+                                <div className="flex gap-2 mt-2">
+                                    <button
+                                        onClick={() => {
+                                            const data = exportProjectHook();
+                                            if (data) {
+                                                const filename = `${currentProject.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-config.json`;
+                                                downloadProjectConfig(data, filename);
+                                                showNotification('Project exported to JSON!', 'success');
+                                            }
+                                        }}
+                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-md text-white text-sm transition"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                        Export JSON
+                                    </button>
+                                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded-md text-white text-sm transition cursor-pointer">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                                        Import JSON
+                                        <input
+                                            type="file"
+                                            accept=".json"
+                                            className="hidden"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
+                                                    try {
+                                                        const data = await loadProjectConfigFromFile(file) as Project;
+                                                        importProjectHook(data);
+                                                    } catch (error) {
+                                                        showNotification('Failed to import project. Invalid JSON.', 'error');
+                                                    }
+                                                }
+                                                e.target.value = '';
+                                            }}
+                                        />
+                                    </label>
                                 </div>
                             </div>
 
