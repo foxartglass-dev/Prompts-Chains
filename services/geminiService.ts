@@ -23,16 +23,16 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<strin
   if (!apiKey) {
     return "Error: Anthropic API key is not provided.";
   }
-  
-  const API_URL = "https://api.anthropic.com/v1/messages";
+
+  // Use backend proxy to avoid CORS issues with direct Anthropic API calls
+  const PROXY_URL = "/api/claude";
   const MODEL_NAME = "claude-3-sonnet-20240229";
 
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetch(PROXY_URL, {
       method: 'POST',
       headers: {
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
