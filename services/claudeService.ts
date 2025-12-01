@@ -1,7 +1,7 @@
 export type LlmProvider = 'claude-sonnet-4-5';
 
 const PROXY_URL = "/api/claude";
-const MODEL_ID = "claude-sonnet-4-5-20250514";
+const MODEL_ID = "claude-sonnet-4-5-20250929";
 
 export async function generateLlmContent(
   prompt: string,
