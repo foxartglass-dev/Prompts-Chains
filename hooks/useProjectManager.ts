@@ -26,7 +26,7 @@ const initialTaggedSnippets: Project['state']['taggedSnippets'] = [
 
 const initialProjectState: ProjectState = {
   apiKeys: { zeroGpt: '', claude: '' },
-  selectedModel: 'gemini',
+  selectedModel: 'claude-sonnet-4-5',
   fileNameTemplate: '{tag}-{item_name}-output',
   wpCredentials: { url: '', user: '', password: '' },
   wpContentType: 'posts',
