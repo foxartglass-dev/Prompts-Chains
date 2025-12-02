@@ -641,7 +641,7 @@ const App: React.FC = () => {
                                     onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
                                     className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500"
                                 >
-                                    <option value="claude-sonnet-4-5-20250514">Claude Sonnet 4.5 (Latest)</option>
+                                    <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Latest)</option>
                                     <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
                                     <option value="claude-3-opus-20240229">Claude 3 Opus</option>
                                     <option value="claude-3-haiku-20240307">Claude 3 Haiku (Fast)</option>

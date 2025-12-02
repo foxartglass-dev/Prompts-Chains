@@ -8,9 +8,9 @@ export const anthropicProvider = {
   id: 'anthropic',
   name: 'Anthropic Claude',
   envKey: 'ANTHROPIC_API_KEY',
-  defaultModel: 'claude-sonnet-4-5-20250514',
+  defaultModel: 'claude-sonnet-4-5-20250929',
   models: [
-    { id: 'claude-sonnet-4-5-20250514', name: 'Claude Sonnet 4.5 (Latest)', maxTokens: 8192 },
+    { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5 (Latest)', maxTokens: 8192 },
     { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', maxTokens: 8192 },
     { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', maxTokens: 4096 },
     { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku (Fast)', maxTokens: 4096 },

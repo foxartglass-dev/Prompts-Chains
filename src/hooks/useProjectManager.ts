@@ -101,7 +101,7 @@ const initialTaggedSnippets: TaggedSnippet[] = [
 const initialProjectState: ProjectState = {
   apiKeys: { zeroGpt: '', anthropic: '' },
   provider: 'anthropic',
-  model: 'claude-sonnet-4-5-20250514',
+  model: 'claude-sonnet-4-5-20250929',
   fileNameTemplate: '{tag}-{item_name}-output',
   wpCredentials: { url: '', user: '', password: '' },
   wpContentType: 'posts',
