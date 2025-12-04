@@ -98,12 +98,23 @@ const initialTaggedSnippets: TaggedSnippet[] = [
   },
 ];
 
+// Load defaults from environment variables (set in .env file)
+const getEnvDefaults = () => ({
+  anthropicKey: import.meta.env.VITE_ANTHROPIC_API_KEY || '',
+  zeroGptKey: import.meta.env.VITE_ZEROGPT_API_KEY || '',
+  wpUrl: import.meta.env.VITE_WP_URL || '',
+  wpUser: import.meta.env.VITE_WP_USER || '',
+  wpPassword: import.meta.env.VITE_WP_PASSWORD || '',
+});
+
+const envDefaults = getEnvDefaults();
+
 const initialProjectState: ProjectState = {
-  apiKeys: { zeroGpt: '', anthropic: '' },
+  apiKeys: { zeroGpt: envDefaults.zeroGptKey, anthropic: envDefaults.anthropicKey },
   provider: 'anthropic',
   model: 'claude-sonnet-4-5-20250929',
   fileNameTemplate: '{tag}-{item_name}-output',
-  wpCredentials: { url: '', user: '', password: '' },
+  wpCredentials: { url: envDefaults.wpUrl, user: envDefaults.wpUser, password: envDefaults.wpPassword },
   wpContentType: 'posts',
   wpTitleTemplate: 'An Introduction to {item_name}',
   tags: initialTags,
