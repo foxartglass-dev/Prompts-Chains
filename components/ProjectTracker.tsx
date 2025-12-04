@@ -51,7 +51,7 @@ const ProjectTracker: React.FC<ProjectTrackerProps> = ({ isOpen, onClose }) => {
                 <ul className="list-none space-y-2 text-gray-300 pl-4 border-l-2 border-yellow-400/30">
                   <li className="flex items-start gap-3"><span className="text-xl mt-px">⚫</span><div><strong className="text-white">Undo/Redo Functionality:</strong> Implement a simple undo/redo stack for minor edits within a project session.</div></li>
                   <li className="flex items-start gap-3"><span className="text-xl mt-px">⚫</span><div><strong className="text-white">Create Settings Page:</strong> Relocate API Keys and other global settings to a dedicated settings page to declutter the main UI.</div></li>
-                  <li className="flex items-start gap-3"><span className="text-xl mt-px">⚫</span><div><strong className="text-white">Sub-projects:</strong> Allow nesting projects within other projects (e.g., Client > Website 1, Website 2).</div></li>
+                  <li className="flex items-start gap-3"><span className="text-xl mt-px">⚫</span><div><strong className="text-white">Sub-projects:</strong> Allow nesting projects within other projects (e.g., Client &gt; Website 1, Website 2).</div></li>
                    <li className="flex items-start gap-3"><span className="text-xl mt-px">⚫</span><div><strong className="text-white">SaaS UI (Payments):</strong> Build the frontend components for Square integration (API key input, subscription status).</div></li>
                 </ul>
               </div>
