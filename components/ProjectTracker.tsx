@@ -1,3 +1,4 @@
+// ProjectTracker component - displays todo list and changelog
 import React from 'react';
 import Icon from './Icon.tsx';
 
