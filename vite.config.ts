@@ -12,7 +12,12 @@ export default defineConfig(({ mode }) => {
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        'process.env.ANTHROPIC_API_KEY': JSON.stringify(env.ANTHROPIC_API_KEY || ''),
+        'process.env.ZEROGPT_API_KEY': JSON.stringify(env.ZEROGPT_API_KEY || ''),
+        'process.env.WP_URL': JSON.stringify(env.WP_URL || ''),
+        'process.env.WP_USER': JSON.stringify(env.WP_USER || ''),
+        'process.env.WP_PASSWORD': JSON.stringify(env.WP_PASSWORD || ''),
       },
       resolve: {
         alias: {

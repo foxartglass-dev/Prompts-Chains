@@ -24,11 +24,27 @@ const initialTaggedSnippets: Project['state']['taggedSnippets'] = [
     { id: 1, key: 'audience_profile', values: { 'B': 'For Beginners: Students and enthusiasts new to the topic, avoid jargon.', 'E': 'For Experts: Professionals with deep domain knowledge, use technical terms.', 'G': 'For a General Audience: Everyday people interested in the basics.' } }
 ];
 
+// Load defaults from environment variables (set in .env.local)
+const getEnvDefaults = () => ({
+  anthropicKey: (typeof process !== 'undefined' && process.env?.ANTHROPIC_API_KEY) || '',
+  zeroGptKey: (typeof process !== 'undefined' && process.env?.ZEROGPT_API_KEY) || '',
+  wpUrl: (typeof process !== 'undefined' && process.env?.WP_URL) || '',
+  wpUser: (typeof process !== 'undefined' && process.env?.WP_USER) || '',
+  wpPassword: (typeof process !== 'undefined' && process.env?.WP_PASSWORD) || '',
+});
+
 const initialProjectState: ProjectState = {
-  apiKeys: { zeroGpt: '', claude: '' },
+  apiKeys: {
+    zeroGpt: getEnvDefaults().zeroGptKey,
+    claude: getEnvDefaults().anthropicKey
+  },
   selectedModel: 'gemini',
   fileNameTemplate: '{tag}-{item_name}-output',
-  wpCredentials: { url: '', user: '', password: '' },
+  wpCredentials: {
+    url: getEnvDefaults().wpUrl,
+    user: getEnvDefaults().wpUser,
+    password: getEnvDefaults().wpPassword
+  },
   wpContentType: 'posts',
   wpTitleTemplate: 'An Introduction to {item_name}',
   tags: initialTags,
