@@ -38,7 +38,7 @@ const initialProjectState: ProjectState = {
     zeroGpt: getEnvDefaults().zeroGptKey,
     claude: getEnvDefaults().anthropicKey
   },
-  selectedModel: 'gemini',
+  selectedModel: 'claude-sonnet-4-5',
   fileNameTemplate: '{tag}-{item_name}-output',
   wpCredentials: {
     url: getEnvDefaults().wpUrl,
@@ -56,9 +56,8 @@ const initialProjectState: ProjectState = {
 const createNewProjectObject = (name: string = "Untitled Project"): Project => ({
   id: `proj_${Date.now()}`,
   name,
-  state: JSON.parse(JSON.stringify(initialProjectState)), // Deep copy to avoid reference issues
+  state: JSON.parse(JSON.stringify(initialProjectState)),
 });
-
 
 const useProjectManager = (
     onSuccess?: (message: string, type: 'success' | 'info' | 'error') => void
@@ -75,20 +74,17 @@ const useProjectManager = (
           setProjects(parsedProjects);
           setCurrentProject(parsedProjects[0]);
         } else {
-          // If storage is empty or invalid, create a new default project
           const defaultProject = createNewProjectObject("Untitled Project");
           setProjects([defaultProject]);
           setCurrentProject(defaultProject);
         }
       } else {
-        // No projects in storage, create a default one
         const defaultProject = createNewProjectObject("Untitled Project");
         setProjects([defaultProject]);
         setCurrentProject(defaultProject);
       }
     } catch (error) {
       console.error("Failed to load projects from local storage:", error);
-      // Fallback to a default project on error
       const defaultProject = createNewProjectObject("Untitled Project");
       setProjects([defaultProject]);
       setCurrentProject(defaultProject);
@@ -105,7 +101,7 @@ const useProjectManager = (
 
   const saveCurrentProject = () => {
     if (!currentProject) return;
-    
+
     const projectExists = projects.some(p => p.id === currentProject.id);
     let updatedProjects;
 
@@ -114,7 +110,7 @@ const useProjectManager = (
     } else {
         updatedProjects = [...projects, currentProject];
     }
-    
+
     setProjects(updatedProjects);
     saveProjectsToStorage(updatedProjects);
     onSuccess?.(`Project "${currentProject.name}" saved!`, 'success');
@@ -135,21 +131,19 @@ const useProjectManager = (
 
     const updatedProjects = projects.filter(p => p.id !== projectId);
     setProjects(updatedProjects);
-    
-    // If the deleted project was the current one, switch to another
+
     if (currentProject?.id === projectId) {
         if (updatedProjects.length > 0) {
             setCurrentProject(updatedProjects[0]);
         } else {
-            // If it was the last project, create a new default one
             const newDefault = createNewProjectObject("Untitled Project");
             updatedProjects.push(newDefault);
             setProjects(updatedProjects);
             setCurrentProject(newDefault);
         }
     }
-     saveProjectsToStorage(updatedProjects);
-     onSuccess?.(`Project "${projectToDelete.name}" deleted.`, 'error');
+    saveProjectsToStorage(updatedProjects);
+    onSuccess?.(`Project "${projectToDelete.name}" deleted.`, 'error');
   };
 
   return { projects, currentProject, setCurrentProject, saveCurrentProject, createNewProject, deleteProject };
