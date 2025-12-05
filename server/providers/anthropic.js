@@ -17,6 +17,10 @@ export const anthropicProvider = {
   ],
 
   async generate({ model, prompt, apiKey, maxTokens }) {
+    if (!apiKey) {
+      throw new Error('Anthropic API key is required');
+    }
+
     const response = await fetch(ANTHROPIC_API_URL, {
       method: 'POST',
       headers: {
@@ -31,7 +35,19 @@ export const anthropicProvider = {
       }),
     });
 
-    const data = await response.json();
+    // Get response text first to handle empty responses
+    const responseText = await response.text();
+
+    if (!responseText) {
+      throw new Error(`Anthropic API returned empty response (status: ${response.status})`);
+    }
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`Anthropic API returned invalid JSON: ${responseText.substring(0, 200)}`);
+    }
 
     if (!response.ok) {
       throw new Error(data.error?.message || `Anthropic API error: ${response.status}`);

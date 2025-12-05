@@ -45,7 +45,7 @@ export async function getProviders(): Promise<LlmProvider[]> {
       id: 'anthropic',
       name: 'Anthropic Claude',
       models: [
-        { id: 'claude-sonnet-4-5-20250514', name: 'Claude Sonnet 4.5', maxTokens: 8192 },
+        { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', maxTokens: 8192 },
       ],
     }];
   }
