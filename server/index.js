@@ -4,6 +4,9 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import llmRouter from './llm-router.js';
+import clientsRouter from './routes/clients.js';
+import projectsRouter from './routes/projects.js';
+import { testConnection, isDatabaseEnabled } from './db/index.js';
 
 dotenv.config();
 
@@ -59,6 +62,19 @@ app.get('/api/config', (req, res) => {
 
 // LLM routing - handles all providers
 app.use('/api/llm', llmRouter);
+
+// Database routes (clients and projects)
+app.use('/api/clients', clientsRouter);
+app.use('/api/projects', projectsRouter);
+
+// Database status endpoint
+app.get('/api/db/status', async (req, res) => {
+  const status = await testConnection();
+  res.json({
+    enabled: isDatabaseEnabled(),
+    ...status
+  });
+});
 
 // ZeroGPT AI detection proxy (avoids CORS issues)
 app.post('/api/zerogpt/detect', async (req, res) => {
