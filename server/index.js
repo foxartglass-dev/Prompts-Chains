@@ -77,6 +77,7 @@ app.post('/api/zerogpt/detect', async (req, res) => {
     });
 
     const responseText = await response.text();
+    console.log('ZeroGPT raw response:', responseText.substring(0, 500));
 
     if (!responseText) {
       throw new Error('ZeroGPT returned empty response');
@@ -89,13 +90,24 @@ app.post('/api/zerogpt/detect', async (req, res) => {
       throw new Error(`ZeroGPT returned invalid JSON: ${responseText.substring(0, 200)}`);
     }
 
+    console.log('ZeroGPT parsed data:', JSON.stringify(data, null, 2).substring(0, 500));
+
     if (!response.ok) {
       throw new Error(data.error?.message || `ZeroGPT API error: ${response.status}`);
     }
 
+    // ZeroGPT returns percentage in different fields depending on API version
+    const score = data.data?.is_gpt_generated_probability
+      || data.data?.fakePercentage
+      || data.data?.fake_percentage
+      || data.is_gpt_generated_probability
+      || 0;
+
+    console.log('ZeroGPT extracted score:', score);
+
     res.json({
       success: true,
-      score: data.data?.is_gpt_generated_probability || 0,
+      score: score,
       wordCount: data.data?.word_count || text.split(/\s+/).filter(Boolean).length,
     });
   } catch (error) {
