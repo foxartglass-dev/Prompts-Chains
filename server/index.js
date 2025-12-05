@@ -56,8 +56,32 @@ app.get('/api/config', (req, res) => {
       wpUrl: process.env.WP_URL || '',
       wpUser: process.env.WP_USER || '',
       wpPassword: process.env.WP_APP_PASSWORD || '',
-    }
+    },
+    // Tell frontend if PIN lock is enabled
+    pinEnabled: !!process.env.APP_PIN,
   });
+});
+
+// PIN Lock authentication
+app.post('/api/auth/verify-pin', (req, res) => {
+  const { pin } = req.body;
+  const correctPin = process.env.APP_PIN;
+
+  // If no PIN is set, always allow access
+  if (!correctPin) {
+    return res.json({ success: true, message: 'PIN not configured - access granted' });
+  }
+
+  if (!pin) {
+    return res.status(400).json({ success: false, error: 'PIN is required' });
+  }
+
+  // Simple PIN comparison (in production, you'd want to hash this)
+  if (pin === correctPin) {
+    res.json({ success: true, message: 'PIN verified' });
+  } else {
+    res.status(401).json({ success: false, error: 'Invalid PIN' });
+  }
 });
 
 // LLM routing - handles all providers

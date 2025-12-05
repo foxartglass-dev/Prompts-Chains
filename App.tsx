@@ -7,6 +7,7 @@ import { checkAiScore } from './src/services/zerogpt-service';
 import { parseCsv, downloadFile, downloadProjectConfig, loadProjectConfigFromFile } from './src/services/file-utils';
 import Icon from './src/components/Icon';
 import ProjectTracker from './src/components/ProjectTracker';
+import PinLock from './src/components/PinLock';
 
 // Types for workflow
 interface WorkflowItem {
@@ -53,6 +54,48 @@ interface Result {
 declare const JSZip: any;
 
 const App: React.FC = () => {
+    // PIN Lock State
+    const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
+      // Check if already unlocked in this session
+      return sessionStorage.getItem('pinUnlocked') === 'true';
+    });
+    const [pinEnabled, setPinEnabled] = useState<boolean | null>(null);
+
+    // Check if PIN lock is enabled on mount
+    useEffect(() => {
+      const checkPinConfig = async () => {
+        try {
+          const response = await fetch('/api/config');
+          const data = await response.json();
+          setPinEnabled(data.pinEnabled || false);
+
+          // If PIN not enabled, auto-unlock
+          if (!data.pinEnabled) {
+            setIsUnlocked(true);
+          }
+        } catch (error) {
+          // If can't fetch config, assume no PIN
+          setPinEnabled(false);
+          setIsUnlocked(true);
+        }
+      };
+      checkPinConfig();
+    }, []);
+
+    // Show PIN lock screen if enabled and not unlocked
+    if (pinEnabled === null) {
+      // Loading state
+      return (
+        <div className="fixed inset-0 bg-gray-900 flex items-center justify-center">
+          <div className="text-cyan-400 text-xl">Loading...</div>
+        </div>
+      );
+    }
+
+    if (pinEnabled && !isUnlocked) {
+      return <PinLock onUnlock={() => setIsUnlocked(true)} />;
+    }
+
     // UI State for notifications
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
 
