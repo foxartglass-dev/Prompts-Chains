@@ -59,9 +59,43 @@ app.get('/api/my-ip', async (req, res) => {
   }
 });
 
+// Helper: Get client IP address
+function getClientIp(req) {
+  // Check various headers for the real IP (behind proxies like Railway)
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.connection?.remoteAddress || req.socket?.remoteAddress || req.ip;
+}
+
+// Helper: Check if IP is whitelisted
+function isIpWhitelisted(ip) {
+  const whitelist = process.env.IP_WHITELIST || '';
+  if (!whitelist) return false;
+
+  // Split by comma and trim each IP
+  const whitelistedIps = whitelist.split(',').map(ip => ip.trim());
+
+  // Check if client IP matches any whitelisted IP
+  // Also handle IPv6 localhost variants
+  const normalizedIp = ip?.replace('::ffff:', '') || '';
+  return whitelistedIps.some(wip =>
+    wip === ip || wip === normalizedIp || normalizedIp.endsWith(wip)
+  );
+}
+
 // Config endpoint - returns default values from environment variables
 // These pre-fill the UI fields so you don't have to enter them every time
 app.get('/api/config', (req, res) => {
+  const clientIp = getClientIp(req);
+  const ipWhitelisted = isIpWhitelisted(clientIp);
+
+  // PIN is required only if:
+  // 1. APP_PIN is set AND
+  // 2. Client IP is NOT in the whitelist
+  const pinRequired = !!process.env.APP_PIN && !ipWhitelisted;
+
   res.json({
     defaults: {
       anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -70,8 +104,11 @@ app.get('/api/config', (req, res) => {
       wpUser: process.env.WP_USER || '',
       wpPassword: process.env.WP_APP_PASSWORD || '',
     },
-    // Tell frontend if PIN lock is enabled
-    pinEnabled: !!process.env.APP_PIN,
+    // Tell frontend if PIN lock is required for this IP
+    pinEnabled: pinRequired,
+    // Debug info (can remove in production)
+    clientIp: clientIp,
+    ipWhitelisted: ipWhitelisted,
   });
 });
 
