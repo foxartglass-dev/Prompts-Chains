@@ -536,7 +536,7 @@ const App: React.FC = () => {
       </div>
     );
     
-    const isClaudeKeyMissing = currentProject.state.selectedModel === 'claude' && !currentProject.state.apiKeys.claude;
+    const isClaudeKeyMissing = currentProject.state.selectedModel === 'claude-sonnet-4-5' && !currentProject.state.apiKeys.claude;
     const isRunDisabled = isProcessing || !items.length || isClaudeKeyMissing;
 
     const getRunButtonText = () => {
@@ -589,7 +589,7 @@ const App: React.FC = () => {
                                 <label className="block text-sm font-medium text-gray-400 mb-1">AI Model</label>
                                 <select value={currentProject.state.selectedModel} onChange={e => setCurrentProjectState(p => ({...p, selectedModel: e.target.value as LlmProvider}))} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500">
                                     <option value="gemini">Google Gemini Flash</option>
-                                    <option value="claude">Anthropic Claude Sonnet</option>
+                                    <option value="claude-sonnet-4-5">Claude Sonnet 4.5 (Latest)</option>
                                 </select>
                             </div>
                             <div>

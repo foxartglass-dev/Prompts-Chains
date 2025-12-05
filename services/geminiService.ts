@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-export type LlmProvider = 'gemini' | 'claude';
+export type LlmProvider = 'gemini' | 'claude-sonnet-4-5';
 
 async function generateWithGemini(prompt: string): Promise<string> {
   try {
@@ -23,16 +23,15 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<strin
   if (!apiKey) {
     return "Error: Anthropic API key is not provided.";
   }
-  
-  const API_URL = "https://api.anthropic.com/v1/messages";
-  const MODEL_NAME = "claude-3-sonnet-20240229";
+
+  // Use the Vite proxy to avoid CORS issues
+  const API_URL = "/api/anthropic/v1/messages";
+  const MODEL_NAME = "claude-sonnet-4-5-20250514";
 
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -43,9 +42,15 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<strin
     });
 
     if (!response.ok) {
-      const errorBody = await response.json();
-      console.error("Anthropic API Error:", errorBody);
-      return `Error: Anthropic API call failed. ${errorBody.error?.message || response.statusText}`;
+      let errorMessage = response.statusText;
+      try {
+        const errorBody = await response.json();
+        console.error("Anthropic API Error:", errorBody);
+        errorMessage = errorBody.error?.message || response.statusText;
+      } catch {
+        // Response might not be JSON
+      }
+      return `Error: Anthropic API call failed. ${errorMessage}`;
     }
 
     const data = await response.json();
@@ -71,7 +76,7 @@ export async function generateLlmContent(
   switch (provider) {
     case 'gemini':
       return generateWithGemini(prompt);
-    case 'claude':
+    case 'claude-sonnet-4-5':
       return generateWithClaude(prompt, apiKeys.claude);
     default:
       throw new Error(`Unsupported LLM provider: ${provider}`);
