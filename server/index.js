@@ -27,6 +27,19 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 
+// Prevent search engine indexing (add noindex header to all responses)
+// This tells Google/Bing/etc to NOT index this site
+app.use((req, res, next) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  next();
+});
+
+// Robots.txt - block all crawlers
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain');
+  res.send('User-agent: *\nDisallow: /\n');
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
