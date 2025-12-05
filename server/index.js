@@ -6,6 +6,9 @@ import { dirname, join } from 'path';
 import llmRouter from './llm-router.js';
 import clientsRouter from './routes/clients.js';
 import projectsRouter from './routes/projects.js';
+import locationsRouter from './routes/locations.js';
+import websitesRouter from './routes/websites.js';
+import templatesRouter from './routes/templates.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
 dotenv.config();
@@ -137,9 +140,12 @@ app.post('/api/auth/verify-pin', (req, res) => {
 // LLM routing - handles all providers
 app.use('/api/llm', llmRouter);
 
-// Database routes (clients and projects)
+// Database routes (clients, projects, locations, websites, templates)
 app.use('/api/clients', clientsRouter);
 app.use('/api/projects', projectsRouter);
+app.use('/api/locations', locationsRouter);
+app.use('/api/websites', websitesRouter);
+app.use('/api/templates', templatesRouter);
 
 // Database status endpoint
 app.get('/api/db/status', async (req, res) => {
