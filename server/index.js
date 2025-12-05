@@ -46,6 +46,68 @@ app.get('/api/config', (req, res) => {
 // LLM routing - handles all providers
 app.use('/api/llm', llmRouter);
 
+// ZeroGPT AI detection proxy (avoids CORS issues)
+app.post('/api/zerogpt/detect', async (req, res) => {
+  const { text, apiKey } = req.body;
+
+  // API key can come from request body or environment variable
+  const resolvedApiKey = apiKey || process.env.ZEROGPT_API_KEY;
+
+  if (!resolvedApiKey) {
+    return res.json({
+      success: true,
+      score: 0,
+      wordCount: text ? text.split(/\s+/).filter(Boolean).length : 0,
+      message: 'No API key - skipping AI detection'
+    });
+  }
+
+  if (!text) {
+    return res.status(400).json({ error: 'Text is required' });
+  }
+
+  try {
+    const response = await fetch('https://api.zerogpt.com/api/detect/detectText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'ApiKey': resolvedApiKey,
+      },
+      body: JSON.stringify({ input_text: text }),
+    });
+
+    const responseText = await response.text();
+
+    if (!responseText) {
+      throw new Error('ZeroGPT returned empty response');
+    }
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`ZeroGPT returned invalid JSON: ${responseText.substring(0, 200)}`);
+    }
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || `ZeroGPT API error: ${response.status}`);
+    }
+
+    res.json({
+      success: true,
+      score: data.data?.is_gpt_generated_probability || 0,
+      wordCount: data.data?.word_count || text.split(/\s+/).filter(Boolean).length,
+    });
+  } catch (error) {
+    console.error('ZeroGPT API error:', error.message);
+    res.status(500).json({
+      error: error.message,
+      score: 0,
+      wordCount: text.split(/\s+/).filter(Boolean).length,
+    });
+  }
+});
+
 // In production, serve the built frontend
 if (isProduction) {
   const distPath = join(__dirname, '..', 'dist');

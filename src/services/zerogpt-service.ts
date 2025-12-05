@@ -1,6 +1,7 @@
 // ZeroGPT AI Detection Service
+// Uses backend proxy to avoid CORS issues
 
-const ZEROGPT_API_URL = 'https://api.zerogpt.com/api/detect/detectText';
+const API_BASE = '/api/zerogpt';
 
 export interface AiScoreResult {
   score: number;
@@ -8,37 +9,33 @@ export interface AiScoreResult {
 }
 
 /**
- * Check AI detection score using ZeroGPT API
+ * Check AI detection score using ZeroGPT API (via backend proxy)
  */
 export async function checkAiScore(apiKey: string, text: string): Promise<AiScoreResult> {
-  if (!apiKey) {
-    // Return default values if no API key
-    return { score: 0, wordCount: text.split(/\s+/).length };
-  }
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
 
   try {
-    const response = await fetch(ZEROGPT_API_URL, {
+    const response = await fetch(`${API_BASE}/detect`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'ApiKey': apiKey,
       },
-      body: JSON.stringify({ input_text: text }),
+      body: JSON.stringify({ text, apiKey }),
     });
-
-    if (!response.ok) {
-      console.error('ZeroGPT API error:', response.status);
-      return { score: 0, wordCount: text.split(/\s+/).length };
-    }
 
     const data = await response.json();
 
+    if (!response.ok) {
+      console.error('ZeroGPT API error:', data.error);
+      return { score: 0, wordCount };
+    }
+
     return {
-      score: data.data?.is_gpt_generated_probability || 0,
-      wordCount: data.data?.word_count || text.split(/\s+/).length,
+      score: data.score || 0,
+      wordCount: data.wordCount || wordCount,
     };
   } catch (error) {
     console.error('ZeroGPT API error:', error);
-    return { score: 0, wordCount: text.split(/\s+/).length };
+    return { score: 0, wordCount };
   }
 }
