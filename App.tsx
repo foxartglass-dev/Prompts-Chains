@@ -451,7 +451,7 @@ const App: React.FC = () => {
         const updateResultStatus = (itemId: number, status: WpStatus, link?: string, error?: string) => {
             setResults(prev => prev.map(r => r.item.id === itemId ? { ...r, wpStatus: status, wpLink: link, wpError: error } : r));
         };
-        
+
         updateResultStatus(result.item.id, 'publishing');
         addLog(`[${result.item.name}] Publishing to WordPress...`, LogStatus.WORKING, result.item.id);
 
@@ -469,34 +469,34 @@ const App: React.FC = () => {
                 tag: result.item.tag,
                 status: result.status,
             };
-            
+
             const generatedTitle = fillSimpleTemplate(currentProject.state.wpTitleTemplate, templateData);
             const title = generatedTitle.trim() ? generatedTitle : (result.metaTitles[0] || result.item.name);
 
-            const endpoint = `${url.replace(/\/$/, '')}/wp-json/wp/v2/${currentProject.state.wpContentType}`;
-            const headers = new Headers();
-            headers.append('Authorization', 'Basic ' + btoa(`${user}:${password}`));
-            headers.append('Content-Type', 'application/json');
-
-            const body = JSON.stringify({
-                title: title,
-                content: result.finalOutput,
-                status: 'publish', // Or 'draft'
-            });
-
-            const response = await fetch(endpoint, {
+            // Use backend proxy to avoid CORS issues
+            const response = await fetch('/api/wordpress/publish', {
                 method: 'POST',
-                headers,
-                body,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    wpUrl: url,
+                    wpUser: user,
+                    wpPassword: password,
+                    contentType: currentProject.state.wpContentType,
+                    title: title,
+                    content: result.finalOutput,
+                    status: 'draft', // Default to draft for safety
+                }),
             });
+
+            const data = await response.json();
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`WordPress API Error: ${errorData.message || response.statusText}`);
+                throw new Error(data.error || `WordPress API Error: ${response.statusText}`);
             }
 
-            const newPage = await response.json();
-            updateResultStatus(result.item.id, 'published', newPage.link);
+            updateResultStatus(result.item.id, 'published', data.link);
             addLog(`[${result.item.name}] Successfully published to WordPress!`, LogStatus.SUCCESS, result.item.id);
 
         } catch (error) {

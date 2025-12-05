@@ -108,6 +108,68 @@ app.post('/api/zerogpt/detect', async (req, res) => {
   }
 });
 
+// WordPress publishing proxy (avoids CORS issues)
+app.post('/api/wordpress/publish', async (req, res) => {
+  const { wpUrl, wpUser, wpPassword, contentType, title, content, status } = req.body;
+
+  // Credentials can come from request body or environment variables
+  const resolvedUrl = wpUrl || process.env.WP_URL;
+  const resolvedUser = wpUser || process.env.WP_USER;
+  const resolvedPassword = wpPassword || process.env.WP_APP_PASSWORD;
+
+  if (!resolvedUrl || !resolvedUser || !resolvedPassword) {
+    return res.status(400).json({ error: 'WordPress credentials are required' });
+  }
+
+  if (!title || !content) {
+    return res.status(400).json({ error: 'Title and content are required' });
+  }
+
+  const endpoint = `${resolvedUrl.replace(/\/$/, '')}/wp-json/wp/v2/${contentType || 'posts'}`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`${resolvedUser}:${resolvedPassword}`).toString('base64'),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title,
+        content,
+        status: status || 'draft',
+      }),
+    });
+
+    const responseText = await response.text();
+
+    if (!responseText) {
+      throw new Error('WordPress API returned empty response');
+    }
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`WordPress API returned invalid JSON: ${responseText.substring(0, 200)}`);
+    }
+
+    if (!response.ok) {
+      throw new Error(data.message || `WordPress API error: ${response.status}`);
+    }
+
+    res.json({
+      success: true,
+      id: data.id,
+      link: data.link,
+      status: data.status,
+    });
+  } catch (error) {
+    console.error('WordPress API error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // In production, serve the built frontend
 if (isProduction) {
   const distPath = join(__dirname, '..', 'dist');
