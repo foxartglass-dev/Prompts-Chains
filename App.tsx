@@ -8,6 +8,7 @@ import { parseCsv, downloadFile, downloadProjectConfig, loadProjectConfigFromFil
 import Icon from './src/components/Icon';
 import ProjectTracker from './src/components/ProjectTracker';
 import PinLock from './src/components/PinLock';
+import AgencyManager from './src/components/AgencyManager';
 
 // Types for workflow
 interface WorkflowItem {
@@ -146,6 +147,7 @@ const App: React.FC = () => {
     const [selectedPlaceholders, setSelectedPlaceholders] = useState<Set<number>>(new Set());
     const [bulkActionTag, setBulkActionTag] = useState('');
     const [isTrackerOpen, setIsTrackerOpen] = useState(false);
+    const [isAgencyOpen, setIsAgencyOpen] = useState(false);
     
     const prevProjectIdRef = useRef<string | null>(null);
 
@@ -646,19 +648,32 @@ const App: React.FC = () => {
                 </div>
             )}
             <ProjectTracker isOpen={isTrackerOpen} onClose={() => setIsTrackerOpen(false)} />
+            <AgencyManager isOpen={isAgencyOpen} onClose={() => setIsAgencyOpen(false)} />
             <header className="mb-8 flex items-center justify-between">
                 <div className="text-left">
                     <h1 className="text-4xl font-bold text-white tracking-tight">PromptFlow: Advanced Workflow Automator</h1>
                     <p className="text-gray-400 mt-2">Visually chain AI prompts, use variables, and process lists of data to generate customized content at scale.</p>
                 </div>
-                <button 
-                    onClick={() => setIsTrackerOpen(true)}
-                    className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-cyan-300 font-bold py-2 px-4 rounded-lg transition"
-                    title="Show Project Tracker"
-                >
-                    <Icon type="document" className="h-5 w-5" />
-                    <span>Project Tracker</span>
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setIsAgencyOpen(true)}
+                        className="flex items-center gap-2 bg-cyan-700 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg transition"
+                        title="Manage Clients & Locations"
+                    >
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        <span>Agency</span>
+                    </button>
+                    <button
+                        onClick={() => setIsTrackerOpen(true)}
+                        className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-cyan-300 font-bold py-2 px-4 rounded-lg transition"
+                        title="Show Project Tracker"
+                    >
+                        <Icon type="document" className="h-5 w-5" />
+                        <span>Project Tracker</span>
+                    </button>
+                </div>
             </header>
 
             <main className="grid grid-cols-1 xl:grid-cols-2 gap-8">
