@@ -29,6 +29,20 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// IP checker - helps debug IP whitelist issues
+app.get('/api/my-ip', async (req, res) => {
+  try {
+    const response = await fetch('https://api.ipify.org?format=json');
+    const data = await response.json();
+    res.json({
+      outboundIp: data.ip,
+      message: 'Add this IP to ZeroGPT whitelist'
+    });
+  } catch (error) {
+    res.json({ error: 'Could not determine IP', message: error.message });
+  }
+});
+
 // Config endpoint - returns default values from environment variables
 // These pre-fill the UI fields so you don't have to enter them every time
 app.get('/api/config', (req, res) => {
