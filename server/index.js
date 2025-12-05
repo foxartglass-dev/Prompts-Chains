@@ -29,6 +29,20 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Config endpoint - returns default values from environment variables
+// These pre-fill the UI fields so you don't have to enter them every time
+app.get('/api/config', (req, res) => {
+  res.json({
+    defaults: {
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+      zeroGptApiKey: process.env.ZEROGPT_API_KEY || '',
+      wpUrl: process.env.WP_URL || '',
+      wpUser: process.env.WP_USER || '',
+      wpPassword: process.env.WP_APP_PASSWORD || '',
+    }
+  });
+});
+
 // LLM routing - handles all providers
 app.use('/api/llm', llmRouter);
 

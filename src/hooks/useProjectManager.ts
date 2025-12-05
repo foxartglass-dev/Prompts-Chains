@@ -118,12 +118,54 @@ const createNewProjectObject = (name: string = 'Untitled Project'): Project => (
   state: JSON.parse(JSON.stringify(initialProjectState)),
 });
 
+// Fetch default config from server (reads from .env or Railway env vars)
+async function fetchDefaultConfig() {
+  try {
+    const response = await fetch('/api/config');
+    if (response.ok) {
+      const data = await response.json();
+      return data.defaults;
+    }
+  } catch (error) {
+    console.log('Could not fetch config defaults (server may not be running)');
+  }
+  return null;
+}
+
+// Apply defaults to a project (fills empty fields with env values)
+function applyDefaults(project: Project, defaults: any): Project {
+  if (!defaults) return project;
+
+  return {
+    ...project,
+    state: {
+      ...project.state,
+      apiKeys: {
+        anthropic: project.state.apiKeys.anthropic || defaults.anthropicApiKey || '',
+        zeroGpt: project.state.apiKeys.zeroGpt || defaults.zeroGptApiKey || '',
+      },
+      wpCredentials: {
+        url: project.state.wpCredentials.url || defaults.wpUrl || '',
+        user: project.state.wpCredentials.user || defaults.wpUser || '',
+        password: project.state.wpCredentials.password || defaults.wpPassword || '',
+      },
+    },
+  };
+}
+
 const useProjectManager = (
   onSuccess?: (message: string, type: 'success' | 'info' | 'error') => void
 ) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [envDefaults, setEnvDefaults] = useState<any>(null);
 
+  // Fetch env defaults on mount
+  useEffect(() => {
+    fetchDefaultConfig().then(setEnvDefaults);
+  }, []);
+
+  // Load projects from localStorage
   useEffect(() => {
     try {
       const storedProjects = localStorage.getItem(STORAGE_KEY);
@@ -149,6 +191,16 @@ const useProjectManager = (
       setCurrentProject(defaultProject);
     }
   }, []);
+
+  // Apply env defaults to current project when defaults load
+  useEffect(() => {
+    if (envDefaults && currentProject) {
+      const updatedProject = applyDefaults(currentProject, envDefaults);
+      if (JSON.stringify(updatedProject) !== JSON.stringify(currentProject)) {
+        setCurrentProject(updatedProject);
+      }
+    }
+  }, [envDefaults, currentProject?.id]);
 
   const saveProjectsToStorage = (updatedProjects: Project[]) => {
     try {
