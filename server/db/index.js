@@ -1,9 +1,9 @@
 // Database connection using Neon's serverless driver
 import { neon } from '@neondatabase/serverless';
 
-// HARDCODED to development database to ensure consistency
+// HARDCODED to production database to ensure consistency
 // TODO: Remove this hardcode once env variables are sorted out
-const connectionString = 'postgresql://neondb_owner:npg_FEAdokp4C1IQ@ep-red-dust-ad3bne7g-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+const connectionString = 'postgresql://neondb_owner:npg_FEAdokp4C1IQ@ep-dark-bar-adgtv25x-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 
 if (!connectionString) {
   console.warn('DATABASE_URL not set - database features will be disabled');
