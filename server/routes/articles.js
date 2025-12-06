@@ -1,0 +1,387 @@
+// Articles API routes (stored outputs with full chain history)
+import express from 'express';
+import { sql, isDatabaseEnabled } from '../db/index.js';
+
+const router = express.Router();
+
+// Middleware to check database availability
+const requireDb = (req, res, next) => {
+  if (!isDatabaseEnabled()) {
+    return res.status(503).json({ error: 'Database not configured' });
+  }
+  next();
+};
+
+// GET all articles (with filtering options)
+router.get('/', requireDb, async (req, res) => {
+  try {
+    const { workflowId, websiteId, clientId, status, limit = 50, offset = 0 } = req.query;
+
+    let articles;
+
+    // Build dynamic query based on filters
+    if (workflowId) {
+      articles = await sql`
+        SELECT a.*, w.name as workflow_name, ws.name as website_name, c.name as client_name
+        FROM articles a
+        LEFT JOIN workflows w ON a.workflow_id = w.id
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        LEFT JOIN clients c ON a.client_id = c.id
+        WHERE a.workflow_id = ${workflowId}
+        ORDER BY a.created_at DESC
+        LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
+      `;
+    } else if (websiteId) {
+      articles = await sql`
+        SELECT a.*, w.name as workflow_name, ws.name as website_name, c.name as client_name
+        FROM articles a
+        LEFT JOIN workflows w ON a.workflow_id = w.id
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        LEFT JOIN clients c ON a.client_id = c.id
+        WHERE a.website_id = ${websiteId}
+        ORDER BY a.created_at DESC
+        LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
+      `;
+    } else if (clientId) {
+      articles = await sql`
+        SELECT a.*, w.name as workflow_name, ws.name as website_name, c.name as client_name
+        FROM articles a
+        LEFT JOIN workflows w ON a.workflow_id = w.id
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        LEFT JOIN clients c ON a.client_id = c.id
+        WHERE a.client_id = ${clientId}
+        ORDER BY a.created_at DESC
+        LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
+      `;
+    } else if (status) {
+      articles = await sql`
+        SELECT a.*, w.name as workflow_name, ws.name as website_name, c.name as client_name
+        FROM articles a
+        LEFT JOIN workflows w ON a.workflow_id = w.id
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        LEFT JOIN clients c ON a.client_id = c.id
+        WHERE a.status = ${status}
+        ORDER BY a.created_at DESC
+        LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
+      `;
+    } else {
+      articles = await sql`
+        SELECT a.*, w.name as workflow_name, ws.name as website_name, c.name as client_name
+        FROM articles a
+        LEFT JOIN workflows w ON a.workflow_id = w.id
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        LEFT JOIN clients c ON a.client_id = c.id
+        ORDER BY a.created_at DESC
+        LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
+      `;
+    }
+
+    // Get total count for pagination
+    const countResult = await sql`SELECT COUNT(*) as total FROM articles`;
+    const total = parseInt(countResult[0].total);
+
+    res.json({ articles, total, limit: parseInt(limit), offset: parseInt(offset) });
+  } catch (error) {
+    console.error('Error fetching articles:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET single article with full details
+router.get('/:id', requireDb, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const articles = await sql`
+      SELECT a.*, w.name as workflow_name, ws.name as website_name, c.name as client_name,
+             ws.wp_url, ws.wp_user, ws.wp_app_password
+      FROM articles a
+      LEFT JOIN workflows w ON a.workflow_id = w.id
+      LEFT JOIN websites ws ON a.website_id = ws.id
+      LEFT JOIN clients c ON a.client_id = c.id
+      WHERE a.id = ${id}
+    `;
+
+    if (articles.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    res.json({ article: articles[0] });
+  } catch (error) {
+    console.error('Error fetching article:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET article version history
+router.get('/:id/history', requireDb, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get the article first
+    const articles = await sql`SELECT * FROM articles WHERE id = ${id}`;
+    if (articles.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    const article = articles[0];
+
+    // Find all versions (go up to parent, then find all children)
+    let rootId = article.id;
+    let current = article;
+
+    // Find the root (first version)
+    while (current.parent_article_id) {
+      const parent = await sql`SELECT * FROM articles WHERE id = ${current.parent_article_id}`;
+      if (parent.length > 0) {
+        current = parent[0];
+        rootId = current.id;
+      } else {
+        break;
+      }
+    }
+
+    // Now get all versions starting from root
+    const allVersions = await sql`
+      WITH RECURSIVE version_tree AS (
+        SELECT *, 1 as depth FROM articles WHERE id = ${rootId}
+        UNION ALL
+        SELECT a.*, vt.depth + 1
+        FROM articles a
+        JOIN version_tree vt ON a.parent_article_id = vt.id
+      )
+      SELECT * FROM version_tree ORDER BY version ASC
+    `;
+
+    res.json({ versions: allVersions, currentId: parseInt(id) });
+  } catch (error) {
+    console.error('Error fetching article history:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST create new article (when workflow generates output)
+router.post('/', requireDb, async (req, res) => {
+  try {
+    const {
+      workflowId,
+      websiteId,
+      clientId,
+      keyword,
+      tag,
+      finalContent,
+      metaTitles,
+      metaDescriptions,
+      chainOutputs,
+      aiScore,
+      wordCount,
+      status
+    } = req.body;
+
+    if (!keyword) {
+      return res.status(400).json({ error: 'Keyword is required' });
+    }
+
+    const result = await sql`
+      INSERT INTO articles (
+        workflow_id, website_id, client_id,
+        keyword, tag,
+        final_content, meta_titles, meta_descriptions,
+        chain_outputs,
+        ai_score, word_count, status
+      )
+      VALUES (
+        ${workflowId || null},
+        ${websiteId || null},
+        ${clientId || null},
+        ${keyword},
+        ${tag || null},
+        ${finalContent || null},
+        ${JSON.stringify(metaTitles || [])},
+        ${JSON.stringify(metaDescriptions || [])},
+        ${JSON.stringify(chainOutputs || {})},
+        ${aiScore || null},
+        ${wordCount || null},
+        ${status || 'generated'}
+      )
+      RETURNING *
+    `;
+
+    res.status(201).json({ article: result[0] });
+  } catch (error) {
+    console.error('Error creating article:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST create new version of article (for edits)
+router.post('/:id/new-version', requireDb, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { finalContent, metaTitles, metaDescriptions } = req.body;
+
+    // Get the original article
+    const original = await sql`SELECT * FROM articles WHERE id = ${id}`;
+    if (original.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    const parentArticle = original[0];
+    const newVersion = parentArticle.version + 1;
+
+    const result = await sql`
+      INSERT INTO articles (
+        workflow_id, website_id, client_id,
+        keyword, tag,
+        final_content, meta_titles, meta_descriptions,
+        chain_outputs,
+        ai_score, word_count, status,
+        version, parent_article_id
+      )
+      VALUES (
+        ${parentArticle.workflow_id},
+        ${parentArticle.website_id},
+        ${parentArticle.client_id},
+        ${parentArticle.keyword},
+        ${parentArticle.tag},
+        ${finalContent || parentArticle.final_content},
+        ${JSON.stringify(metaTitles || parentArticle.meta_titles)},
+        ${JSON.stringify(metaDescriptions || parentArticle.meta_descriptions)},
+        ${JSON.stringify(parentArticle.chain_outputs)},
+        ${parentArticle.ai_score},
+        ${parentArticle.word_count},
+        'edited',
+        ${newVersion},
+        ${id}
+      )
+      RETURNING *
+    `;
+
+    res.status(201).json({ article: result[0] });
+  } catch (error) {
+    console.error('Error creating article version:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT update article (for inline edits without creating new version)
+router.put('/:id', requireDb, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { finalContent, metaTitles, metaDescriptions, status } = req.body;
+
+    const result = await sql`
+      UPDATE articles
+      SET final_content = COALESCE(${finalContent}, final_content),
+          meta_titles = COALESCE(${metaTitles ? JSON.stringify(metaTitles) : null}, meta_titles),
+          meta_descriptions = COALESCE(${metaDescriptions ? JSON.stringify(metaDescriptions) : null}, meta_descriptions),
+          status = COALESCE(${status}, status),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${id}
+      RETURNING *
+    `;
+
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    res.json({ article: result[0] });
+  } catch (error) {
+    console.error('Error updating article:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH update WordPress publish status
+router.patch('/:id/wp-status', requireDb, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { wpPostId, wpPostUrl, status } = req.body;
+
+    const result = await sql`
+      UPDATE articles
+      SET wp_post_id = ${wpPostId || null},
+          wp_post_url = ${wpPostUrl || null},
+          wp_published_at = ${wpPostId ? 'CURRENT_TIMESTAMP' : null},
+          status = ${status || 'published'},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${id}
+      RETURNING *
+    `;
+
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    res.json({ article: result[0] });
+  } catch (error) {
+    console.error('Error updating article WP status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE article
+router.delete('/:id', requireDb, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await sql`
+      DELETE FROM articles WHERE id = ${id}
+      RETURNING *
+    `;
+
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    res.json({ deleted: result[0] });
+  } catch (error) {
+    console.error('Error deleting article:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET articles by keyword search
+router.get('/search/:keyword', requireDb, async (req, res) => {
+  try {
+    const { keyword } = req.params;
+    const { websiteId, clientId } = req.query;
+
+    let articles;
+    if (websiteId) {
+      articles = await sql`
+        SELECT a.*, w.name as workflow_name, ws.name as website_name
+        FROM articles a
+        LEFT JOIN workflows w ON a.workflow_id = w.id
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        WHERE a.keyword ILIKE ${'%' + keyword + '%'} AND a.website_id = ${websiteId}
+        ORDER BY a.created_at DESC
+      `;
+    } else if (clientId) {
+      articles = await sql`
+        SELECT a.*, w.name as workflow_name, ws.name as website_name
+        FROM articles a
+        LEFT JOIN workflows w ON a.workflow_id = w.id
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        WHERE a.keyword ILIKE ${'%' + keyword + '%'} AND a.client_id = ${clientId}
+        ORDER BY a.created_at DESC
+      `;
+    } else {
+      articles = await sql`
+        SELECT a.*, w.name as workflow_name, ws.name as website_name
+        FROM articles a
+        LEFT JOIN workflows w ON a.workflow_id = w.id
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        WHERE a.keyword ILIKE ${'%' + keyword + '%'}
+        ORDER BY a.created_at DESC
+      `;
+    }
+
+    res.json({ articles });
+  } catch (error) {
+    console.error('Error searching articles:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export default router;

@@ -9,6 +9,9 @@ import Icon from './src/components/Icon';
 import ProjectTracker from './src/components/ProjectTracker';
 import PinLock from './src/components/PinLock';
 import AgencyManager from './src/components/AgencyManager';
+import ArticleManager from './src/components/ArticleManager';
+import TemplateLibrary from './src/components/TemplateLibrary';
+import WorkflowNavigation from './src/components/WorkflowNavigation';
 
 // Types for workflow
 interface WorkflowItem {
@@ -51,16 +54,76 @@ interface Result {
   wpError?: string;
 }
 
-// Make JSZip available from the global scope
+// Make JSZip available from the global scope (force rebuild)
 declare const JSZip: any;
 
 const App: React.FC = () => {
+    // ========== ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS ==========
+
     // PIN Lock State
     const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
       // Check if already unlocked in this session
       return sessionStorage.getItem('pinUnlocked') === 'true';
     });
     const [pinEnabled, setPinEnabled] = useState<boolean | null>(null);
+
+    // UI State for notifications
+    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
+
+    // Notification helper function (defined early so it can be passed to useProjectManager)
+    const showNotification = useCallback((message: string, type: 'success' | 'info' | 'error') => {
+        setNotification({ message, type });
+    }, []);
+
+    // App State - useProjectManager hook
+    const {
+      projects,
+      currentProject,
+      setCurrentProject,
+      saveCurrentProject: saveProjectHook,
+      createNewProject: createNewProjectHook,
+      deleteProject: deleteProjectHook,
+      importProject: importProjectHook,
+      exportCurrentProject: exportProjectHook,
+    } = useProjectManager(showNotification);
+
+    // Workflow items state
+    const [items, setItems] = useState<WorkflowItem[]>([]);
+    const [manualItems, setManualItems] = useState('');
+
+    // UI State
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [logs, setLogs] = useState<LogEntry[]>([]);
+    const [results, setResults] = useState<Result[]>([]);
+    const [fileName, setFileName] = useState('');
+    const [activeCollapsible, setActiveCollapsible] = useState<string | null>('setup');
+    const [newTagName, setNewTagName] = useState('');
+    const [selectedPlaceholders, setSelectedPlaceholders] = useState<Set<number>>(new Set());
+    const [bulkActionTag, setBulkActionTag] = useState('');
+    const [isTrackerOpen, setIsTrackerOpen] = useState(false);
+    const [isAgencyOpen, setIsAgencyOpen] = useState(false);
+    const [isArticlesOpen, setIsArticlesOpen] = useState(false);
+    const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+    const [isWorkflowNavOpen, setIsWorkflowNavOpen] = useState(false);
+    const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
+    const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
+
+    // Refs
+    const prevProjectIdRef = useRef<string | null>(null);
+    const logContainerRef = useRef<HTMLDivElement>(null);
+    const draggedPromptId = useRef<number | null>(null);
+
+    // useCallback for logging (must be before conditional returns)
+    const addLog = useCallback((message: string, status: LogStatus, itemId?: number) => {
+        setLogs(prevLogs => {
+            const newLog = { id: prevLogs.length, message, status, itemId, timestamp: new Date().toLocaleTimeString() };
+            const updatedLogs = [...prevLogs, newLog];
+            setTimeout(() => { logContainerRef.current?.scrollTo(0, logContainerRef.current.scrollHeight); }, 0);
+            return updatedLogs;
+        });
+    }, []);
+
+    // ========== ALL useEffect HOOKS ==========
 
     // Check if PIN lock is enabled on mount
     useEffect(() => {
@@ -83,23 +146,6 @@ const App: React.FC = () => {
       checkPinConfig();
     }, []);
 
-    // Show PIN lock screen if enabled and not unlocked
-    if (pinEnabled === null) {
-      // Loading state
-      return (
-        <div className="fixed inset-0 bg-gray-900 flex items-center justify-center">
-          <div className="text-cyan-400 text-xl">Loading...</div>
-        </div>
-      );
-    }
-
-    if (pinEnabled && !isUnlocked) {
-      return <PinLock onUnlock={() => setIsUnlocked(true)} />;
-    }
-
-    // UI State for notifications
-    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
-
     // Effect to clear notification after a delay
     useEffect(() => {
         if (notification) {
@@ -107,22 +153,44 @@ const App: React.FC = () => {
             return () => clearTimeout(timer);
         }
     }, [notification]);
-    
-    const showNotification = (message: string, type: 'success' | 'info' | 'error') => {
-        setNotification({ message, type });
-    };
 
-    // App State
-    const {
-      projects,
-      currentProject,
-      setCurrentProject,
-      saveCurrentProject: saveProjectHook,
-      createNewProject: createNewProjectHook,
-      deleteProject: deleteProjectHook,
-      importProject: importProjectHook,
-      exportCurrentProject: exportProjectHook,
-    } = useProjectManager(showNotification);
+    // Effect to reset local workflow state when the project changes
+    useEffect(() => {
+        if (currentProject) {
+            const currentId = currentProject.id;
+            const prevId = prevProjectIdRef.current;
+
+            // If the project ID has changed, reset the workspace.
+            if (prevId !== null && prevId !== currentId) {
+                setItems([]);
+                setManualItems('');
+                setLogs([]);
+                setResults([]);
+                setFileName('');
+            }
+
+            // Update the ref to the current project's ID for the next render.
+            prevProjectIdRef.current = currentId;
+        }
+    }, [currentProject]);
+
+    // ========== CONDITIONAL RETURNS (after all hooks) ==========
+
+    // Show loading state while checking PIN config
+    if (pinEnabled === null) {
+      return (
+        <div className="fixed inset-0 bg-gray-900 flex items-center justify-center">
+          <div className="text-cyan-400 text-xl">Loading...</div>
+        </div>
+      );
+    }
+
+    // Show PIN lock screen if enabled and not unlocked
+    if (pinEnabled && !isUnlocked) {
+      return <PinLock onUnlock={() => setIsUnlocked(true)} />;
+    }
+
+    // ========== HELPER FUNCTIONS (after conditional returns is OK) ==========
 
     // Helper function to update the current project's state
     const setCurrentProjectState = (updater: (prevState: Project['state']) => Project['state']) => {
@@ -133,47 +201,6 @@ const App: React.FC = () => {
             });
         }
     };
-    
-    const [items, setItems] = useState<WorkflowItem[]>([]);
-    const [manualItems, setManualItems] = useState('');
-    
-    // UI State
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [logs, setLogs] = useState<LogEntry[]>([]);
-    const [results, setResults] = useState<Result[]>([]);
-    const [fileName, setFileName] = useState('');
-    const [activeCollapsible, setActiveCollapsible] = useState<string | null>('setup');
-    const [newTagName, setNewTagName] = useState('');
-    const [selectedPlaceholders, setSelectedPlaceholders] = useState<Set<number>>(new Set());
-    const [bulkActionTag, setBulkActionTag] = useState('');
-    const [isTrackerOpen, setIsTrackerOpen] = useState(false);
-    const [isAgencyOpen, setIsAgencyOpen] = useState(false);
-    
-    const prevProjectIdRef = useRef<string | null>(null);
-
-    // Effect to reset local workflow state when the project changes
-    useEffect(() => {
-        if (currentProject) {
-            const currentId = currentProject.id;
-            const prevId = prevProjectIdRef.current;
-            
-            // If the project ID has changed, reset the workspace.
-            if (prevId !== null && prevId !== currentId) {
-                setItems([]);
-                setManualItems('');
-                setLogs([]);
-                setResults([]);
-                setFileName('');
-            }
-            
-            // Update the ref to the current project's ID for the next render.
-            prevProjectIdRef.current = currentId;
-        }
-    }, [currentProject]);
-
-
-    const logContainerRef = useRef<HTMLDivElement>(null);
-    const draggedPromptId = useRef<number | null>(null);
 
     const handleSaveProject = () => {
         saveProjectHook();
@@ -189,15 +216,6 @@ const App: React.FC = () => {
             deleteProjectHook(currentProject.id);
         }
     };
-    
-    const addLog = useCallback((message: string, status: LogStatus, itemId?: number) => {
-        setLogs(prevLogs => {
-            const newLog = { id: prevLogs.length, message, status, itemId, timestamp: new Date().toLocaleTimeString() };
-            const updatedLogs = [...prevLogs, newLog];
-            setTimeout(() => { logContainerRef.current?.scrollTo(0, logContainerRef.current.scrollHeight); }, 0);
-            return updatedLogs;
-        });
-    }, []);
 
     // --- Data Mutation Handlers (Simulating API Calls) ---
 
@@ -466,6 +484,31 @@ const App: React.FC = () => {
 
                 setResults(prev => [...prev, { item, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
                 addLog(`[${item.name}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
+
+                // Save article to database
+                try {
+                    await fetch('/api/articles', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            workflowId: currentWorkflowId || null,
+                            websiteId: currentWebsiteId || null,
+                            keyword: item.name,
+                            tag: item.tag,
+                            finalContent: finalOutput,
+                            metaTitles,
+                            metaDescriptions,
+                            chainOutputs: promptOutputs,
+                            aiScore,
+                            wordCount,
+                            status: status.toLowerCase()
+                        })
+                    });
+                    addLog(`[${item.name}] Article saved to database.`, LogStatus.INFO, item.id);
+                } catch (saveError) {
+                    // Don't fail the whole process if saving fails
+                    console.error('Failed to save article:', saveError);
+                }
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
                 addLog(`[${item.name}] Failed: ${errorMessage}`, LogStatus.ERROR, item.id);
@@ -649,12 +692,75 @@ const App: React.FC = () => {
             )}
             <ProjectTracker isOpen={isTrackerOpen} onClose={() => setIsTrackerOpen(false)} />
             <AgencyManager isOpen={isAgencyOpen} onClose={() => setIsAgencyOpen(false)} />
+            <ArticleManager
+                isOpen={isArticlesOpen}
+                onClose={() => setIsArticlesOpen(false)}
+                filterByWebsite={currentWebsiteId}
+            />
+            <TemplateLibrary
+                isOpen={isTemplatesOpen}
+                onClose={() => setIsTemplatesOpen(false)}
+                currentWorkflowId={currentWorkflowId}
+                currentWebsiteId={currentWebsiteId}
+                onApplyTemplate={(template) => {
+                    showNotification(`Applied template: ${template.name}`, 'success');
+                    // Reload the current project to get updated data
+                }}
+            />
+            <WorkflowNavigation
+                isOpen={isWorkflowNavOpen}
+                onClose={() => setIsWorkflowNavOpen(false)}
+                currentWorkflowId={currentWorkflowId}
+                onSelectWorkflow={(workflow) => {
+                    setCurrentWorkflowId(workflow.id);
+                    setCurrentWebsiteId(workflow.website_id || undefined);
+                    showNotification(`Loaded workflow: ${workflow.name}`, 'info');
+                }}
+                onCreateWorkflow={async (clientId, websiteId) => {
+                    // Create a new workflow in the database
+                    try {
+                        const res = await fetch('/api/workflows', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: 'New Workflow',
+                                clientId: clientId || null,
+                                websiteId: websiteId || null,
+                                state: {}
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.workflow) {
+                            setCurrentWorkflowId(data.workflow.id);
+                            if (websiteId) setCurrentWebsiteId(websiteId);
+                            handleCreateNewProject();
+                            showNotification(`Created new workflow: ${data.workflow.name}`, 'success');
+                            setIsWorkflowNavOpen(false);
+                        } else {
+                            showNotification('Failed to create workflow', 'error');
+                        }
+                    } catch (err) {
+                        console.error('Failed to create workflow:', err);
+                        showNotification('Failed to create workflow', 'error');
+                    }
+                }}
+            />
             <header className="mb-8 flex items-center justify-between">
                 <div className="text-left">
                     <h1 className="text-4xl font-bold text-white tracking-tight">PromptFlow: Advanced Workflow Automator</h1>
                     <p className="text-gray-400 mt-2">Visually chain AI prompts, use variables, and process lists of data to generate customized content at scale.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                    <button
+                        onClick={() => setIsWorkflowNavOpen(true)}
+                        className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition"
+                        title="Browse Workflows"
+                    >
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
+                        </svg>
+                        <span>Workflows</span>
+                    </button>
                     <button
                         onClick={() => setIsAgencyOpen(true)}
                         className="flex items-center gap-2 bg-cyan-700 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg transition"
@@ -666,12 +772,32 @@ const App: React.FC = () => {
                         <span>Agency</span>
                     </button>
                     <button
+                        onClick={() => setIsArticlesOpen(true)}
+                        className="flex items-center gap-2 bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition"
+                        title="View Saved Articles"
+                    >
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span>Articles</span>
+                    </button>
+                    <button
+                        onClick={() => setIsTemplatesOpen(true)}
+                        className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg transition"
+                        title="Template Library"
+                    >
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <span>Templates</span>
+                    </button>
+                    <button
                         onClick={() => setIsTrackerOpen(true)}
                         className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-cyan-300 font-bold py-2 px-4 rounded-lg transition"
                         title="Show Project Tracker"
                     >
                         <Icon type="document" className="h-5 w-5" />
-                        <span>Project Tracker</span>
+                        <span>Tracker</span>
                     </button>
                 </div>
             </header>

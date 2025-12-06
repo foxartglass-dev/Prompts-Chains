@@ -11,10 +11,13 @@ const requireDb = (req, res, next) => {
   next();
 };
 
-// GET all websites for a client
-router.get('/client/:clientId', requireDb, async (req, res) => {
+// GET all websites for a client (supports ?client_id=X)
+router.get('/', requireDb, async (req, res) => {
   try {
-    const { clientId } = req.params;
+    const clientId = req.query.client_id;
+    if (!clientId) {
+      return res.status(400).json({ error: 'client_id query parameter required' });
+    }
     const websites = await sql`
       SELECT w.*,
         COALESCE(
@@ -69,7 +72,12 @@ router.get('/:id', requireDb, async (req, res) => {
 // POST create website
 router.post('/', requireDb, async (req, res) => {
   try {
-    const { clientId, name, url, wpUrl, wpUser, wpAppPassword } = req.body;
+    // Support both camelCase and snake_case
+    const clientId = req.body.client_id || req.body.clientId;
+    const { name, url } = req.body;
+    const wpUrl = req.body.wp_url || req.body.wpUrl;
+    const wpUser = req.body.wp_user || req.body.wpUser;
+    const wpAppPassword = req.body.wp_app_password || req.body.wpAppPassword;
 
     if (!clientId || !name) {
       return res.status(400).json({ error: 'Client ID and name are required' });
@@ -92,7 +100,11 @@ router.post('/', requireDb, async (req, res) => {
 router.put('/:id', requireDb, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, url, wpUrl, wpUser, wpAppPassword } = req.body;
+    // Support both camelCase and snake_case
+    const { name, url } = req.body;
+    const wpUrl = req.body.wpUrl || req.body.wp_url;
+    const wpUser = req.body.wpUser || req.body.wp_user;
+    const wpAppPassword = req.body.wpAppPassword || req.body.wp_app_password;
 
     const result = await sql`
       UPDATE websites

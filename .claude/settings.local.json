@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(npm run dev:all:*)",
+      "Bash(npm install)",
+      "Bash(npm run dev:server:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(copy:*)",
+      "Bash(cat:*)",
+      "Bash(node -e:*)",
+      "Bash(node test-db.js:*)",
+      "Bash(node test-db.cjs:*)",
+      "Bash(node run-schema.cjs:*)",
+      "Bash(timeout:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

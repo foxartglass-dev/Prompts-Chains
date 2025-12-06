@@ -61,6 +61,11 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   const [showLocationForm, setShowLocationForm] = useState(false);
   const [showWebsiteForm, setShowWebsiteForm] = useState(false);
 
+  // Edit mode - track which item is being edited
+  const [editingClientId, setEditingClientId] = useState<number | null>(null);
+  const [editingLocationId, setEditingLocationId] = useState<number | null>(null);
+  const [editingWebsiteId, setEditingWebsiteId] = useState<number | null>(null);
+
   // Form data
   const [clientForm, setClientForm] = useState({ name: '', description: '' });
   const [locationForm, setLocationForm] = useState({
@@ -94,10 +99,19 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
     setLoading(true);
     try {
       const res = await fetch('/api/clients');
+      if (!res.ok) {
+        setClients([]);
+        setError('Database not configured. Run schema.sql in Neon.');
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
-      setClients(data);
+      // API returns {clients: [...]}
+      const clientsArray = data.clients || data;
+      setClients(Array.isArray(clientsArray) ? clientsArray : []);
     } catch (err) {
-      setError('Failed to fetch clients');
+      setClients([]);
+      setError('Database not configured. Run schema.sql in Neon.');
     }
     setLoading(false);
   };
@@ -105,9 +119,16 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   const fetchLocations = async (clientId: number) => {
     try {
       const res = await fetch(`/api/locations?client_id=${clientId}`);
+      if (!res.ok) {
+        setLocations([]);
+        return;
+      }
       const data = await res.json();
-      setLocations(data);
+      // API returns {locations: [...]}
+      const locationsArray = data.locations || data;
+      setLocations(Array.isArray(locationsArray) ? locationsArray : []);
     } catch (err) {
+      setLocations([]);
       setError('Failed to fetch locations');
     }
   };
@@ -115,9 +136,16 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   const fetchWebsites = async (clientId: number) => {
     try {
       const res = await fetch(`/api/websites?client_id=${clientId}`);
+      if (!res.ok) {
+        setWebsites([]);
+        return;
+      }
       const data = await res.json();
-      setWebsites(data);
+      // API returns {websites: [...]}
+      const websitesArray = data.websites || data;
+      setWebsites(Array.isArray(websitesArray) ? websitesArray : []);
     } catch (err) {
+      setWebsites([]);
       setError('Failed to fetch websites');
     }
   };
@@ -174,6 +202,115 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
     } catch (err) {
       setError('Failed to create website');
     }
+  };
+
+  // Edit functions
+  const startEditClient = (client: Client) => {
+    setEditingClientId(client.id);
+    setClientForm({ name: client.name, description: client.description || '' });
+    setShowClientForm(true);
+  };
+
+  const startEditLocation = (location: Location) => {
+    setEditingLocationId(location.id);
+    setLocationForm({
+      name: location.name,
+      address: location.address || '',
+      city: location.city || '',
+      state: location.state || '',
+      zip: location.zip || '',
+      country: location.country || 'USA',
+      has_gbp: location.has_gbp,
+      gbp_place_id: location.gbp_place_id || ''
+    });
+    setShowLocationForm(true);
+  };
+
+  const startEditWebsite = (website: Website) => {
+    setEditingWebsiteId(website.id);
+    setWebsiteForm({
+      name: website.name,
+      url: website.url || '',
+      wp_url: website.wp_url || '',
+      wp_user: website.wp_user || '',
+      wp_app_password: website.wp_app_password || ''
+    });
+    setShowWebsiteForm(true);
+  };
+
+  const updateClient = async () => {
+    if (!editingClientId) return;
+    try {
+      const res = await fetch(`/api/clients/${editingClientId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(clientForm)
+      });
+      if (res.ok) {
+        setClientForm({ name: '', description: '' });
+        setShowClientForm(false);
+        setEditingClientId(null);
+        fetchClients();
+      }
+    } catch (err) {
+      setError('Failed to update client');
+    }
+  };
+
+  const updateLocation = async () => {
+    if (!editingLocationId || !selectedClient) return;
+    try {
+      const res = await fetch(`/api/locations/${editingLocationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(locationForm)
+      });
+      if (res.ok) {
+        setLocationForm({ name: '', address: '', city: '', state: '', zip: '', country: 'USA', has_gbp: false, gbp_place_id: '' });
+        setShowLocationForm(false);
+        setEditingLocationId(null);
+        fetchLocations(selectedClient.id);
+      }
+    } catch (err) {
+      setError('Failed to update location');
+    }
+  };
+
+  const updateWebsite = async () => {
+    if (!editingWebsiteId || !selectedClient) return;
+    try {
+      const res = await fetch(`/api/websites/${editingWebsiteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(websiteForm)
+      });
+      if (res.ok) {
+        setWebsiteForm({ name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '' });
+        setShowWebsiteForm(false);
+        setEditingWebsiteId(null);
+        fetchWebsites(selectedClient.id);
+      }
+    } catch (err) {
+      setError('Failed to update website');
+    }
+  };
+
+  const cancelClientForm = () => {
+    setShowClientForm(false);
+    setEditingClientId(null);
+    setClientForm({ name: '', description: '' });
+  };
+
+  const cancelLocationForm = () => {
+    setShowLocationForm(false);
+    setEditingLocationId(null);
+    setLocationForm({ name: '', address: '', city: '', state: '', zip: '', country: 'USA', has_gbp: false, gbp_place_id: '' });
+  };
+
+  const cancelWebsiteForm = () => {
+    setShowWebsiteForm(false);
+    setEditingWebsiteId(null);
+    setWebsiteForm({ name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '' });
   };
 
   const deleteClient = async (id: number) => {
@@ -285,9 +422,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
 
                 {showClientForm && (
                   <div className="p-3 border-b border-gray-700 bg-gray-900/30 space-y-2">
+                    <p className="text-xs text-cyan-400 font-medium">{editingClientId ? 'Edit Client' : 'New Client'}</p>
                     <input
                       type="text"
-                      placeholder="Client Name"
+                      placeholder="Client Name *"
                       value={clientForm.name}
                       onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
                       className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
@@ -300,10 +438,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                       className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
                     />
                     <div className="flex gap-2">
-                      <button onClick={createClient} className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
-                        Save
+                      <button onClick={editingClientId ? updateClient : createClient} className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
+                        {editingClientId ? 'Update' : 'Save'}
                       </button>
-                      <button onClick={() => setShowClientForm(false)} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
+                      <button onClick={cancelClientForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
                         Cancel
                       </button>
                     </div>
@@ -333,17 +471,32 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                             <p className="text-xs text-gray-400">{client.description}</p>
                           )}
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteClient(client.id);
-                          }}
-                          className="text-gray-500 hover:text-red-400 p-1"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startEditClient(client);
+                            }}
+                            className="text-gray-500 hover:text-cyan-400 p-1"
+                            title="Edit"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteClient(client.id);
+                            }}
+                            className="text-gray-500 hover:text-red-400 p-1"
+                            title="Delete"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -353,7 +506,12 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
               {/* Locations Panel */}
               <div className="w-1/3 border-r border-gray-700 flex flex-col">
                 <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-900/50">
-                  <h3 className="font-semibold text-cyan-400">Locations</h3>
+                  <div>
+                    <h3 className="font-semibold text-cyan-400">Locations</h3>
+                    {selectedClient && (
+                      <p className="text-xs text-gray-500">for {selectedClient.name}</p>
+                    )}
+                  </div>
                   {selectedClient && (
                     <button
                       onClick={() => setShowLocationForm(true)}
@@ -366,9 +524,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
 
                 {showLocationForm && selectedClient && (
                   <div className="p-3 border-b border-gray-700 bg-gray-900/30 space-y-2">
+                    <p className="text-xs text-cyan-400 font-medium">{editingLocationId ? 'Edit Location' : 'New Location'}</p>
                     <input
                       type="text"
-                      placeholder="Location Name"
+                      placeholder="Location Name *"
                       value={locationForm.name}
                       onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })}
                       className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
@@ -431,10 +590,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                       />
                     )}
                     <div className="flex gap-2">
-                      <button onClick={createLocation} className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
-                        Save
+                      <button onClick={editingLocationId ? updateLocation : createLocation} className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
+                        {editingLocationId ? 'Update' : 'Save'}
                       </button>
-                      <button onClick={() => setShowLocationForm(false)} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
+                      <button onClick={cancelLocationForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
                         Cancel
                       </button>
                     </div>
@@ -488,9 +647,22 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                startEditLocation(location);
+                              }}
+                              className="text-gray-500 hover:text-cyan-400 p-1"
+                              title="Edit"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 deleteLocation(location.id);
                               }}
                               className="text-gray-500 hover:text-red-400 p-1"
+                              title="Delete"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -507,7 +679,12 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
               {/* Websites Panel */}
               <div className="w-1/3 flex flex-col">
                 <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-900/50">
-                  <h3 className="font-semibold text-cyan-400">Websites</h3>
+                  <div>
+                    <h3 className="font-semibold text-cyan-400">Websites</h3>
+                    {selectedClient && (
+                      <p className="text-xs text-gray-500">for {selectedClient.name}</p>
+                    )}
+                  </div>
                   {selectedClient && (
                     <button
                       onClick={() => setShowWebsiteForm(true)}
@@ -520,9 +697,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
 
                 {showWebsiteForm && selectedClient && (
                   <div className="p-3 border-b border-gray-700 bg-gray-900/30 space-y-2">
+                    <p className="text-xs text-cyan-400 font-medium">{editingWebsiteId ? 'Edit Website' : 'New Website'}</p>
                     <input
                       type="text"
-                      placeholder="Website Name"
+                      placeholder="Website Name *"
                       value={websiteForm.name}
                       onChange={(e) => setWebsiteForm({ ...websiteForm, name: e.target.value })}
                       className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
@@ -559,10 +737,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                       />
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={createWebsite} className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
-                        Save
+                      <button onClick={editingWebsiteId ? updateWebsite : createWebsite} className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
+                        {editingWebsiteId ? 'Update' : 'Save'}
                       </button>
-                      <button onClick={() => setShowWebsiteForm(false)} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
+                      <button onClick={cancelWebsiteForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
                         Cancel
                       </button>
                     </div>
@@ -609,8 +787,18 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                               </button>
                             )}
                             <button
+                              onClick={() => startEditWebsite(website)}
+                              className="text-gray-500 hover:text-cyan-400 p-1"
+                              title="Edit"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
                               onClick={() => deleteWebsite(website.id)}
                               className="text-gray-500 hover:text-red-400 p-1"
+                              title="Delete"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
