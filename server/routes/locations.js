@@ -11,10 +11,13 @@ const requireDb = (req, res, next) => {
   next();
 };
 
-// GET all locations for a client
-router.get('/client/:clientId', requireDb, async (req, res) => {
+// GET all locations for a client (supports both /client/:clientId and ?client_id=X)
+router.get('/', requireDb, async (req, res) => {
   try {
-    const { clientId } = req.params;
+    const clientId = req.query.client_id;
+    if (!clientId) {
+      return res.status(400).json({ error: 'client_id query parameter required' });
+    }
     const locations = await sql`
       SELECT l.*,
         COALESCE(
@@ -63,7 +66,12 @@ router.get('/:id', requireDb, async (req, res) => {
 // POST create location
 router.post('/', requireDb, async (req, res) => {
   try {
-    const { clientId, name, address, city, state, zip, country, hasGbp, gbpPlaceId, gbpCategories } = req.body;
+    // Support both camelCase and snake_case
+    const clientId = req.body.client_id || req.body.clientId;
+    const { name, address, city, state, zip, country } = req.body;
+    const hasGbp = req.body.has_gbp || req.body.hasGbp;
+    const gbpPlaceId = req.body.gbp_place_id || req.body.gbpPlaceId;
+    const gbpCategories = req.body.gbp_categories || req.body.gbpCategories;
 
     if (!clientId || !name) {
       return res.status(400).json({ error: 'Client ID and name are required' });
@@ -86,7 +94,12 @@ router.post('/', requireDb, async (req, res) => {
 router.put('/:id', requireDb, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, address, city, state, zip, country, hasGbp, gbpPlaceId, gbpCategories, gbpData } = req.body;
+    // Support both camelCase and snake_case
+    const { name, address, city, state, zip, country } = req.body;
+    const hasGbp = req.body.hasGbp ?? req.body.has_gbp;
+    const gbpPlaceId = req.body.gbpPlaceId || req.body.gbp_place_id;
+    const gbpCategories = req.body.gbpCategories || req.body.gbp_categories;
+    const gbpData = req.body.gbpData || req.body.gbp_data;
 
     const result = await sql`
       UPDATE locations

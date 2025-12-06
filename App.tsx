@@ -716,9 +716,33 @@ const App: React.FC = () => {
                     setCurrentWebsiteId(workflow.website_id || undefined);
                     showNotification(`Loaded workflow: ${workflow.name}`, 'info');
                 }}
-                onCreateWorkflow={(clientId, websiteId) => {
-                    handleCreateNewProject();
-                    if (websiteId) setCurrentWebsiteId(websiteId);
+                onCreateWorkflow={async (clientId, websiteId) => {
+                    // Create a new workflow in the database
+                    try {
+                        const res = await fetch('/api/workflows', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: 'New Workflow',
+                                clientId: clientId || null,
+                                websiteId: websiteId || null,
+                                state: {}
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.workflow) {
+                            setCurrentWorkflowId(data.workflow.id);
+                            if (websiteId) setCurrentWebsiteId(websiteId);
+                            handleCreateNewProject();
+                            showNotification(`Created new workflow: ${data.workflow.name}`, 'success');
+                            setIsWorkflowNavOpen(false);
+                        } else {
+                            showNotification('Failed to create workflow', 'error');
+                        }
+                    } catch (err) {
+                        console.error('Failed to create workflow:', err);
+                        showNotification('Failed to create workflow', 'error');
+                    }
                 }}
             />
             <header className="mb-8 flex items-center justify-between">

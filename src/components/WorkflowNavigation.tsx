@@ -85,7 +85,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
 
   const fetchWebsites = async (clientId: number) => {
     try {
-      const res = await fetch(`/api/websites/client/${clientId}`);
+      const res = await fetch(`/api/websites?client_id=${clientId}`);
       const data = await res.json();
       setWebsites(prev => {
         const otherWebsites = prev.filter(w => w.client_id !== clientId);
