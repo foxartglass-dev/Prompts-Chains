@@ -10,6 +10,10 @@ CREATE TABLE IF NOT EXISTS clients (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   description TEXT,
+  contact_name VARCHAR(255),
+  contact_email VARCHAR(255),
+  contact_phone VARCHAR(50),
+  notes TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -24,11 +28,24 @@ CREATE TABLE IF NOT EXISTS locations (
   state VARCHAR(100),
   zip VARCHAR(20),
   country VARCHAR(100) DEFAULT 'USA',
+  phone VARCHAR(50),
   -- Google Business Profile
   has_gbp BOOLEAN DEFAULT false,
   gbp_place_id VARCHAR(255),
-  gbp_categories JSONB DEFAULT '[]',
-  gbp_data JSONB DEFAULT '{}',
+  gbp_account_id VARCHAR(255),
+  gbp_location_id VARCHAR(255),
+  gbp_refresh_token TEXT, -- OAuth refresh token for API access
+  gbp_primary_category VARCHAR(255),
+  gbp_categories JSONB DEFAULT '[]', -- Array of category objects
+  gbp_services JSONB DEFAULT '[]', -- Array of service items
+  gbp_description TEXT,
+  gbp_hours JSONB DEFAULT '{}', -- Regular hours object
+  gbp_phone VARCHAR(50),
+  gbp_website VARCHAR(500),
+  gbp_data JSONB DEFAULT '{}', -- Full raw GBP data for reference
+  gbp_last_synced TIMESTAMP,
+  -- Custom placeholders for this location (beyond GBP data)
+  custom_placeholders JSONB DEFAULT '{}',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -39,9 +56,14 @@ CREATE TABLE IF NOT EXISTS websites (
   client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   url VARCHAR(500),
+  -- WordPress credentials
   wp_url VARCHAR(500),
   wp_user VARCHAR(255),
   wp_app_password VARCHAR(255),
+  -- Elementor integration
+  elementor_connected BOOLEAN DEFAULT false,
+  elementor_api_key VARCHAR(255),
+  elementor_api_secret TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -56,7 +78,21 @@ CREATE TABLE IF NOT EXISTS location_websites (
   UNIQUE(location_id, website_id)
 );
 
--- Projects/Workflows table (linked to websites or standalone)
+-- Workflows table (prompt chains - linked to websites or standalone)
+-- Each workflow = one full dashboard/prompt chain setup
+CREATE TABLE IF NOT EXISTS workflows (
+  id SERIAL PRIMARY KEY,
+  client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+  website_id INTEGER REFERENCES websites(id) ON DELETE SET NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  -- Full workflow state (prompts, placeholders, tags, snippets, settings)
+  state JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Keep projects table for backwards compatibility (alias to workflows)
 CREATE TABLE IF NOT EXISTS projects (
   id SERIAL PRIMARY KEY,
   client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
@@ -92,11 +128,65 @@ CREATE TABLE IF NOT EXISTS templates (
   name VARCHAR(255) NOT NULL,
   description TEXT,
   -- What level is this template for?
-  template_type VARCHAR(50) NOT NULL, -- 'client', 'location', 'website', 'project', 'workflow'
+  template_type VARCHAR(50) NOT NULL, -- 'full_workflow', 'prompts', 'placeholders', 'tags', 'snippets', 'website_setup', 'client_setup'
   -- The actual template data (prompts, placeholders, snippets, etc.)
   template_data JSONB NOT NULL DEFAULT '{}',
-  -- Tags for organization
+  -- Which sections are included (for granular templates)
+  includes JSONB DEFAULT '{"prompts": true, "placeholders": true, "tags": true, "snippets": true, "settings": true}',
+  -- Tags for organization/search
   tags JSONB DEFAULT '[]',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- ARTICLES TABLE (stored outputs)
+-- ============================================
+
+-- Articles table (stores all generated content with full history)
+CREATE TABLE IF NOT EXISTS articles (
+  id SERIAL PRIMARY KEY,
+  -- Link to workflow and optionally website/client
+  workflow_id INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
+  website_id INTEGER REFERENCES websites(id) ON DELETE SET NULL,
+  client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+  -- Article identification
+  keyword VARCHAR(500) NOT NULL, -- The page keyword that started the chain
+  tag VARCHAR(50), -- The audience tag (B, E, G, etc.) if applicable
+  -- Final output
+  final_content TEXT,
+  meta_titles JSONB DEFAULT '[]', -- Array of generated meta titles
+  meta_descriptions JSONB DEFAULT '[]', -- Array of generated meta descriptions
+  -- All intermediate outputs from the chain
+  chain_outputs JSONB DEFAULT '{}', -- {"output_1": "...", "output_2": "...", "output_3": "..."}
+  -- AI detection results
+  ai_score DECIMAL(5,2), -- 0.00 to 100.00
+  word_count INTEGER,
+  status VARCHAR(20) DEFAULT 'generated', -- 'generated', 'passed', 'flagged', 'edited', 'published'
+  -- WordPress publishing
+  wp_post_id INTEGER,
+  wp_post_url VARCHAR(500),
+  wp_published_at TIMESTAMP,
+  -- Version tracking
+  version INTEGER DEFAULT 1,
+  parent_article_id INTEGER REFERENCES articles(id) ON DELETE SET NULL, -- For version history
+  -- Timestamps
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- GBP OAUTH TOKENS (for Google Business Profile API)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS gbp_oauth_tokens (
+  id SERIAL PRIMARY KEY,
+  location_id INTEGER REFERENCES locations(id) ON DELETE CASCADE,
+  access_token TEXT,
+  refresh_token TEXT,
+  token_type VARCHAR(50) DEFAULT 'Bearer',
+  expires_at TIMESTAMP,
+  scope TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -107,8 +197,16 @@ CREATE TABLE IF NOT EXISTS templates (
 
 CREATE INDEX IF NOT EXISTS idx_locations_client_id ON locations(client_id);
 CREATE INDEX IF NOT EXISTS idx_websites_client_id ON websites(client_id);
+CREATE INDEX IF NOT EXISTS idx_workflows_client_id ON workflows(client_id);
+CREATE INDEX IF NOT EXISTS idx_workflows_website_id ON workflows(website_id);
 CREATE INDEX IF NOT EXISTS idx_projects_client_id ON projects(client_id);
 CREATE INDEX IF NOT EXISTS idx_projects_website_id ON projects(website_id);
 CREATE INDEX IF NOT EXISTS idx_location_websites_location ON location_websites(location_id);
 CREATE INDEX IF NOT EXISTS idx_location_websites_website ON location_websites(website_id);
 CREATE INDEX IF NOT EXISTS idx_templates_type ON templates(template_type);
+CREATE INDEX IF NOT EXISTS idx_articles_workflow_id ON articles(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_articles_website_id ON articles(website_id);
+CREATE INDEX IF NOT EXISTS idx_articles_client_id ON articles(client_id);
+CREATE INDEX IF NOT EXISTS idx_articles_keyword ON articles(keyword);
+CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
+CREATE INDEX IF NOT EXISTS idx_gbp_oauth_location ON gbp_oauth_tokens(location_id);

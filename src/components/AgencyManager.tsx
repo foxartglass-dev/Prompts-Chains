@@ -94,10 +94,17 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
     setLoading(true);
     try {
       const res = await fetch('/api/clients');
+      if (!res.ok) {
+        setClients([]);
+        setError('Database not configured. Run schema.sql in Neon.');
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
-      setClients(data);
+      setClients(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError('Failed to fetch clients');
+      setClients([]);
+      setError('Database not configured. Run schema.sql in Neon.');
     }
     setLoading(false);
   };
@@ -105,9 +112,14 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   const fetchLocations = async (clientId: number) => {
     try {
       const res = await fetch(`/api/locations?client_id=${clientId}`);
+      if (!res.ok) {
+        setLocations([]);
+        return;
+      }
       const data = await res.json();
-      setLocations(data);
+      setLocations(Array.isArray(data) ? data : []);
     } catch (err) {
+      setLocations([]);
       setError('Failed to fetch locations');
     }
   };
@@ -115,9 +127,14 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   const fetchWebsites = async (clientId: number) => {
     try {
       const res = await fetch(`/api/websites?client_id=${clientId}`);
+      if (!res.ok) {
+        setWebsites([]);
+        return;
+      }
       const data = await res.json();
-      setWebsites(data);
+      setWebsites(Array.isArray(data) ? data : []);
     } catch (err) {
+      setWebsites([]);
       setError('Failed to fetch websites');
     }
   };
