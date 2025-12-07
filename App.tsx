@@ -901,20 +901,20 @@ const App: React.FC = () => {
                              {/* API Keys and Model Selection */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-400 mb-1.5">ZeroGPT API Key (Optional)</label>
-                                    <input type="password" placeholder="ZeroGPT API Key" value={currentProject.state.apiKeys.zeroGpt} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, zeroGpt: e.target.value}}))} className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-cyan focus:border-brand-cyan transition-all" />
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">ZeroGPT API Key (Optional)</label>
+                                    <input type="password" placeholder="ZeroGPT API Key" value={currentProject.state.apiKeys.zeroGpt} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, zeroGpt: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-400 mb-1.5">Anthropic API Key (Required)</label>
-                                    <input type="password" placeholder="sk-ant-..." value={currentProject.state.apiKeys.anthropic} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, anthropic: e.target.value}}))} className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-cyan focus:border-brand-cyan transition-all" />
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">Anthropic API Key (Required)</label>
+                                    <input type="password" placeholder="sk-ant-..." value={currentProject.state.apiKeys.anthropic} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, anthropic: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
                                 </div>
                             </div>
                              <div>
-                                <label className="block text-sm font-medium text-slate-400 mb-1.5">AI Model</label>
+                                <label className="block text-sm font-medium text-brand-gold mb-1.5">AI Model</label>
                                 <select
                                     value={currentProject.state.model}
                                     onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
-                                    className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-cyan focus:border-brand-cyan transition-all"
+                                    className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all"
                                 >
                                     <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Latest)</option>
                                     <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
@@ -923,22 +923,22 @@ const App: React.FC = () => {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-400 mb-1.5">Filename Template</label>
-                                <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-cyan focus:border-brand-cyan transition-all" />
+                                <label className="block text-sm font-medium text-brand-gold mb-1.5">Filename Template</label>
+                                <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
                             </div>
                             
                             {/* Project Management */}
-                             <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700/50 space-y-3">
-                                <h3 className="text-lg font-semibold text-slate-300">Project Management</h3>
+                             <div className="bg-slate-800/50 p-4 rounded-lg border border-brand-gold/50 space-y-3">
+                                <h3 className="text-lg font-semibold text-brand-gold">Project Management</h3>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={handleCreateNewProject} className="w-full text-center px-4 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white font-semibold text-sm transition border border-slate-600/50">+ New Project</button>
+                                    <button onClick={handleCreateNewProject} className="w-full text-center px-4 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white font-semibold text-sm transition border border-brand-gold/50">+ New Project</button>
                                     <select
                                         onChange={(e) => {
                                             const project = projects.find(p => p.id === e.target.value);
                                             if(project) setCurrentProject(project);
                                         }}
                                         value={currentProject.id}
-                                        className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-cyan"
+                                        className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-gold"
                                     >
                                         <option value="" disabled>Load Project</option>
                                         {projects.map(p => (
@@ -952,7 +952,7 @@ const App: React.FC = () => {
                                         placeholder="Enter project name..."
                                         value={currentProject.name === 'Untitled Project' ? '' : currentProject.name}
                                         onChange={e => setCurrentProject({...currentProject, name: e.target.value || 'Untitled Project'})}
-                                        className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-cyan"
+                                        className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-gold"
                                     />
                                     <button onClick={handleSaveProject} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-white font-semibold transition">Save</button>
                                     <button onClick={handleDeleteProject} className="p-2.5 bg-red-600/80 hover:bg-red-600 rounded-lg text-white transition" title="Delete current project">
@@ -970,12 +970,12 @@ const App: React.FC = () => {
                                                 showNotification('Project exported to JSON!', 'success');
                                             }
                                         }}
-                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition border border-slate-600/50"
+                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition border border-brand-gold/50"
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                                         Export JSON
                                     </button>
-                                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition cursor-pointer border border-slate-600/50">
+                                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition cursor-pointer border border-brand-gold/50">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                                         Import JSON
                                         <input
@@ -1002,13 +1002,13 @@ const App: React.FC = () => {
 
                             {/* Item Input */}
                             <div>
-                                <label htmlFor="manual-items" className="block text-sm font-medium text-slate-400 mb-1.5">
+                                <label htmlFor="manual-items" className="block text-sm font-medium text-brand-gold mb-1.5">
                                     Add Items (one per line)
                                 </label>
                                 <textarea
                                     id="manual-items"
                                     rows={6}
-                                    className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-white font-mono text-sm focus:ring-2 focus:ring-brand-cyan focus:border-brand-cyan transition-all"
+                                    className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-sm focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all"
                                     placeholder="Topic A(H)&#10;Topic B(H)&#10;Product X(J)"
                                     value={manualItems}
                                     onChange={(e) => setManualItems(e.target.value)}
@@ -1016,11 +1016,11 @@ const App: React.FC = () => {
                                 <div className="mt-3 flex items-center justify-between">
                                     <button
                                         onClick={handleManualAddItems}
-                                        className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 px-4 rounded-lg transition text-sm border border-slate-600/50"
+                                        className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 px-4 rounded-lg transition text-sm border border-brand-gold/50"
                                     >
                                         Add Items from Text
                                     </button>
-                                    <label htmlFor="file-upload" className="cursor-pointer text-sm text-brand-cyan hover:text-brand-cyan-light transition">
+                                    <label htmlFor="file-upload" className="cursor-pointer text-sm text-brand-gold hover:text-brand-gold-light transition">
                                         {fileName ? `File: ${fileName}` : 'Or, upload a CSV file'}
                                         <input id="file-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
                                     </label>
@@ -1035,10 +1035,10 @@ const App: React.FC = () => {
                     
                     {items.length > 0 && renderSection('2. Loaded Items', 'loadedItems', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-2">
-                            <p className="text-slate-300">{items.length} item(s) loaded.</p>
-                            <div className="max-h-60 overflow-y-auto bg-slate-900/50 rounded-lg p-2 border border-slate-700/50">
+                            <p className="text-brand-gold">{items.length} item(s) loaded.</p>
+                            <div className="max-h-60 overflow-y-auto bg-slate-900/50 rounded-lg p-2 border border-brand-gold/50">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="text-xs text-slate-400 uppercase bg-slate-800/50">
+                                    <thead className="text-xs text-brand-gold uppercase bg-slate-800/50">
                                         <tr>
                                             <th scope="col" className="px-4 py-2.5 rounded-tl-lg">Item Name</th>
                                             <th scope="col" className="px-4 py-2.5 rounded-tr-lg">Tag</th>
@@ -1064,61 +1064,61 @@ const App: React.FC = () => {
                             </p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-400 mb-1.5">WordPress Site URL</label>
-                                    <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-cyan transition-all" />
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
+                                    <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-400 mb-1.5">Content Type</label>
-                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-cyan transition-all">
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">Content Type</label>
+                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all">
                                         <option value="pages">Page</option>
                                         <option value="posts">Post</option>
                                     </select>
                                 </div>
                             </div>
                              <div>
-                                <label className="block text-sm font-medium text-slate-400 mb-1.5">Page/Post Title Template</label>
+                                <label className="block text-sm font-medium text-brand-gold mb-1.5">Page/Post Title Template</label>
                                 <input
                                     type="text"
                                     value={currentProject.state.wpTitleTemplate}
                                     onChange={e => setCurrentProjectState(p => ({...p, wpTitleTemplate: e.target.value}))}
-                                    className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-cyan transition-all"
+                                    className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                 />
-                                <p className="text-xs text-slate-500 mt-1">
+                                <p className="text-xs text-brand-gold/70 mt-1">
                                     Use variables like {'{item_name}'} or {'{city}'}.
                                 </p>
                             </div>
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-400 mb-1.5">WordPress Username</label>
-                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials.user} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, user: e.target.value}}))} className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-cyan transition-all" />
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Username</label>
+                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials.user} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, user: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-400 mb-1.5">WP Application Password</label>
-                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials.password} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, password: e.target.value}}))} className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-cyan transition-all" />
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">WP Application Password</label>
+                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials.password} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, password: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                             </div>
-                            <p className="text-xs text-slate-400">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
+                            <p className="text-xs text-brand-gold/70">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
                         </div>
                     )}
 
                      {renderSection('3. Tag Manager', 'tags', <Icon type="settings" className="h-6 w-6"/>,
                         <div className="space-y-3">
                              <div className="flex gap-2">
-                                <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-cyan transition-all"/>
+                                <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-gold transition-all"/>
                                 <button onClick={addTag} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-white font-semibold transition">Add</button>
                             </div>
-                            <div className="flex flex-wrap gap-2">{currentProject.state.tags.map(t => (<div key={t.id} className="bg-brand-cyan/20 border border-brand-cyan/30 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-brand-cyan"><span>{t.name}</span><button onClick={() => removeTag(t.id)} className="text-brand-cyan/60 hover:text-white transition"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>))}</div>
+                            <div className="flex flex-wrap gap-2">{currentProject.state.tags.map(t => (<div key={t.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-brand-gold"><span>{t.name}</span><button onClick={() => removeTag(t.id)} className="text-brand-gold/60 hover:text-white transition"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>))}</div>
                         </div>
                      )}
 
                     {renderSection('4. Workflow Variables', 'placeholders', <Icon type="info" className="h-6 w-6"/>,
                         <div className="space-y-6">
                             <div>
-                                <h3 className="text-lg font-semibold text-slate-300 mb-2 border-b border-slate-700/50 pb-1">Global Variables</h3>
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Global Variables</h3>
                                 {selectedPlaceholders.size > 0 && (
-                                    <div className="bg-slate-800/50 p-3 rounded-lg mb-3 flex items-center gap-3 border border-slate-700/50">
-                                        <span className="text-sm font-semibold">{selectedPlaceholders.size} selected</span>
-                                        <select value={bulkActionTag} onChange={e => setBulkActionTag(e.target.value)} className="bg-slate-800/80 border border-slate-600/50 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-brand-cyan">
+                                    <div className="bg-slate-800/50 p-3 rounded-lg mb-3 flex items-center gap-3 border border-brand-gold/50">
+                                        <span className="text-sm font-semibold text-brand-gold">{selectedPlaceholders.size} selected</span>
+                                        <select value={bulkActionTag} onChange={e => setBulkActionTag(e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-brand-gold">
                                             <option value="">Select Tag...</option>
                                             {currentProject.state.tags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                                         </select>
@@ -1127,42 +1127,42 @@ const App: React.FC = () => {
                                 )}
                                 <div className="space-y-2">
                                 {currentProject.state.placeholders.filter(p=>!p.tag).map(p => (<div key={p.id} className="grid grid-cols-[auto,1fr,1fr,auto] gap-2 items-center">
-                                    <input type="checkbox" checked={selectedPlaceholders.has(p.id)} onChange={() => togglePlaceholderSelection(p.id)} className="form-checkbox h-4 w-4 bg-slate-800 border-slate-600 text-brand-cyan focus:ring-brand-cyan rounded"/>
-                                    <input type="text" placeholder="{key}" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-cyan text-sm transition-all"/>
-                                    <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-cyan text-sm transition-all"/>
+                                    <input type="checkbox" checked={selectedPlaceholders.has(p.id)} onChange={() => togglePlaceholderSelection(p.id)} className="form-checkbox h-4 w-4 bg-slate-800 border-brand-gold text-brand-gold focus:ring-brand-gold rounded"/>
+                                    <input type="text" placeholder="{key}" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
+                                    <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
                                     <button onClick={() => handleDeletePlaceholder(p.id)} className="p-2 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                 </div>))}
                                 </div>
-                                <button onClick={() => handleAddPlaceholder()} className="mt-3 text-brand-cyan hover:text-brand-cyan-light font-semibold text-sm transition">+ Add Global Variable</button>
+                                <button onClick={() => handleAddPlaceholder()} className="mt-3 text-brand-gold hover:text-brand-gold-light font-semibold text-sm transition">+ Add Global Variable</button>
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-slate-300 mb-2 border-b border-slate-700/50 pb-1">Tagged Variables</h3>
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Tagged Variables</h3>
                                 {currentProject.state.tags.map(tag => (
                                     <div key={tag.id} className="mb-4">
-                                        <p className="font-bold text-brand-cyan text-sm mb-2">Tag: {tag.name}</p>
+                                        <p className="font-bold text-brand-gold text-sm mb-2">Tag: {tag.name}</p>
                                         <div className="space-y-2">
                                             {currentProject.state.placeholders.filter(p=>p.tag===tag.name).map(p => (<div key={p.id} className="grid grid-cols-[1fr,1fr,auto] gap-2 items-center">
-                                                <input type="text" placeholder={`{key{${tag.name}}}`} value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-cyan transition-all"/>
-                                                <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-cyan transition-all"/>
+                                                <input type="text" placeholder={`{key{${tag.name}}}`} value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                                <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
                                                 <div className="relative group">
-                                                    <button className="p-2 text-slate-400 hover:text-white transition">
+                                                    <button className="p-2 text-brand-gold hover:text-white transition">
                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
                                                     </button>
-                                                    <div className="absolute right-0 bottom-full z-10 mb-2 w-max bg-slate-800 border border-slate-700 text-white text-xs rounded-lg shadow-card-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
+                                                    <div className="absolute right-0 bottom-full z-10 mb-2 w-max bg-slate-800 border border-brand-gold/50 text-white text-xs rounded-lg shadow-card-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
                                                         <button onClick={() => handleMakePlaceholderUniversal(p.id)} className="block w-full text-left px-3 py-2 hover:bg-slate-700 rounded-t-lg transition">Make Global</button>
                                                         <button onClick={() => handleDeletePlaceholder(p.id)} className="block w-full text-left px-3 py-2 hover:bg-slate-700 rounded-b-lg text-red-400 transition">Delete Variable</button>
                                                     </div>
                                                 </div>
                                             </div>))}
                                         </div>
-                                        <button onClick={() => handleAddPlaceholder(tag.name)} className="mt-2 text-brand-cyan hover:text-brand-cyan-light font-semibold text-sm ml-1 transition">+ Add Variable for Tag: {tag.name}</button>
+                                        <button onClick={() => handleAddPlaceholder(tag.name)} className="mt-2 text-brand-gold hover:text-brand-gold-light font-semibold text-sm ml-1 transition">+ Add Variable for Tag: {tag.name}</button>
                                     </div>
                                 ))}
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-slate-300 mb-2 border-b border-slate-700/50 pb-1">Prompt Output Variables <span className="text-xs text-slate-500">(Read-only)</span></h3>
-                                <p className="text-xs text-slate-400 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-slate-800/50 p-1 rounded border border-slate-700/50">[output_key]</span></p>
-                                <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-purple-600/20 border border-purple-500/30 rounded-full px-3 py-1 text-sm font-mono text-purple-300">[{p.outputKey}]</div>))}</div>
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-gold/60">(Read-only)</span></h3>
+                                <p className="text-xs text-brand-gold/70 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-slate-800/50 p-1 rounded border border-brand-gold/50">[output_key]</span></p>
+                                <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 text-sm font-mono text-brand-gold">[{p.outputKey}]</div>))}</div>
                             </div>
                         </div>
                     )}
@@ -1170,22 +1170,22 @@ const App: React.FC = () => {
                     {renderSection('5. Conditional Snippets', 'snippets', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-4">
                              {currentProject.state.taggedSnippets.map(s => (
-                                <div key={s.id} className="bg-slate-800/50 p-4 rounded-lg space-y-2 border border-slate-700/50">
+                                <div key={s.id} className="bg-slate-800/50 p-4 rounded-lg space-y-2 border border-brand-gold/50">
                                     <div className="flex gap-2 items-center">
-                                        <input type="text" placeholder={`{{{SnippetName}}}`} value={s.key} onChange={e => handleSnippetChange(s.id, 'key', e.target.value)} className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-cyan transition-all"/>
+                                        <input type="text" placeholder={`{{{SnippetName}}}`} value={s.key} onChange={e => handleSnippetChange(s.id, 'key', e.target.value)} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-gold transition-all"/>
                                         <button onClick={() => removeSnippet(s.id)} className="p-2.5 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                     </div>
                                     <div className={`grid grid-cols-1 md:grid-cols-${Math.min(currentProject.state.tags.length, 3)} gap-2`}>
                                         {currentProject.state.tags.map(tag => (
                                             <div key={tag.id}>
-                                                <label className="block text-xs font-medium text-slate-400 mb-1.5">For Tag: <span className="text-brand-cyan">{tag.name}</span></label>
-                                                <textarea placeholder={`Value for tag: (${tag.name})`} value={s.values[tag.name] || ''} onChange={e => handleSnippetChange(s.id, 'values', { ...s.values, [tag.name]: e.target.value })} rows={3} className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-cyan transition-all" />
+                                                <label className="block text-xs font-medium text-brand-gold mb-1.5">For Tag: <span className="text-brand-gold">{tag.name}</span></label>
+                                                <textarea placeholder={`Value for tag: (${tag.name})`} value={s.values[tag.name] || ''} onChange={e => handleSnippetChange(s.id, 'values', { ...s.values, [tag.name]: e.target.value })} rows={3} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all" />
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                              ))}
-                             <button onClick={addSnippet} className="text-brand-cyan hover:text-brand-cyan-light font-semibold text-sm transition">+ Add Snippet</button>
+                             <button onClick={addSnippet} className="text-brand-gold hover:text-brand-gold-light font-semibold text-sm transition">+ Add Snippet</button>
                         </div>
                     )}
                 </div>
@@ -1196,20 +1196,20 @@ const App: React.FC = () => {
                         <div className="space-y-4">
                             {currentProject.state.promptTemplates.map((prompt, index) => (
                                 <div key={prompt.id} draggable onDragStart={() => draggedPromptId.current = prompt.id} onDragOver={e => e.preventDefault()} onDrop={() => handleReorderPrompts(draggedPromptId.current!, prompt.id)}
-                                    className="bg-slate-800/50 p-4 rounded-lg space-y-3 border border-slate-700/50 cursor-grab active:cursor-grabbing hover:border-slate-600/50 transition-colors">
+                                    className="bg-slate-800/50 p-4 rounded-lg space-y-3 border border-brand-gold/50 cursor-grab active:cursor-grabbing hover:border-brand-gold/70 transition-colors">
                                     <div className="flex items-center gap-2">
                                         <span className="text-brand-gold font-bold text-lg">{index + 1}</span>
-                                        <input type="text" value={prompt.name} onChange={e => handleUpdatePrompt(prompt.id, 'name', e.target.value)} placeholder="Prompt Name" className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-cyan transition-all"/>
-                                        <input type="text" value={prompt.outputKey} onChange={e => handleUpdatePrompt(prompt.id, 'outputKey', e.target.value)} placeholder="Output Key" className="w-1/3 bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 font-mono text-xs focus:ring-2 focus:ring-brand-cyan transition-all" title="Output Placeholder Key"/>
-                                        <button onClick={() => handleDuplicatePrompt(prompt.id)} className="p-2 text-brand-cyan hover:text-white transition" title="Duplicate Prompt">
+                                        <input type="text" value={prompt.name} onChange={e => handleUpdatePrompt(prompt.id, 'name', e.target.value)} placeholder="Prompt Name" className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                        <input type="text" value={prompt.outputKey} onChange={e => handleUpdatePrompt(prompt.id, 'outputKey', e.target.value)} placeholder="Output Key" className="w-1/3 bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all" title="Output Placeholder Key"/>
+                                        <button onClick={() => handleDuplicatePrompt(prompt.id)} className="p-2 text-brand-gold hover:text-white transition" title="Duplicate Prompt">
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                                         </button>
                                         <button onClick={() => handleDeletePrompt(prompt.id)} className="p-2.5 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                     </div>
-                                    <textarea value={prompt.template} onChange={e => handleUpdatePrompt(prompt.id, 'template', e.target.value)} rows={8} className="w-full bg-slate-800/80 border border-slate-600/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-cyan transition-all"></textarea>
-                                    <div className="text-right text-xs text-slate-400">
+                                    <textarea value={prompt.template} onChange={e => handleUpdatePrompt(prompt.id, 'template', e.target.value)} rows={8} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"></textarea>
+                                    <div className="text-right text-xs text-brand-gold">
                                         <label htmlFor={`output-action-${prompt.id}`} className="mr-2 font-semibold">Output Action:</label>
-                                        <select id={`output-action-${prompt.id}`} value={prompt.outputAction || ''} onChange={e => handleUpdatePrompt(prompt.id, 'outputAction', e.target.value)} className="bg-slate-800/80 border border-slate-600/50 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:ring-2 focus:ring-brand-cyan transition-all">
+                                        <select id={`output-action-${prompt.id}`} value={prompt.outputAction || ''} onChange={e => handleUpdatePrompt(prompt.id, 'outputAction', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-xs text-white focus:ring-2 focus:ring-brand-gold transition-all">
                                             <option value="">(none)</option>
                                             <option value="addToFinal">Add to final document</option>
                                             <option value="download">Mark for individual download</option>
@@ -1218,21 +1218,21 @@ const App: React.FC = () => {
                                 </div>
                             ))}
                             <div className="flex justify-between items-center">
-                                <button onClick={handleAddPrompt} className="text-brand-cyan hover:text-brand-cyan-light font-semibold text-sm transition">+ Add Prompt Step</button>
+                                <button onClick={handleAddPrompt} className="text-brand-gold hover:text-brand-gold-light font-semibold text-sm transition">+ Add Prompt Step</button>
                             </div>
                         </div>
                     )}
-                    <div className="bg-card rounded-xl shadow-card card-3d border border-slate-700/50">
+                    <div className="bg-card rounded-xl shadow-card card-3d border border-brand-gold/50">
                         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5`}><Icon type="info" className="h-6 w-6"/><span className="ml-3">Processing Log</span></h2>
-                        <div className="p-5 pt-0 border-t border-slate-700/50">
-                            <div ref={logContainerRef} className="h-96 bg-slate-900/70 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-slate-700/50">
+                        <div className="p-5 pt-0 border-t border-brand-gold/30">
+                            <div ref={logContainerRef} className="h-96 bg-slate-900/70 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">
                                 {logs.map(log => (<div key={log.id} className={`flex items-start ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400 animate-pulse'}[log.status]}`}>{{ [LogStatus.INFO]: <Icon type="info" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-4 w-4 mr-2 flex-shrink-0 animate-spin"/>}[log.status]}<span className="flex-1"><span className="text-gray-500 mr-2">{log.timestamp}</span>{log.message}</span></div>))}
                                 {logs.length === 0 && <div className="text-gray-500">Logs will appear here once processing starts.</div>}
                             </div>
                         </div>
                     </div>
-                     {results.length > 0 && <div className="bg-card rounded-xl shadow-card card-3d border border-slate-700/50">
-                        <div className="p-5 flex items-center justify-between border-b border-slate-700/50">
+                     {results.length > 0 && <div className="bg-card rounded-xl shadow-card card-3d border border-brand-gold/50">
+                        <div className="p-5 flex items-center justify-between border-b border-brand-gold/30">
                             <h2 className={`text-xl font-bold flex items-center text-brand-gold`}><Icon type="success" className="h-6 w-6"/><span className="ml-3">Results ({results.length})</span></h2>
                             <button onClick={handleDownloadAll} className="flex items-center bg-gradient-to-r from-brand-gold to-brand-gold-dark hover:from-brand-gold-dark hover:to-brand-gold text-white font-bold py-2.5 px-4 rounded-lg transition-all shadow-card hover:shadow-glow-gold text-sm btn-press"><Icon type="download" className="h-5 w-5 mr-2"/>Download All as ZIP</button>
                         </div>
@@ -1252,7 +1252,7 @@ const App: React.FC = () => {
                                         }
                                     };
                                     return (
-                                        <div key={result.item.id} className="bg-slate-800/80 p-4 rounded-lg border border-slate-700/50 hover:border-slate-600/50 transition-colors">
+                                        <div key={result.item.id} className="bg-slate-800/80 p-4 rounded-lg border border-brand-gold/30 hover:border-brand-gold/50 transition-colors">
                                             <div className="flex items-center justify-between">
                                                 <div>
                                                     <p className="font-bold text-white">{result.item.name}</p>
@@ -1267,11 +1267,11 @@ const App: React.FC = () => {
                                                     <PublishButton />
                                                 </div>
                                             </div>
-                                            <div className="mt-3 pt-3 border-t border-slate-700/50">
-                                                <p className="text-xs font-semibold text-slate-400 mb-2">Individual Prompt Outputs:</p>
+                                            <div className="mt-3 pt-3 border-t border-brand-gold/20">
+                                                <p className="text-xs font-semibold text-brand-gold mb-2">Individual Prompt Outputs:</p>
                                                 <div className="flex flex-wrap gap-2">
                                                     {Object.entries(result.allOutputs).map(([key, value]) => (
-                                                        <button key={key} onClick={() => handleDownload(value, `${key}.txt`, 'text/plain')} className="text-xs bg-slate-700/70 hover:bg-brand-cyan/30 text-brand-cyan-light px-3 py-1 rounded-full transition border border-slate-600/50 hover:border-brand-cyan/50">
+                                                        <button key={key} onClick={() => handleDownload(value, `${key}.txt`, 'text/plain')} className="text-xs bg-slate-700/70 hover:bg-brand-gold/20 text-brand-gold px-3 py-1 rounded-full transition border border-brand-gold/30 hover:border-brand-gold/50">
                                                             Download [{key}]
                                                         </button>
                                                     ))}
