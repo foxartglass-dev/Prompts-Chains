@@ -67,6 +67,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   const [hoveredWebsites, setHoveredWebsites] = useState<Website[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
 
+  // Hover glow for location-website connection
+  const [hoveredLocationId, setHoveredLocationId] = useState<number | null>(null);
+  const [hoveredWebsiteId, setHoveredWebsiteId] = useState<number | null>(null);
+
   // Forms
   const [showClientForm, setShowClientForm] = useState(false);
   const [showLocationForm, setShowLocationForm] = useState(false);
@@ -628,9 +632,9 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                         >
                           {/* The Row - 3 columns */}
                           <div
-                            className={`flex transition-all duration-200 ${
+                            className={`flex transition-all duration-300 ${
                               isSelected
-                                ? 'border-4 border-brand-cyan rounded-lg shadow-[0_0_30px_rgba(0,180,216,0.6)] bg-slate-900 my-2 mx-2'
+                                ? 'border-4 border-brand-cyan rounded-xl shadow-[0_0_40px_rgba(0,180,216,0.7)] bg-gradient-to-b from-slate-800 to-slate-900 my-3 mx-3 min-h-[200px]'
                                 : isHovered
                                 ? 'border-2 border-brand-cyan rounded-lg shadow-[0_0_20px_rgba(0,180,216,0.4)] bg-slate-800'
                                 : ''
@@ -682,6 +686,8 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                                         setSelectedLocation(null);
                                         setLocations([]);
                                         setWebsites([]);
+                                        setHoveredLocationId(null);
+                                        setHoveredWebsiteId(null);
                                       }}
                                       className="text-gray-500 hover:text-white p-1 ml-2"
                                       title="Close"
@@ -696,51 +702,89 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                             </div>
 
                             {/* Locations Column - Shows on hover/select */}
-                            <div className={`w-1/3 border-r border-brand-cyan/30 transition-all duration-200 ${
+                            <div className={`w-1/3 border-r border-brand-cyan/30 transition-all duration-200 flex flex-col ${
                               showAssets ? 'opacity-100' : 'opacity-30'
                             }`}>
                               {showAssets ? (
-                                <div className="p-4 min-h-[80px]">
+                                <div className={`p-4 flex-1 ${isSelected ? 'max-h-[400px] overflow-y-auto' : 'min-h-[80px]'}`}>
                                   {displayLocations.length === 0 ? (
                                     <p className="text-gray-500 text-sm">No locations</p>
                                   ) : (
                                     <div className="space-y-2">
-                                      {displayLocations.map((loc) => (
+                                      {displayLocations.map((loc) => {
+                                        // Glow when a website is hovered (connection glow)
+                                        const locationGlows = hoveredWebsiteId !== null && isSelected;
+                                        const isLocationHovered = hoveredLocationId === loc.id;
+                                        return (
                                         <div
                                           key={loc.id}
                                           onClick={() => isSelected && setSelectedLocation(loc)}
-                                          className={`flex items-center justify-between p-2 rounded ${
-                                            isSelected ? 'cursor-pointer hover:bg-slate-700/50' : ''
-                                          } ${selectedLocation?.id === loc.id ? 'bg-brand-cyan/20 border border-brand-cyan' : ''}`}
+                                          onMouseEnter={() => isSelected && setHoveredLocationId(loc.id)}
+                                          onMouseLeave={() => setHoveredLocationId(null)}
+                                          className={`relative p-2 rounded transition-all duration-200 ${
+                                            isSelected ? 'cursor-pointer' : ''
+                                          } ${selectedLocation?.id === loc.id ? 'bg-brand-cyan/20 border border-brand-cyan' : ''} ${
+                                            locationGlows ? 'border-2 border-brand-cyan shadow-[0_0_15px_rgba(0,180,216,0.5)]' : 'border border-transparent'
+                                          } ${isLocationHovered ? 'border-2 border-brand-gold shadow-[0_0_15px_rgba(245,166,35,0.5)] bg-slate-800' : ''}`}
                                         >
-                                          <div className="flex items-center gap-2">
-                                            <p className="text-white text-sm">{loc.name}</p>
-                                            {loc.has_gbp && (
-                                              <span className="px-1.5 py-0.5 bg-green-600/30 text-green-400 text-xs rounded">GBP</span>
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-white text-sm font-medium">{loc.name}</p>
+                                              {loc.has_gbp && (
+                                                <span className="px-1.5 py-0.5 bg-green-600/30 text-green-400 text-xs rounded">GBP</span>
+                                              )}
+                                            </div>
+                                            {isSelected && (
+                                              <div className="flex gap-1">
+                                                <button
+                                                  onClick={(e) => { e.stopPropagation(); startEditLocation(loc); }}
+                                                  className="text-gray-500 hover:text-brand-cyan p-1"
+                                                >
+                                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                  </svg>
+                                                </button>
+                                                <button
+                                                  onClick={(e) => { e.stopPropagation(); deleteLocation(loc.id); }}
+                                                  className="text-gray-500 hover:text-red-400 p-1"
+                                                >
+                                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                  </svg>
+                                                </button>
+                                              </div>
                                             )}
                                           </div>
-                                          {isSelected && (
-                                            <div className="flex gap-1">
-                                              <button
-                                                onClick={(e) => { e.stopPropagation(); startEditLocation(loc); }}
-                                                className="text-gray-500 hover:text-brand-cyan p-1"
-                                              >
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                              </button>
-                                              <button
-                                                onClick={(e) => { e.stopPropagation(); deleteLocation(loc.id); }}
-                                                className="text-gray-500 hover:text-red-400 p-1"
-                                              >
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                              </button>
+                                          {/* Expanded details on hover */}
+                                          {isLocationHovered && isSelected && (
+                                            <div className="mt-2 pt-2 border-t border-gray-600 space-y-1 text-xs">
+                                              {loc.address && (
+                                                <p className="text-gray-300"><span className="text-gray-500">Address:</span> {loc.address}</p>
+                                              )}
+                                              {(loc.city || loc.state || loc.zip) && (
+                                                <p className="text-gray-300">
+                                                  <span className="text-gray-500">Location:</span> {[loc.city, loc.state, loc.zip].filter(Boolean).join(', ')}
+                                                </p>
+                                              )}
+                                              {loc.country && loc.country !== 'USA' && (
+                                                <p className="text-gray-300"><span className="text-gray-500">Country:</span> {loc.country}</p>
+                                              )}
+                                              {loc.has_gbp && (
+                                                <p className="text-green-400 flex items-center gap-1">
+                                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                  </svg>
+                                                  Google Business Profile linked
+                                                </p>
+                                              )}
+                                              {loc.created_at && (
+                                                <p className="text-gray-500">Added: {new Date(loc.created_at).toLocaleDateString()}</p>
+                                              )}
                                             </div>
                                           )}
                                         </div>
-                                      ))}
+                                        );
+                                      })}
                                     </div>
                                   )}
                                 </div>
@@ -750,69 +794,118 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                             </div>
 
                             {/* Websites Column - Shows on hover/select */}
-                            <div className={`w-1/3 transition-all duration-200 ${
+                            <div className={`w-1/3 transition-all duration-200 flex flex-col ${
                               showAssets ? 'opacity-100' : 'opacity-30'
                             }`}>
                               {showAssets ? (
-                                <div className="p-4 min-h-[80px]">
+                                <div className={`p-4 flex-1 ${isSelected ? 'max-h-[400px] overflow-y-auto' : 'min-h-[80px]'}`}>
                                   {displayWebsites.length === 0 ? (
                                     <p className="text-gray-500 text-sm">No websites</p>
                                   ) : (
                                     <div className="space-y-2">
-                                      {displayWebsites.map((web) => (
+                                      {displayWebsites.map((web) => {
+                                        // Glow when a location is hovered (connection glow)
+                                        const websiteGlows = hoveredLocationId !== null && isSelected;
+                                        const isWebsiteHovered = hoveredWebsiteId === web.id;
+                                        return (
                                         <div
                                           key={web.id}
-                                          className="flex items-center justify-between p-2 rounded hover:bg-slate-700/50"
+                                          onMouseEnter={() => isSelected && setHoveredWebsiteId(web.id)}
+                                          onMouseLeave={() => setHoveredWebsiteId(null)}
+                                          className={`relative p-2 rounded transition-all duration-200 ${
+                                            websiteGlows ? 'border-2 border-brand-cyan shadow-[0_0_15px_rgba(0,180,216,0.5)]' : 'border border-transparent'
+                                          } ${isWebsiteHovered ? 'border-2 border-brand-gold shadow-[0_0_15px_rgba(245,166,35,0.5)] bg-slate-800' : ''}`}
                                         >
-                                          <div className="flex-1 min-w-0">
-                                            <p className="text-white text-sm truncate">{web.name}</p>
-                                            {web.url && (
-                                              <a
-                                                href={web.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-xs text-brand-cyan hover:underline truncate block"
-                                                onClick={(e) => e.stopPropagation()}
-                                              >
-                                                {web.url}
-                                              </a>
-                                            )}
-                                          </div>
-                                          <div className="flex gap-1 items-center">
-                                            {isSelected && onSelectWebsite && (
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  onSelectWebsite(web, client, selectedLocation || undefined);
-                                                }}
-                                                className="px-2 py-1 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-slate-900 text-xs font-medium"
-                                              >
-                                                Select
-                                              </button>
-                                            )}
-                                            {isSelected && (
-                                              <>
-                                                <button
-                                                  onClick={(e) => { e.stopPropagation(); startEditWebsite(web); }}
-                                                  className="text-gray-500 hover:text-brand-cyan p-1"
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex-1 min-w-0">
+                                              <p className="text-white text-sm font-medium truncate">{web.name}</p>
+                                              {web.url && (
+                                                <a
+                                                  href={web.url}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="text-xs text-brand-cyan hover:underline truncate block"
+                                                  onClick={(e) => e.stopPropagation()}
                                                 >
-                                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                  </svg>
-                                                </button>
+                                                  {web.url}
+                                                </a>
+                                              )}
+                                            </div>
+                                            <div className="flex gap-1 items-center">
+                                              {isSelected && onSelectWebsite && (
                                                 <button
-                                                  onClick={(e) => { e.stopPropagation(); deleteWebsite(web.id); }}
-                                                  className="text-gray-500 hover:text-red-400 p-1"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onSelectWebsite(web, client, selectedLocation || undefined);
+                                                  }}
+                                                  className="px-2 py-1 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-slate-900 text-xs font-medium"
                                                 >
-                                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                  </svg>
+                                                  Select
                                                 </button>
-                                              </>
-                                            )}
+                                              )}
+                                              {isSelected && (
+                                                <>
+                                                  <button
+                                                    onClick={(e) => { e.stopPropagation(); startEditWebsite(web); }}
+                                                    className="text-gray-500 hover:text-brand-cyan p-1"
+                                                  >
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                  </button>
+                                                  <button
+                                                    onClick={(e) => { e.stopPropagation(); deleteWebsite(web.id); }}
+                                                    className="text-gray-500 hover:text-red-400 p-1"
+                                                  >
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                  </button>
+                                                </>
+                                              )}
+                                            </div>
                                           </div>
+                                          {/* Expanded details on hover */}
+                                          {isWebsiteHovered && isSelected && (
+                                            <div className="mt-2 pt-2 border-t border-gray-600 space-y-1 text-xs">
+                                              {web.url && (
+                                                <p className="text-gray-300">
+                                                  <span className="text-gray-500">Website:</span>{' '}
+                                                  <a href={web.url} target="_blank" rel="noopener noreferrer" className="text-brand-cyan hover:underline">
+                                                    {web.url}
+                                                  </a>
+                                                </p>
+                                              )}
+                                              {web.wp_url && (
+                                                <div className="pt-1 border-t border-gray-700 mt-1">
+                                                  <p className="text-brand-gold font-medium mb-1">WordPress</p>
+                                                  <p className="text-gray-300">
+                                                    <span className="text-gray-500">Admin:</span>{' '}
+                                                    <a href={web.wp_url} target="_blank" rel="noopener noreferrer" className="text-brand-cyan hover:underline">
+                                                      {web.wp_url}
+                                                    </a>
+                                                  </p>
+                                                  {web.wp_user && (
+                                                    <p className="text-gray-300"><span className="text-gray-500">User:</span> {web.wp_user}</p>
+                                                  )}
+                                                  {web.wp_app_password && (
+                                                    <p className="text-green-400 flex items-center gap-1">
+                                                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                      </svg>
+                                                      App password configured
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              )}
+                                              {web.created_at && (
+                                                <p className="text-gray-500">Added: {new Date(web.created_at).toLocaleDateString()}</p>
+                                              )}
+                                            </div>
+                                          )}
                                         </div>
-                                      ))}
+                                        );
+                                      })}
                                     </div>
                                   )}
                                 </div>
@@ -828,57 +921,86 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                 )}
               </div>
 
-              {/* Location Form Modal */}
+              {/* Location Form Modal - Full Screen */}
               {showLocationForm && selectedClient && (
-                <div className="absolute inset-0 bg-black/50 z-30 flex items-center justify-center p-4">
-                  <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md border border-brand-cyan/30">
-                    <p className="text-sm text-brand-cyan font-medium mb-4">{editingLocationId ? 'Edit Location' : 'New Location'}</p>
-                    <div className="space-y-3">
-                      <input
-                        type="text"
-                        placeholder="Location Name *"
-                        value={locationForm.name}
-                        onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })}
-                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Address"
-                        value={locationForm.address}
-                        onChange={(e) => setLocationForm({ ...locationForm, address: e.target.value })}
-                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
+                <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
+                  <div className="bg-slate-800 rounded-lg p-6 w-full max-w-lg border-2 border-brand-cyan shadow-[0_0_30px_rgba(0,180,216,0.5)]">
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-lg text-brand-cyan font-semibold">{editingLocationId ? 'Edit Location' : 'New Location'}</p>
+                      <button onClick={cancelLocationForm} className="text-gray-400 hover:text-white">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Location Name *</label>
                         <input
                           type="text"
-                          placeholder="City"
-                          value={locationForm.city}
-                          onChange={(e) => setLocationForm({ ...locationForm, city: e.target.value })}
-                          className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
-                        />
-                        <input
-                          type="text"
-                          placeholder="State"
-                          value={locationForm.state}
-                          onChange={(e) => setLocationForm({ ...locationForm, state: e.target.value })}
-                          className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                          placeholder="e.g., Downtown Office"
+                          value={locationForm.name}
+                          onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })}
+                          className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
                         />
                       </div>
-                      <label className="flex items-center gap-2 text-sm text-gray-300">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Address</label>
+                        <input
+                          type="text"
+                          placeholder="Street address"
+                          value={locationForm.address}
+                          onChange={(e) => setLocationForm({ ...locationForm, address: e.target.value })}
+                          className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-1">City</label>
+                          <input
+                            type="text"
+                            value={locationForm.city}
+                            onChange={(e) => setLocationForm({ ...locationForm, city: e.target.value })}
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-1">State</label>
+                          <input
+                            type="text"
+                            value={locationForm.state}
+                            onChange={(e) => setLocationForm({ ...locationForm, state: e.target.value })}
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-1">ZIP</label>
+                          <input
+                            type="text"
+                            value={locationForm.zip}
+                            onChange={(e) => setLocationForm({ ...locationForm, zip: e.target.value })}
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-3 text-gray-300 p-3 bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-700">
                         <input
                           type="checkbox"
                           checked={locationForm.has_gbp}
                           onChange={(e) => setLocationForm({ ...locationForm, has_gbp: e.target.checked })}
-                          className="rounded bg-gray-700 border-gray-600"
+                          className="w-5 h-5 rounded bg-gray-600 border-gray-500 text-brand-cyan focus:ring-brand-cyan"
                         />
-                        Has Google Business Profile
+                        <div>
+                          <span className="font-medium">Has Google Business Profile</span>
+                          <p className="text-xs text-gray-500">Enable if this location has a GBP listing</p>
+                        </div>
                       </label>
                     </div>
-                    <div className="flex gap-2 mt-4">
-                      <button onClick={editingLocationId ? updateLocation : createLocation} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
-                        {editingLocationId ? 'Update' : 'Save'}
+                    <div className="flex gap-3 mt-6">
+                      <button onClick={editingLocationId ? updateLocation : createLocation} className="flex-1 px-4 py-3 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 font-medium transition">
+                        {editingLocationId ? 'Update Location' : 'Create Location'}
                       </button>
-                      <button onClick={cancelLocationForm} className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-sm text-white">
+                      <button onClick={cancelLocationForm} className="px-6 py-3 bg-gray-600 hover:bg-gray-500 rounded text-white transition">
                         Cancel
                       </button>
                     </div>
@@ -886,56 +1008,80 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                 </div>
               )}
 
-              {/* Website Form Modal */}
+              {/* Website Form Modal - Full Screen */}
               {showWebsiteForm && selectedClient && (
-                <div className="absolute inset-0 bg-black/50 z-30 flex items-center justify-center p-4">
-                  <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md border border-brand-cyan/30">
-                    <p className="text-sm text-brand-cyan font-medium mb-4">{editingWebsiteId ? 'Edit Website' : 'New Website'}</p>
-                    <div className="space-y-3">
-                      <input
-                        type="text"
-                        placeholder="Website Name *"
-                        value={websiteForm.name}
-                        onChange={(e) => setWebsiteForm({ ...websiteForm, name: e.target.value })}
-                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
-                      />
-                      <input
-                        type="text"
-                        placeholder="URL (e.g., https://example.com)"
-                        value={websiteForm.url}
-                        onChange={(e) => setWebsiteForm({ ...websiteForm, url: e.target.value })}
-                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
-                      />
-                      <p className="text-xs text-gray-500 font-medium">WordPress Settings (optional)</p>
-                      <input
-                        type="text"
-                        placeholder="WP Site URL"
-                        value={websiteForm.wp_url}
-                        onChange={(e) => setWebsiteForm({ ...websiteForm, wp_url: e.target.value })}
-                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
+                <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
+                  <div className="bg-slate-800 rounded-lg p-6 w-full max-w-lg border-2 border-brand-cyan shadow-[0_0_30px_rgba(0,180,216,0.5)]">
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-lg text-brand-cyan font-semibold">{editingWebsiteId ? 'Edit Website' : 'New Website'}</p>
+                      <button onClick={cancelWebsiteForm} className="text-gray-400 hover:text-white">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Website Name *</label>
                         <input
                           type="text"
-                          placeholder="WP Username"
-                          value={websiteForm.wp_user}
-                          onChange={(e) => setWebsiteForm({ ...websiteForm, wp_user: e.target.value })}
-                          className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
-                        />
-                        <input
-                          type="password"
-                          placeholder="WP App Password"
-                          value={websiteForm.wp_app_password}
-                          onChange={(e) => setWebsiteForm({ ...websiteForm, wp_app_password: e.target.value })}
-                          className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                          placeholder="e.g., Main Website"
+                          value={websiteForm.name}
+                          onChange={(e) => setWebsiteForm({ ...websiteForm, name: e.target.value })}
+                          className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
                         />
                       </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Website URL</label>
+                        <input
+                          type="text"
+                          placeholder="https://example.com"
+                          value={websiteForm.url}
+                          onChange={(e) => setWebsiteForm({ ...websiteForm, url: e.target.value })}
+                          className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                        />
+                      </div>
+                      <div className="border-t border-gray-700 pt-4 mt-4">
+                        <p className="text-sm text-brand-gold font-medium mb-3">WordPress Settings (optional)</p>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-sm text-gray-400 mb-1">WordPress Admin URL</label>
+                            <input
+                              type="text"
+                              placeholder="https://example.com/wp-admin"
+                              value={websiteForm.wp_url}
+                              onChange={(e) => setWebsiteForm({ ...websiteForm, wp_url: e.target.value })}
+                              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-sm text-gray-400 mb-1">Username</label>
+                              <input
+                                type="text"
+                                value={websiteForm.wp_user}
+                                onChange={(e) => setWebsiteForm({ ...websiteForm, wp_user: e.target.value })}
+                                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm text-gray-400 mb-1">App Password</label>
+                              <input
+                                type="password"
+                                value={websiteForm.wp_app_password}
+                                onChange={(e) => setWebsiteForm({ ...websiteForm, wp_app_password: e.target.value })}
+                                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-2 mt-4">
-                      <button onClick={editingWebsiteId ? updateWebsite : createWebsite} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
-                        {editingWebsiteId ? 'Update' : 'Save'}
+                    <div className="flex gap-3 mt-6">
+                      <button onClick={editingWebsiteId ? updateWebsite : createWebsite} className="flex-1 px-4 py-3 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 font-medium transition">
+                        {editingWebsiteId ? 'Update Website' : 'Create Website'}
                       </button>
-                      <button onClick={cancelWebsiteForm} className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-sm text-white">
+                      <button onClick={cancelWebsiteForm} className="px-6 py-3 bg-gray-600 hover:bg-gray-500 rounded text-white transition">
                         Cancel
                       </button>
                     </div>
