@@ -40,6 +40,13 @@ interface AgencyManagerProps {
   onSelectWebsite?: (website: Website, client: Client, location?: Location) => void;
 }
 
+interface PersonalProject {
+  id: number;
+  name: string;
+  description: string | null;
+  created_at: string;
+}
+
 type Mode = 'agency' | 'personal';
 type View = 'clients' | 'locations' | 'websites';
 
@@ -51,6 +58,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   const [clients, setClients] = useState<Client[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [websites, setWebsites] = useState<Website[]>([]);
+  const [personalProjects, setPersonalProjects] = useState<PersonalProject[]>([]);
 
   // Selection
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -60,11 +68,13 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   const [showClientForm, setShowClientForm] = useState(false);
   const [showLocationForm, setShowLocationForm] = useState(false);
   const [showWebsiteForm, setShowWebsiteForm] = useState(false);
+  const [showProjectForm, setShowProjectForm] = useState(false);
 
   // Edit mode - track which item is being edited
   const [editingClientId, setEditingClientId] = useState<number | null>(null);
   const [editingLocationId, setEditingLocationId] = useState<number | null>(null);
   const [editingWebsiteId, setEditingWebsiteId] = useState<number | null>(null);
+  const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
 
   // Form data
   const [clientForm, setClientForm] = useState({ name: '', description: '' });
@@ -75,6 +85,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   const [websiteForm, setWebsiteForm] = useState({
     name: '', url: '', wp_url: '', wp_user: '', wp_app_password: ''
   });
+  const [projectForm, setProjectForm] = useState({ name: '', description: '' });
 
   // Loading states
   const [loading, setLoading] = useState(false);
@@ -84,6 +95,8 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   useEffect(() => {
     if (isOpen && mode === 'agency') {
       fetchClients();
+    } else if (isOpen && mode === 'personal') {
+      fetchPersonalProjects();
     }
   }, [isOpen, mode]);
 
@@ -148,6 +161,25 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
       setWebsites([]);
       setError('Failed to fetch websites');
     }
+  };
+
+  const fetchPersonalProjects = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/personal-projects');
+      if (!res.ok) {
+        setPersonalProjects([]);
+        setLoading(false);
+        return;
+      }
+      const data = await res.json();
+      const projectsArray = data.projects || data;
+      setPersonalProjects(Array.isArray(projectsArray) ? projectsArray : []);
+    } catch (err) {
+      setPersonalProjects([]);
+      setError('Failed to fetch personal projects');
+    }
+    setLoading(false);
   };
 
   // CRUD operations
@@ -358,6 +390,65 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
       if (selectedClient) fetchLocations(selectedClient.id);
     } catch (err) {
       setError('Failed to update location');
+    }
+  };
+
+  // Personal Project CRUD
+  const createPersonalProject = async () => {
+    try {
+      const res = await fetch('/api/personal-projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(projectForm)
+      });
+      if (res.ok) {
+        setProjectForm({ name: '', description: '' });
+        setShowProjectForm(false);
+        fetchPersonalProjects();
+      }
+    } catch (err) {
+      setError('Failed to create project');
+    }
+  };
+
+  const startEditProject = (project: PersonalProject) => {
+    setEditingProjectId(project.id);
+    setProjectForm({ name: project.name, description: project.description || '' });
+    setShowProjectForm(true);
+  };
+
+  const updatePersonalProject = async () => {
+    if (!editingProjectId) return;
+    try {
+      const res = await fetch(`/api/personal-projects/${editingProjectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(projectForm)
+      });
+      if (res.ok) {
+        setProjectForm({ name: '', description: '' });
+        setShowProjectForm(false);
+        setEditingProjectId(null);
+        fetchPersonalProjects();
+      }
+    } catch (err) {
+      setError('Failed to update project');
+    }
+  };
+
+  const cancelProjectForm = () => {
+    setShowProjectForm(false);
+    setEditingProjectId(null);
+    setProjectForm({ name: '', description: '' });
+  };
+
+  const deletePersonalProject = async (id: number) => {
+    if (!confirm('Delete this project? Workflows inside will become ungrouped.')) return;
+    try {
+      await fetch(`/api/personal-projects/${id}`, { method: 'DELETE' });
+      fetchPersonalProjects();
+    } catch (err) {
+      setError('Failed to delete project');
     }
   };
 
@@ -814,11 +905,115 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
             </>
           ) : (
             /* Personal Projects Mode */
-            <div className="flex-1 p-6">
-              <div className="text-center text-gray-400">
-                <p className="text-lg mb-4">Personal Projects Mode</p>
-                <p className="text-sm">Your standalone projects that aren't tied to any agency client.</p>
-                <p className="text-sm mt-2 text-gray-500">Coming soon - personal projects management</p>
+            <div className="flex-1 flex flex-col">
+              {/* Header */}
+              <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-900/50">
+                <div>
+                  <h3 className="font-semibold text-purple-400">Personal Projects</h3>
+                  <p className="text-xs text-gray-500">Organize your standalone workflows</p>
+                </div>
+                <button
+                  onClick={() => setShowProjectForm(true)}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm text-white"
+                >
+                  + New Project
+                </button>
+              </div>
+
+              {/* Add/Edit Form */}
+              {showProjectForm && (
+                <div className="p-4 border-b border-gray-700 bg-gray-900/30 space-y-3">
+                  <p className="text-sm text-purple-400 font-medium">
+                    {editingProjectId ? 'Edit Project' : 'Create New Project'}
+                  </p>
+                  <input
+                    type="text"
+                    placeholder="Project Name *"
+                    value={projectForm.name}
+                    onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Description (optional)"
+                    value={projectForm.description}
+                    onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={editingProjectId ? updatePersonalProject : createPersonalProject}
+                      disabled={!projectForm.name.trim()}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm disabled:opacity-50"
+                    >
+                      {editingProjectId ? 'Update' : 'Create'}
+                    </button>
+                    <button
+                      onClick={cancelProjectForm}
+                      className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-white text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Projects List */}
+              <div className="flex-1 overflow-y-auto p-4">
+                {loading ? (
+                  <div className="text-center text-gray-400 py-8">Loading...</div>
+                ) : personalProjects.length === 0 ? (
+                  <div className="text-center text-gray-500 py-8">
+                    <p className="mb-2">No projects yet</p>
+                    <p className="text-sm">Create a project to organize your standalone workflows.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {personalProjects.map((project) => (
+                      <div
+                        key={project.id}
+                        className="bg-gray-700/50 border border-gray-600 rounded-lg p-4 hover:border-purple-500/50 transition"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h4 className="font-medium text-white">{project.name}</h4>
+                            {project.description && (
+                              <p className="text-sm text-gray-400 mt-1">{project.description}</p>
+                            )}
+                            <p className="text-xs text-gray-500 mt-2">
+                              Created {new Date(project.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => startEditProject(project)}
+                              className="text-gray-400 hover:text-purple-400 p-1"
+                              title="Edit"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => deletePersonalProject(project.id)}
+                              className="text-gray-400 hover:text-red-400 p-1"
+                              title="Delete"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer info */}
+              <div className="p-3 border-t border-gray-700 bg-gray-900/50 text-sm text-gray-400">
+                <p>Projects organize your standalone workflows. Use the <strong>Workflows</strong> sidebar to create workflows inside projects.</p>
               </div>
             </div>
           )}
