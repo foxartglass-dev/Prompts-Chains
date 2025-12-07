@@ -931,7 +931,7 @@ const App: React.FC = () => {
                              <div className="bg-slate-800/50 p-4 rounded-lg border border-brand-gold/50 space-y-3">
                                 <h3 className="text-lg font-semibold text-brand-gold">Project Management</h3>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={handleCreateNewProject} className="w-full text-center px-4 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white font-semibold text-sm transition border border-brand-gold/50">+ New Project</button>
+                                    <button onClick={handleCreateNewProject} className="w-full text-center px-4 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-brand-cyan font-semibold text-sm transition border border-brand-gold">+ New Project</button>
                                     <select
                                         onChange={(e) => {
                                             const project = projects.find(p => p.id === e.target.value);
@@ -970,12 +970,12 @@ const App: React.FC = () => {
                                                 showNotification('Project exported to JSON!', 'success');
                                             }
                                         }}
-                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition border border-brand-gold/50"
+                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-brand-cyan font-semibold text-sm transition border border-brand-gold"
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                                         Export JSON
                                     </button>
-                                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition cursor-pointer border border-brand-gold/50">
+                                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-brand-cyan font-semibold text-sm transition cursor-pointer border border-brand-gold">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                                         Import JSON
                                         <input
@@ -1016,7 +1016,7 @@ const App: React.FC = () => {
                                 <div className="mt-3 flex items-center justify-between">
                                     <button
                                         onClick={handleManualAddItems}
-                                        className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 px-4 rounded-lg transition text-sm border border-brand-gold/50"
+                                        className="bg-brand-gold hover:bg-brand-gold-dark text-brand-cyan font-bold py-2.5 px-4 rounded-lg transition text-sm border border-brand-gold"
                                     >
                                         Add Items from Text
                                     </button>
