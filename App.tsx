@@ -928,10 +928,10 @@ const App: React.FC = () => {
                             </div>
                             
                             {/* Project Management */}
-                             <div className="bg-slate-800/50 p-4 rounded-lg border border-brand-gold/50 space-y-3">
+                             <div className="bg-slate-800/50 p-4 rounded-lg border border-brand-gold/50 space-y-3 shadow-glow-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold">Project Management</h3>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={handleCreateNewProject} className="w-full text-center px-4 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold">+ New Project</button>
+                                    <button onClick={handleCreateNewProject} className="w-full text-center px-4 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold shadow-glow-cyan">+ New Project</button>
                                     <select
                                         onChange={(e) => {
                                             const project = projects.find(p => p.id === e.target.value);
