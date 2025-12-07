@@ -258,9 +258,9 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-900 rounded-lg w-[85vw] h-[80vh] flex flex-col overflow-hidden">
+      <div className="bg-slate-900 rounded-lg w-[85vw] h-[80vh] flex flex-col overflow-hidden border border-brand-cyan/30">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
+        <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
           <div className="flex items-center gap-4">
             <h2 className="text-xl font-semibold text-white">Template Library</h2>
             {viewMode !== 'browse' && (
@@ -302,20 +302,20 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
           {viewMode === 'browse' && (
             <>
               {/* Sidebar filters */}
-              <div className="w-56 border-r border-gray-700 p-4 flex flex-col gap-4">
+              <div className="w-56 border-r border-brand-cyan/30 p-4 flex flex-col gap-4">
                 <input
                   type="text"
                   placeholder="Search templates..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm"
+                  className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white text-sm"
                 />
                 <div>
                   <label className="text-xs text-gray-400 mb-2 block">Filter by Type</label>
                   <select
                     value={typeFilter}
                     onChange={(e) => setTypeFilter(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm"
+                    className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-2 py-1.5 text-white text-sm"
                   >
                     <option value="">All Types</option>
                     {TEMPLATE_TYPES.map(t => (
@@ -420,7 +420,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                       value={createForm.name}
                       onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
                       placeholder="e.g., Single Audience SEO Workflow"
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
+                      className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
                     />
                   </div>
 
@@ -431,7 +431,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                       onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
                       placeholder="Describe what this template is for..."
                       rows={3}
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white resize-none"
+                      className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white resize-none"
                     />
                   </div>
 
@@ -442,7 +442,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                       value={createForm.tags}
                       onChange={(e) => setCreateForm({ ...createForm, tags: e.target.value })}
                       placeholder="e.g., seo, single-audience, local-business"
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
+                      className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
                     />
                   </div>
 
@@ -461,7 +461,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                           className={`flex items-start gap-3 p-3 rounded cursor-pointer ${
                             includes[key as keyof typeof includes]
                               ? 'bg-blue-600/20 border border-blue-500'
-                              : 'bg-gray-800 border border-gray-700'
+                              : 'bg-gray-800 border border-brand-cyan/30'
                           }`}
                         >
                           <input

@@ -456,9 +456,9 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-slate-800 rounded-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col border border-brand-cyan/30">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
+        <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
           <div className="flex items-center gap-4">
             <h2 className="text-xl font-bold text-white">Agency Manager</h2>
             {/* Mode Toggle */}
@@ -466,7 +466,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
               <button
                 onClick={() => setMode('agency')}
                 className={`px-4 py-1 rounded-md text-sm font-medium transition ${
-                  mode === 'agency' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'
+                  mode === 'agency' ? 'bg-brand-cyan text-white' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 Agency Mode
@@ -474,7 +474,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
               <button
                 onClick={() => setMode('personal')}
                 className={`px-4 py-1 rounded-md text-sm font-medium transition ${
-                  mode === 'personal' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'
+                  mode === 'personal' ? 'bg-brand-cyan text-white' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 Personal Projects
@@ -500,20 +500,20 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
           {mode === 'agency' ? (
             <>
               {/* Clients Panel */}
-              <div className="w-1/3 border-r border-gray-700 flex flex-col">
-                <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-900/50">
-                  <h3 className="font-semibold text-cyan-400">Clients</h3>
+              <div className="w-1/3 border-r border-brand-cyan/30 flex flex-col">
+                <div className="p-3 border-b border-brand-cyan/30 flex items-center justify-between bg-gray-900/50">
+                  <h3 className="font-semibold text-brand-cyan">Clients</h3>
                   <button
                     onClick={() => setShowClientForm(true)}
-                    className="text-cyan-400 hover:text-cyan-300 text-sm"
+                    className="text-brand-cyan hover:text-brand-cyan-light text-sm"
                   >
                     + Add
                   </button>
                 </div>
 
                 {showClientForm && (
-                  <div className="p-3 border-b border-gray-700 bg-gray-900/30 space-y-2">
-                    <p className="text-xs text-cyan-400 font-medium">{editingClientId ? 'Edit Client' : 'New Client'}</p>
+                  <div className="p-3 border-b border-brand-cyan/30 bg-gray-900/30 space-y-2">
+                    <p className="text-xs text-brand-cyan font-medium">{editingClientId ? 'Edit Client' : 'New Client'}</p>
                     <input
                       type="text"
                       placeholder="Client Name *"
@@ -529,7 +529,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                       className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
                     />
                     <div className="flex gap-2">
-                      <button onClick={editingClientId ? updateClient : createClient} className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
+                      <button onClick={editingClientId ? updateClient : createClient} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-sm">
                         {editingClientId ? 'Update' : 'Save'}
                       </button>
                       <button onClick={cancelClientForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
@@ -552,8 +552,8 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                           setSelectedClient(client);
                           setSelectedLocation(null);
                         }}
-                        className={`p-3 border-b border-gray-700 cursor-pointer hover:bg-gray-700/50 flex items-center justify-between ${
-                          selectedClient?.id === client.id ? 'bg-gray-700' : ''
+                        className={`p-3 border-b border-brand-cyan/30 cursor-pointer hover:bg-slate-700/50 flex items-center justify-between min-h-[60px] ${
+                          selectedClient?.id === client.id ? 'bg-brand-cyan/10 border-l-2 border-l-brand-cyan shadow-[0_0_10px_rgba(0,180,216,0.3)]' : ''
                         }`}
                       >
                         <div>
@@ -568,7 +568,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                               e.stopPropagation();
                               startEditClient(client);
                             }}
-                            className="text-gray-500 hover:text-cyan-400 p-1"
+                            className="text-gray-500 hover:text-brand-cyan p-1"
                             title="Edit"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -595,10 +595,10 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
               </div>
 
               {/* Locations Panel */}
-              <div className="w-1/3 border-r border-gray-700 flex flex-col">
-                <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-900/50">
+              <div className="w-1/3 border-r border-brand-cyan/30 flex flex-col">
+                <div className="p-3 border-b border-brand-cyan/30 flex items-center justify-between bg-gray-900/50">
                   <div>
-                    <h3 className="font-semibold text-cyan-400">Locations</h3>
+                    <h3 className="font-semibold text-brand-cyan">Locations</h3>
                     {selectedClient && (
                       <p className="text-xs text-gray-500">for {selectedClient.name}</p>
                     )}
@@ -606,7 +606,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                   {selectedClient && (
                     <button
                       onClick={() => setShowLocationForm(true)}
-                      className="text-cyan-400 hover:text-cyan-300 text-sm"
+                      className="text-brand-cyan hover:text-brand-cyan-light text-sm"
                     >
                       + Add
                     </button>
@@ -614,8 +614,8 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                 </div>
 
                 {showLocationForm && selectedClient && (
-                  <div className="p-3 border-b border-gray-700 bg-gray-900/30 space-y-2">
-                    <p className="text-xs text-cyan-400 font-medium">{editingLocationId ? 'Edit Location' : 'New Location'}</p>
+                  <div className="p-3 border-b border-brand-cyan/30 bg-gray-900/30 space-y-2">
+                    <p className="text-xs text-brand-cyan font-medium">{editingLocationId ? 'Edit Location' : 'New Location'}</p>
                     <input
                       type="text"
                       placeholder="Location Name *"
@@ -681,7 +681,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                       />
                     )}
                     <div className="flex gap-2">
-                      <button onClick={editingLocationId ? updateLocation : createLocation} className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
+                      <button onClick={editingLocationId ? updateLocation : createLocation} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-sm">
                         {editingLocationId ? 'Update' : 'Save'}
                       </button>
                       <button onClick={cancelLocationForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
@@ -701,8 +701,8 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                       <div
                         key={location.id}
                         onClick={() => setSelectedLocation(location)}
-                        className={`p-3 border-b border-gray-700 cursor-pointer hover:bg-gray-700/50 ${
-                          selectedLocation?.id === location.id ? 'bg-gray-700' : ''
+                        className={`p-3 border-b border-brand-cyan/30 cursor-pointer hover:bg-slate-700/50 min-h-[60px] ${
+                          selectedLocation?.id === location.id ? 'bg-brand-cyan/10 border-l-2 border-l-brand-cyan shadow-[0_0_10px_rgba(0,180,216,0.3)]' : ''
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -740,7 +740,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                                 e.stopPropagation();
                                 startEditLocation(location);
                               }}
-                              className="text-gray-500 hover:text-cyan-400 p-1"
+                              className="text-gray-500 hover:text-brand-cyan p-1"
                               title="Edit"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -769,9 +769,9 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
 
               {/* Websites Panel */}
               <div className="w-1/3 flex flex-col">
-                <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-900/50">
+                <div className="p-3 border-b border-brand-cyan/30 flex items-center justify-between bg-gray-900/50">
                   <div>
-                    <h3 className="font-semibold text-cyan-400">Websites</h3>
+                    <h3 className="font-semibold text-brand-cyan">Websites</h3>
                     {selectedClient && (
                       <p className="text-xs text-gray-500">for {selectedClient.name}</p>
                     )}
@@ -779,7 +779,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                   {selectedClient && (
                     <button
                       onClick={() => setShowWebsiteForm(true)}
-                      className="text-cyan-400 hover:text-cyan-300 text-sm"
+                      className="text-brand-cyan hover:text-brand-cyan-light text-sm"
                     >
                       + Add
                     </button>
@@ -787,8 +787,8 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                 </div>
 
                 {showWebsiteForm && selectedClient && (
-                  <div className="p-3 border-b border-gray-700 bg-gray-900/30 space-y-2">
-                    <p className="text-xs text-cyan-400 font-medium">{editingWebsiteId ? 'Edit Website' : 'New Website'}</p>
+                  <div className="p-3 border-b border-brand-cyan/30 bg-gray-900/30 space-y-2">
+                    <p className="text-xs text-brand-cyan font-medium">{editingWebsiteId ? 'Edit Website' : 'New Website'}</p>
                     <input
                       type="text"
                       placeholder="Website Name *"
@@ -828,7 +828,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                       />
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={editingWebsiteId ? updateWebsite : createWebsite} className="px-3 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-sm">
+                      <button onClick={editingWebsiteId ? updateWebsite : createWebsite} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-sm">
                         {editingWebsiteId ? 'Update' : 'Save'}
                       </button>
                       <button onClick={cancelWebsiteForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
@@ -847,7 +847,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                     websites.map((website) => (
                       <div
                         key={website.id}
-                        className="p-3 border-b border-gray-700 hover:bg-gray-700/50"
+                        className="p-3 border-b border-brand-cyan/30 hover:bg-slate-700/50 min-h-[60px]"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
@@ -857,7 +857,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                                 href={website.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs text-cyan-400 hover:underline"
+                                className="text-xs text-brand-cyan hover:underline"
                               >
                                 {website.url}
                               </a>
@@ -872,14 +872,14 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                             {onSelectWebsite && (
                               <button
                                 onClick={() => onSelectWebsite(website, selectedClient!, selectedLocation || undefined)}
-                                className="px-2 py-1 bg-cyan-600 hover:bg-cyan-700 rounded text-xs"
+                                className="px-2 py-1 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-xs"
                               >
                                 Select
                               </button>
                             )}
                             <button
                               onClick={() => startEditWebsite(website)}
-                              className="text-gray-500 hover:text-cyan-400 p-1"
+                              className="text-gray-500 hover:text-brand-cyan p-1"
                               title="Edit"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -907,7 +907,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
             /* Personal Projects Mode */
             <div className="flex-1 flex flex-col">
               {/* Header */}
-              <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-900/50">
+              <div className="p-3 border-b border-brand-cyan/30 flex items-center justify-between bg-gray-900/50">
                 <div>
                   <h3 className="font-semibold text-purple-400">Personal Projects</h3>
                   <p className="text-xs text-gray-500">Organize your standalone workflows</p>
@@ -922,7 +922,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
 
               {/* Add/Edit Form */}
               {showProjectForm && (
-                <div className="p-4 border-b border-gray-700 bg-gray-900/30 space-y-3">
+                <div className="p-4 border-b border-brand-cyan/30 bg-gray-900/30 space-y-3">
                   <p className="text-sm text-purple-400 font-medium">
                     {editingProjectId ? 'Edit Project' : 'Create New Project'}
                   </p>
@@ -1012,7 +1012,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
               </div>
 
               {/* Footer info */}
-              <div className="p-3 border-t border-gray-700 bg-gray-900/50 text-sm text-gray-400">
+              <div className="p-3 border-t border-brand-cyan/30 bg-gray-900/50 text-sm text-gray-400">
                 <p>Projects organize your standalone workflows. Use the <strong>Workflows</strong> sidebar to create workflows inside projects.</p>
               </div>
             </div>
@@ -1021,15 +1021,15 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
 
         {/* Footer with breadcrumb */}
         {mode === 'agency' && (
-          <div className="p-3 border-t border-gray-700 bg-gray-900/50 text-sm text-gray-400">
+          <div className="p-3 border-t border-brand-cyan/30 bg-gray-900/50 text-sm text-gray-400">
             <span>Current: </span>
             {selectedClient ? (
               <>
-                <span className="text-cyan-400">{selectedClient.name}</span>
+                <span className="text-brand-cyan">{selectedClient.name}</span>
                 {selectedLocation && (
                   <>
                     <span className="mx-2">&gt;</span>
-                    <span className="text-cyan-400">{selectedLocation.name}</span>
+                    <span className="text-brand-cyan">{selectedLocation.name}</span>
                   </>
                 )}
               </>

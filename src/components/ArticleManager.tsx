@@ -248,9 +248,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-900 rounded-lg w-[90vw] h-[85vh] flex flex-col overflow-hidden">
+      <div className="bg-slate-900 rounded-lg w-[90vw] h-[85vh] flex flex-col overflow-hidden border border-brand-cyan/30">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
+        <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
           <div className="flex items-center gap-4">
             <h2 className="text-xl font-semibold text-white">Article Library</h2>
             {viewMode !== 'list' && (
@@ -288,12 +288,12 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                   placeholder="Search by keyword..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
+                  className="flex-1 bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
                 />
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white"
+                  className="bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
                 >
                   <option value="">All Status</option>
                   <option value="generated">Generated</option>
@@ -328,7 +328,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                       {filteredArticles.map((article) => (
                         <tr
                           key={article.id}
-                          className="border-t border-gray-700 hover:bg-gray-800/50"
+                          className="border-t border-brand-cyan/30 hover:bg-gray-800/50"
                         >
                           <td className="p-2 text-white font-medium">
                             {article.keyword}
@@ -388,7 +388,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
               {/* Main content area */}
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Article header */}
-                <div className="p-4 border-b border-gray-700">
+                <div className="p-4 border-b border-brand-cyan/30">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-lg font-semibold text-white">{selectedArticle.keyword}</h3>
@@ -472,14 +472,14 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                     <textarea
                       value={editContent}
                       onChange={(e) => setEditContent(e.target.value)}
-                      className="w-full h-full bg-gray-800 border border-gray-700 rounded p-4 text-white resize-none font-mono text-sm"
+                      className="w-full h-full bg-gray-800 border border-brand-cyan/30 rounded p-4 text-white resize-none font-mono text-sm"
                       placeholder="Article content..."
                     />
                   )}
                 </div>
 
                 {/* Meta section */}
-                <div className="border-t border-gray-700 p-4 bg-gray-800/50">
+                <div className="border-t border-brand-cyan/30 p-4 bg-gray-800/50">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <h4 className="text-sm font-medium text-gray-400 mb-2">Meta Titles</h4>
@@ -537,8 +537,8 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
               </div>
 
               {/* Side panel - Chain outputs & versions */}
-              <div className="w-80 border-l border-gray-700 flex flex-col overflow-hidden">
-                <div className="p-3 border-b border-gray-700">
+              <div className="w-80 border-l border-brand-cyan/30 flex flex-col overflow-hidden">
+                <div className="p-3 border-b border-brand-cyan/30">
                   <div className="flex gap-2">
                     <button
                       onClick={() => setShowVersions(false)}
