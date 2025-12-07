@@ -905,6 +905,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                   )}
                 </div>
               </div>
+              </div>
             </>
           ) : (
             /* Personal Projects Mode */
