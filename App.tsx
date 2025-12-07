@@ -931,7 +931,7 @@ const App: React.FC = () => {
                              <div className="bg-slate-800/50 p-4 rounded-lg border border-brand-gold/50 space-y-3">
                                 <h3 className="text-lg font-semibold text-brand-gold">Project Management</h3>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={handleCreateNewProject} className="w-full text-center px-4 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold shadow-[0_0_15px_rgba(245,166,35,0.5)]">+ New Project</button>
+                                    <button onClick={handleCreateNewProject} className="w-full text-center px-4 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold">+ New Project</button>
                                     <select
                                         onChange={(e) => {
                                             const project = projects.find(p => p.id === e.target.value);
@@ -970,12 +970,12 @@ const App: React.FC = () => {
                                                 showNotification('Project exported to JSON!', 'success');
                                             }
                                         }}
-                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold shadow-[0_0_15px_rgba(245,166,35,0.5)]"
+                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold"
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                                         Export JSON
                                     </button>
-                                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition cursor-pointer border border-brand-gold shadow-[0_0_15px_rgba(245,166,35,0.5)]">
+                                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition cursor-pointer border border-brand-gold">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                                         Import JSON
                                         <input
@@ -1016,7 +1016,7 @@ const App: React.FC = () => {
                                 <div className="mt-3 flex items-center justify-between">
                                     <button
                                         onClick={handleManualAddItems}
-                                        className="bg-brand-gold hover:bg-brand-gold-dark text-slate-900 font-bold py-2.5 px-4 rounded-lg transition text-sm border border-brand-gold shadow-[0_0_15px_rgba(245,166,35,0.5)]"
+                                        className="bg-brand-gold hover:bg-brand-gold-dark text-slate-900 font-bold py-2.5 px-4 rounded-lg transition text-sm border border-brand-gold"
                                     >
                                         Add Items from Text
                                     </button>
@@ -1222,17 +1222,17 @@ const App: React.FC = () => {
                             </div>
                         </div>
                     )}
-                    <div className="bg-card rounded-xl shadow-card card-3d border border-brand-gold/50">
+                    <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan">
                         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5`}><Icon type="info" className="h-6 w-6"/><span className="ml-3">Processing Log</span></h2>
-                        <div className="p-5 pt-0 border-t border-brand-gold/30">
+                        <div className="p-5 pt-0 border-t border-brand-cyan/30">
                             <div ref={logContainerRef} className="h-96 bg-slate-900/70 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">
                                 {logs.map(log => (<div key={log.id} className={`flex items-start ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400 animate-pulse'}[log.status]}`}>{{ [LogStatus.INFO]: <Icon type="info" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-4 w-4 mr-2 flex-shrink-0 animate-spin"/>}[log.status]}<span className="flex-1"><span className="text-gray-500 mr-2">{log.timestamp}</span>{log.message}</span></div>))}
                                 {logs.length === 0 && <div className="text-gray-500">Logs will appear here once processing starts.</div>}
                             </div>
                         </div>
                     </div>
-                     {results.length > 0 && <div className="bg-card rounded-xl shadow-card card-3d border border-brand-gold/50">
-                        <div className="p-5 flex items-center justify-between border-b border-brand-gold/30">
+                     {results.length > 0 && <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan">
+                        <div className="p-5 flex items-center justify-between border-b border-brand-cyan/30">
                             <h2 className={`text-xl font-bold flex items-center text-brand-gold`}><Icon type="success" className="h-6 w-6"/><span className="ml-3">Results ({results.length})</span></h2>
                             <button onClick={handleDownloadAll} className="flex items-center bg-gradient-to-r from-brand-gold to-brand-gold-dark hover:from-brand-gold-dark hover:to-brand-gold text-white font-bold py-2.5 px-4 rounded-lg transition-all shadow-card hover:shadow-glow-gold text-sm btn-press"><Icon type="download" className="h-5 w-5 mr-2"/>Download All as ZIP</button>
                         </div>
