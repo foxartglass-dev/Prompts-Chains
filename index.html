@@ -8,15 +8,96 @@
     <title>PromptFlow - Advanced Prompt Chaining</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              // Brand Colors from Digi Branded AI logo
+              brand: {
+                cyan: '#00B4D8',
+                'cyan-dark': '#0096C7',
+                'cyan-light': '#48CAE4',
+                gold: '#F5A623',
+                'gold-dark': '#E09500',
+                'gold-light': '#FFB84D',
+              },
+              // Card backgrounds
+              card: {
+                DEFAULT: '#1E293B',
+                dark: '#0F172A',
+                light: '#334155',
+              }
+            },
+            boxShadow: {
+              'card': '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2)',
+              'card-hover': '0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3)',
+              'card-lg': '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
+              'glow-cyan': '0 0 20px rgba(0, 180, 216, 0.3)',
+              'glow-gold': '0 0 20px rgba(245, 166, 35, 0.3)',
+            },
+            backgroundImage: {
+              'gradient-brand': 'linear-gradient(135deg, #00B4D8 0%, #0077B6 100%)',
+              'gradient-gold': 'linear-gradient(135deg, #F5A623 0%, #E09500 100%)',
+            }
+          }
+        }
+      }
+    </script>
     <style>
       html, body, #root {
         height: 100%;
         margin: 0;
         padding: 0;
       }
+
+      /* Smooth scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1E293B;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #475569;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #00B4D8;
+      }
+
+      /* Card hover effect */
+      .card-3d {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      .card-3d:hover {
+        transform: translateY(-2px);
+      }
+
+      /* Button press effect */
+      .btn-press:active {
+        transform: scale(0.98);
+      }
+
+      /* Gradient text */
+      .text-gradient-brand {
+        background: linear-gradient(135deg, #00B4D8 0%, #48CAE4 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .text-gradient-gold {
+        background: linear-gradient(135deg, #F5A623 0%, #FFB84D 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
     </style>
   </head>
-  <body class="bg-gray-900 text-gray-100">
+  <body class="bg-slate-900 text-gray-100">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
