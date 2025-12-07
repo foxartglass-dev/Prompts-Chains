@@ -800,7 +800,7 @@ const App: React.FC = () => {
                     <div className="flex gap-2 flex-wrap">
                         <button
                             onClick={() => setIsWorkflowNavOpen(true)}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Browse Workflows"
                         >
                             <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -810,7 +810,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => setIsAgencyOpen(true)}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Manage Clients & Locations"
                         >
                             <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -820,7 +820,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => setIsArticlesOpen(true)}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="View Saved Articles"
                         >
                             <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -830,7 +830,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => setIsTemplatesOpen(true)}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Template Library"
                         >
                             <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -840,7 +840,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => setIsTrackerOpen(true)}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Show Project Tracker"
                         >
                             <Icon type="document" className="h-5 w-5 text-brand-cyan" />
