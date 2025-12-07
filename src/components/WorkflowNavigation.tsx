@@ -418,9 +418,9 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 left-0 w-80 bg-gray-900 border-r border-gray-700 flex flex-col z-40 shadow-xl">
+    <div className="fixed inset-y-0 left-0 w-80 bg-slate-900 border-r border-brand-cyan/30 flex flex-col z-40 shadow-xl">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700">
+      <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
         <h2 className="text-lg font-semibold text-white">Workflows</h2>
         <button
           onClick={onClose}
@@ -431,12 +431,12 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
       </div>
 
       {/* View mode tabs */}
-      <div className="flex border-b border-gray-700">
+      <div className="flex border-b border-brand-cyan/30">
         <button
           onClick={() => setViewMode('clients')}
           className={`flex-1 py-2 text-sm font-medium ${
             viewMode === 'clients'
-              ? 'text-blue-400 border-b-2 border-blue-400'
+              ? 'text-brand-cyan border-b-2 border-brand-cyan'
               : 'text-gray-400 hover:text-white'
           }`}
         >
@@ -446,7 +446,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
           onClick={() => setViewMode('standalone')}
           className={`flex-1 py-2 text-sm font-medium ${
             viewMode === 'standalone'
-              ? 'text-blue-400 border-b-2 border-blue-400'
+              ? 'text-brand-cyan border-b-2 border-brand-cyan'
               : 'text-gray-400 hover:text-white'
           }`}
         >
@@ -455,13 +455,13 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
       </div>
 
       {/* Search */}
-      <div className="p-3 border-b border-gray-700">
+      <div className="p-3 border-b border-brand-cyan/30">
         <input
           type="text"
           placeholder="Search..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white text-sm"
+          className="w-full bg-slate-800 border border-brand-cyan/50 rounded px-3 py-1.5 text-white text-sm focus:ring-1 focus:ring-brand-cyan"
         />
       </div>
 
@@ -501,7 +501,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
 
                   {/* Websites under client */}
                   {expandedClients.has(client.id) && (
-                    <div className="ml-4 border-l border-gray-700">
+                    <div className="ml-4 border-l border-brand-cyan/30">
                       {getClientWebsites(client.id).map((website) => (
                         <div key={website.id}>
                           {/* Website row */}
@@ -514,17 +514,17 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
                             <span className={`text-xs transition-transform ${expandedWebsites.has(website.id) ? 'rotate-90' : ''}`}>
                               ▶
                             </span>
-                            <span className="text-blue-400 text-sm">{website.name}</span>
+                            <span className="text-brand-cyan text-sm">{website.name}</span>
                           </div>
 
                           {/* Workflows under website */}
                           {expandedWebsites.has(website.id) && (
-                            <div className="ml-4 border-l border-gray-700">
+                            <div className="ml-4 border-l border-brand-cyan/30">
                               {getWebsiteWorkflows(website.id).map((workflow) => (
                                 <div
                                   key={workflow.id}
                                   className={`group flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-gray-800 ${
-                                    currentWorkflowId === workflow.id ? 'bg-blue-600/20 border-l-2 border-blue-500' : ''
+                                    currentWorkflowId === workflow.id ? 'bg-brand-cyan/20 border-l-2 border-brand-cyan' : ''
                                   }`}
                                 >
                                   <span
@@ -561,7 +561,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
                               {/* Add workflow button */}
                               <button
                                 onClick={() => openCreateWorkflowDialog(client.id, website.id)}
-                                className="w-full text-left px-4 py-2 text-gray-500 hover:text-blue-400 text-sm"
+                                className="w-full text-left px-4 py-2 text-gray-500 hover:text-brand-cyan text-sm"
                               >
                                 + New Workflow
                               </button>
@@ -618,12 +618,12 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
 
                 {/* Workflows under project */}
                 {expandedProjects.has(project.id) && (
-                  <div className="ml-4 border-l border-gray-700">
+                  <div className="ml-4 border-l border-brand-cyan/30">
                     {getProjectWorkflows(project.id).map((workflow) => (
                       <div
                         key={workflow.id}
                         className={`group flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-gray-800 ${
-                          currentWorkflowId === workflow.id ? 'bg-blue-600/20 border-l-2 border-blue-500' : ''
+                          currentWorkflowId === workflow.id ? 'bg-brand-cyan/20 border-l-2 border-brand-cyan' : ''
                         }`}
                       >
                         <span
@@ -660,7 +660,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
                     {/* Add workflow to project */}
                     <button
                       onClick={() => openCreateWorkflowDialog(undefined, undefined, project.id)}
-                      className="w-full text-left px-4 py-2 text-gray-500 hover:text-blue-400 text-sm"
+                      className="w-full text-left px-4 py-2 text-gray-500 hover:text-brand-cyan text-sm"
                     >
                       + New Workflow
                     </button>
@@ -672,14 +672,14 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
             {/* Ungrouped workflows section */}
             {filteredUngroupedWorkflows.length > 0 && (
               <>
-                <div className="px-4 py-2 text-xs text-gray-500 uppercase mt-2 border-t border-gray-700">
+                <div className="px-4 py-2 text-xs text-gray-500 uppercase mt-2 border-t border-brand-cyan/30">
                   Ungrouped Workflows
                 </div>
                 {filteredUngroupedWorkflows.map((workflow) => (
                   <div
                     key={workflow.id}
                     className={`group flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-gray-800 ${
-                      currentWorkflowId === workflow.id ? 'bg-blue-600/20 border-l-2 border-blue-500' : ''
+                      currentWorkflowId === workflow.id ? 'bg-brand-cyan/20 border-l-2 border-brand-cyan' : ''
                     }`}
                   >
                     <span
@@ -727,7 +727,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
       </div>
 
       {/* Footer - Create new */}
-      <div className="border-t border-gray-700 p-3 space-y-2">
+      <div className="border-t border-brand-cyan/30 p-3 space-y-2">
         {viewMode === 'standalone' && (
           <button
             onClick={openCreateProjectDialog}
@@ -738,7 +738,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
         )}
         <button
           onClick={() => openCreateWorkflowDialog()}
-          className="w-full py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm font-medium"
+          className="w-full py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 text-sm font-medium"
         >
           + New {viewMode === 'standalone' ? 'Ungrouped ' : 'Standalone '}Workflow
         </button>
@@ -769,7 +769,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
               </button>
               <button
                 onClick={handleSaveWorkflow}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm"
+                className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 text-sm font-medium"
               >
                 {workflowDialogMode === 'create' ? 'Create' : 'Save'}
               </button>

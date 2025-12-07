@@ -800,7 +800,7 @@ const App: React.FC = () => {
                     <div className="flex gap-2 flex-wrap">
                         <button
                             onClick={() => setIsWorkflowNavOpen(true)}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Browse Workflows"
                         >
                             <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -810,7 +810,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => setIsAgencyOpen(true)}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Manage Clients & Locations"
                         >
                             <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -820,7 +820,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => setIsArticlesOpen(true)}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="View Saved Articles"
                         >
                             <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -830,7 +830,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => setIsTemplatesOpen(true)}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Template Library"
                         >
                             <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -840,7 +840,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => setIsTrackerOpen(true)}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Show Project Tracker"
                         >
                             <Icon type="document" className="h-5 w-5 text-brand-cyan" />
@@ -954,7 +954,7 @@ const App: React.FC = () => {
                                         onChange={e => setCurrentProject({...currentProject, name: e.target.value || 'Untitled Project'})}
                                         className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-gold"
                                     />
-                                    <button onClick={handleSaveProject} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-white font-semibold transition">Save</button>
+                                    <button onClick={handleSaveProject} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold transition">Save</button>
                                     <button onClick={handleDeleteProject} className="p-2.5 bg-red-600/80 hover:bg-red-600 rounded-lg text-white transition" title="Delete current project">
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                     </button>
