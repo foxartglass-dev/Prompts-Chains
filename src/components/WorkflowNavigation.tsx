@@ -595,7 +595,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
                   >
                     ▶
                   </span>
-                  <span onClick={() => toggleProject(project)} className="text-purple-400 font-medium flex-1">
+                  <span onClick={() => toggleProject(project)} className="text-brand-gold font-medium flex-1">
                     {project.name}
                   </span>
                   <div className="hidden group-hover:flex gap-1">
@@ -803,7 +803,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
               </button>
               <button
                 onClick={handleSaveProject}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm"
+                className="px-4 py-2 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-slate-900 text-sm font-medium"
               >
                 {projectDialogMode === 'create' ? 'Create' : 'Save'}
               </button>

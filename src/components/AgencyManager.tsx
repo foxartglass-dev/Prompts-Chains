@@ -498,114 +498,84 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
         {/* Content */}
         <div className="flex-1 overflow-hidden flex flex-col">
           {mode === 'agency' ? (
-            <>
-              {/* Column Headers - unified row */}
-              <div className="flex border-b border-brand-cyan/30 bg-gray-900/50">
-                <div className="w-1/3 p-3 flex items-center justify-between border-r border-brand-cyan/30 h-14">
-                  <h3 className="font-semibold text-brand-cyan">Clients</h3>
-                  <button
-                    onClick={() => setShowClientForm(true)}
-                    className="text-brand-cyan hover:text-brand-cyan-light text-sm"
-                  >
-                    + Add
-                  </button>
-                </div>
-                <div className="w-1/3 p-3 flex items-center justify-between border-r border-brand-cyan/30 h-14">
-                  <div>
-                    <h3 className="font-semibold text-brand-cyan">Locations</h3>
-                    {selectedClient && (
-                      <p className="text-xs text-gray-500">for {selectedClient.name}</p>
-                    )}
-                  </div>
-                  {selectedClient && (
-                    <button
-                      onClick={() => setShowLocationForm(true)}
-                      className="text-brand-cyan hover:text-brand-cyan-light text-sm"
-                    >
-                      + Add
-                    </button>
-                  )}
-                </div>
-                <div className="w-1/3 p-3 flex items-center justify-between h-14">
-                  <div>
-                    <h3 className="font-semibold text-brand-cyan">Websites</h3>
-                    {selectedClient && (
-                      <p className="text-xs text-gray-500">for {selectedClient.name}</p>
-                    )}
-                  </div>
-                  {selectedClient && (
-                    <button
-                      onClick={() => setShowWebsiteForm(true)}
-                      className="text-brand-cyan hover:text-brand-cyan-light text-sm"
-                    >
-                      + Add
-                    </button>
-                  )}
-                </div>
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+              {/* Client List Header */}
+              <div className="p-4 border-b border-brand-cyan/30 bg-gray-900/50 flex items-center justify-between">
+                <h3 className="font-semibold text-brand-cyan">Clients</h3>
+                <button
+                  onClick={() => setShowClientForm(true)}
+                  className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
+                >
+                  + Add Client
+                </button>
               </div>
 
-              {/* Content columns */}
-              <div className="flex-1 overflow-hidden flex">
-                {/* Clients Column */}
-                <div className="w-1/3 border-r border-brand-cyan/30 flex flex-col overflow-hidden">
-                  {showClientForm && (
-                    <div className="p-3 border-b border-brand-cyan/30 bg-gray-900/30 space-y-2">
-                      <p className="text-xs text-brand-cyan font-medium">{editingClientId ? 'Edit Client' : 'New Client'}</p>
-                      <input
-                        type="text"
-                        placeholder="Client Name *"
-                        value={clientForm.name}
-                        onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
-                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Description (optional)"
-                        value={clientForm.description}
-                        onChange={(e) => setClientForm({ ...clientForm, description: e.target.value })}
-                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                      />
-                      <div className="flex gap-2">
-                        <button onClick={editingClientId ? updateClient : createClient} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
-                          {editingClientId ? 'Update' : 'Save'}
-                        </button>
-                        <button onClick={cancelClientForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
+              {/* Add/Edit Client Form */}
+              {showClientForm && !selectedClient && (
+                <div className="p-4 border-b border-brand-cyan/30 bg-gray-900/30 space-y-3">
+                  <p className="text-sm text-brand-cyan font-medium">{editingClientId ? 'Edit Client' : 'New Client'}</p>
+                  <input
+                    type="text"
+                    placeholder="Client Name *"
+                    value={clientForm.name}
+                    onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Description (optional)"
+                    value={clientForm.description}
+                    onChange={(e) => setClientForm({ ...clientForm, description: e.target.value })}
+                    className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={editingClientId ? updateClient : createClient} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
+                      {editingClientId ? 'Update' : 'Save'}
+                    </button>
+                    <button onClick={cancelClientForm} className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-white text-sm">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                  <div className="flex-1 overflow-y-auto">
-                    {loading ? (
-                      <div className="p-4 text-gray-400 text-center">Loading...</div>
-                    ) : clients.length === 0 ? (
-                      <div className="p-4 text-gray-500 text-center text-sm">No clients yet. Add one to get started.</div>
-                    ) : (
-                      clients.map((client) => (
-                        <div
-                          key={client.id}
-                          onClick={() => {
-                            setSelectedClient(client);
-                            setSelectedLocation(null);
-                          }}
-                          className={`p-3 border-b border-brand-cyan/30 cursor-pointer hover:bg-slate-700/50 flex items-center justify-between h-[60px] ${
-                            selectedClient?.id === client.id ? 'bg-brand-cyan/10 border-l-2 border-l-brand-cyan shadow-[0_0_10px_rgba(0,180,216,0.3)]' : ''
-                          }`}
-                        >
+              {/* Client Grid */}
+              <div className="flex-1 overflow-y-auto p-4">
+                {loading ? (
+                  <div className="text-center text-gray-400 py-8">Loading...</div>
+                ) : clients.length === 0 ? (
+                  <div className="text-center text-gray-500 py-8">
+                    <p className="mb-2">No clients yet</p>
+                    <p className="text-sm">Add a client to get started.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-4">
+                    {clients.map((client) => (
+                      <div
+                        key={client.id}
+                        onClick={() => {
+                          setSelectedClient(client);
+                          setSelectedLocation(null);
+                        }}
+                        className="bg-gray-700/50 border border-brand-cyan/30 rounded-lg p-4 cursor-pointer hover:border-brand-cyan hover:shadow-glow-cyan transition group"
+                      >
+                        <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-white truncate">{client.name}</p>
+                            <h4 className="font-medium text-white truncate">{client.name}</h4>
                             {client.description && (
-                              <p className="text-xs text-gray-400 truncate">{client.description}</p>
+                              <p className="text-sm text-gray-400 mt-1 truncate">{client.description}</p>
                             )}
+                            <p className="text-xs text-gray-500 mt-2">
+                              Click to view details
+                            </p>
                           </div>
-                          <div className="flex items-center gap-1 flex-shrink-0">
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 startEditClient(client);
                               }}
-                              className="text-gray-500 hover:text-brand-cyan p-1"
+                              className="text-gray-400 hover:text-brand-cyan p-1"
                               title="Edit"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -617,7 +587,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                                 e.stopPropagation();
                                 deleteClient(client.id);
                               }}
-                              className="text-gray-500 hover:text-red-400 p-1"
+                              className="text-gray-400 hover:text-red-400 p-1"
                               title="Delete"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -626,294 +596,370 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                             </button>
                           </div>
                         </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* Locations Column */}
-                <div className="w-1/3 border-r border-brand-cyan/30 flex flex-col overflow-hidden">
-                  {showLocationForm && selectedClient && (
-                  <div className="p-3 border-b border-brand-cyan/30 bg-gray-900/30 space-y-2">
-                    <p className="text-xs text-brand-cyan font-medium">{editingLocationId ? 'Edit Location' : 'New Location'}</p>
-                    <input
-                      type="text"
-                      placeholder="Location Name *"
-                      value={locationForm.name}
-                      onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })}
-                      className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Address"
-                      value={locationForm.address}
-                      onChange={(e) => setLocationForm({ ...locationForm, address: e.target.value })}
-                      className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        placeholder="City"
-                        value={locationForm.city}
-                        onChange={(e) => setLocationForm({ ...locationForm, city: e.target.value })}
-                        className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                      />
-                      <input
-                        type="text"
-                        placeholder="State"
-                        value={locationForm.state}
-                        onChange={(e) => setLocationForm({ ...locationForm, state: e.target.value })}
-                        className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        placeholder="ZIP"
-                        value={locationForm.zip}
-                        onChange={(e) => setLocationForm({ ...locationForm, zip: e.target.value })}
-                        className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Country"
-                        value={locationForm.country}
-                        onChange={(e) => setLocationForm({ ...locationForm, country: e.target.value })}
-                        className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                      />
-                    </div>
-                    <label className="flex items-center gap-2 text-sm text-gray-300">
-                      <input
-                        type="checkbox"
-                        checked={locationForm.has_gbp}
-                        onChange={(e) => setLocationForm({ ...locationForm, has_gbp: e.target.checked })}
-                        className="rounded bg-gray-700 border-gray-600"
-                      />
-                      Has Google Business Profile
-                    </label>
-                    {locationForm.has_gbp && (
-                      <input
-                        type="text"
-                        placeholder="GBP Place ID (optional)"
-                        value={locationForm.gbp_place_id}
-                        onChange={(e) => setLocationForm({ ...locationForm, gbp_place_id: e.target.value })}
-                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                      />
-                    )}
-                    <div className="flex gap-2">
-                      <button onClick={editingLocationId ? updateLocation : createLocation} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
-                        {editingLocationId ? 'Update' : 'Save'}
-                      </button>
-                      <button onClick={cancelLocationForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
-                        Cancel
-                      </button>
-                    </div>
+                      </div>
+                    ))}
                   </div>
                 )}
+              </div>
 
-                <div className="flex-1 overflow-y-auto">
-                  {!selectedClient ? (
-                    <div className="p-4 text-gray-500 text-center text-sm">Select a client to see locations</div>
-                  ) : locations.length === 0 ? (
-                    <div className="p-4 text-gray-500 text-center text-sm">No locations yet</div>
-                  ) : (
-                    locations.map((location) => (
-                      <div
-                        key={location.id}
-                        onClick={() => setSelectedLocation(location)}
-                        className={`p-3 border-b border-brand-cyan/30 cursor-pointer hover:bg-slate-700/50 h-[60px] ${
-                          selectedLocation?.id === location.id ? 'bg-brand-cyan/10 border-l-2 border-l-brand-cyan shadow-[0_0_10px_rgba(0,180,216,0.3)]' : ''
-                        }`}
+              {/* Client Detail Overlay - pops up when a client is selected */}
+              {selectedClient && (
+                <div className="absolute inset-0 bg-slate-800 flex flex-col z-10 animate-in fade-in slide-in-from-bottom-4 duration-200">
+                  {/* Overlay Header */}
+                  <div className="p-4 border-b border-brand-cyan/30 bg-gray-900/50 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => {
+                          setSelectedClient(null);
+                          setSelectedLocation(null);
+                          setLocations([]);
+                          setWebsites([]);
+                        }}
+                        className="text-gray-400 hover:text-white p-1"
+                        title="Back to clients"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium text-white">{location.name}</p>
-                              {location.has_gbp && (
-                                <span className="px-2 py-0.5 bg-green-600/30 text-green-400 text-xs rounded-full">
-                                  GBP
-                                </span>
-                              )}
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                      <div>
+                        <h3 className="text-lg font-semibold text-white">{selectedClient.name}</h3>
+                        {selectedClient.description && (
+                          <p className="text-sm text-gray-400">{selectedClient.description}</p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => startEditClient(selectedClient)}
+                      className="px-3 py-1.5 border border-brand-cyan rounded text-brand-cyan hover:bg-brand-cyan/10 text-sm"
+                    >
+                      Edit Client
+                    </button>
+                  </div>
+
+                  {/* Edit Client Form in Overlay */}
+                  {showClientForm && editingClientId === selectedClient.id && (
+                    <div className="p-4 border-b border-brand-cyan/30 bg-gray-900/30 space-y-3">
+                      <p className="text-sm text-brand-cyan font-medium">Edit Client</p>
+                      <input
+                        type="text"
+                        placeholder="Client Name *"
+                        value={clientForm.name}
+                        onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
+                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Description (optional)"
+                        value={clientForm.description}
+                        onChange={(e) => setClientForm({ ...clientForm, description: e.target.value })}
+                        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+                      />
+                      <div className="flex gap-2">
+                        <button onClick={updateClient} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
+                          Update
+                        </button>
+                        <button onClick={cancelClientForm} className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-white text-sm">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Two Column Layout: Locations & Websites */}
+                  <div className="flex-1 overflow-hidden flex">
+                    {/* Locations Column */}
+                    <div className="w-1/2 border-r border-brand-cyan/30 flex flex-col">
+                      <div className="p-3 border-b border-brand-cyan/30 bg-gray-900/30 flex items-center justify-between">
+                        <h4 className="font-semibold text-brand-cyan">Locations</h4>
+                        <button
+                          onClick={() => setShowLocationForm(true)}
+                          className="text-brand-cyan hover:text-brand-cyan-light text-sm"
+                        >
+                          + Add
+                        </button>
+                      </div>
+
+                      {showLocationForm && (
+                        <div className="p-3 border-b border-brand-cyan/30 bg-gray-900/30 space-y-2">
+                          <p className="text-xs text-brand-cyan font-medium">{editingLocationId ? 'Edit Location' : 'New Location'}</p>
+                          <input
+                            type="text"
+                            placeholder="Location Name *"
+                            value={locationForm.name}
+                            onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })}
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Address"
+                            value={locationForm.address}
+                            onChange={(e) => setLocationForm({ ...locationForm, address: e.target.value })}
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="text"
+                              placeholder="City"
+                              value={locationForm.city}
+                              onChange={(e) => setLocationForm({ ...locationForm, city: e.target.value })}
+                              className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                            />
+                            <input
+                              type="text"
+                              placeholder="State"
+                              value={locationForm.state}
+                              onChange={(e) => setLocationForm({ ...locationForm, state: e.target.value })}
+                              className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="text"
+                              placeholder="ZIP"
+                              value={locationForm.zip}
+                              onChange={(e) => setLocationForm({ ...locationForm, zip: e.target.value })}
+                              className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Country"
+                              value={locationForm.country}
+                              onChange={(e) => setLocationForm({ ...locationForm, country: e.target.value })}
+                              className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                            />
+                          </div>
+                          <label className="flex items-center gap-2 text-sm text-gray-300">
+                            <input
+                              type="checkbox"
+                              checked={locationForm.has_gbp}
+                              onChange={(e) => setLocationForm({ ...locationForm, has_gbp: e.target.checked })}
+                              className="rounded bg-gray-700 border-gray-600"
+                            />
+                            Has Google Business Profile
+                          </label>
+                          {locationForm.has_gbp && (
+                            <input
+                              type="text"
+                              placeholder="GBP Place ID (optional)"
+                              value={locationForm.gbp_place_id}
+                              onChange={(e) => setLocationForm({ ...locationForm, gbp_place_id: e.target.value })}
+                              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                            />
+                          )}
+                          <div className="flex gap-2">
+                            <button onClick={editingLocationId ? updateLocation : createLocation} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
+                              {editingLocationId ? 'Update' : 'Save'}
+                            </button>
+                            <button onClick={cancelLocationForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm text-white">
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex-1 overflow-y-auto">
+                        {locations.length === 0 ? (
+                          <div className="p-4 text-gray-500 text-center text-sm">No locations yet</div>
+                        ) : (
+                          locations.map((location) => (
+                            <div
+                              key={location.id}
+                              onClick={() => setSelectedLocation(location)}
+                              className={`p-4 border-b border-brand-cyan/30 cursor-pointer hover:bg-slate-700/50 ${
+                                selectedLocation?.id === location.id ? 'bg-brand-cyan/10 border-l-4 border-l-brand-cyan' : ''
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-white">{location.name}</p>
+                                    {location.has_gbp && (
+                                      <span className="px-2 py-0.5 bg-green-600/30 text-green-400 text-xs rounded-full">
+                                        GBP
+                                      </span>
+                                    )}
+                                  </div>
+                                  {location.city && (
+                                    <p className="text-sm text-gray-400 mt-1">
+                                      {location.city}{location.state ? `, ${location.state}` : ''}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); toggleGBP(location); }}
+                                    className={`p-1 rounded ${location.has_gbp ? 'text-green-400 hover:text-green-300' : 'text-gray-500 hover:text-gray-400'}`}
+                                    title="Toggle GBP"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); startEditLocation(location); }}
+                                    className="text-gray-500 hover:text-brand-cyan p-1"
+                                    title="Edit"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); deleteLocation(location.id); }}
+                                    className="text-gray-500 hover:text-red-400 p-1"
+                                    title="Delete"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
                             </div>
-                            {location.city && (
-                              <p className="text-xs text-gray-400">
-                                {location.city}{location.state ? `, ${location.state}` : ''}
-                              </p>
-                            )}
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Websites Column */}
+                    <div className="w-1/2 flex flex-col">
+                      <div className="p-3 border-b border-brand-cyan/30 bg-gray-900/30 flex items-center justify-between">
+                        <h4 className="font-semibold text-brand-cyan">Websites</h4>
+                        <button
+                          onClick={() => setShowWebsiteForm(true)}
+                          className="text-brand-cyan hover:text-brand-cyan-light text-sm"
+                        >
+                          + Add
+                        </button>
+                      </div>
+
+                      {showWebsiteForm && (
+                        <div className="p-3 border-b border-brand-cyan/30 bg-gray-900/30 space-y-2">
+                          <p className="text-xs text-brand-cyan font-medium">{editingWebsiteId ? 'Edit Website' : 'New Website'}</p>
+                          <input
+                            type="text"
+                            placeholder="Website Name *"
+                            value={websiteForm.name}
+                            onChange={(e) => setWebsiteForm({ ...websiteForm, name: e.target.value })}
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                          />
+                          <input
+                            type="text"
+                            placeholder="URL (e.g., https://example.com)"
+                            value={websiteForm.url}
+                            onChange={(e) => setWebsiteForm({ ...websiteForm, url: e.target.value })}
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                          />
+                          <p className="text-xs text-gray-500 font-medium mt-2">WordPress Settings (optional)</p>
+                          <input
+                            type="text"
+                            placeholder="WP Site URL"
+                            value={websiteForm.wp_url}
+                            onChange={(e) => setWebsiteForm({ ...websiteForm, wp_url: e.target.value })}
+                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="text"
+                              placeholder="WP Username"
+                              value={websiteForm.wp_user}
+                              onChange={(e) => setWebsiteForm({ ...websiteForm, wp_user: e.target.value })}
+                              className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                            />
+                            <input
+                              type="password"
+                              placeholder="WP App Password"
+                              value={websiteForm.wp_app_password}
+                              onChange={(e) => setWebsiteForm({ ...websiteForm, wp_app_password: e.target.value })}
+                              className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+                            />
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleGBP(location);
-                              }}
-                              className={`p-1 rounded ${location.has_gbp ? 'text-green-400 hover:text-green-300' : 'text-gray-500 hover:text-gray-400'}`}
-                              title="Toggle GBP"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
+                          <div className="flex gap-2">
+                            <button onClick={editingWebsiteId ? updateWebsite : createWebsite} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
+                              {editingWebsiteId ? 'Update' : 'Save'}
                             </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startEditLocation(location);
-                              }}
-                              className="text-gray-500 hover:text-brand-cyan p-1"
-                              title="Edit"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteLocation(location.id);
-                              }}
-                              className="text-gray-500 hover:text-red-400 p-1"
-                              title="Delete"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
+                            <button onClick={cancelWebsiteForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm text-white">
+                              Cancel
                             </button>
                           </div>
                         </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+                      )}
 
-              {/* Websites Column */}
-                <div className="w-1/3 flex flex-col overflow-hidden">
-                  {showWebsiteForm && selectedClient && (
-                  <div className="p-3 border-b border-brand-cyan/30 bg-gray-900/30 space-y-2">
-                    <p className="text-xs text-brand-cyan font-medium">{editingWebsiteId ? 'Edit Website' : 'New Website'}</p>
-                    <input
-                      type="text"
-                      placeholder="Website Name *"
-                      value={websiteForm.name}
-                      onChange={(e) => setWebsiteForm({ ...websiteForm, name: e.target.value })}
-                      className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                    />
-                    <input
-                      type="text"
-                      placeholder="URL (e.g., https://example.com)"
-                      value={websiteForm.url}
-                      onChange={(e) => setWebsiteForm({ ...websiteForm, url: e.target.value })}
-                      className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                    />
-                    <p className="text-xs text-gray-500 font-medium mt-2">WordPress Settings (optional)</p>
-                    <input
-                      type="text"
-                      placeholder="WP Site URL"
-                      value={websiteForm.wp_url}
-                      onChange={(e) => setWebsiteForm({ ...websiteForm, wp_url: e.target.value })}
-                      className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        placeholder="WP Username"
-                        value={websiteForm.wp_user}
-                        onChange={(e) => setWebsiteForm({ ...websiteForm, wp_user: e.target.value })}
-                        className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                      />
-                      <input
-                        type="password"
-                        placeholder="WP App Password"
-                        value={websiteForm.wp_app_password}
-                        onChange={(e) => setWebsiteForm({ ...websiteForm, wp_app_password: e.target.value })}
-                        className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={editingWebsiteId ? updateWebsite : createWebsite} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
-                        {editingWebsiteId ? 'Update' : 'Save'}
-                      </button>
-                      <button onClick={cancelWebsiteForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
-                        Cancel
-                      </button>
+                      <div className="flex-1 overflow-y-auto">
+                        {websites.length === 0 ? (
+                          <div className="p-4 text-gray-500 text-center text-sm">No websites yet</div>
+                        ) : (
+                          websites.map((website) => (
+                            <div
+                              key={website.id}
+                              className="p-4 border-b border-brand-cyan/30 hover:bg-slate-700/50"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <p className="font-medium text-white">{website.name}</p>
+                                  {website.url && (
+                                    <a
+                                      href={website.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-sm text-brand-cyan hover:underline"
+                                    >
+                                      {website.url}
+                                    </a>
+                                  )}
+                                  {website.wp_url && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      WP: {website.wp_url}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {onSelectWebsite && (
+                                    <button
+                                      onClick={() => onSelectWebsite(website, selectedClient, selectedLocation || undefined)}
+                                      className="px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-slate-900 text-xs font-medium"
+                                    >
+                                      Select
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => startEditWebsite(website)}
+                                    className="text-gray-500 hover:text-brand-cyan p-1"
+                                    title="Edit"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => deleteWebsite(website.id)}
+                                    className="text-gray-500 hover:text-red-400 p-1"
+                                    title="Delete"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
                   </div>
-                )}
-
-                <div className="flex-1 overflow-y-auto">
-                  {!selectedClient ? (
-                    <div className="p-4 text-gray-500 text-center text-sm">Select a client to see websites</div>
-                  ) : websites.length === 0 ? (
-                    <div className="p-4 text-gray-500 text-center text-sm">No websites yet</div>
-                  ) : (
-                    websites.map((website) => (
-                      <div
-                        key={website.id}
-                        className="p-3 border-b border-brand-cyan/30 hover:bg-slate-700/50 h-[60px]"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <p className="font-medium text-white">{website.name}</p>
-                            {website.url && (
-                              <a
-                                href={website.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-brand-cyan hover:underline"
-                              >
-                                {website.url}
-                              </a>
-                            )}
-                            {website.wp_url && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                WP: {website.wp_url}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {onSelectWebsite && (
-                              <button
-                                onClick={() => onSelectWebsite(website, selectedClient!, selectedLocation || undefined)}
-                                className="px-2 py-1 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-xs font-medium"
-                              >
-                                Select
-                              </button>
-                            )}
-                            <button
-                              onClick={() => startEditWebsite(website)}
-                              className="text-gray-500 hover:text-brand-cyan p-1"
-                              title="Edit"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => deleteWebsite(website.id)}
-                              className="text-gray-500 hover:text-red-400 p-1"
-                              title="Delete"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
                 </div>
-              </div>
-              </div>
-            </>
+              )}
+            </div>
           ) : (
             /* Personal Projects Mode */
             <div className="flex-1 flex flex-col">
               {/* Header */}
               <div className="p-3 border-b border-brand-cyan/30 flex items-center justify-between bg-gray-900/50">
                 <div>
-                  <h3 className="font-semibold text-purple-400">Personal Projects</h3>
+                  <h3 className="font-semibold text-brand-gold">Personal Projects</h3>
                   <p className="text-xs text-gray-500">Organize your standalone workflows</p>
                 </div>
                 <button
@@ -927,7 +973,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
               {/* Add/Edit Form */}
               {showProjectForm && (
                 <div className="p-4 border-b border-brand-cyan/30 bg-gray-900/30 space-y-3">
-                  <p className="text-sm text-purple-400 font-medium">
+                  <p className="text-sm text-brand-gold font-medium">
                     {editingProjectId ? 'Edit Project' : 'Create New Project'}
                   </p>
                   <input
@@ -976,7 +1022,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                     {personalProjects.map((project) => (
                       <div
                         key={project.id}
-                        className="bg-gray-700/50 border border-gray-600 rounded-lg p-4 hover:border-purple-500/50 transition"
+                        className="bg-gray-700/50 border border-gray-600 rounded-lg p-4 hover:border-brand-gold/50 transition"
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
@@ -991,7 +1037,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                           <div className="flex gap-1">
                             <button
                               onClick={() => startEditProject(project)}
-                              className="text-gray-400 hover:text-purple-400 p-1"
+                              className="text-gray-400 hover:text-brand-gold p-1"
                               title="Edit"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1023,25 +1069,6 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
           )}
         </div>
 
-        {/* Footer with breadcrumb */}
-        {mode === 'agency' && (
-          <div className="p-3 border-t border-brand-cyan/30 bg-gray-900/50 text-sm text-gray-400">
-            <span>Current: </span>
-            {selectedClient ? (
-              <>
-                <span className="text-brand-cyan">{selectedClient.name}</span>
-                {selectedLocation && (
-                  <>
-                    <span className="mx-2">&gt;</span>
-                    <span className="text-brand-cyan">{selectedLocation.name}</span>
-                  </>
-                )}
-              </>
-            ) : (
-              <span>No client selected</span>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

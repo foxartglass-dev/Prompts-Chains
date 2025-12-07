@@ -239,11 +239,11 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'full_workflow': return 'bg-purple-600';
-      case 'prompts': return 'bg-blue-600';
+      case 'full_workflow': return 'bg-brand-gold';
+      case 'prompts': return 'bg-brand-cyan';
       case 'placeholders': return 'bg-green-600';
       case 'tags': return 'bg-yellow-600';
-      case 'snippets': return 'bg-pink-600';
+      case 'snippets': return 'bg-brand-gold';
       case 'website_setup': return 'bg-indigo-600';
       default: return 'bg-gray-600';
     }
@@ -460,7 +460,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                           key={key}
                           className={`flex items-start gap-3 p-3 rounded cursor-pointer ${
                             includes[key as keyof typeof includes]
-                              ? 'bg-blue-600/20 border border-blue-500'
+                              ? 'bg-brand-cyan/20 border border-brand-cyan'
                               : 'bg-gray-800 border border-brand-cyan/30'
                           }`}
                         >
@@ -577,7 +577,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                       </h4>
                       <div className="flex gap-2">
                         {selectedTemplate.template_data.tags.map((t: any, i: number) => (
-                          <span key={i} className="px-3 py-1 bg-purple-600/30 border border-purple-500 rounded text-sm text-white">
+                          <span key={i} className="px-3 py-1 bg-brand-gold/30 border border-brand-gold rounded text-sm text-slate-900 font-medium">
                             {t.name} ({t.key})
                           </span>
                         ))}
@@ -587,7 +587,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
 
                   {selectedTemplate.template_data?.taggedSnippets && (
                     <div className="bg-gray-800 rounded-lg p-4">
-                      <h4 className="text-sm font-medium text-pink-400 mb-3">
+                      <h4 className="text-sm font-medium text-brand-gold mb-3">
                         Tagged Snippets ({selectedTemplate.template_data.taggedSnippets.length})
                       </h4>
                       <div className="space-y-2">
