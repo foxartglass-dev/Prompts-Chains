@@ -799,7 +799,7 @@ const App: React.FC = () => {
                     {/* Navigation Buttons */}
                     <div className="flex gap-2 flex-wrap">
                         <button
-                            onClick={() => setIsWorkflowNavOpen(true)}
+                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(true); }}
                             className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Browse Workflows"
                         >
@@ -809,7 +809,7 @@ const App: React.FC = () => {
                             <span>Workflows</span>
                         </button>
                         <button
-                            onClick={() => setIsAgencyOpen(true)}
+                            onClick={() => { setIsTrackerOpen(false); setIsWorkflowNavOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsAgencyOpen(true); }}
                             className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Manage Clients & Locations"
                         >
@@ -819,7 +819,7 @@ const App: React.FC = () => {
                             <span>Agency</span>
                         </button>
                         <button
-                            onClick={() => setIsArticlesOpen(true)}
+                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsWorkflowNavOpen(false); setIsTemplatesOpen(false); setIsArticlesOpen(true); }}
                             className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="View Saved Articles"
                         >
@@ -829,7 +829,7 @@ const App: React.FC = () => {
                             <span>Articles</span>
                         </button>
                         <button
-                            onClick={() => setIsTemplatesOpen(true)}
+                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsWorkflowNavOpen(false); setIsTemplatesOpen(true); }}
                             className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Template Library"
                         >
@@ -839,7 +839,7 @@ const App: React.FC = () => {
                             <span>Templates</span>
                         </button>
                         <button
-                            onClick={() => setIsTrackerOpen(true)}
+                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(true); }}
                             className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
                             title="Show Project Tracker"
                         >

@@ -236,11 +236,11 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'published': return 'bg-green-500';
-      case 'edited': return 'bg-blue-500';
-      case 'flagged': return 'bg-red-500';
-      case 'passed': return 'bg-emerald-500';
-      default: return 'bg-gray-500';
+      case 'published': return 'bg-green-500 text-white';
+      case 'edited': return 'bg-brand-gold text-slate-900 font-medium';
+      case 'flagged': return 'bg-brand-gold text-slate-900 font-medium';
+      case 'passed': return 'bg-emerald-500 text-white';
+      default: return 'bg-gray-500 text-white';
     }
   };
 
@@ -252,7 +252,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
           <div className="flex items-center gap-4">
-            <h2 className="text-xl font-semibold text-white">Article Library</h2>
+            <h2 className="text-xl font-semibold text-brand-gold">Article Library</h2>
             {viewMode !== 'list' && (
               <button
                 onClick={backToList}
@@ -338,13 +338,13 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                           </td>
                           <td className="p-2">
                             {article.tag && (
-                              <span className="px-2 py-0.5 bg-purple-600 rounded text-xs">
+                              <span className="px-2 py-0.5 bg-brand-gold rounded text-xs text-slate-900 font-medium">
                                 {article.tag}
                               </span>
                             )}
                           </td>
                           <td className="p-2">
-                            <span className={`px-2 py-0.5 rounded text-xs text-white ${getStatusColor(article.status)}`}>
+                            <span className={`px-2 py-0.5 rounded text-xs ${getStatusColor(article.status)}`}>
                               {article.status}
                             </span>
                           </td>
@@ -394,11 +394,11 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                       <h3 className="text-lg font-semibold text-white">{selectedArticle.keyword}</h3>
                       <div className="flex items-center gap-3 mt-1 text-sm text-gray-400">
                         {selectedArticle.tag && (
-                          <span className="px-2 py-0.5 bg-purple-600 rounded text-xs text-white">
+                          <span className="px-2 py-0.5 bg-brand-gold rounded text-xs text-slate-900 font-medium">
                             {selectedArticle.tag}
                           </span>
                         )}
-                        <span className={`px-2 py-0.5 rounded text-xs text-white ${getStatusColor(selectedArticle.status)}`}>
+                        <span className={`px-2 py-0.5 rounded text-xs ${getStatusColor(selectedArticle.status)}`}>
                           {selectedArticle.status}
                         </span>
                         <span>AI: {selectedArticle.ai_score ?? '-'}%</span>
@@ -560,7 +560,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                     <div className="space-y-3">
                       {Object.entries(selectedArticle.chain_outputs || {}).map(([key, value]) => (
                         <div key={key} className="bg-gray-800 rounded p-3">
-                          <h5 className="text-sm font-medium text-purple-400 mb-2">{key}</h5>
+                          <h5 className="text-sm font-medium text-brand-gold mb-2">{key}</h5>
                           <pre className="text-xs text-gray-300 whitespace-pre-wrap max-h-40 overflow-auto">
                             {value}
                           </pre>
@@ -580,7 +580,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                           onClick={() => fetchArticle(v.id)}
                           className={`p-3 rounded cursor-pointer ${
                             v.id === selectedArticle.id
-                              ? 'bg-blue-600/30 border border-blue-500'
+                              ? 'bg-brand-cyan/30 border border-brand-cyan'
                               : 'bg-gray-800 hover:bg-gray-700'
                           }`}
                         >
