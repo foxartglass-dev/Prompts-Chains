@@ -731,14 +731,14 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
         {viewMode === 'standalone' && (
           <button
             onClick={openCreateProjectDialog}
-            className="w-full py-2 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm font-medium"
+            className="w-full py-2 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-slate-900 text-sm font-medium"
           >
             + New Project
           </button>
         )}
         <button
           onClick={() => openCreateWorkflowDialog()}
-          className="w-full py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 text-sm font-medium"
+          className="w-full py-2 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium"
         >
           + New {viewMode === 'standalone' ? 'Ungrouped ' : 'Standalone '}Workflow
         </button>

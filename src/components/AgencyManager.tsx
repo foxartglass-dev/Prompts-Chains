@@ -466,7 +466,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
               <button
                 onClick={() => setMode('agency')}
                 className={`px-4 py-1 rounded-md text-sm font-medium transition ${
-                  mode === 'agency' ? 'bg-brand-cyan text-white' : 'text-gray-400 hover:text-white'
+                  mode === 'agency' ? 'bg-brand-cyan text-slate-900' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 Agency Mode
@@ -474,7 +474,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
               <button
                 onClick={() => setMode('personal')}
                 className={`px-4 py-1 rounded-md text-sm font-medium transition ${
-                  mode === 'personal' ? 'bg-brand-cyan text-white' : 'text-gray-400 hover:text-white'
+                  mode === 'personal' ? 'bg-brand-cyan text-slate-900' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 Personal Projects
@@ -529,7 +529,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                       className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
                     />
                     <div className="flex gap-2">
-                      <button onClick={editingClientId ? updateClient : createClient} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-sm">
+                      <button onClick={editingClientId ? updateClient : createClient} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
                         {editingClientId ? 'Update' : 'Save'}
                       </button>
                       <button onClick={cancelClientForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
@@ -681,7 +681,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                       />
                     )}
                     <div className="flex gap-2">
-                      <button onClick={editingLocationId ? updateLocation : createLocation} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-sm">
+                      <button onClick={editingLocationId ? updateLocation : createLocation} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
                         {editingLocationId ? 'Update' : 'Save'}
                       </button>
                       <button onClick={cancelLocationForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
@@ -828,7 +828,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                       />
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={editingWebsiteId ? updateWebsite : createWebsite} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-sm">
+                      <button onClick={editingWebsiteId ? updateWebsite : createWebsite} className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-sm font-medium">
                         {editingWebsiteId ? 'Update' : 'Save'}
                       </button>
                       <button onClick={cancelWebsiteForm} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">
@@ -872,7 +872,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                             {onSelectWebsite && (
                               <button
                                 onClick={() => onSelectWebsite(website, selectedClient!, selectedLocation || undefined)}
-                                className="px-2 py-1 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-xs"
+                                className="px-2 py-1 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 text-xs font-medium"
                               >
                                 Select
                               </button>
@@ -914,7 +914,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                 </div>
                 <button
                   onClick={() => setShowProjectForm(true)}
-                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm text-white"
+                  className="px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-sm text-slate-900 font-medium"
                 >
                   + New Project
                 </button>
@@ -944,7 +944,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                     <button
                       onClick={editingProjectId ? updatePersonalProject : createPersonalProject}
                       disabled={!projectForm.name.trim()}
-                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm disabled:opacity-50"
+                      className="px-4 py-2 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-slate-900 text-sm font-medium disabled:opacity-50"
                     >
                       {editingProjectId ? 'Update' : 'Create'}
                     </button>

@@ -276,7 +276,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
             {viewMode === 'browse' && (
               <button
                 onClick={() => setViewMode('create')}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white"
+                className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
               >
                 + Save Current as Template
               </button>
@@ -380,21 +380,21 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                           {template.template_type === 'website_setup' ? (
                             <button
                               onClick={() => applyWebsiteTemplate(template)}
-                              className="flex-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white"
+                              className="flex-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
                             >
                               Apply to Website
                             </button>
                           ) : (
                             <button
                               onClick={() => applyTemplate(template)}
-                              className="flex-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white"
+                              className="flex-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
                             >
                               Apply
                             </button>
                           )}
                           <button
                             onClick={() => deleteTemplate(template.id)}
-                            className="px-2 py-1.5 bg-red-600/20 hover:bg-red-600/40 rounded text-sm text-red-400"
+                            className="px-2 py-1.5 border border-brand-cyan rounded text-sm text-brand-cyan hover:bg-brand-cyan/10"
                           >
                             &times;
                           </button>
@@ -483,7 +483,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                     <button
                       onClick={createTemplateFromWorkflow}
                       disabled={!createForm.name || loading}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white disabled:opacity-50"
+                      className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 font-medium disabled:opacity-50"
                     >
                       {loading ? 'Saving...' : 'Save Workflow Template'}
                     </button>
@@ -491,7 +491,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                       <button
                         onClick={createTemplateFromWebsite}
                         disabled={!createForm.name || loading}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white disabled:opacity-50"
+                        className="px-4 py-2 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-slate-900 font-medium disabled:opacity-50"
                       >
                         Save All Website Workflows
                       </button>
@@ -628,7 +628,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                     <button
                       onClick={() => applyWebsiteTemplate(selectedTemplate)}
                       disabled={!currentWebsiteId || loading}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white disabled:opacity-50"
+                      className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 font-medium disabled:opacity-50"
                     >
                       Apply to Current Website
                     </button>
@@ -637,14 +637,14 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                       <button
                         onClick={() => applyTemplate(selectedTemplate, false)}
                         disabled={loading}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white disabled:opacity-50"
+                        className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 font-medium disabled:opacity-50"
                       >
                         Replace Current
                       </button>
                       <button
                         onClick={() => applyTemplate(selectedTemplate, true)}
                         disabled={loading}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white disabled:opacity-50"
+                        className="px-4 py-2 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-slate-900 font-medium disabled:opacity-50"
                       >
                         Merge with Current
                       </button>
@@ -652,7 +652,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                   )}
                   <button
                     onClick={() => deleteTemplate(selectedTemplate.id)}
-                    className="px-4 py-2 bg-red-600/20 hover:bg-red-600/40 rounded text-red-400"
+                    className="px-4 py-2 border border-brand-cyan rounded text-brand-cyan hover:bg-brand-cyan/10"
                   >
                     Delete Template
                   </button>

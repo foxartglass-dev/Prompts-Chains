@@ -359,7 +359,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                           <td className="p-2">
                             <button
                               onClick={() => viewArticle(article)}
-                              className="text-blue-400 hover:text-blue-300 text-xs mr-2"
+                              className="text-brand-cyan hover:text-brand-cyan-light text-xs mr-2"
                             >
                               View
                             </button>
@@ -411,7 +411,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                         <>
                           <button
                             onClick={editArticle}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white"
+                            className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
                           >
                             Edit
                           </button>
@@ -427,21 +427,21 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                           <button
                             onClick={() => saveArticle(false)}
                             disabled={saving}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white disabled:opacity-50"
+                            className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium disabled:opacity-50"
                           >
                             {saving ? 'Saving...' : 'Save'}
                           </button>
                           <button
                             onClick={() => saveArticle(true)}
                             disabled={saving}
-                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm text-white disabled:opacity-50"
+                            className="px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-sm text-slate-900 font-medium disabled:opacity-50"
                           >
                             Save as New Version
                           </button>
                           <button
                             onClick={publishToWordPress}
                             disabled={publishing}
-                            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm text-white disabled:opacity-50"
+                            className="px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-sm text-slate-900 font-medium disabled:opacity-50"
                           >
                             {publishing ? 'Publishing...' : 'Publish to WP'}
                           </button>
@@ -542,13 +542,13 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                   <div className="flex gap-2">
                     <button
                       onClick={() => setShowVersions(false)}
-                      className={`px-3 py-1 rounded text-sm ${!showVersions ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                      className={`px-3 py-1 rounded text-sm font-medium ${!showVersions ? 'bg-brand-cyan text-slate-900' : 'bg-gray-700 text-gray-300'}`}
                     >
                       Chain Outputs
                     </button>
                     <button
                       onClick={() => fetchVersionHistory(selectedArticle.id)}
-                      className={`px-3 py-1 rounded text-sm ${showVersions ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                      className={`px-3 py-1 rounded text-sm font-medium ${showVersions ? 'bg-brand-cyan text-slate-900' : 'bg-gray-700 text-gray-300'}`}
                     >
                       Versions
                     </button>
