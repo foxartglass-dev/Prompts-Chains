@@ -78,12 +78,29 @@ CREATE TABLE IF NOT EXISTS location_websites (
   UNIQUE(location_id, website_id)
 );
 
+-- ============================================
+-- PERSONAL PROJECTS MODE (non-agency)
+-- Must be defined BEFORE workflows since workflows references it
+-- ============================================
+
+-- Personal projects (standalone, not linked to clients)
+CREATE TABLE IF NOT EXISTS personal_projects (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  category VARCHAR(100),
+  state JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Workflows table (prompt chains - linked to websites or standalone)
 -- Each workflow = one full dashboard/prompt chain setup
 CREATE TABLE IF NOT EXISTS workflows (
   id SERIAL PRIMARY KEY,
   client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
   website_id INTEGER REFERENCES websites(id) ON DELETE SET NULL,
+  personal_project_id INTEGER REFERENCES personal_projects(id) ON DELETE SET NULL,
   name VARCHAR(255) NOT NULL,
   description TEXT,
   -- Full workflow state (prompts, placeholders, tags, snippets, settings)
@@ -99,21 +116,6 @@ CREATE TABLE IF NOT EXISTS projects (
   website_id INTEGER REFERENCES websites(id) ON DELETE SET NULL,
   name VARCHAR(255) NOT NULL,
   description TEXT,
-  state JSONB NOT NULL DEFAULT '{}',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- ============================================
--- PERSONAL PROJECTS MODE (non-agency)
--- ============================================
-
--- Personal projects (standalone, not linked to clients)
-CREATE TABLE IF NOT EXISTS personal_projects (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  description TEXT,
-  category VARCHAR(100),
   state JSONB NOT NULL DEFAULT '{}',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -199,6 +201,7 @@ CREATE INDEX IF NOT EXISTS idx_locations_client_id ON locations(client_id);
 CREATE INDEX IF NOT EXISTS idx_websites_client_id ON websites(client_id);
 CREATE INDEX IF NOT EXISTS idx_workflows_client_id ON workflows(client_id);
 CREATE INDEX IF NOT EXISTS idx_workflows_website_id ON workflows(website_id);
+CREATE INDEX IF NOT EXISTS idx_workflows_personal_project_id ON workflows(personal_project_id);
 CREATE INDEX IF NOT EXISTS idx_projects_client_id ON projects(client_id);
 CREATE INDEX IF NOT EXISTS idx_projects_website_id ON projects(website_id);
 CREATE INDEX IF NOT EXISTS idx_location_websites_location ON location_websites(location_id);

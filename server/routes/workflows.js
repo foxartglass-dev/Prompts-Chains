@@ -66,14 +66,35 @@ router.get('/', requireDb, async (req, res) => {
 router.get('/standalone', requireDb, async (req, res) => {
   try {
     const workflows = await sql`
-      SELECT * FROM workflows
-      WHERE client_id IS NULL
-      ORDER BY updated_at DESC
+      SELECT w.*, pp.name as project_name
+      FROM workflows w
+      LEFT JOIN personal_projects pp ON w.personal_project_id = pp.id
+      WHERE w.client_id IS NULL
+      ORDER BY w.updated_at DESC
     `;
 
     res.json({ workflows });
   } catch (error) {
     console.error('Error fetching standalone workflows:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET workflows by personal project
+router.get('/by-project/:projectId', requireDb, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const workflows = await sql`
+      SELECT w.*, pp.name as project_name
+      FROM workflows w
+      LEFT JOIN personal_projects pp ON w.personal_project_id = pp.id
+      WHERE w.personal_project_id = ${projectId}
+      ORDER BY w.updated_at DESC
+    `;
+
+    res.json({ workflows });
+  } catch (error) {
+    console.error('Error fetching project workflows:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -86,10 +107,12 @@ router.get('/:id', requireDb, async (req, res) => {
     const workflows = await sql`
       SELECT w.*, c.name as client_name, ws.name as website_name, ws.url as website_url,
              ws.wp_url, ws.wp_user, ws.wp_app_password,
-             ws.elementor_connected, ws.elementor_api_key
+             ws.elementor_connected, ws.elementor_api_key,
+             pp.name as project_name
       FROM workflows w
       LEFT JOIN clients c ON w.client_id = c.id
       LEFT JOIN websites ws ON w.website_id = ws.id
+      LEFT JOIN personal_projects pp ON w.personal_project_id = pp.id
       WHERE w.id = ${id}
     `;
 
@@ -107,19 +130,29 @@ router.get('/:id', requireDb, async (req, res) => {
 // POST create new workflow
 router.post('/', requireDb, async (req, res) => {
   try {
-    const { clientId, websiteId, name, description, state } = req.body;
+    const { clientId, websiteId, personalProjectId, name, description, state } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Workflow name is required' });
     }
 
     const result = await sql`
-      INSERT INTO workflows (client_id, website_id, name, description, state)
-      VALUES (${clientId || null}, ${websiteId || null}, ${name}, ${description || null}, ${JSON.stringify(state || {})})
+      INSERT INTO workflows (client_id, website_id, personal_project_id, name, description, state)
+      VALUES (${clientId || null}, ${websiteId || null}, ${personalProjectId || null}, ${name}, ${description || null}, ${JSON.stringify(state || {})})
       RETURNING *
     `;
 
-    res.status(201).json({ workflow: result[0] });
+    // Fetch with joined data to return project_name, etc.
+    const workflows = await sql`
+      SELECT w.*, c.name as client_name, ws.name as website_name, pp.name as project_name
+      FROM workflows w
+      LEFT JOIN clients c ON w.client_id = c.id
+      LEFT JOIN websites ws ON w.website_id = ws.id
+      LEFT JOIN personal_projects pp ON w.personal_project_id = pp.id
+      WHERE w.id = ${result[0].id}
+    `;
+
+    res.status(201).json({ workflow: workflows[0] });
   } catch (error) {
     console.error('Error creating workflow:', error);
     res.status(500).json({ error: error.message });
@@ -164,23 +197,29 @@ router.post('/:id/duplicate', requireDb, async (req, res) => {
 router.put('/:id', requireDb, async (req, res) => {
   try {
     const { id } = req.params;
-    const { clientId, websiteId, name, description, state } = req.body;
+    const { clientId, websiteId, personalProjectId, name, description, state } = req.body;
+
+    // First get existing workflow to preserve state if not provided
+    const existing = await sql`SELECT * FROM workflows WHERE id = ${id}`;
+    if (existing.length === 0) {
+      return res.status(404).json({ error: 'Workflow not found' });
+    }
+
+    const existingWorkflow = existing[0];
+    const newState = state && Object.keys(state).length > 0 ? state : existingWorkflow.state;
 
     const result = await sql`
       UPDATE workflows
-      SET client_id = ${clientId || null},
-          website_id = ${websiteId || null},
-          name = ${name},
-          description = ${description || null},
-          state = ${JSON.stringify(state || {})},
+      SET client_id = ${clientId !== undefined ? clientId : existingWorkflow.client_id},
+          website_id = ${websiteId !== undefined ? websiteId : existingWorkflow.website_id},
+          personal_project_id = ${personalProjectId !== undefined ? personalProjectId : existingWorkflow.personal_project_id},
+          name = ${name || existingWorkflow.name},
+          description = ${description !== undefined ? description : existingWorkflow.description},
+          state = ${JSON.stringify(newState || {})},
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
     `;
-
-    if (result.length === 0) {
-      return res.status(404).json({ error: 'Workflow not found' });
-    }
 
     res.json({ workflow: result[0] });
   } catch (error) {

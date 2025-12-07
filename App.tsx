@@ -107,6 +107,13 @@ const App: React.FC = () => {
     const [isWorkflowNavOpen, setIsWorkflowNavOpen] = useState(false);
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
+    const [currentWorkflowContext, setCurrentWorkflowContext] = useState<{
+      workflowName?: string;
+      clientName?: string;
+      websiteName?: string;
+      projectName?: string;
+      isStandalone?: boolean;
+    }>({});
 
     // Refs
     const prevProjectIdRef = useRef<string | null>(null);
@@ -714,18 +721,26 @@ const App: React.FC = () => {
                 onSelectWorkflow={(workflow) => {
                     setCurrentWorkflowId(workflow.id);
                     setCurrentWebsiteId(workflow.website_id || undefined);
+                    setCurrentWorkflowContext({
+                        workflowName: workflow.name,
+                        clientName: workflow.client_name,
+                        websiteName: workflow.website_name,
+                        isStandalone: !workflow.client_id,
+                        projectName: undefined // Will be fetched if needed
+                    });
                     showNotification(`Loaded workflow: ${workflow.name}`, 'info');
                 }}
-                onCreateWorkflow={async (clientId, websiteId) => {
+                onCreateWorkflow={async (name, clientId, websiteId, personalProjectId) => {
                     // Create a new workflow in the database
                     try {
                         const res = await fetch('/api/workflows', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                name: 'New Workflow',
+                                name: name,
                                 clientId: clientId || null,
                                 websiteId: websiteId || null,
+                                personalProjectId: personalProjectId || null,
                                 state: {}
                             })
                         });
@@ -733,8 +748,15 @@ const App: React.FC = () => {
                         if (data.workflow) {
                             setCurrentWorkflowId(data.workflow.id);
                             if (websiteId) setCurrentWebsiteId(websiteId);
+                            setCurrentWorkflowContext({
+                                workflowName: name,
+                                clientName: data.workflow.client_name,
+                                websiteName: data.workflow.website_name,
+                                isStandalone: !clientId,
+                                projectName: data.workflow.project_name
+                            });
                             handleCreateNewProject();
-                            showNotification(`Created new workflow: ${data.workflow.name}`, 'success');
+                            showNotification(`Created new workflow: ${name}`, 'success');
                             setIsWorkflowNavOpen(false);
                         } else {
                             showNotification('Failed to create workflow', 'error');
@@ -749,6 +771,46 @@ const App: React.FC = () => {
                 <div className="text-left">
                     <h1 className="text-4xl font-bold text-white tracking-tight">PromptFlow: Advanced Workflow Automator</h1>
                     <p className="text-gray-400 mt-2">Visually chain AI prompts, use variables, and process lists of data to generate customized content at scale.</p>
+                    {/* Workflow Context Header */}
+                    {currentWorkflowContext.workflowName && (
+                        <div className="mt-3 flex items-center gap-2 text-sm">
+                            {currentWorkflowContext.isStandalone ? (
+                                <>
+                                    <span className="px-2 py-1 bg-purple-600/30 border border-purple-500 rounded text-purple-300">
+                                        Standalone
+                                    </span>
+                                    {currentWorkflowContext.projectName && (
+                                        <>
+                                            <span className="text-gray-500">&gt;</span>
+                                            <span className="text-purple-400">{currentWorkflowContext.projectName}</span>
+                                        </>
+                                    )}
+                                    <span className="text-gray-500">&gt;</span>
+                                    <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="px-2 py-1 bg-cyan-600/30 border border-cyan-500 rounded text-cyan-300">
+                                        Client
+                                    </span>
+                                    {currentWorkflowContext.clientName && (
+                                        <>
+                                            <span className="text-gray-500">&gt;</span>
+                                            <span className="text-cyan-400">{currentWorkflowContext.clientName}</span>
+                                        </>
+                                    )}
+                                    {currentWorkflowContext.websiteName && (
+                                        <>
+                                            <span className="text-gray-500">&gt;</span>
+                                            <span className="text-blue-400">{currentWorkflowContext.websiteName}</span>
+                                        </>
+                                    )}
+                                    <span className="text-gray-500">&gt;</span>
+                                    <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
+                                </>
+                            )}
+                        </div>
+                    )}
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <button

@@ -17,17 +17,24 @@ interface Workflow {
   id: number;
   client_id: number | null;
   website_id: number | null;
+  personal_project_id: number | null;
   name: string;
   description: string | null;
   client_name?: string;
   website_name?: string;
 }
 
+interface StandaloneProject {
+  id: number;
+  name: string;
+  description: string | null;
+}
+
 interface WorkflowNavigationProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectWorkflow: (workflow: Workflow) => void;
-  onCreateWorkflow: (clientId?: number, websiteId?: number) => void;
+  onCreateWorkflow: (name: string, clientId?: number, websiteId?: number, personalProjectId?: number) => void;
   currentWorkflowId?: number;
 }
 
@@ -45,11 +52,13 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
   const [websites, setWebsites] = useState<Website[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [standaloneWorkflows, setStandaloneWorkflows] = useState<Workflow[]>([]);
+  const [standaloneProjects, setStandaloneProjects] = useState<StandaloneProject[]>([]);
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
   const [expandedClients, setExpandedClients] = useState<Set<number>>(new Set());
   const [expandedWebsites, setExpandedWebsites] = useState<Set<number>>(new Set());
+  const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,10 +66,28 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
   // Search
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Create/Edit workflow dialog
+  const [showWorkflowDialog, setShowWorkflowDialog] = useState(false);
+  const [workflowDialogMode, setWorkflowDialogMode] = useState<'create' | 'edit'>('create');
+  const [workflowName, setWorkflowName] = useState('');
+  const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
+  const [createContext, setCreateContext] = useState<{
+    clientId?: number;
+    websiteId?: number;
+    projectId?: number;
+  }>({});
+
+  // Create/Edit project dialog (standalone)
+  const [showProjectDialog, setShowProjectDialog] = useState(false);
+  const [projectDialogMode, setProjectDialogMode] = useState<'create' | 'edit'>('create');
+  const [projectName, setProjectName] = useState('');
+  const [editingProject, setEditingProject] = useState<StandaloneProject | null>(null);
+
   useEffect(() => {
     if (isOpen) {
       fetchClients();
       fetchStandaloneWorkflows();
+      fetchStandaloneProjects();
     }
   }, [isOpen]);
 
@@ -124,6 +151,35 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
     }
   };
 
+  const fetchStandaloneProjects = async () => {
+    try {
+      const res = await fetch('/api/personal-projects');
+      if (!res.ok) {
+        setStandaloneProjects([]);
+        return;
+      }
+      const data = await res.json();
+      setStandaloneProjects(Array.isArray(data) ? data : (Array.isArray(data.projects) ? data.projects : []));
+    } catch (err) {
+      setStandaloneProjects([]);
+      console.error('Failed to fetch standalone projects:', err);
+    }
+  };
+
+  const fetchProjectWorkflows = async (projectId: number) => {
+    try {
+      const res = await fetch(`/api/workflows/by-project/${projectId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setStandaloneWorkflows(prev => {
+        const otherWorkflows = prev.filter(w => w.personal_project_id !== projectId);
+        return [...otherWorkflows, ...(data.workflows || [])];
+      });
+    } catch (err) {
+      console.error('Failed to fetch project workflows:', err);
+    }
+  };
+
   const toggleClient = async (client: Client) => {
     const newExpanded = new Set(expandedClients);
     if (newExpanded.has(client.id)) {
@@ -148,13 +204,153 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
     setSelectedWebsite(website);
   };
 
+  const toggleProject = async (project: StandaloneProject) => {
+    const newExpanded = new Set(expandedProjects);
+    if (newExpanded.has(project.id)) {
+      newExpanded.delete(project.id);
+    } else {
+      newExpanded.add(project.id);
+      await fetchProjectWorkflows(project.id);
+    }
+    setExpandedProjects(newExpanded);
+  };
+
   const handleSelectWorkflow = (workflow: Workflow) => {
     onSelectWorkflow(workflow);
     onClose();
   };
 
-  const handleCreateWorkflow = (clientId?: number, websiteId?: number) => {
-    onCreateWorkflow(clientId, websiteId);
+  // Open dialog to create new workflow
+  const openCreateWorkflowDialog = (clientId?: number, websiteId?: number, projectId?: number) => {
+    setWorkflowDialogMode('create');
+    setWorkflowName('');
+    setEditingWorkflow(null);
+    setCreateContext({ clientId, websiteId, projectId });
+    setShowWorkflowDialog(true);
+  };
+
+  // Open dialog to edit workflow name
+  const openEditWorkflowDialog = (workflow: Workflow) => {
+    setWorkflowDialogMode('edit');
+    setWorkflowName(workflow.name);
+    setEditingWorkflow(workflow);
+    setShowWorkflowDialog(true);
+  };
+
+  // Save workflow (create or update)
+  const handleSaveWorkflow = async () => {
+    if (!workflowName.trim()) {
+      setError('Please enter a workflow name');
+      return;
+    }
+
+    if (workflowDialogMode === 'edit' && editingWorkflow) {
+      // Update existing workflow name
+      try {
+        const res = await fetch(`/api/workflows/${editingWorkflow.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: workflowName.trim(),
+            clientId: editingWorkflow.client_id,
+            websiteId: editingWorkflow.website_id,
+            personalProjectId: editingWorkflow.personal_project_id,
+            state: {} // Preserve state on backend
+          })
+        });
+        if (res.ok) {
+          // Refresh appropriate list
+          if (editingWorkflow.website_id) {
+            await fetchWorkflows(editingWorkflow.website_id);
+          } else if (editingWorkflow.personal_project_id) {
+            await fetchProjectWorkflows(editingWorkflow.personal_project_id);
+          } else {
+            await fetchStandaloneWorkflows();
+          }
+          setShowWorkflowDialog(false);
+        } else {
+          setError('Failed to update workflow');
+        }
+      } catch (err) {
+        setError('Failed to update workflow');
+      }
+    } else {
+      // Create new workflow
+      onCreateWorkflow(workflowName.trim(), createContext.clientId, createContext.websiteId, createContext.projectId);
+      setShowWorkflowDialog(false);
+    }
+  };
+
+  // Open dialog to create new project
+  const openCreateProjectDialog = () => {
+    setProjectDialogMode('create');
+    setProjectName('');
+    setEditingProject(null);
+    setShowProjectDialog(true);
+  };
+
+  // Open dialog to edit project name
+  const openEditProjectDialog = (project: StandaloneProject) => {
+    setProjectDialogMode('edit');
+    setProjectName(project.name);
+    setEditingProject(project);
+    setShowProjectDialog(true);
+  };
+
+  // Save project (create or update)
+  const handleSaveProject = async () => {
+    if (!projectName.trim()) {
+      setError('Please enter a project name');
+      return;
+    }
+
+    if (projectDialogMode === 'edit' && editingProject) {
+      // Update existing project
+      try {
+        const res = await fetch(`/api/personal-projects/${editingProject.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: projectName.trim() })
+        });
+        if (res.ok) {
+          await fetchStandaloneProjects();
+          setShowProjectDialog(false);
+        } else {
+          setError('Failed to update project');
+        }
+      } catch (err) {
+        setError('Failed to update project');
+      }
+    } else {
+      // Create new project
+      try {
+        const res = await fetch('/api/personal-projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: projectName.trim() })
+        });
+        if (res.ok) {
+          await fetchStandaloneProjects();
+          setShowProjectDialog(false);
+        } else {
+          setError('Failed to create project');
+        }
+      } catch (err) {
+        setError('Failed to create project');
+      }
+    }
+  };
+
+  // Delete project
+  const deleteProject = async (project: StandaloneProject) => {
+    if (!confirm(`Delete project "${project.name}"? All workflows inside will become ungrouped.`)) return;
+    try {
+      await fetch(`/api/personal-projects/${project.id}`, { method: 'DELETE' });
+      await fetchStandaloneProjects();
+      await fetchStandaloneWorkflows();
+    } catch (err) {
+      setError('Failed to delete project');
+    }
   };
 
   const duplicateWorkflow = async (workflow: Workflow) => {
@@ -199,11 +395,23 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
     return workflows.filter(w => w.website_id === websiteId);
   };
 
+  const getProjectWorkflows = (projectId: number) => {
+    return standaloneWorkflows.filter(w => w.personal_project_id === projectId);
+  };
+
+  const getUngroupedWorkflows = () => {
+    return standaloneWorkflows.filter(w => !w.personal_project_id);
+  };
+
   const filteredClients = clients.filter(c =>
     c.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredStandalone = standaloneWorkflows.filter(w =>
+  const filteredProjects = standaloneProjects.filter(p =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredUngroupedWorkflows = getUngroupedWorkflows().filter(w =>
     w.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -327,6 +535,13 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
                                   </span>
                                   <div className="hidden group-hover:flex gap-1">
                                     <button
+                                      onClick={(e) => { e.stopPropagation(); openEditWorkflowDialog(workflow); }}
+                                      className="text-xs text-gray-500 hover:text-cyan-400 px-1"
+                                      title="Rename"
+                                    >
+                                      ✎
+                                    </button>
+                                    <button
                                       onClick={(e) => { e.stopPropagation(); duplicateWorkflow(workflow); }}
                                       className="text-xs text-gray-500 hover:text-white px-1"
                                       title="Duplicate"
@@ -345,7 +560,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
                               ))}
                               {/* Add workflow button */}
                               <button
-                                onClick={() => handleCreateWorkflow(client.id, website.id)}
+                                onClick={() => openCreateWorkflowDialog(client.id, website.id)}
                                 className="w-full text-left px-4 py-2 text-gray-500 hover:text-blue-400 text-sm"
                               >
                                 + New Workflow
@@ -367,56 +582,235 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
           </div>
         ) : (
           <div className="py-2">
-            {filteredStandalone.length === 0 ? (
-              <div className="p-4 text-center text-gray-500 text-sm">
-                No standalone workflows
-              </div>
-            ) : (
-              filteredStandalone.map((workflow) => (
+            {/* Projects section */}
+            {filteredProjects.map((project) => (
+              <div key={project.id}>
+                {/* Project row */}
                 <div
-                  key={workflow.id}
-                  className={`group flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-gray-800 ${
-                    currentWorkflowId === workflow.id ? 'bg-blue-600/20 border-l-2 border-blue-500' : ''
-                  }`}
+                  className={`group flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-gray-800`}
                 >
                   <span
-                    onClick={() => handleSelectWorkflow(workflow)}
-                    className="text-gray-300 flex-1"
+                    onClick={() => toggleProject(project)}
+                    className={`text-xs transition-transform ${expandedProjects.has(project.id) ? 'rotate-90' : ''}`}
                   >
-                    {workflow.name}
+                    ▶
+                  </span>
+                  <span onClick={() => toggleProject(project)} className="text-purple-400 font-medium flex-1">
+                    {project.name}
                   </span>
                   <div className="hidden group-hover:flex gap-1">
                     <button
-                      onClick={(e) => { e.stopPropagation(); duplicateWorkflow(workflow); }}
-                      className="text-xs text-gray-500 hover:text-white px-1"
-                      title="Duplicate"
+                      onClick={(e) => { e.stopPropagation(); openEditProjectDialog(project); }}
+                      className="text-xs text-gray-500 hover:text-cyan-400 px-1"
+                      title="Rename Project"
                     >
-                      ⧉
+                      ✎
                     </button>
                     <button
-                      onClick={(e) => { e.stopPropagation(); deleteWorkflow(workflow); }}
+                      onClick={(e) => { e.stopPropagation(); deleteProject(project); }}
                       className="text-xs text-gray-500 hover:text-red-400 px-1"
-                      title="Delete"
+                      title="Delete Project"
                     >
                       ×
                     </button>
                   </div>
                 </div>
-              ))
+
+                {/* Workflows under project */}
+                {expandedProjects.has(project.id) && (
+                  <div className="ml-4 border-l border-gray-700">
+                    {getProjectWorkflows(project.id).map((workflow) => (
+                      <div
+                        key={workflow.id}
+                        className={`group flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-gray-800 ${
+                          currentWorkflowId === workflow.id ? 'bg-blue-600/20 border-l-2 border-blue-500' : ''
+                        }`}
+                      >
+                        <span
+                          onClick={() => handleSelectWorkflow(workflow)}
+                          className="text-gray-300 text-sm flex-1"
+                        >
+                          {workflow.name}
+                        </span>
+                        <div className="hidden group-hover:flex gap-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openEditWorkflowDialog(workflow); }}
+                            className="text-xs text-gray-500 hover:text-cyan-400 px-1"
+                            title="Rename"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); duplicateWorkflow(workflow); }}
+                            className="text-xs text-gray-500 hover:text-white px-1"
+                            title="Duplicate"
+                          >
+                            ⧉
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteWorkflow(workflow); }}
+                            className="text-xs text-gray-500 hover:text-red-400 px-1"
+                            title="Delete"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {/* Add workflow to project */}
+                    <button
+                      onClick={() => openCreateWorkflowDialog(undefined, undefined, project.id)}
+                      className="w-full text-left px-4 py-2 text-gray-500 hover:text-blue-400 text-sm"
+                    >
+                      + New Workflow
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Ungrouped workflows section */}
+            {filteredUngroupedWorkflows.length > 0 && (
+              <>
+                <div className="px-4 py-2 text-xs text-gray-500 uppercase mt-2 border-t border-gray-700">
+                  Ungrouped Workflows
+                </div>
+                {filteredUngroupedWorkflows.map((workflow) => (
+                  <div
+                    key={workflow.id}
+                    className={`group flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-gray-800 ${
+                      currentWorkflowId === workflow.id ? 'bg-blue-600/20 border-l-2 border-blue-500' : ''
+                    }`}
+                  >
+                    <span
+                      onClick={() => handleSelectWorkflow(workflow)}
+                      className="text-gray-300 flex-1"
+                    >
+                      {workflow.name}
+                    </span>
+                    <div className="hidden group-hover:flex gap-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openEditWorkflowDialog(workflow); }}
+                        className="text-xs text-gray-500 hover:text-cyan-400 px-1"
+                        title="Rename"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); duplicateWorkflow(workflow); }}
+                        className="text-xs text-gray-500 hover:text-white px-1"
+                        title="Duplicate"
+                      >
+                        ⧉
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteWorkflow(workflow); }}
+                        className="text-xs text-gray-500 hover:text-red-400 px-1"
+                        title="Delete"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* Empty state */}
+            {filteredProjects.length === 0 && filteredUngroupedWorkflows.length === 0 && (
+              <div className="p-4 text-center text-gray-500 text-sm">
+                No projects or workflows yet
+              </div>
             )}
           </div>
         )}
       </div>
 
       {/* Footer - Create new */}
-      <div className="border-t border-gray-700 p-3">
+      <div className="border-t border-gray-700 p-3 space-y-2">
+        {viewMode === 'standalone' && (
+          <button
+            onClick={openCreateProjectDialog}
+            className="w-full py-2 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm font-medium"
+          >
+            + New Project
+          </button>
+        )}
         <button
-          onClick={() => handleCreateWorkflow()}
+          onClick={() => openCreateWorkflowDialog()}
           className="w-full py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm font-medium"
         >
-          + New Standalone Workflow
+          + New {viewMode === 'standalone' ? 'Ungrouped ' : 'Standalone '}Workflow
         </button>
       </div>
+
+      {/* Workflow Name Dialog */}
+      {showWorkflowDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-96 shadow-xl">
+            <h3 className="text-lg font-semibold text-white mb-4">
+              {workflowDialogMode === 'create' ? 'Create New Workflow' : 'Rename Workflow'}
+            </h3>
+            <input
+              type="text"
+              value={workflowName}
+              onChange={(e) => setWorkflowName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveWorkflow()}
+              placeholder="Enter workflow name..."
+              autoFocus
+              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white mb-4"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowWorkflowDialog(false)}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-white text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveWorkflow}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm"
+              >
+                {workflowDialogMode === 'create' ? 'Create' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Project Name Dialog */}
+      {showProjectDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-96 shadow-xl">
+            <h3 className="text-lg font-semibold text-white mb-4">
+              {projectDialogMode === 'create' ? 'Create New Project' : 'Rename Project'}
+            </h3>
+            <input
+              type="text"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveProject()}
+              placeholder="Enter project name..."
+              autoFocus
+              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white mb-4"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowProjectDialog(false)}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-white text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveProject}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm"
+              >
+                {projectDialogMode === 'create' ? 'Create' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
