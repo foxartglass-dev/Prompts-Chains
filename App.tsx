@@ -826,14 +826,14 @@ const App: React.FC = () => {
                     }
                 }}
             />
-            <header className="mb-8">
-                {/* Top Bar with Logo and Navigation */}
-                <div className="flex items-center justify-between mb-6">
-                    {/* Logo */}
-                    <div className="flex items-center gap-4">
+            <header className="mb-8 px-2 sm:px-0">
+                {/* Top Bar with Logo and Navigation - Mobile: stacked, Desktop: side by side */}
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
+                    {/* Logo - Centered on mobile */}
+                    <div className="flex items-center justify-center md:justify-start">
                         <div className="flex items-center">
                             {/* Logo SVG - Digi Branded AI style bars */}
-                            <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-3">
+                            <svg width="40" height="40" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-2 md:mr-3 md:w-12 md:h-12">
                                 <rect x="4" y="28" width="6" height="16" rx="1" fill="#00B4D8"/>
                                 <rect x="12" y="22" width="6" height="22" rx="1" fill="#0096C7"/>
                                 <rect x="20" y="16" width="6" height="28" rx="1" fill="#0077B6"/>
@@ -847,85 +847,85 @@ const App: React.FC = () => {
                                 <circle cx="38" cy="6" r="3" fill="#F5A623"/>
                             </svg>
                             <div>
-                                <h1 className="text-2xl font-bold">
+                                <h1 className="text-xl md:text-2xl font-bold">
                                     <span className="text-brand-cyan">Prompt</span><span className="text-brand-gold">Flow</span>
                                 </h1>
-                                <p className="text-xs text-slate-400">Advanced Workflow Automator</p>
+                                <p className="text-[10px] md:text-xs text-slate-400">Advanced Workflow Automator</p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Navigation Buttons - Order: Agency, Clients, Workflows, Websites, Articles, Templates, Analytics */}
-                    <div className="flex gap-2 flex-wrap">
+                    {/* Navigation Buttons - Grid on mobile (4 columns), flex on desktop */}
+                    <div className="grid grid-cols-4 gap-1.5 sm:gap-2 md:flex md:gap-2 md:flex-wrap justify-center md:justify-end">
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsWorkflowNavOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsAgencyOpen(true); }}
-                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Manage Clients & Locations"
                         >
-                            <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                             </svg>
-                            <span>Agency</span>
+                            <span className="text-[10px] md:text-sm">Agency</span>
                         </button>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsClientsOpen(true); }}
-                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="View All Clients"
                         >
-                            <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                             </svg>
-                            <span>Clients</span>
+                            <span className="text-[10px] md:text-sm">Clients</span>
                         </button>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWorkflowNavOpen(true); }}
-                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Browse Workflows"
                         >
-                            <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
                             </svg>
-                            <span>Workflows</span>
+                            <span className="text-[10px] md:text-sm">Workflows</span>
                         </button>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsAnalyticsOpen(false); setIsWebsitesOpen(true); }}
-                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="View All Websites"
                         >
-                            <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                             </svg>
-                            <span>Websites</span>
+                            <span className="text-[10px] md:text-sm">Websites</span>
                         </button>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsWorkflowNavOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsArticlesOpen(true); }}
-                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="View Saved Articles"
                         >
-                            <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            <span>Articles</span>
+                            <span className="text-[10px] md:text-sm">Articles</span>
                         </button>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsTemplatesOpen(true); }}
-                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Template Library"
                         >
-                            <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                             </svg>
-                            <span>Templates</span>
+                            <span className="text-[10px] md:text-sm">Templates</span>
                         </button>
                         <button
                             onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(true); }}
-                            className="flex items-center gap-2 bg-slate-800 text-brand-gold font-semibold py-2.5 px-4 rounded-lg transition hover:shadow-glow-gold btn-press border-2 border-brand-gold"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Analytics Dashboard"
                         >
-                            <svg className="h-5 w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                             </svg>
-                            <span>Analytics</span>
+                            <span className="text-[10px] md:text-sm">Analytics</span>
                         </button>
                     </div>
                 </div>
