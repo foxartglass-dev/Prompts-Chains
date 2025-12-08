@@ -3,8 +3,51 @@
  * Uses GPT-4o-mini to analyze content and generate FLUX-optimized prompts
  */
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-4o-mini';
+
+/**
+ * Convert a local file path to base64 data URL
+ */
+function localFileToBase64(localPath) {
+  // Remove leading slash and build full path
+  const relativePath = localPath.startsWith('/') ? localPath.substring(1) : localPath;
+  const fullPath = path.join(__dirname, '..', '..', relativePath);
+
+  if (!fs.existsSync(fullPath)) {
+    throw new Error(`File not found: ${localPath}`);
+  }
+
+  const fileBuffer = fs.readFileSync(fullPath);
+  const base64 = fileBuffer.toString('base64');
+
+  // Determine MIME type from extension
+  const ext = path.extname(fullPath).toLowerCase();
+  const mimeTypes = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp'
+  };
+  const mimeType = mimeTypes[ext] || 'image/jpeg';
+
+  return `data:${mimeType};base64,${base64}`;
+}
+
+/**
+ * Check if a URL is a local file path
+ */
+function isLocalPath(url) {
+  return url.startsWith('/uploads/') || url.startsWith('uploads/');
+}
 
 /**
  * Call OpenAI GPT-4o-mini API
@@ -47,19 +90,38 @@ export async function extractStyleDNA(referenceImages, apiKey, options = {}) {
     throw new Error('At least one reference image is required');
   }
 
-  // Build vision content with images
-  const imageContent = referenceImages.map(img => ({
-    type: 'image_url',
-    image_url: {
-      url: img.url,
-      detail: 'low' // Use low detail to reduce tokens
+  // Build vision content with images - convert local paths to base64
+  const imageContent = [];
+  for (const img of referenceImages) {
+    let imageUrl = img.url;
+
+    // If it's a local file path, convert to base64
+    if (isLocalPath(imageUrl)) {
+      try {
+        imageUrl = localFileToBase64(imageUrl);
+      } catch (err) {
+        console.error(`Failed to load local image ${img.url}:`, err.message);
+        continue; // Skip this image but continue with others
+      }
     }
-  }));
+
+    imageContent.push({
+      type: 'image_url',
+      image_url: {
+        url: imageUrl,
+        detail: 'low' // Use low detail to reduce tokens
+      }
+    });
+  }
+
+  if (imageContent.length === 0) {
+    throw new Error('No valid images could be loaded');
+  }
 
   const systemPrompt = `You are an expert at analyzing visual styles and creating image generation prompts.
 Your task is to analyze reference images and extract a reusable "Style DNA" template for FLUX 1.1 Pro.`;
 
-  const userPrompt = `Analyze these ${referenceImages.length} reference images and extract a reusable style template.
+  const userPrompt = `Analyze these ${imageContent.length} reference images and extract a reusable style template.
 
 Focus on identifying:
 1. **Color Palette**: Dominant colors, tones, and color relationships
