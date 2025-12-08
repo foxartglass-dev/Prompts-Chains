@@ -11,25 +11,44 @@ const requireDb = (req, res, next) => {
   next();
 };
 
-// GET all websites for a client (supports ?client_id=X)
+// GET all websites for a client (supports ?client_id=X) or ALL websites
 router.get('/', requireDb, async (req, res) => {
   try {
-    const clientId = req.query.client_id;
-    if (!clientId) {
-      return res.status(400).json({ error: 'client_id query parameter required' });
+    const clientId = req.query.client_id || req.query.clientId;
+
+    let websites;
+    if (clientId) {
+      // Get websites for specific client
+      websites = await sql`
+        SELECT w.*,
+          c.name as client_name,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', l.id, 'name', l.name, 'city', l.city, 'has_gbp', l.has_gbp))
+             FROM location_websites lw
+             JOIN locations l ON lw.location_id = l.id
+             WHERE lw.website_id = w.id), '[]'
+          ) as linked_locations
+        FROM websites w
+        LEFT JOIN clients c ON w.client_id = c.id
+        WHERE w.client_id = ${clientId}
+        ORDER BY w.created_at DESC
+      `;
+    } else {
+      // Get ALL websites across all clients
+      websites = await sql`
+        SELECT w.*,
+          c.name as client_name,
+          COALESCE(
+            (SELECT json_agg(json_build_object('id', l.id, 'name', l.name, 'city', l.city, 'has_gbp', l.has_gbp))
+             FROM location_websites lw
+             JOIN locations l ON lw.location_id = l.id
+             WHERE lw.website_id = w.id), '[]'
+          ) as linked_locations
+        FROM websites w
+        LEFT JOIN clients c ON w.client_id = c.id
+        ORDER BY w.created_at DESC
+      `;
     }
-    const websites = await sql`
-      SELECT w.*,
-        COALESCE(
-          (SELECT json_agg(json_build_object('id', l.id, 'name', l.name, 'city', l.city, 'has_gbp', l.has_gbp))
-           FROM location_websites lw
-           JOIN locations l ON lw.location_id = l.id
-           WHERE lw.website_id = w.id), '[]'
-        ) as linked_locations
-      FROM websites w
-      WHERE w.client_id = ${clientId}
-      ORDER BY w.created_at DESC
-    `;
     res.json({ websites });
   } catch (error) {
     console.error('Error fetching websites:', error);

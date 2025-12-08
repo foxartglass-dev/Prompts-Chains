@@ -36,12 +36,15 @@ const Analytics: React.FC<AnalyticsProps> = ({ isOpen, onClose }) => {
     try {
       const res = await fetch('/api/websites');
       const data = await res.json();
-      setWebsites(data || []);
-      if (data && data.length > 0) {
-        setSelectedWebsite(data[0]);
+      // API returns { websites: [...] }
+      const websitesList = data.websites || [];
+      setWebsites(websitesList);
+      if (websitesList.length > 0) {
+        setSelectedWebsite(websitesList[0]);
       }
     } catch (error) {
       console.error('Failed to fetch websites:', error);
+      setWebsites([]);
     }
   };
 

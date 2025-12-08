@@ -67,9 +67,11 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
     try {
       const res = await fetch('/api/websites');
       const data = await res.json();
-      setWebsites(data || []);
+      // API returns { websites: [...] }
+      setWebsites(data.websites || []);
     } catch (error) {
       console.error('Failed to fetch websites:', error);
+      setWebsites([]);
     } finally {
       setLoading(false);
     }
@@ -79,9 +81,11 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
     try {
       const res = await fetch('/api/clients');
       const data = await res.json();
-      setClients(data || []);
+      // API returns { clients: [...] }
+      setClients(data.clients || []);
     } catch (error) {
       console.error('Failed to fetch clients:', error);
+      setClients([]);
     }
   };
 

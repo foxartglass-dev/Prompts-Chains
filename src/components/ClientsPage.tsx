@@ -79,29 +79,38 @@ const ClientsPage: React.FC<ClientsPageProps> = ({ isOpen, onClose, onSelectWebs
       const res = await fetch('/api/clients');
       const data = await res.json();
 
+      // API returns { clients: [...] }
+      const clientsList = data.clients || [];
+
       // Fetch additional data for each client
-      const enrichedClients = await Promise.all(data.map(async (client: Client) => {
-        const [websitesRes, locationsRes, workflowsRes] = await Promise.all([
-          fetch(`/api/websites?clientId=${client.id}`),
-          fetch(`/api/locations?clientId=${client.id}`),
-          fetch(`/api/workflows?clientId=${client.id}`)
-        ]);
+      const enrichedClients = await Promise.all(clientsList.map(async (client: Client) => {
+        try {
+          const [websitesRes, locationsRes, workflowsRes] = await Promise.all([
+            fetch(`/api/websites?clientId=${client.id}`),
+            fetch(`/api/locations?clientId=${client.id}`),
+            fetch(`/api/workflows?clientId=${client.id}`)
+          ]);
 
-        const websites = await websitesRes.json();
-        const locations = await locationsRes.json();
-        const workflows = await workflowsRes.json();
+          const websitesData = await websitesRes.json();
+          const locationsData = await locationsRes.json();
+          const workflowsData = await workflowsRes.json();
 
-        return {
-          ...client,
-          websites: websites || [],
-          locations: locations || [],
-          workflows: workflows || []
-        };
+          return {
+            ...client,
+            websites: websitesData.websites || [],
+            locations: locationsData.locations || [],
+            workflows: workflowsData.workflows || workflowsData || []
+          };
+        } catch (err) {
+          console.error(`Failed to fetch data for client ${client.id}:`, err);
+          return { ...client, websites: [], locations: [], workflows: [] };
+        }
       }));
 
       setClients(enrichedClients);
     } catch (error) {
       console.error('Failed to fetch clients:', error);
+      setClients([]);
     } finally {
       setLoading(false);
     }
