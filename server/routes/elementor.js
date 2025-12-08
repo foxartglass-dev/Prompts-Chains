@@ -16,6 +16,7 @@ import {
   scheduleDripFeed,
   testConnection
 } from '../services/wordpress-publisher.js';
+import { processArticleWithImages, previewPrompts } from '../services/image-pipeline.js';
 
 const router = express.Router();
 
@@ -128,6 +129,7 @@ router.post('/preview', async (req, res) => {
 /**
  * POST /api/elementor/publish
  * Full pipeline: Article → Elementor Page on WordPress
+ * Optionally generates AI images with Style DNA
  */
 router.post('/publish', async (req, res) => {
   try {
@@ -136,6 +138,7 @@ router.post('/publish', async (req, res) => {
       content,
       title,
       slug,
+      keyword,
       // WordPress credentials
       wpUrl,
       wpUser,
@@ -150,7 +153,14 @@ router.post('/publish', async (req, res) => {
       status = 'draft',
       publishDate,
       // Database tracking
-      articleId
+      articleId,
+      // Image generation options (NEW)
+      generateImages = false,
+      styleDNA = null,
+      referenceImages = null,
+      openaiApiKey = null,
+      replicateApiKey = null,
+      maxImages = 4
     } = req.body;
 
     // Validate required fields
@@ -164,8 +174,32 @@ router.post('/publish', async (req, res) => {
 
     const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
 
-    // Step 1: Chunk the content
-    const chunked = chunkContent(content, { maxWords });
+    let chunked;
+    let imagesGenerated = 0;
+    let estimatedCost = null;
+
+    // Step 1: Process content with or without images
+    if (generateImages) {
+      // Use the image pipeline for full processing
+      const pipelineResult = await processArticleWithImages(content, {
+        title,
+        keyword,
+        styleDNA,
+        referenceImages,
+        openaiApiKey: openaiApiKey || process.env.OPENAI_API_KEY,
+        replicateApiKey: replicateApiKey || process.env.REPLICATE_API_TOKEN,
+        wpCredentials,
+        maxImages,
+        maxWords
+      });
+
+      chunked = pipelineResult.chunks;
+      imagesGenerated = pipelineResult.imagesGenerated || 0;
+      estimatedCost = pipelineResult.estimatedCost;
+    } else {
+      // Standard chunking without images
+      chunked = chunkContent(content, { maxWords });
+    }
 
     // Step 2: Extract or use provided title
     const pageTitle = title || extractTitle(content) || 'Untitled Page';
@@ -213,7 +247,9 @@ router.post('/publish', async (req, res) => {
       success: true,
       page: pageResult,
       chunks: chunked.chunkCount,
-      wordCount: chunked.totalWords
+      wordCount: chunked.totalWords,
+      imagesGenerated,
+      estimatedCost
     });
   } catch (error) {
     console.error('Publish error:', error);

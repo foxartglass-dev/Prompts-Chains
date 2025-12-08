@@ -56,9 +56,13 @@ function buildTextEditorWidget(content, imageData = null, imageAlignment = 'left
   let htmlContent = content;
 
   // If we have image data, embed it at the start with the appropriate alignment
-  if (imageData && imageData.url) {
-    const imgClass = imageAlignment === 'left' ? 'alignleft' : 'alignright';
-    const imgTag = `<img class="${imgClass} wp-image-${imageData.id || ''}" src="${imageData.url}" alt="${imageData.alt || ''}" width="${imageData.width || 400}" height="${imageData.height || 600}" />`;
+  if (imageData && (imageData.wpUrl || imageData.url)) {
+    // Prefer WordPress URL (permanent) over Replicate URL (temporary)
+    const imageUrl = imageData.wpUrl || imageData.url;
+    const imageId = imageData.wpMediaId || imageData.id || '';
+    // Use imageSide from pipeline if alignment not explicitly set
+    const imgClass = (imageData.side || imageAlignment) === 'left' ? 'alignleft' : 'alignright';
+    const imgTag = `<img class="${imgClass} wp-image-${imageId}" src="${imageUrl}" alt="${imageData.alt || ''}" width="${imageData.width || 400}" height="${imageData.height || 600}" />`;
 
     // Insert image at the beginning of content
     htmlContent = imgTag + htmlContent;
@@ -88,6 +92,9 @@ function buildTextEditorWidget(content, imageData = null, imageAlignment = 'left
  */
 function buildImageWidget(imageData, options = {}) {
   const { align = 'center' } = options;
+  // Prefer WordPress URL (permanent) over Replicate URL (temporary)
+  const imageUrl = imageData.wpUrl || imageData.url;
+  const imageId = imageData.wpMediaId || imageData.id || 0;
 
   return {
     id: generateElementId(),
@@ -96,8 +103,8 @@ function buildImageWidget(imageData, options = {}) {
     isInner: false,
     settings: {
       image: {
-        url: imageData.url,
-        id: imageData.id || 0,
+        url: imageUrl,
+        id: imageId,
         alt: imageData.alt || ''
       },
       image_size: 'full',

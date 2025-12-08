@@ -72,10 +72,14 @@ CREATE TABLE IF NOT EXISTS websites (
   elementor_cta_text VARCHAR(255) DEFAULT 'Book Now!',
   elementor_cta_url VARCHAR(500) DEFAULT '#',
   elementor_include_stats_bar BOOLEAN DEFAULT false,
-  -- Image generation settings (for future use)
+  -- Image generation settings
   image_generation_enabled BOOLEAN DEFAULT false,
-  image_provider VARCHAR(50) DEFAULT 'runware', -- runware, lexica, gemini, stability
+  image_provider VARCHAR(50) DEFAULT 'flux', -- flux, stability, dalle
   image_provider_api_key VARCHAR(255),
+  -- Style DNA for consistent image generation
+  image_style_dna JSONB DEFAULT '{}', -- Extracted style template and attributes
+  image_reference_urls JSONB DEFAULT '[]', -- Reference images used for Style DNA
+  images_per_article INTEGER DEFAULT 4,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -184,6 +188,8 @@ CREATE TABLE IF NOT EXISTS articles (
   -- Version tracking
   version INTEGER DEFAULT 1,
   parent_article_id INTEGER REFERENCES articles(id) ON DELETE SET NULL, -- For version history
+  -- AI-generated images
+  generated_images JSONB DEFAULT '[]', -- Array of {url, prompt, placement, wpMediaId}
   -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
