@@ -52,6 +52,7 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
     styleDNA: null as any,
     imagesPerArticle: 4
   });
+  const [loadingImageSettings, setLoadingImageSettings] = useState(false);
   const [newReferenceUrl, setNewReferenceUrl] = useState('');
   const [extractingDNA, setExtractingDNA] = useState(false);
 
@@ -93,6 +94,7 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
     setSelectedWebsite(website);
     setView('detail');
     setLoadingPages(true);
+    setLoadingImageSettings(true);
 
     // Load website's image settings
     try {
@@ -107,9 +109,30 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
           styleDNA: data.styleDNA || null,
           imagesPerArticle: 4
         });
+      } else {
+        // Reset to defaults on error
+        setImageSettings({
+          enabled: false,
+          openaiKey: '',
+          replicateKey: '',
+          referenceImages: [],
+          styleDNA: null,
+          imagesPerArticle: 4
+        });
       }
     } catch (error) {
       console.error('Failed to load image settings:', error);
+      // Reset to defaults on error
+      setImageSettings({
+        enabled: false,
+        openaiKey: '',
+        replicateKey: '',
+        referenceImages: [],
+        styleDNA: null,
+        imagesPerArticle: 4
+      });
+    } finally {
+      setLoadingImageSettings(false);
     }
 
     // Load published pages (placeholder - would need to fetch from WP or database)
@@ -334,19 +357,23 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
               <div className="bg-slate-800/50 rounded-xl p-6 border border-green-500/30">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-bold text-green-400">🎨 AI Image Generation</h3>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <span className="text-sm text-gray-400">Enable</span>
-                    <div className="relative">
-                      <input
-                        type="checkbox"
-                        checked={imageSettings.enabled}
-                        onChange={e => setImageSettings(prev => ({ ...prev, enabled: e.target.checked }))}
-                        className="sr-only"
-                      />
-                      <div className={`w-12 h-6 rounded-full transition ${imageSettings.enabled ? 'bg-green-500' : 'bg-slate-600'}`}></div>
-                      <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition transform ${imageSettings.enabled ? 'translate-x-6' : ''}`}></div>
-                    </div>
-                  </label>
+                  {loadingImageSettings ? (
+                    <span className="text-sm text-gray-400">Loading settings...</span>
+                  ) : (
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <span className="text-sm text-gray-400">Enable</span>
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={imageSettings.enabled}
+                          onChange={e => setImageSettings(prev => ({ ...prev, enabled: e.target.checked }))}
+                          className="sr-only"
+                        />
+                        <div className={`w-12 h-6 rounded-full transition ${imageSettings.enabled ? 'bg-green-500' : 'bg-slate-600'}`}></div>
+                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition transform ${imageSettings.enabled ? 'translate-x-6' : ''}`}></div>
+                      </div>
+                    </label>
+                  )}
                 </div>
 
                 {imageSettings.enabled && (

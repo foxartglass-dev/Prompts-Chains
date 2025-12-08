@@ -285,6 +285,8 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       case 'edited': return 'bg-brand-gold text-slate-900 font-medium';
       case 'flagged': return 'bg-brand-gold text-slate-900 font-medium';
       case 'passed': return 'bg-emerald-500 text-white';
+      case 'draft': return 'bg-slate-600 text-white';
+      case 'generated': return 'bg-blue-500 text-white';
       default: return 'bg-gray-500 text-white';
     }
   };
@@ -392,6 +394,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                             <span className={`px-2 py-0.5 rounded text-xs ${getStatusColor(article.status)}`}>
                               {article.status}
                             </span>
+                            {article.wp_post_url && article.status !== 'published' && (
+                              <span className="ml-1 text-yellow-400 text-xs" title="Article has WP link but status isn't 'published' - may need sync">⚠️</span>
+                            )}
                           </td>
                           <td className="p-2 text-gray-300">
                             {article.ai_score !== null ? `${article.ai_score}%` : '-'}
