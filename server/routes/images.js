@@ -4,12 +4,60 @@
  */
 
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { sql, isDatabaseEnabled } from '../db/index.js';
 import { extractStyleDNA, extractAction, buildFluxPrompt, analyzeImageStyle } from '../services/image-prompt-generator.js';
 import { generateImage, generateBatchImages, estimateCost } from '../services/image-generator.js';
 import { processArticleWithImages, previewPrompts } from '../services/image-pipeline.js';
 
 const router = express.Router();
+
+// Get directory path for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, '..', '..', 'uploads', 'reference-images');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const websiteId = req.body.websiteId || 'general';
+    const websiteDir = path.join(uploadsDir, websiteId.toString());
+    if (!fs.existsSync(websiteDir)) {
+      fs.mkdirSync(websiteDir, { recursive: true });
+    }
+    cb(null, websiteDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+    files: 30 // Max 30 files at once
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (extname && mimetype) {
+      return cb(null, true);
+    }
+    cb(new Error('Only image files are allowed'));
+  }
+});
 
 // Middleware to check database availability
 const requireDb = (req, res, next) => {
@@ -18,6 +66,93 @@ const requireDb = (req, res, next) => {
   }
   next();
 };
+
+/**
+ * POST /api/images/upload
+ * Upload reference images for Style DNA
+ */
+router.post('/upload', upload.array('images', 30), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    const websiteId = req.body.websiteId || 'general';
+    const images = req.files.map(file => {
+      // Build the URL path for the uploaded file
+      const relativePath = `/uploads/reference-images/${websiteId}/${file.filename}`;
+      return {
+        url: relativePath,
+        filename: file.originalname,
+        size: file.size,
+        tags: [] // Can be populated by AI later
+      };
+    });
+
+    res.json({
+      success: true,
+      images,
+      count: images.length
+    });
+  } catch (error) {
+    console.error('Image upload error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/images/uploaded/:websiteId
+ * List all uploaded reference images for a website
+ */
+router.get('/uploaded/:websiteId', (req, res) => {
+  try {
+    const { websiteId } = req.params;
+    const websiteDir = path.join(uploadsDir, websiteId);
+
+    if (!fs.existsSync(websiteDir)) {
+      return res.json({ success: true, images: [] });
+    }
+
+    const files = fs.readdirSync(websiteDir);
+    const images = files
+      .filter(file => /\.(jpg|jpeg|png|gif|webp)$/i.test(file))
+      .map(file => ({
+        url: `/uploads/reference-images/${websiteId}/${file}`,
+        filename: file,
+        size: fs.statSync(path.join(websiteDir, file)).size
+      }));
+
+    res.json({
+      success: true,
+      images
+    });
+  } catch (error) {
+    console.error('List uploaded images error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/images/uploaded/:websiteId/:filename
+ * Delete an uploaded reference image
+ */
+router.delete('/uploaded/:websiteId/:filename', (req, res) => {
+  try {
+    const { websiteId, filename } = req.params;
+    const filePath = path.join(uploadsDir, websiteId, filename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    fs.unlinkSync(filePath);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete image error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 /**
  * POST /api/images/extract-style-dna

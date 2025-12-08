@@ -36,6 +36,10 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 
+// Serve uploaded files statically
+const uploadsPath = join(__dirname, '..', 'uploads');
+app.use('/uploads', express.static(uploadsPath));
+
 // Prevent search engine indexing (add noindex header to all responses)
 // This tells Google/Bing/etc to NOT index this site
 app.use((req, res, next) => {
