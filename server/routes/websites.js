@@ -79,13 +79,31 @@ router.post('/', requireDb, async (req, res) => {
     const wpUser = req.body.wp_user || req.body.wpUser;
     const wpAppPassword = req.body.wp_app_password || req.body.wpAppPassword;
 
+    // Drip feed settings
+    const dripFeedPagesPerDay = req.body.drip_feed_pages_per_day || req.body.dripFeedPagesPerDay || 5;
+    const dripFeedRandomize = req.body.drip_feed_randomize ?? req.body.dripFeedRandomize ?? true;
+    const dripFeedPublishTime = req.body.drip_feed_publish_time || req.body.dripFeedPublishTime || '09:00';
+
+    // Elementor settings
+    const elementorCtaText = req.body.elementor_cta_text || req.body.elementorCtaText || 'Book Now!';
+    const elementorCtaUrl = req.body.elementor_cta_url || req.body.elementorCtaUrl || '#';
+    const elementorIncludeStatsBar = req.body.elementor_include_stats_bar ?? req.body.elementorIncludeStatsBar ?? false;
+
     if (!clientId || !name) {
       return res.status(400).json({ error: 'Client ID and name are required' });
     }
 
     const result = await sql`
-      INSERT INTO websites (client_id, name, url, wp_url, wp_user, wp_app_password)
-      VALUES (${clientId}, ${name}, ${url || ''}, ${wpUrl || ''}, ${wpUser || ''}, ${wpAppPassword || ''})
+      INSERT INTO websites (
+        client_id, name, url, wp_url, wp_user, wp_app_password,
+        drip_feed_pages_per_day, drip_feed_randomize, drip_feed_publish_time,
+        elementor_cta_text, elementor_cta_url, elementor_include_stats_bar
+      )
+      VALUES (
+        ${clientId}, ${name}, ${url || ''}, ${wpUrl || ''}, ${wpUser || ''}, ${wpAppPassword || ''},
+        ${dripFeedPagesPerDay}, ${dripFeedRandomize}, ${dripFeedPublishTime},
+        ${elementorCtaText}, ${elementorCtaUrl}, ${elementorIncludeStatsBar}
+      )
       RETURNING *
     `;
 
@@ -106,6 +124,16 @@ router.put('/:id', requireDb, async (req, res) => {
     const wpUser = req.body.wpUser || req.body.wp_user;
     const wpAppPassword = req.body.wpAppPassword || req.body.wp_app_password;
 
+    // Drip feed settings
+    const dripFeedPagesPerDay = req.body.drip_feed_pages_per_day || req.body.dripFeedPagesPerDay;
+    const dripFeedRandomize = req.body.drip_feed_randomize ?? req.body.dripFeedRandomize;
+    const dripFeedPublishTime = req.body.drip_feed_publish_time || req.body.dripFeedPublishTime;
+
+    // Elementor settings
+    const elementorCtaText = req.body.elementor_cta_text || req.body.elementorCtaText;
+    const elementorCtaUrl = req.body.elementor_cta_url || req.body.elementorCtaUrl;
+    const elementorIncludeStatsBar = req.body.elementor_include_stats_bar ?? req.body.elementorIncludeStatsBar;
+
     const result = await sql`
       UPDATE websites
       SET name = ${name},
@@ -113,6 +141,12 @@ router.put('/:id', requireDb, async (req, res) => {
           wp_url = ${wpUrl || ''},
           wp_user = ${wpUser || ''},
           wp_app_password = ${wpAppPassword || ''},
+          drip_feed_pages_per_day = COALESCE(${dripFeedPagesPerDay}, drip_feed_pages_per_day),
+          drip_feed_randomize = COALESCE(${dripFeedRandomize}, drip_feed_randomize),
+          drip_feed_publish_time = COALESCE(${dripFeedPublishTime}, drip_feed_publish_time),
+          elementor_cta_text = COALESCE(${elementorCtaText}, elementor_cta_text),
+          elementor_cta_url = COALESCE(${elementorCtaUrl}, elementor_cta_url),
+          elementor_include_stats_bar = COALESCE(${elementorIncludeStatsBar}, elementor_include_stats_bar),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *

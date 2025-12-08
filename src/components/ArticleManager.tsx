@@ -158,7 +158,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
     }
   };
 
-  const publishToWordPress = async () => {
+  const publishToWordPress = async (useElementor: boolean = true) => {
     if (!selectedArticle) return;
 
     // Check for WP credentials
@@ -173,42 +173,87 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
 
     setPublishing(true);
     try {
-      const res = await fetch('/api/wordpress/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          wpUrl,
-          wpUser,
-          wpPassword,
-          contentType: 'pages',
-          title: selectedArticle.keyword,
-          content: editContent || selectedArticle.final_content,
-          status: 'draft'
-        })
-      });
+      let res;
+      let wpData;
 
-      const wpData = await res.json();
-
-      if (wpData.success) {
-        // Update article with WP info
-        await fetch(`/api/articles/${selectedArticle.id}/wp-status`, {
-          method: 'PATCH',
+      if (useElementor) {
+        // Use Elementor publishing endpoint
+        res = await fetch('/api/elementor/publish', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            wpPostId: wpData.id,
-            wpPostUrl: wpData.link,
-            status: 'published'
+            wpUrl,
+            wpUser,
+            wpPassword,
+            title: selectedArticle.keyword,
+            content: editContent || selectedArticle.final_content,
+            status: 'draft',
+            ctaText: 'Book Now!',
+            ctaUrl: '#',
+            includeStatsBar: false,
+            articleId: selectedArticle.id
           })
         });
 
-        // Refresh article
-        fetchArticle(selectedArticle.id);
-        fetchArticles();
+        wpData = await res.json();
+
+        if (wpData.success && wpData.page) {
+          // Update article with WP info
+          await fetch(`/api/articles/${selectedArticle.id}/wp-status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              wpPostId: wpData.page.id,
+              wpPostUrl: wpData.page.link,
+              status: 'published'
+            })
+          });
+
+          // Refresh article
+          fetchArticle(selectedArticle.id);
+          fetchArticles();
+        } else {
+          setError(wpData.error || 'Failed to publish Elementor page');
+        }
       } else {
-        setError(wpData.error || 'Failed to publish to WordPress');
+        // Use regular WordPress endpoint
+        res = await fetch('/api/wordpress/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wpUrl,
+            wpUser,
+            wpPassword,
+            contentType: 'pages',
+            title: selectedArticle.keyword,
+            content: editContent || selectedArticle.final_content,
+            status: 'draft'
+          })
+        });
+
+        wpData = await res.json();
+
+        if (wpData.success) {
+          // Update article with WP info
+          await fetch(`/api/articles/${selectedArticle.id}/wp-status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              wpPostId: wpData.id,
+              wpPostUrl: wpData.link,
+              status: 'published'
+            })
+          });
+
+          // Refresh article
+          fetchArticle(selectedArticle.id);
+          fetchArticles();
+        } else {
+          setError(wpData.error || 'Failed to publish to WordPress');
+        }
       }
     } catch (err) {
-      setError('Failed to publish to WordPress');
+      setError('Failed to publish');
     } finally {
       setPublishing(false);
     }
@@ -439,11 +484,19 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                             Save as New Version
                           </button>
                           <button
-                            onClick={publishToWordPress}
+                            onClick={() => publishToWordPress(true)}
                             disabled={publishing}
-                            className="px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-sm text-slate-900 font-medium disabled:opacity-50"
+                            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm text-white font-medium disabled:opacity-50"
                           >
-                            {publishing ? 'Publishing...' : 'Publish to WP'}
+                            {publishing ? 'Publishing...' : 'Publish Elementor Page'}
+                          </button>
+                          <button
+                            onClick={() => publishToWordPress(false)}
+                            disabled={publishing}
+                            className="px-2 py-1 text-xs text-gray-400 hover:text-gray-200"
+                            title="Publish as plain HTML (no Elementor formatting)"
+                          >
+                            Plain WP
                           </button>
                           <button
                             onClick={() => setViewMode('view')}

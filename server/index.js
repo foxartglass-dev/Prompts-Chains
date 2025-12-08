@@ -13,6 +13,7 @@ import templatesRouter from './routes/templates.js';
 import workflowsRouter from './routes/workflows.js';
 import articlesRouter from './routes/articles.js';
 import gbpRouter from './routes/gbp.js';
+import elementorRouter from './routes/elementor.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
 dotenv.config();
@@ -154,6 +155,7 @@ app.use('/api/templates', templatesRouter);
 app.use('/api/workflows', workflowsRouter);
 app.use('/api/articles', articlesRouter);
 app.use('/api/gbp', gbpRouter);
+app.use('/api/elementor', elementorRouter);
 
 // Database status endpoint
 app.get('/api/db/status', async (req, res) => {

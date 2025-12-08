@@ -64,6 +64,18 @@ CREATE TABLE IF NOT EXISTS websites (
   elementor_connected BOOLEAN DEFAULT false,
   elementor_api_key VARCHAR(255),
   elementor_api_secret TEXT,
+  -- Drip feed settings
+  drip_feed_pages_per_day INTEGER DEFAULT 5,
+  drip_feed_randomize BOOLEAN DEFAULT true,
+  drip_feed_publish_time VARCHAR(10) DEFAULT '09:00',
+  -- Elementor page settings
+  elementor_cta_text VARCHAR(255) DEFAULT 'Book Now!',
+  elementor_cta_url VARCHAR(500) DEFAULT '#',
+  elementor_include_stats_bar BOOLEAN DEFAULT false,
+  -- Image generation settings (for future use)
+  image_generation_enabled BOOLEAN DEFAULT false,
+  image_provider VARCHAR(50) DEFAULT 'runware', -- runware, lexica, gemini, stability
+  image_provider_api_key VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

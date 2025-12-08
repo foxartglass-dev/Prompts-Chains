@@ -535,7 +535,7 @@ const App: React.FC = () => {
         });
     };
 
-    const handlePublishToWordPress = async (result: Result) => {
+    const handlePublishToWordPress = async (result: Result, useElementor: boolean = true) => {
         if (!currentProject) return;
         const { url, user, password } = currentProject.state.wpCredentials;
         if (!url || !user || !password) {
@@ -548,7 +548,8 @@ const App: React.FC = () => {
         };
 
         updateResultStatus(result.item.id, 'publishing');
-        addLog(`[${result.item.name}] Publishing to WordPress...`, LogStatus.WORKING, result.item.id);
+        const publishType = useElementor ? 'Elementor page' : 'WordPress';
+        addLog(`[${result.item.name}] Publishing to ${publishType}...`, LogStatus.WORKING, result.item.id);
 
         try {
             const placeholderData = currentProject.state.placeholders.reduce((acc, p) => {
@@ -568,31 +569,64 @@ const App: React.FC = () => {
             const generatedTitle = fillSimpleTemplate(currentProject.state.wpTitleTemplate, templateData);
             const title = generatedTitle.trim() ? generatedTitle : (result.metaTitles[0] || result.item.name);
 
-            // Use backend proxy to avoid CORS issues
-            const response = await fetch('/api/wordpress/publish', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    wpUrl: url,
-                    wpUser: user,
-                    wpPassword: password,
-                    contentType: currentProject.state.wpContentType,
-                    title: title,
-                    content: result.finalOutput,
-                    status: 'draft', // Default to draft for safety
-                }),
-            });
+            let response;
+            let data;
 
-            const data = await response.json();
+            if (useElementor) {
+                // Use Elementor publishing endpoint
+                response = await fetch('/api/elementor/publish', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        wpUrl: url,
+                        wpUser: user,
+                        wpPassword: password,
+                        title: title,
+                        content: result.finalOutput,
+                        status: 'draft',
+                        ctaText: 'Book Now!',
+                        ctaUrl: '#',
+                        includeStatsBar: false,
+                    }),
+                });
 
-            if (!response.ok) {
-                throw new Error(data.error || `WordPress API Error: ${response.statusText}`);
+                data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || `Elementor API Error: ${response.statusText}`);
+                }
+
+                updateResultStatus(result.item.id, 'published', data.page?.link);
+                addLog(`[${result.item.name}] Successfully published as Elementor page!`, LogStatus.SUCCESS, result.item.id);
+            } else {
+                // Use regular WordPress endpoint
+                response = await fetch('/api/wordpress/publish', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        wpUrl: url,
+                        wpUser: user,
+                        wpPassword: password,
+                        contentType: currentProject.state.wpContentType,
+                        title: title,
+                        content: result.finalOutput,
+                        status: 'draft',
+                    }),
+                });
+
+                data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || `WordPress API Error: ${response.statusText}`);
+                }
+
+                updateResultStatus(result.item.id, 'published', data.link);
+                addLog(`[${result.item.name}] Successfully published to WordPress!`, LogStatus.SUCCESS, result.item.id);
             }
-
-            updateResultStatus(result.item.id, 'published', data.link);
-            addLog(`[${result.item.name}] Successfully published to WordPress!`, LogStatus.SUCCESS, result.item.id);
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during publishing.';
@@ -1242,13 +1276,13 @@ const App: React.FC = () => {
                                     const PublishButton = () => {
                                         switch (result.wpStatus) {
                                             case 'publishing':
-                                                return <button className="p-2 bg-yellow-600 rounded-md transition" title="Publishing..."><Icon type="working" className="h-5 w-5 animate-spin"/></button>;
+                                                return <button className="p-2 bg-yellow-600 rounded-md transition" title="Publishing Elementor page..."><Icon type="working" className="h-5 w-5 animate-spin"/></button>;
                                             case 'published':
-                                                return <a href={result.wpLink} target="_blank" rel="noopener noreferrer" className="p-2 bg-green-600 hover:bg-green-500 rounded-md transition" title="View on WordPress"><Icon type="success" className="h-5 w-5"/></a>;
+                                                return <a href={result.wpLink} target="_blank" rel="noopener noreferrer" className="p-2 bg-green-600 hover:bg-green-500 rounded-md transition" title="View Elementor page"><Icon type="success" className="h-5 w-5"/></a>;
                                             case 'error':
-                                                return <button onClick={() => handlePublishToWordPress(result)} className="p-2 bg-red-600 hover:bg-red-500 rounded-md transition" title={`Error: ${result.wpError}\nClick to retry.`}><Icon type="error" className="h-5 w-5"/></button>;
+                                                return <button onClick={() => handlePublishToWordPress(result, true)} className="p-2 bg-red-600 hover:bg-red-500 rounded-md transition" title={`Error: ${result.wpError}\nClick to retry.`}><Icon type="error" className="h-5 w-5"/></button>;
                                             default:
-                                                return <button onClick={() => handlePublishToWordPress(result)} className="p-2 bg-gray-600 hover:bg-cyan-600 rounded-md transition" title="Publish to WordPress"><Icon type="upload" className="h-5 w-5"/></button>;
+                                                return <button onClick={() => handlePublishToWordPress(result, true)} className="p-2 bg-green-700 hover:bg-green-600 rounded-md transition" title="Publish as Elementor page"><Icon type="upload" className="h-5 w-5"/></button>;
                                         }
                                     };
                                     return (
