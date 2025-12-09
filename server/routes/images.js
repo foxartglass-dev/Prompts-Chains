@@ -552,4 +552,320 @@ router.get('/cost-estimate', (req, res) => {
   });
 });
 
+// ========== STYLELOCK INTEGRATION ==========
+// These endpoints provide access to the StyleLock engine from the images API
+
+import {
+  createStyleLockEngine,
+  getEffectiveSettings,
+  getGlobalSettings,
+  extractStyleDNA as stylelockExtractStyleDNA
+} from '../services/stylelock/index.js';
+
+// In-memory job tracking for StyleLock jobs
+const stylelockJobs = new Map();
+
+/**
+ * POST /api/images/stylelock/generate
+ * Generate a high-quality image using the full StyleLock engine
+ * This runs the complete voting and blind test workflow
+ */
+router.post('/stylelock/generate', async (req, res) => {
+  try {
+    const {
+      websiteId,
+      referenceImages,
+      targetDescription,
+      uniformConfig,
+      settingsOverrides,
+      openaiApiKey,
+      replicateApiKey,
+      anthropicApiKey
+    } = req.body;
+
+    // Validate required fields
+    if (!referenceImages || referenceImages.length === 0) {
+      return res.status(400).json({ error: 'At least one reference image is required' });
+    }
+
+    if (!targetDescription) {
+      return res.status(400).json({ error: 'Target description is required' });
+    }
+
+    // Get API keys
+    const apiKeys = {
+      openai: openaiApiKey || process.env.OPENAI_API_KEY,
+      replicate: replicateApiKey || process.env.REPLICATE_API_TOKEN,
+      anthropic: anthropicApiKey || process.env.ANTHROPIC_API_KEY
+    };
+
+    if (!apiKeys.openai) {
+      return res.status(400).json({ error: 'OpenAI API key is required' });
+    }
+
+    if (!apiKeys.replicate) {
+      return res.status(400).json({ error: 'Replicate API key is required' });
+    }
+
+    // Get effective settings
+    const settings = await getEffectiveSettings(websiteId, settingsOverrides);
+
+    // Create engine
+    const engine = createStyleLockEngine(apiKeys, settings);
+
+    // Generate job ID
+    const jobId = `sl-${Date.now().toString(36)}`;
+
+    // Create job record
+    const jobRecord = {
+      id: jobId,
+      websiteId,
+      status: 'running',
+      referenceImages,
+      targetDescription,
+      uniformConfig,
+      settings,
+      progress: [],
+      result: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    stylelockJobs.set(jobId, jobRecord);
+
+    // Start job in background
+    (async () => {
+      try {
+        const result = await engine.run(
+          {
+            referenceImages,
+            targetDescription,
+            uniformConfig,
+            websiteId
+          },
+          (progress) => {
+            // Update job progress
+            const job = stylelockJobs.get(jobId);
+            if (job) {
+              job.progress.push({ ...progress, timestamp: new Date() });
+              job.updatedAt = new Date();
+              if (progress.status === 'complete' || progress.status === 'error' || progress.status === 'max_rounds_reached') {
+                job.status = progress.status === 'complete' ? 'complete' : 'failed';
+              }
+            }
+          }
+        );
+
+        // Store result
+        const job = stylelockJobs.get(jobId);
+        if (job) {
+          job.result = result;
+          job.status = result.success ? 'complete' : 'failed';
+          job.updatedAt = new Date();
+        }
+      } catch (error) {
+        const job = stylelockJobs.get(jobId);
+        if (job) {
+          job.status = 'error';
+          job.error = error.message;
+          job.updatedAt = new Date();
+        }
+      }
+    })();
+
+    // Return immediately with job ID
+    res.json({
+      success: true,
+      jobId,
+      status: 'running',
+      message: 'StyleLock job started. Poll /api/images/stylelock/job/:jobId for status.'
+    });
+
+  } catch (error) {
+    console.error('StyleLock generate error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/images/stylelock/job/:jobId
+ * Get StyleLock job status and result
+ */
+router.get('/stylelock/job/:jobId', (req, res) => {
+  const { jobId } = req.params;
+
+  const job = stylelockJobs.get(jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+
+  res.json({
+    id: job.id,
+    status: job.status,
+    websiteId: job.websiteId,
+    targetDescription: job.targetDescription,
+    progress: job.progress,
+    result: job.result,
+    error: job.error,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt
+  });
+});
+
+/**
+ * GET /api/images/stylelock/jobs
+ * List recent StyleLock jobs
+ */
+router.get('/stylelock/jobs', (req, res) => {
+  const { websiteId, status, limit = 20 } = req.query;
+
+  let jobs = Array.from(stylelockJobs.values());
+
+  if (websiteId) {
+    jobs = jobs.filter(j => j.websiteId === parseInt(websiteId));
+  }
+
+  if (status) {
+    jobs = jobs.filter(j => j.status === status);
+  }
+
+  // Sort by creation date, newest first
+  jobs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  // Limit results
+  jobs = jobs.slice(0, parseInt(limit));
+
+  res.json({
+    jobs: jobs.map(j => ({
+      id: j.id,
+      status: j.status,
+      websiteId: j.websiteId,
+      targetDescription: j.targetDescription,
+      createdAt: j.createdAt,
+      updatedAt: j.updatedAt,
+      result: j.result ? {
+        success: j.result.success,
+        score: j.result.score,
+        tier: j.result.tier,
+        imageUrl: j.result.imageUrl,
+        totalCost: j.result.totalCost
+      } : null
+    })),
+    total: jobs.length
+  });
+});
+
+/**
+ * POST /api/images/stylelock/extract-dna
+ * Extract Style DNA using the StyleLock enhanced analysis
+ */
+router.post('/stylelock/extract-dna', async (req, res) => {
+  try {
+    const { referenceImages, openaiApiKey, websiteId } = req.body;
+
+    const apiKey = openaiApiKey || process.env.OPENAI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(400).json({ error: 'OpenAI API key is required' });
+    }
+
+    if (!referenceImages || !Array.isArray(referenceImages) || referenceImages.length === 0) {
+      return res.status(400).json({ error: 'At least one reference image URL is required' });
+    }
+
+    // Convert simple URLs to proper format
+    const images = referenceImages.map(img =>
+      typeof img === 'string' ? img : img.url
+    );
+
+    // Use StyleLock's enhanced Style DNA extraction
+    const result = await stylelockExtractStyleDNA(images, apiKey, {
+      model: 'gpt-4o' // Use better model for enhanced analysis
+    });
+
+    // Save to database if websiteId provided
+    if (websiteId && isDatabaseEnabled()) {
+      try {
+        await sql`
+          UPDATE websites
+          SET image_style_dna = ${JSON.stringify(result.styleDNA)},
+              image_reference_urls = ${JSON.stringify(referenceImages)},
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${websiteId}
+        `;
+      } catch (dbError) {
+        console.error('Failed to save StyleLock DNA to database:', dbError);
+      }
+    }
+
+    res.json({
+      success: true,
+      styleDNA: result.styleDNA,
+      imagesAnalyzed: result.imagesAnalyzed,
+      cost: result.cost
+    });
+  } catch (error) {
+    console.error('StyleLock extract DNA error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/images/stylelock/cost-estimate
+ * Get cost estimate for StyleLock generation
+ */
+router.get('/stylelock/cost-estimate', async (req, res) => {
+  try {
+    const { websiteId, referenceImageCount = 5 } = req.query;
+    const settings = await getEffectiveSettings(websiteId ? parseInt(websiteId) : null);
+
+    const costs = settings.costs;
+    const gen = settings.generation;
+    const voting = settings.voting;
+    const blindTest = settings.blindTest;
+    const limits = settings.limits;
+
+    // Calculate estimates
+    const styleDNACost = (parseInt(referenceImageCount) * 0.01) + 0.01;
+    const promptGenCostPerRound = gen.numGenerators * 0.003;
+    const imageGenCostPerRound = gen.numGenerators * costs['flux-1.1-pro'];
+    const votingCostPerRound = gen.numGenerators * voting.numVoters * 0.01;
+    const costPerRound = promptGenCostPerRound + imageGenCostPerRound + votingCostPerRound;
+    const blindTestCost = blindTest.numJudges * 0.02;
+
+    const minRounds = 2;
+    const avgRounds = 5;
+
+    res.json({
+      success: true,
+      estimate: {
+        min: styleDNACost + (costPerRound * minRounds) + blindTestCost,
+        average: styleDNACost + (costPerRound * avgRounds) + (blindTestCost * 1.5),
+        max: limits.maxCost,
+        currency: 'USD'
+      },
+      breakdown: {
+        styleDNA: styleDNACost,
+        perRound: costPerRound,
+        blindTest: blindTestCost,
+        components: {
+          promptGeneration: promptGenCostPerRound,
+          imageGeneration: imageGenCostPerRound,
+          voting: votingCostPerRound
+        }
+      },
+      settings: {
+        numGenerators: gen.numGenerators,
+        numVoters: voting.numVoters,
+        numJudges: blindTest.numJudges,
+        maxRounds: limits.maxRounds,
+        advanceThreshold: voting.advanceThreshold
+      }
+    });
+  } catch (error) {
+    console.error('StyleLock cost estimate error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

@@ -1,0 +1,47 @@
+You are an expert at detecting AI-generated images.
+
+I'm showing you {NUM_IMAGES} images. Some are real photographs. Some are AI-generated.
+Your job: identify which is which.
+
+## What AI Images Often Have:
+- Unnatural skin texture (too smooth, waxy, plastic-looking)
+- Lighting inconsistencies (shadows that don't match light source)
+- Background anomalies (blurry areas, merged objects, impossible architecture)
+- "Too perfect" look (unnaturally symmetrical, too clean)
+- Weird details (fingers, teeth, text, patterns, fabric textures)
+- Uncanny valley effect on faces
+- Inconsistent focus/depth of field
+- Strange reflections
+
+## What Real Photos Often Have:
+- Natural imperfections (skin pores, minor blemishes, dust)
+- Consistent lighting and shadows throughout
+- Realistic textures with natural variation
+- Minor flaws and asymmetry
+- Consistent depth of field
+- Natural motion blur if applicable
+- Realistic environmental details
+
+## Instructions:
+- Look at each image carefully
+- Consider ALL the factors above
+- Be honest - if you genuinely cannot tell, say "UNSURE"
+- Don't second-guess yourself too much
+
+## Response Format (JSON array, no other text):
+[
+  {
+    "image_number": 1,
+    "verdict": "REAL" or "AI" or "UNSURE",
+    "confidence": "HIGH" or "MEDIUM" or "LOW",
+    "reason": "Brief explanation of why you think this"
+  },
+  {
+    "image_number": 2,
+    "verdict": "REAL" or "AI" or "UNSURE",
+    "confidence": "HIGH" or "MEDIUM" or "LOW",
+    "reason": "Brief explanation"
+  }
+]
+
+The images are shown below in random order with no labels:

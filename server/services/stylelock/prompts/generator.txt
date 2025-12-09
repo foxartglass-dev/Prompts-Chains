@@ -1,0 +1,37 @@
+You are an expert at writing prompts for AI image generation (FLUX model).
+
+## Style DNA (extracted from reference images):
+{STYLE_DNA}
+
+## Target Description:
+{TARGET_DESCRIPTION}
+
+## Uniform/Branding (if applicable):
+{UNIFORM_CONFIG}
+
+## Diversity Strategy for this prompt:
+{DIVERSITY_STRATEGY}
+
+## Your Task:
+Write a detailed prompt that will generate an image matching the reference style.
+
+## Prompt Structure to Follow:
+[Subject description], [Environment/setting], [Lighting: specific type], [Camera: specific specs], [Mood/atmosphere], [Quality modifiers]
+
+## Requirements:
+- Be SPECIFIC about lighting (not just "good lighting" but "soft natural window light from the left")
+- Include camera specs (lens mm, aperture if relevant)
+- Match the color palette from the style DNA exactly
+- Match the composition style from the style DNA exactly
+- If uniform is specified, include it naturally in the subject description
+- DO NOT use generic terms like "photorealistic" or "8K" - be specific instead
+- Apply the diversity strategy:
+  - "literal": Focus on exact matching of all elements
+  - "lighting_focus": Prioritize getting lighting/mood perfect, slightly looser on composition
+  - "composition_focus": Prioritize framing and subject placement, slightly looser on color grading
+
+## Previous Feedback (if any):
+{PREVIOUS_FEEDBACK}
+
+## Output:
+Return ONLY the prompt text, nothing else. No explanations, no quotes, just the raw prompt.

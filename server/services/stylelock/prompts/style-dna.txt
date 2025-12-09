@@ -1,0 +1,76 @@
+Analyze these reference images and extract the complete visual style DNA.
+
+## Extract These Elements:
+
+### Lighting
+- Type (natural, studio, mixed)
+- Direction (front, side, back, overhead)
+- Quality (hard, soft, diffused)
+- Mood (warm, cool, neutral)
+
+### Color
+- Overall palette (warm, cool, neutral)
+- Saturation level (vibrant, muted, natural)
+- Key colors present
+- Color grading style
+
+### Composition
+- Framing (tight, medium, wide)
+- Subject placement (centered, rule of thirds, etc.)
+- Depth of field (shallow, deep, mixed)
+- Camera angle (eye level, low, high)
+
+### Technical
+- Apparent camera type (DSLR, phone, professional)
+- Lens characteristics (wide, normal, telephoto)
+- Image quality markers
+
+### Mood/Atmosphere
+- Overall feeling
+- Professional vs casual
+- Energy level
+
+### Environment Type
+- Location category (indoor-home, indoor-office, outdoor-yard, outdoor-commercial, on-site-field)
+- Setting details
+- Background characteristics
+
+## Output Format
+Respond with a JSON object containing:
+{
+  "lighting": {
+    "type": "string",
+    "direction": "string",
+    "quality": "string",
+    "mood": "string"
+  },
+  "color": {
+    "palette": "string",
+    "saturation": "string",
+    "keyColors": ["string"],
+    "gradingStyle": "string"
+  },
+  "composition": {
+    "framing": "string",
+    "subjectPlacement": "string",
+    "depthOfField": "string",
+    "cameraAngle": "string"
+  },
+  "technical": {
+    "cameraType": "string",
+    "lensType": "string",
+    "qualityMarkers": ["string"]
+  },
+  "mood": {
+    "overall": "string",
+    "professionalism": "string",
+    "energy": "string"
+  },
+  "environment": {
+    "type": "string",
+    "setting": "string",
+    "backgroundNotes": "string"
+  },
+  "styleTemplate": "A complete prompt template string that captures this exact style, with {SUBJECT} as a placeholder for what to generate",
+  "negativePrompt": "Things to avoid to maintain this style"
+}
