@@ -67,6 +67,27 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
   const [showApiKeysModal, setShowApiKeysModal] = useState(false);
   const [tempApiKeys, setTempApiKeys] = useState({ openai: '', replicate: '' });
 
+  // StyleLock Settings
+  const [stylelockPreset, setStylelockPreset] = useState<'conservative' | 'balanced' | 'aggressive'>('balanced');
+  const [stylelockSettings, setStylelockSettings] = useState({
+    numGenerators: 3,
+    numVoters: 3,
+    numJudges: 3,
+    advanceThreshold: 85,
+    blindTestThreshold: 66,
+    maxRounds: 10,
+    maxCost: 5.00
+  });
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [stylelockJob, setStylelockJob] = useState<{
+    id: string;
+    status: string;
+    progress: any[];
+    result: any;
+  } | null>(null);
+  const [runningStylelock, setRunningStylelock] = useState(false);
+  const [targetDescription, setTargetDescription] = useState('');
+
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -273,6 +294,87 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
       replicateKey: tempApiKeys.replicate
     }));
     setShowApiKeysModal(false);
+  };
+
+  // StyleLock preset values
+  const presetValues = {
+    conservative: { numGenerators: 2, numVoters: 3, numJudges: 3, advanceThreshold: 80, blindTestThreshold: 50, maxRounds: 5, maxCost: 2.00 },
+    balanced: { numGenerators: 3, numVoters: 3, numJudges: 3, advanceThreshold: 85, blindTestThreshold: 66, maxRounds: 10, maxCost: 5.00 },
+    aggressive: { numGenerators: 5, numVoters: 5, numJudges: 5, advanceThreshold: 90, blindTestThreshold: 80, maxRounds: 15, maxCost: 10.00 }
+  };
+
+  const handlePresetChange = (preset: 'conservative' | 'balanced' | 'aggressive') => {
+    setStylelockPreset(preset);
+    setStylelockSettings(presetValues[preset]);
+  };
+
+  const runStyleLock = async () => {
+    if (!selectedWebsite || !imageSettings.styleDNA || !targetDescription) {
+      alert('Please extract Style DNA and enter a target description first');
+      return;
+    }
+
+    setRunningStylelock(true);
+    setStylelockJob(null);
+
+    try {
+      const res = await fetch('/api/images/stylelock/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          websiteId: selectedWebsite.id,
+          referenceImages: imageSettings.referenceImages.map(img => img.url),
+          targetDescription,
+          openaiApiKey: imageSettings.openaiKey || undefined,
+          replicateApiKey: imageSettings.replicateKey || undefined,
+          settingsOverrides: {
+            generation: { numGenerators: stylelockSettings.numGenerators, maxRounds: stylelockSettings.maxRounds },
+            voting: { numVoters: stylelockSettings.numVoters, advanceThreshold: stylelockSettings.advanceThreshold },
+            blindTest: { numJudges: stylelockSettings.numJudges, passThreshold: stylelockSettings.blindTestThreshold / 100 },
+            limits: { maxCost: stylelockSettings.maxCost }
+          }
+        })
+      });
+
+      const data = await res.json();
+      if (data.success && data.jobId) {
+        setStylelockJob({ id: data.jobId, status: 'running', progress: [], result: null });
+        pollJobStatus(data.jobId);
+      } else {
+        alert('Failed to start StyleLock: ' + (data.error || 'Unknown error'));
+        setRunningStylelock(false);
+      }
+    } catch (error) {
+      console.error('StyleLock error:', error);
+      alert('Failed to start StyleLock');
+      setRunningStylelock(false);
+    }
+  };
+
+  const pollJobStatus = async (jobId: string) => {
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/images/stylelock/job/${jobId}`);
+        const data = await res.json();
+
+        setStylelockJob({
+          id: jobId,
+          status: data.status,
+          progress: data.progress || [],
+          result: data.result
+        });
+
+        if (data.status === 'running') {
+          setTimeout(poll, 2000);
+        } else {
+          setRunningStylelock(false);
+        }
+      } catch (error) {
+        console.error('Poll error:', error);
+        setRunningStylelock(false);
+      }
+    };
+    poll();
   };
 
   const openApiKeysModal = () => {
@@ -561,25 +663,163 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                     <button
                       onClick={handleExtractStyleDNA}
                       disabled={extractingDNA || imageSettings.referenceImages.length === 0}
-                      className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 rounded-lg text-white font-bold transition disabled:opacity-50"
+                      className="w-full py-2 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 rounded text-white text-sm font-bold transition disabled:opacity-50"
                     >
                       {extractingDNA ? 'Extracting Style DNA...' : 'Extract Style DNA'}
                     </button>
 
                     {/* Style DNA Preview */}
                     {imageSettings.styleDNA && (
-                      <div className="bg-slate-900/50 rounded-lg p-4 border border-green-500/30">
-                        <h4 className="text-sm font-bold text-green-400 mb-2">Style DNA Template</h4>
-                        <p className="text-xs text-gray-300 font-mono bg-slate-800/50 p-3 rounded">
+                      <div className="bg-slate-900/50 rounded-lg p-3 border border-green-500/30">
+                        <h4 className="text-xs font-bold text-green-400 mb-1">Style DNA Template</h4>
+                        <p className="text-[10px] text-gray-300 font-mono bg-slate-800/50 p-2 rounded max-h-16 overflow-auto">
                           {imageSettings.styleDNA.styleTemplate}
                         </p>
+                      </div>
+                    )}
+
+                    {/* StyleLock Engine Section */}
+                    {imageSettings.styleDNA && (
+                      <div className="bg-slate-900/50 rounded-lg p-4 border border-purple-500/30">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-bold text-purple-400">StyleLock Engine</h4>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-gray-500">Est. ${(stylelockSettings.maxCost * 0.3).toFixed(2)}-${stylelockSettings.maxCost.toFixed(2)}</span>
+                            <select
+                              value={stylelockPreset}
+                              onChange={e => handlePresetChange(e.target.value as any)}
+                              className="bg-slate-800 border border-purple-500/50 rounded px-2 py-1 text-xs text-white"
+                            >
+                              <option value="conservative">Conservative</option>
+                              <option value="balanced">Balanced</option>
+                              <option value="aggressive">Aggressive</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Target Description */}
+                        <input
+                          type="text"
+                          placeholder="Describe the image you want (e.g., 'A plumber fixing a kitchen sink')"
+                          value={targetDescription}
+                          onChange={e => setTargetDescription(e.target.value)}
+                          className="w-full bg-slate-800 border border-purple-500/30 rounded px-3 py-2 text-sm text-white mb-3"
+                        />
+
+                        {/* Compact Settings Grid */}
+                        <button
+                          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                          className="text-[10px] text-purple-400 hover:text-purple-300 mb-2 flex items-center gap-1"
+                        >
+                          <svg className={`w-3 h-3 transition ${showAdvancedSettings ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                          </svg>
+                          {showAdvancedSettings ? 'Hide' : 'Show'} Advanced Settings
+                        </button>
+
+                        {showAdvancedSettings && (
+                          <div className="grid grid-cols-4 gap-2 mb-3 p-2 bg-slate-800/50 rounded">
+                            <div>
+                              <label className="text-[10px] text-gray-500 block">Generators</label>
+                              <select value={stylelockSettings.numGenerators} onChange={e => setStylelockSettings(s => ({...s, numGenerators: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
+                                <option value={2}>2</option><option value={3}>3</option><option value={5}>5</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-500 block">Voters</label>
+                              <select value={stylelockSettings.numVoters} onChange={e => setStylelockSettings(s => ({...s, numVoters: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
+                                <option value={3}>3</option><option value={5}>5</option><option value={7}>7</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-500 block">Judges</label>
+                              <select value={stylelockSettings.numJudges} onChange={e => setStylelockSettings(s => ({...s, numJudges: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
+                                <option value={3}>3</option><option value={5}>5</option><option value={7}>7</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-500 block">Max $</label>
+                              <select value={stylelockSettings.maxCost} onChange={e => setStylelockSettings(s => ({...s, maxCost: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
+                                <option value={2}>$2</option><option value={5}>$5</option><option value={10}>$10</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-500 block">Pass %</label>
+                              <select value={stylelockSettings.advanceThreshold} onChange={e => setStylelockSettings(s => ({...s, advanceThreshold: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
+                                <option value={80}>80%</option><option value={85}>85%</option><option value={90}>90%</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-500 block">Blind %</label>
+                              <select value={stylelockSettings.blindTestThreshold} onChange={e => setStylelockSettings(s => ({...s, blindTestThreshold: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
+                                <option value={50}>50%</option><option value={66}>66%</option><option value={80}>80%</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-500 block">Rounds</label>
+                              <select value={stylelockSettings.maxRounds} onChange={e => setStylelockSettings(s => ({...s, maxRounds: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
+                                <option value={5}>5</option><option value={10}>10</option><option value={15}>15</option>
+                              </select>
+                            </div>
+                            <div className="flex items-end">
+                              <button onClick={() => handlePresetChange(stylelockPreset)} className="text-[10px] text-purple-400 hover:text-purple-300">Reset</button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Run Button */}
+                        <button
+                          onClick={runStyleLock}
+                          disabled={runningStylelock || !targetDescription}
+                          className="w-full py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded text-white text-sm font-bold transition disabled:opacity-50"
+                        >
+                          {runningStylelock ? 'Running StyleLock...' : 'Run StyleLock Generation'}
+                        </button>
+
+                        {/* Progress Display */}
+                        {stylelockJob && (
+                          <div className="mt-3 p-2 bg-slate-800/50 rounded text-xs">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-gray-400">Status:</span>
+                              <span className={`font-bold ${stylelockJob.status === 'complete' ? 'text-green-400' : stylelockJob.status === 'failed' ? 'text-red-400' : 'text-yellow-400'}`}>
+                                {stylelockJob.status.toUpperCase()}
+                              </span>
+                            </div>
+                            {stylelockJob.progress.length > 0 && (
+                              <div className="space-y-0.5 max-h-20 overflow-auto">
+                                {stylelockJob.progress.slice(-5).map((p, i) => (
+                                  <div key={i} className="text-[10px] text-gray-500 flex justify-between">
+                                    <span>{p.status}</span>
+                                    {p.bestScore && <span className="text-purple-400">{p.bestScore}%</span>}
+                                    {p.cost && <span className="text-green-400">${p.cost.toFixed(2)}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {stylelockJob.result && (
+                              <div className="mt-2 pt-2 border-t border-slate-700">
+                                <div className="flex items-center gap-2">
+                                  {stylelockJob.result.imageUrl && (
+                                    <img src={stylelockJob.result.imageUrl} alt="Result" className="w-16 h-16 rounded object-cover" />
+                                  )}
+                                  <div className="flex-1 text-[10px]">
+                                    <p><span className="text-gray-500">Tier:</span> <span className={`font-bold ${stylelockJob.result.tier === 'PERFECT' ? 'text-green-400' : stylelockJob.result.tier === 'GOOD_ENOUGH' ? 'text-yellow-400' : 'text-red-400'}`}>{stylelockJob.result.tier}</span></p>
+                                    <p><span className="text-gray-500">Score:</span> <span className="text-white">{stylelockJob.result.score}%</span></p>
+                                    <p><span className="text-gray-500">Cost:</span> <span className="text-green-400">${stylelockJob.result.totalCost?.toFixed(2)}</span></p>
+                                    <p><span className="text-gray-500">Rounds:</span> <span className="text-white">{stylelockJob.result.rounds}</span></p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {/* Save Button */}
                     <button
                       onClick={handleSaveImageSettings}
-                      className="w-full py-3 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-bold transition"
+                      className="w-full py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 text-sm font-bold transition"
                     >
                       Save Image Settings
                     </button>
