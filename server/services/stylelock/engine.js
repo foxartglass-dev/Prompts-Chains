@@ -10,6 +10,13 @@ import { voteOnCandidates, aggregateFeedback } from './voting.js';
 import { runBlindTest, quickQualityCheck } from './blind-test.js';
 import { DEFAULT_SETTINGS, mergeSettings, validateSettings } from './default-settings.js';
 import { generateImage } from '../image-generator.js';
+import {
+  getKnowledgeText,
+  logRoundImage,
+  updateImageVotes,
+  logRoundEvent,
+  downloadAndStoreImage
+} from './knowledge-service.js';
 
 /**
  * StyleLock Engine Class
@@ -72,6 +79,16 @@ export class StyleLockEngine {
         throw new Error('Replicate API key is required for image generation');
       }
 
+      // Load Course Engine Knowledge
+      onProgress({ status: 'loading_knowledge', jobId, round: 0 });
+      let knowledgeText = '';
+      try {
+        knowledgeText = await getKnowledgeText();
+        onProgress({ status: 'knowledge_loaded', jobId, round: 0, itemCount: knowledgeText.length > 0 ? 'loaded' : 'none' });
+      } catch (e) {
+        console.warn('Could not load knowledge:', e.message);
+      }
+
       // Extract Style DNA
       job.status = 'extracting';
       onProgress({ status: 'extracting_style', jobId, round: 0 });
@@ -79,12 +96,18 @@ export class StyleLockEngine {
       const styleDNAResult = await extractStyleDNA(
         referenceImages,
         this.apiKeys.openai,
-        { model: this.settings.generation.generatorModel }
+        { model: this.settings.generation.generatorModel, knowledge: knowledgeText }
       );
 
       job.styleDNA = styleDNAResult.styleDNA;
       job.costBreakdown.styleDNA = styleDNAResult.cost;
       job.totalCost += styleDNAResult.cost;
+
+      // Log style DNA extraction
+      await logRoundEvent(jobId, 0, 'style_dna_extracted', {
+        styleDNA: job.styleDNA,
+        cost: styleDNAResult.cost
+      });
 
       onProgress({ status: 'style_extracted', jobId, round: 0, styleDNA: job.styleDNA, cost: job.totalCost });
 
@@ -130,23 +153,59 @@ export class StyleLockEngine {
         onProgress({ status: 'generating_images', jobId, round, promptCount: promptsResult.count });
 
         const imageResults = [];
-        for (const promptObj of promptsResult.prompts) {
+        const imageDbIds = []; // Track database IDs for logging
+
+        for (let genIndex = 0; genIndex < promptsResult.prompts.length; genIndex++) {
+          const promptObj = promptsResult.prompts[genIndex];
           try {
             const result = await generateImage(
               promptObj.prompt,
               { width: this.settings.generation.imageWidth, height: this.settings.generation.imageHeight },
               this.apiKeys.replicate
             );
-            imageResults.push({ url: result.url, prompt: promptObj.prompt, strategy: promptObj.strategy });
+
+            // Download and store image locally
+            let storedImageData = null;
+            try {
+              storedImageData = await downloadAndStoreImage(result.url);
+            } catch (e) {
+              console.warn('Could not download image:', e.message);
+            }
+
+            imageResults.push({
+              url: result.url,
+              localData: storedImageData,
+              prompt: promptObj.prompt,
+              strategy: promptObj.strategy,
+              generatorIndex: genIndex
+            });
+
+            // Log image to database
+            const dbId = await logRoundImage(jobId, round, genIndex, promptObj.prompt, result.url, storedImageData);
+            imageDbIds.push(dbId);
+
             job.costBreakdown.images += this.settings.costs['flux-1.1-pro'];
             job.totalCost += this.settings.costs['flux-1.1-pro'];
+
+            onProgress({
+              status: 'image_generated',
+              jobId,
+              round,
+              generatorIndex: genIndex,
+              imageUrl: result.url,
+              localData: storedImageData,
+              prompt: promptObj.prompt
+            });
+
           } catch (error) {
-            console.warn(`Image generation failed for prompt ${promptObj.index}:`, error.message);
+            console.warn(`Image generation failed for generator ${genIndex}:`, error.message);
+            await logRoundEvent(jobId, round, 'generation_error', { generatorIndex: genIndex, error: error.message });
           }
         }
 
         if (imageResults.length === 0) {
           onProgress({ status: 'generation_failed', jobId, round, error: 'All image generations failed' });
+          await logRoundEvent(jobId, round, 'generation_failed', { error: 'All generators failed' });
           continue;
         }
 
@@ -156,16 +215,50 @@ export class StyleLockEngine {
           imageResults.map(r => r.url),
           referenceImages,
           this.apiKeys.openai,
-          { numVoters: this.settings.voting.numVoters, model: this.settings.voting.voterModel }
+          {
+            numVoters: this.settings.voting.numVoters,
+            model: this.settings.voting.voterModel,
+            knowledge: knowledgeText
+          }
         );
 
         job.costBreakdown.voting += voteResults.totalCost;
         job.totalCost += voteResults.totalCost;
 
+        // Update database with vote results for each image
+        for (let imgIdx = 0; imgIdx < imageResults.length; imgIdx++) {
+          const imgVotes = voteResults.results.filter(v => v.imageIndex === imgIdx);
+          const avgScore = imgVotes.length > 0 ? imgVotes.reduce((sum, v) => sum + v.score, 0) / imgVotes.length : 0;
+          const isWinner = imgIdx === voteResults.bestIndex;
+
+          if (imageDbIds[imgIdx]) {
+            await updateImageVotes(imageDbIds[imgIdx], imgVotes, avgScore, isWinner);
+          }
+
+          // Report individual votes
+          onProgress({
+            status: 'votes_received',
+            jobId,
+            round,
+            generatorIndex: imgIdx,
+            votes: imgVotes,
+            avgScore,
+            isWinner
+          });
+        }
+
+        // Log voting event
+        await logRoundEvent(jobId, round, 'voting_complete', {
+          results: voteResults.results,
+          bestIndex: voteResults.bestIndex,
+          bestScore: voteResults.bestScore,
+          bestFeedback: voteResults.bestFeedback
+        });
+
         const roundResult = {
           roundNum: round,
           prompts: imageResults.map(r => r.prompt),
-          images: imageResults.map(r => r.url),
+          images: imageResults.map(r => ({ url: r.url, localData: r.localData })),
           voteResults: voteResults.results,
           bestImageIndex: voteResults.bestIndex,
           bestScore: voteResults.bestScore,

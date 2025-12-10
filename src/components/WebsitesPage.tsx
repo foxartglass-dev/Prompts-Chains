@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import StyleLockPanel from './StyleLockPanel';
 
 interface Website {
   id: number;
@@ -678,141 +679,16 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                       </div>
                     )}
 
-                    {/* StyleLock Engine Section */}
-                    {imageSettings.styleDNA && (
-                      <div className="bg-slate-900/50 rounded-lg p-4 border border-purple-500/30">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-sm font-bold text-purple-400">StyleLock Engine</h4>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-gray-500">Est. ${(stylelockSettings.maxCost * 0.3).toFixed(2)}-${stylelockSettings.maxCost.toFixed(2)}</span>
-                            <select
-                              value={stylelockPreset}
-                              onChange={e => handlePresetChange(e.target.value as any)}
-                              className="bg-slate-800 border border-purple-500/50 rounded px-2 py-1 text-xs text-white"
-                            >
-                              <option value="conservative">Conservative</option>
-                              <option value="balanced">Balanced</option>
-                              <option value="aggressive">Aggressive</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        {/* Target Description */}
-                        <input
-                          type="text"
-                          placeholder="Describe the image you want (e.g., 'A plumber fixing a kitchen sink')"
-                          value={targetDescription}
-                          onChange={e => setTargetDescription(e.target.value)}
-                          className="w-full bg-slate-800 border border-purple-500/30 rounded px-3 py-2 text-sm text-white mb-3"
+                    {/* StyleLock Engine Section - Now using dedicated component */}
+                    {imageSettings.styleDNA && selectedWebsite && (
+                      <div className="bg-slate-900/50 rounded-lg p-3 border border-purple-500/30">
+                        <StyleLockPanel
+                          websiteId={selectedWebsite.id}
+                          styleDNA={imageSettings.styleDNA}
+                          referenceImages={imageSettings.referenceImages.map(img => img.url)}
+                          openaiKey={imageSettings.openaiKey}
+                          replicateKey={imageSettings.replicateKey}
                         />
-
-                        {/* Compact Settings Grid */}
-                        <button
-                          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-                          className="text-[10px] text-purple-400 hover:text-purple-300 mb-2 flex items-center gap-1"
-                        >
-                          <svg className={`w-3 h-3 transition ${showAdvancedSettings ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                          </svg>
-                          {showAdvancedSettings ? 'Hide' : 'Show'} Advanced Settings
-                        </button>
-
-                        {showAdvancedSettings && (
-                          <div className="grid grid-cols-4 gap-2 mb-3 p-2 bg-slate-800/50 rounded">
-                            <div>
-                              <label className="text-[10px] text-gray-500 block">Generators</label>
-                              <select value={stylelockSettings.numGenerators} onChange={e => setStylelockSettings(s => ({...s, numGenerators: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
-                                <option value={2}>2</option><option value={3}>3</option><option value={5}>5</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-gray-500 block">Voters</label>
-                              <select value={stylelockSettings.numVoters} onChange={e => setStylelockSettings(s => ({...s, numVoters: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
-                                <option value={3}>3</option><option value={5}>5</option><option value={7}>7</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-gray-500 block">Judges</label>
-                              <select value={stylelockSettings.numJudges} onChange={e => setStylelockSettings(s => ({...s, numJudges: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
-                                <option value={3}>3</option><option value={5}>5</option><option value={7}>7</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-gray-500 block">Max $</label>
-                              <select value={stylelockSettings.maxCost} onChange={e => setStylelockSettings(s => ({...s, maxCost: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
-                                <option value={2}>$2</option><option value={5}>$5</option><option value={10}>$10</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-gray-500 block">Pass %</label>
-                              <select value={stylelockSettings.advanceThreshold} onChange={e => setStylelockSettings(s => ({...s, advanceThreshold: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
-                                <option value={80}>80%</option><option value={85}>85%</option><option value={90}>90%</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-gray-500 block">Blind %</label>
-                              <select value={stylelockSettings.blindTestThreshold} onChange={e => setStylelockSettings(s => ({...s, blindTestThreshold: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
-                                <option value={50}>50%</option><option value={66}>66%</option><option value={80}>80%</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-gray-500 block">Rounds</label>
-                              <select value={stylelockSettings.maxRounds} onChange={e => setStylelockSettings(s => ({...s, maxRounds: +e.target.value}))} className="w-full bg-slate-700 border-0 rounded px-1 py-0.5 text-xs text-white">
-                                <option value={5}>5</option><option value={10}>10</option><option value={15}>15</option>
-                              </select>
-                            </div>
-                            <div className="flex items-end">
-                              <button onClick={() => handlePresetChange(stylelockPreset)} className="text-[10px] text-purple-400 hover:text-purple-300">Reset</button>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Run Button */}
-                        <button
-                          onClick={runStyleLock}
-                          disabled={runningStylelock || !targetDescription}
-                          className="w-full py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded text-white text-sm font-bold transition disabled:opacity-50"
-                        >
-                          {runningStylelock ? 'Running StyleLock...' : 'Run StyleLock Generation'}
-                        </button>
-
-                        {/* Progress Display */}
-                        {stylelockJob && (
-                          <div className="mt-3 p-2 bg-slate-800/50 rounded text-xs">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-gray-400">Status:</span>
-                              <span className={`font-bold ${stylelockJob.status === 'complete' ? 'text-green-400' : stylelockJob.status === 'failed' ? 'text-red-400' : 'text-yellow-400'}`}>
-                                {stylelockJob.status.toUpperCase()}
-                              </span>
-                            </div>
-                            {stylelockJob.progress.length > 0 && (
-                              <div className="space-y-0.5 max-h-20 overflow-auto">
-                                {stylelockJob.progress.slice(-5).map((p, i) => (
-                                  <div key={i} className="text-[10px] text-gray-500 flex justify-between">
-                                    <span>{p.status}</span>
-                                    {p.bestScore && <span className="text-purple-400">{p.bestScore}%</span>}
-                                    {p.cost && <span className="text-green-400">${p.cost.toFixed(2)}</span>}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {stylelockJob.result && (
-                              <div className="mt-2 pt-2 border-t border-slate-700">
-                                <div className="flex items-center gap-2">
-                                  {stylelockJob.result.imageUrl && (
-                                    <img src={stylelockJob.result.imageUrl} alt="Result" className="w-16 h-16 rounded object-cover" />
-                                  )}
-                                  <div className="flex-1 text-[10px]">
-                                    <p><span className="text-gray-500">Tier:</span> <span className={`font-bold ${stylelockJob.result.tier === 'PERFECT' ? 'text-green-400' : stylelockJob.result.tier === 'GOOD_ENOUGH' ? 'text-yellow-400' : 'text-red-400'}`}>{stylelockJob.result.tier}</span></p>
-                                    <p><span className="text-gray-500">Score:</span> <span className="text-white">{stylelockJob.result.score}%</span></p>
-                                    <p><span className="text-gray-500">Cost:</span> <span className="text-green-400">${stylelockJob.result.totalCost?.toFixed(2)}</span></p>
-                                    <p><span className="text-gray-500">Rounds:</span> <span className="text-white">{stylelockJob.result.rounds}</span></p>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
                       </div>
                     )}
 
