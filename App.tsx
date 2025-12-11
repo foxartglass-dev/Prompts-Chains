@@ -415,7 +415,7 @@ const App: React.FC = () => {
              filledTemplate = filledTemplate.replace(new RegExp(`{${p.key}}`, 'g'), p.value);
         });
 
-        filledTemplate = filledTemplate.replace(/{item_name}/g, item.name);
+        filledTemplate = filledTemplate.replace(/<item_name>/g, item.name);
 
         return filledTemplate;
     };
@@ -1084,7 +1084,7 @@ const App: React.FC = () => {
                             {/* Item Input */}
                             <div>
                                 <label htmlFor="manual-items" className="block text-sm font-medium text-brand-gold mb-1.5">
-                                    Add Items (one per line)
+                                    Add Items (one per line) <span className="text-xs text-brand-gold/60 font-mono">{'<item_name>'}</span>
                                 </label>
                                 <textarea
                                     id="manual-items"
@@ -1165,7 +1165,7 @@ const App: React.FC = () => {
                                     className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                 />
                                 <p className="text-xs text-brand-gold/70 mt-1">
-                                    Use variables like {'{item_name}'} or {'{city}'}.
+                                    Use variables like {'<item_name>'} or {'{city}'}.
                                 </p>
                             </div>
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1195,7 +1195,7 @@ const App: React.FC = () => {
                     {renderSection('4. Workflow Variables', 'placeholders', <Icon type="info" className="h-6 w-6"/>,
                         <div className="space-y-6">
                             <div>
-                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Global Variables</h3>
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Global Variables <span className="text-xs text-brand-gold/60 font-mono">{'{key}'}</span></h3>
                                 {selectedPlaceholders.size > 0 && (
                                     <div className="bg-slate-800/50 p-3 rounded-lg mb-3 flex items-center gap-3 border border-brand-gold/50">
                                         <span className="text-sm font-semibold text-brand-gold">{selectedPlaceholders.size} selected</span>
@@ -1217,7 +1217,7 @@ const App: React.FC = () => {
                                 <button onClick={() => handleAddPlaceholder()} className="mt-3 text-brand-gold hover:text-brand-gold-light font-semibold text-sm transition">+ Add Global Variable</button>
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Tagged Variables</h3>
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Tagged Variables <span className="text-xs text-brand-gold/60 font-mono">{'{key{TAG}}'}</span></h3>
                                 {currentProject.state.tags.map(tag => (
                                     <div key={tag.id} className="mb-4">
                                         <p className="font-bold text-brand-gold text-sm mb-2">Tag: {tag.name}</p>
@@ -1241,7 +1241,7 @@ const App: React.FC = () => {
                                 ))}
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-gold/60">(Read-only)</span></h3>
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-gold/60 font-mono">[output_key]</span> <span className="text-xs text-brand-gold/60">(Read-only)</span></h3>
                                 <p className="text-xs text-brand-gold/70 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-slate-800/50 p-1 rounded border border-brand-gold/50">[output_key]</span></p>
                                 <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 text-sm font-mono text-brand-gold">[{p.outputKey}]</div>))}</div>
                             </div>
@@ -1250,6 +1250,7 @@ const App: React.FC = () => {
                     
                     {renderSection('5. Conditional Snippets', 'snippets', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-4">
+                            <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Conditional Snippets <span className="text-xs text-brand-gold/60 font-mono">{'{{{key}}}'}</span></h3>
                              {currentProject.state.taggedSnippets.map(s => (
                                 <div key={s.id} className="bg-slate-800/50 p-4 rounded-lg space-y-2 border border-brand-gold/50">
                                     <div className="flex gap-2 items-center">
