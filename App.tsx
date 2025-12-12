@@ -57,6 +57,25 @@ interface Result {
   wpError?: string;
 }
 
+// Option Variable pending selection types
+interface OptionSelection {
+  variableKey: string;
+  options: string[];
+  selectedIndex: number | null;  // null = not selected, -1 = custom
+  customValue: string;
+}
+
+interface PendingResult {
+  id: number;
+  item: WorkflowItem;
+  finalOutput: string;
+  metaTitles: string[];
+  metaDescriptions: string[];
+  allOutputs: Record<string, string>;
+  timestamp: string;
+  optionSelections: OptionSelection[];
+}
+
 // Make JSZip available from the global scope (force rebuild)
 declare const JSZip: any;
 
@@ -98,6 +117,7 @@ const App: React.FC = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [results, setResults] = useState<Result[]>([]);
+    const [pendingResults, setPendingResults] = useState<PendingResult[]>([]);
     const [fileName, setFileName] = useState('');
     const [activeCollapsible, setActiveCollapsible] = useState<string | null>('setup');
     const [newTagName, setNewTagName] = useState('');
@@ -384,6 +404,129 @@ const App: React.FC = () => {
         }));
     };
 
+    // Pending Result Selection Handlers
+    const handleSelectOption = (pendingId: number, variableKey: string, optionIndex: number) => {
+        setPendingResults(prev => prev.map(pr => {
+            if (pr.id !== pendingId) return pr;
+            return {
+                ...pr,
+                optionSelections: pr.optionSelections.map(os =>
+                    os.variableKey === variableKey ? { ...os, selectedIndex: optionIndex } : os
+                )
+            };
+        }));
+    };
+
+    const handleCustomOptionValue = (pendingId: number, variableKey: string, value: string) => {
+        setPendingResults(prev => prev.map(pr => {
+            if (pr.id !== pendingId) return pr;
+            return {
+                ...pr,
+                optionSelections: pr.optionSelections.map(os =>
+                    os.variableKey === variableKey ? { ...os, customValue: value, selectedIndex: -1 } : os
+                )
+            };
+        }));
+    };
+
+    const handleFinalizePendingResult = async (pendingId: number) => {
+        if (!currentProject) return;
+        const pending = pendingResults.find(pr => pr.id === pendingId);
+        if (!pending) return;
+
+        // Check all options are selected
+        const unresolved = pending.optionSelections.filter(os => os.selectedIndex === null);
+        if (unresolved.length > 0) {
+            showNotification(`Please select options for: ${unresolved.map(u => u.variableKey).join(', ')}`, 'error');
+            return;
+        }
+
+        // Apply selections to final output
+        let finalizedOutput = pending.finalOutput;
+        pending.optionSelections.forEach(os => {
+            const selectedValue = os.selectedIndex === -1 ? os.customValue : os.options[os.selectedIndex!];
+            // Replace ?key:count? pattern with selected value
+            const pattern = new RegExp(`\\?${os.variableKey}:\\d+\\?`, 'g');
+            finalizedOutput = finalizedOutput.replace(pattern, selectedValue);
+        });
+
+        // Check AI score for finalized content
+        addLog(`[${pending.item.name}] Finalizing selections and checking AI score...`, LogStatus.WORKING, pending.item.id);
+        const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalizedOutput);
+        const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
+
+        const txtContent = `${finalizedOutput}\n\n---META TITLES---\n${pending.metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${pending.metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
+
+        const jsonContent = JSON.stringify({
+            item_name: pending.item.name, tag: pending.item.tag, final_output: finalizedOutput, parsed_titles: pending.metaTitles,
+            parsed_summaries: pending.metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp: pending.timestamp,
+        }, null, 2);
+
+        // Move to results
+        setResults(prev => [...prev, {
+            item: pending.item,
+            finalOutput: finalizedOutput,
+            metaTitles: pending.metaTitles,
+            metaDescriptions: pending.metaDescriptions,
+            aiScore,
+            wordCount,
+            status,
+            timestamp: pending.timestamp,
+            jsonContent,
+            txtContent,
+            allOutputs: pending.allOutputs,
+            wpStatus: 'idle'
+        }]);
+
+        // Remove from pending
+        setPendingResults(prev => prev.filter(pr => pr.id !== pendingId));
+        addLog(`[${pending.item.name}] Finalized! Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, pending.item.id);
+    };
+
+    const handleAiChooseOption = async (pendingId: number, variableKey: string) => {
+        if (!currentProject) return;
+        const pending = pendingResults.find(pr => pr.id === pendingId);
+        if (!pending) return;
+        const selection = pending.optionSelections.find(os => os.variableKey === variableKey);
+        if (!selection || selection.options.length === 0) return;
+
+        addLog(`[${pending.item.name}] AI choosing best option for ${variableKey}...`, LogStatus.WORKING, pending.item.id);
+
+        const prompt = `You are selecting the best option from a list. Given this context about "${pending.item.name}", choose the single best option from the following numbered list. Reply with ONLY the number (1, 2, 3, etc.) of the best option:\n\n${selection.options.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}`;
+
+        try {
+            const response = await generateLlmContent(
+                prompt,
+                currentProject.state.provider,
+                currentProject.state.model,
+                { anthropic: currentProject.state.apiKeys.anthropic }
+            );
+            const chosenNumber = parseInt(response.trim().match(/\d+/)?.[0] || '1');
+            const chosenIndex = Math.max(0, Math.min(chosenNumber - 1, selection.options.length - 1));
+            handleSelectOption(pendingId, variableKey, chosenIndex);
+            addLog(`[${pending.item.name}] AI chose option ${chosenIndex + 1} for ${variableKey}`, LogStatus.SUCCESS, pending.item.id);
+        } catch (error) {
+            addLog(`[${pending.item.name}] AI selection failed, defaulting to option 1`, LogStatus.ERROR, pending.item.id);
+            handleSelectOption(pendingId, variableKey, 0);
+        }
+    };
+
+    const handleAiChooseAllForPending = async (pendingId: number) => {
+        const pending = pendingResults.find(pr => pr.id === pendingId);
+        if (!pending) return;
+        for (const selection of pending.optionSelections) {
+            if (selection.selectedIndex === null) {
+                await handleAiChooseOption(pendingId, selection.variableKey);
+            }
+        }
+    };
+
+    const handleAiChooseAllPending = async () => {
+        for (const pending of pendingResults) {
+            await handleAiChooseAllForPending(pending.id);
+        }
+    };
+
     const addTag = () => {
         if (currentProject && newTagName && !currentProject.state.tags.some(t => t.name === newTagName)) {
             setCurrentProjectState(prev => ({
@@ -533,50 +676,118 @@ const App: React.FC = () => {
                 const mainContentKeys = finalPrompts.length > 0 ? finalPrompts.map(p => p.outputKey) : [currentProject.state.promptTemplates[currentProject.state.promptTemplates.length - 1]?.outputKey].filter(Boolean);
                 
                 const combinedOutput = mainContentKeys.map(key => promptOutputs[key]).join('\n\n---\n\n');
-                
+
                 const { finalOutput, metaTitles, metaDescriptions } = parseFinalOutput(combinedOutput);
                 addLog(`[${item.name}] Generated final content.`, LogStatus.INFO, item.id);
 
-                addLog(`[${item.name}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, item.id);
-                const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
-                addLog(`[${item.name}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
+                // Check for option variables in the final output
+                const optionVarPattern = /\?([^:?]+):(\d+)\?/g;
+                const optionMatches = [...finalOutput.matchAll(optionVarPattern)];
+                const optionVariables = currentProject.state.optionVariables || [];
 
-                const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
-                const timestamp = new Date().toISOString();
-                
-                const txtContent = `${finalOutput}\n\n---META TITLES---\n${metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
-                
-                const jsonContent = JSON.stringify({
-                    item_name: item.name, tag: item.tag, final_output: finalOutput, parsed_titles: metaTitles,
-                    parsed_summaries: metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp,
-                }, null, 2);
+                if (optionMatches.length > 0 && optionVariables.length > 0) {
+                    // Has option variables - generate options and store as pending
+                    addLog(`[${item.name}] Found ${optionMatches.length} option variable(s), generating options...`, LogStatus.INFO, item.id);
 
-                setResults(prev => [...prev, { item, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
-                addLog(`[${item.name}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
+                    const optionSelections: OptionSelection[] = [];
 
-                // Save article to database
-                try {
-                    await fetch('/api/articles', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            workflowId: currentWorkflowId || null,
-                            websiteId: currentWebsiteId || null,
-                            keyword: item.name,
-                            tag: item.tag,
-                            finalContent: finalOutput,
-                            metaTitles,
-                            metaDescriptions,
-                            chainOutputs: promptOutputs,
-                            aiScore,
-                            wordCount,
-                            status: status.toLowerCase()
-                        })
-                    });
-                    addLog(`[${item.name}] Article saved to database.`, LogStatus.INFO, item.id);
-                } catch (saveError) {
-                    // Don't fail the whole process if saving fails
-                    console.error('Failed to save article:', saveError);
+                    for (const match of optionMatches) {
+                        const varKey = match[1];
+                        const optionCount = parseInt(match[2]);
+                        const optionVar = optionVariables.find(ov => ov.key === varKey);
+
+                        if (optionVar) {
+                            addLog(`[${item.name}] Generating ${optionCount} options for "${varKey}"...`, LogStatus.WORKING, item.id);
+
+                            // Fill the option variable prompt with context
+                            let optionPrompt = optionVar.prompt;
+                            optionPrompt = optionPrompt.replace(/<item_name>/g, item.name);
+                            // Add instruction to generate numbered list
+                            optionPrompt += `\n\nGenerate exactly ${optionCount} options. Format as a numbered list:\n1. [option]\n2. [option]\netc.`;
+
+                            const optionsResponse = await generateLlmContent(
+                                optionPrompt,
+                                currentProject.state.provider,
+                                currentProject.state.model,
+                                { anthropic: currentProject.state.apiKeys.anthropic }
+                            );
+
+                            // Parse the numbered list response
+                            const options = optionsResponse
+                                .split('\n')
+                                .map(line => line.replace(/^\d+\.\s*/, '').trim())
+                                .filter(line => line.length > 0)
+                                .slice(0, optionCount);
+
+                            optionSelections.push({
+                                variableKey: varKey,
+                                options,
+                                selectedIndex: null,
+                                customValue: ''
+                            });
+
+                            addLog(`[${item.name}] Generated ${options.length} options for "${varKey}"`, LogStatus.SUCCESS, item.id);
+                        }
+                    }
+
+                    const timestamp = new Date().toISOString();
+
+                    // Store as pending result
+                    setPendingResults(prev => [...prev, {
+                        id: Date.now() + item.id,
+                        item,
+                        finalOutput,
+                        metaTitles,
+                        metaDescriptions,
+                        allOutputs: promptOutputs,
+                        timestamp,
+                        optionSelections
+                    }]);
+
+                    addLog(`[${item.name}] Added to pending selections (${optionSelections.length} option(s) need selection)`, LogStatus.INFO, item.id);
+                } else {
+                    // No option variables - proceed normally
+                    addLog(`[${item.name}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, item.id);
+                    const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
+                    addLog(`[${item.name}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
+
+                    const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
+                    const timestamp = new Date().toISOString();
+
+                    const txtContent = `${finalOutput}\n\n---META TITLES---\n${metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
+
+                    const jsonContent = JSON.stringify({
+                        item_name: item.name, tag: item.tag, final_output: finalOutput, parsed_titles: metaTitles,
+                        parsed_summaries: metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp,
+                    }, null, 2);
+
+                    setResults(prev => [...prev, { item, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
+                    addLog(`[${item.name}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
+
+                    // Save article to database
+                    try {
+                        await fetch('/api/articles', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                workflowId: currentWorkflowId || null,
+                                websiteId: currentWebsiteId || null,
+                                keyword: item.name,
+                                tag: item.tag,
+                                finalContent: finalOutput,
+                                metaTitles,
+                                metaDescriptions,
+                                chainOutputs: promptOutputs,
+                                aiScore,
+                                wordCount,
+                                status: status.toLowerCase()
+                            })
+                        });
+                        addLog(`[${item.name}] Article saved to database.`, LogStatus.INFO, item.id);
+                    } catch (saveError) {
+                        // Don't fail the whole process if saving fails
+                        console.error('Failed to save article:', saveError);
+                    }
                 }
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
@@ -1439,6 +1650,107 @@ const App: React.FC = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* Pending Selections Section */}
+                    {pendingResults.length > 0 && (
+                        <div className="bg-card rounded-xl shadow-glow-gold card-3d border-2 border-pink-500">
+                            <div className="p-5 flex items-center justify-between border-b border-pink-500/30">
+                                <h2 className="text-xl font-bold flex items-center text-pink-400">
+                                    <svg className="h-6 w-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    <span>Pending Selections ({pendingResults.length})</span>
+                                </h2>
+                                <button
+                                    onClick={handleAiChooseAllPending}
+                                    className="flex items-center bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                                >
+                                    <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                                    AI Choose All
+                                </button>
+                            </div>
+                            <div className="p-5 space-y-4">
+                                {pendingResults.map(pending => (
+                                    <div key={pending.id} className="bg-slate-800/50 rounded-lg border border-pink-500/50 overflow-hidden">
+                                        <div className="p-4 border-b border-pink-500/30 flex items-center justify-between">
+                                            <div>
+                                                <h3 className="font-bold text-white">{pending.item.name}</h3>
+                                                <p className="text-xs text-pink-400/70">{pending.optionSelections.filter(os => os.selectedIndex === null).length} option(s) need selection</p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleAiChooseAllForPending(pending.id)}
+                                                    className="px-3 py-1.5 bg-pink-500/20 hover:bg-pink-500/40 border border-pink-500/50 rounded-lg text-pink-400 text-sm transition"
+                                                >
+                                                    AI Choose All
+                                                </button>
+                                                <button
+                                                    onClick={() => handleFinalizePendingResult(pending.id)}
+                                                    className="px-3 py-1.5 bg-green-500/20 hover:bg-green-500/40 border border-green-500/50 rounded-lg text-green-400 text-sm transition"
+                                                >
+                                                    Finalize
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="p-4 space-y-4">
+                                            {pending.optionSelections.map(selection => (
+                                                <div key={selection.variableKey} className="bg-slate-900/50 rounded-lg p-3 border border-pink-500/30">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <h4 className="font-semibold text-pink-400">?{selection.variableKey}?</h4>
+                                                        <button
+                                                            onClick={() => handleAiChooseOption(pending.id, selection.variableKey)}
+                                                            className="text-xs px-2 py-1 bg-pink-500/20 hover:bg-pink-500/40 border border-pink-500/50 rounded text-pink-400 transition"
+                                                        >
+                                                            AI Choose
+                                                        </button>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {selection.options.map((option, idx) => (
+                                                            <label
+                                                                key={idx}
+                                                                className={`flex items-start gap-3 p-2 rounded-lg cursor-pointer transition ${selection.selectedIndex === idx ? 'bg-pink-500/30 border border-pink-500' : 'bg-slate-800/50 border border-transparent hover:border-pink-500/50'}`}
+                                                            >
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`${pending.id}-${selection.variableKey}`}
+                                                                    checked={selection.selectedIndex === idx}
+                                                                    onChange={() => handleSelectOption(pending.id, selection.variableKey, idx)}
+                                                                    className="mt-1 accent-pink-500"
+                                                                />
+                                                                <span className="text-sm text-white">{option}</span>
+                                                            </label>
+                                                        ))}
+                                                        {/* Custom option */}
+                                                        <label
+                                                            className={`flex items-start gap-3 p-2 rounded-lg cursor-pointer transition ${selection.selectedIndex === -1 ? 'bg-pink-500/30 border border-pink-500' : 'bg-slate-800/50 border border-transparent hover:border-pink-500/50'}`}
+                                                        >
+                                                            <input
+                                                                type="radio"
+                                                                name={`${pending.id}-${selection.variableKey}`}
+                                                                checked={selection.selectedIndex === -1}
+                                                                onChange={() => handleSelectOption(pending.id, selection.variableKey, -1)}
+                                                                className="mt-1 accent-pink-500"
+                                                            />
+                                                            <div className="flex-1">
+                                                                <span className="text-sm text-pink-400/70 block mb-1">Custom:</span>
+                                                                <input
+                                                                    type="text"
+                                                                    value={selection.customValue}
+                                                                    onChange={(e) => handleCustomOptionValue(pending.id, selection.variableKey, e.target.value)}
+                                                                    placeholder="Enter custom value..."
+                                                                    className="w-full bg-slate-800/80 border border-pink-500/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-pink-500 transition"
+                                                                    onClick={() => handleSelectOption(pending.id, selection.variableKey, -1)}
+                                                                />
+                                                            </div>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                      {results.length > 0 && <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan">
                         <div className="p-5 flex items-center justify-between border-b border-brand-cyan/30">
                             <h2 className={`text-xl font-bold flex items-center text-brand-gold`}><Icon type="success" className="h-6 w-6"/><span className="ml-3">Results ({results.length})</span></h2>
