@@ -125,6 +125,7 @@ const App: React.FC = () => {
     const prevProjectIdRef = useRef<string | null>(null);
     const logContainerRef = useRef<HTMLDivElement>(null);
     const draggedPromptId = useRef<number | null>(null);
+    const promptTextareaRefs = useRef<{[key: number]: HTMLTextAreaElement | null}>({});
 
     // useCallback for logging (must be before conditional returns)
     const addLog = useCallback((message: string, status: LogStatus, itemId?: number) => {
@@ -237,6 +238,26 @@ const App: React.FC = () => {
             ...prev,
             promptTemplates: prev.promptTemplates.map(p => p.id === id ? { ...p, [field]: value } : p)
         }));
+    };
+
+    const insertVariableIntoPrompt = (promptId: number, variable: string) => {
+        const textarea = promptTextareaRefs.current[promptId];
+        if (!textarea) return;
+
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const currentValue = textarea.value;
+
+        // Replace selected text or insert at cursor
+        const newValue = currentValue.substring(0, start) + variable + currentValue.substring(end);
+
+        handleUpdatePrompt(promptId, 'template', newValue);
+
+        // Restore focus and cursor position after the inserted variable
+        setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + variable.length, start + variable.length);
+        }, 0);
     };
 
     const handleAddPrompt = () => {
@@ -1288,7 +1309,28 @@ const App: React.FC = () => {
                                         </button>
                                         <button onClick={() => handleDeletePrompt(prompt.id)} className="p-2.5 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                     </div>
-                                    <textarea value={prompt.template} onChange={e => handleUpdatePrompt(prompt.id, 'template', e.target.value)} rows={8} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"></textarea>
+                                    <textarea ref={el => promptTextareaRefs.current[prompt.id] = el} value={prompt.template} onChange={e => handleUpdatePrompt(prompt.id, 'template', e.target.value)} rows={8} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"></textarea>
+                                    <div className="flex flex-wrap gap-1.5 p-2 bg-slate-900/50 rounded-lg border border-brand-gold/30">
+                                        <span className="text-xs text-brand-gold/60 w-full mb-1">Click to insert:</span>
+                                        {/* Item Name */}
+                                        <button type="button" onClick={() => insertVariableIntoPrompt(prompt.id, '<item_name>')} className="px-2 py-1 text-xs font-mono bg-brand-cyan/20 hover:bg-brand-cyan/40 border border-brand-cyan/50 rounded text-brand-cyan transition">{'<item_name>'}</button>
+                                        {/* Global Variables */}
+                                        {currentProject.state.placeholders.filter(p => !p.tag).map(p => (
+                                            <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `{${p.key}}`)} className="px-2 py-1 text-xs font-mono bg-brand-gold/20 hover:bg-brand-gold/40 border border-brand-gold/50 rounded text-brand-gold transition">{`{${p.key}}`}</button>
+                                        ))}
+                                        {/* Tagged Variables */}
+                                        {currentProject.state.placeholders.filter(p => p.tag).map(p => (
+                                            <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `{${p.key}{${p.tag}}}`)} className="px-2 py-1 text-xs font-mono bg-orange-500/20 hover:bg-orange-500/40 border border-orange-500/50 rounded text-orange-400 transition">{`{${p.key}{${p.tag}}}`}</button>
+                                        ))}
+                                        {/* Conditional Snippets */}
+                                        {currentProject.state.taggedSnippets.map(s => (
+                                            <button key={s.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `{{{${s.key}}}}`)} className="px-2 py-1 text-xs font-mono bg-purple-500/20 hover:bg-purple-500/40 border border-purple-500/50 rounded text-purple-400 transition">{`{{{${s.key}}}}`}</button>
+                                        ))}
+                                        {/* Prompt Output Variables */}
+                                        {currentProject.state.promptTemplates.map(p => (
+                                            <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `[${p.outputKey}]`)} className="px-2 py-1 text-xs font-mono bg-green-500/20 hover:bg-green-500/40 border border-green-500/50 rounded text-green-400 transition">{`[${p.outputKey}]`}</button>
+                                        ))}
+                                    </div>
                                     <div className="text-right text-xs text-brand-gold">
                                         <label htmlFor={`output-action-${prompt.id}`} className="mr-2 font-semibold">Output Action:</label>
                                         <select id={`output-action-${prompt.id}`} value={prompt.outputAction || ''} onChange={e => handleUpdatePrompt(prompt.id, 'outputAction', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-xs text-white focus:ring-2 focus:ring-brand-gold transition-all">
