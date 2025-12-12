@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import useProjectManager, {
-  PromptTemplate, Placeholder, TaggedSnippet, Tag, WpContentType, Project
+  PromptTemplate, Placeholder, TaggedSnippet, Tag, WpContentType, Project, OptionVariable
 } from './src/hooks/useProjectManager';
 import { generateLlmContent } from './src/services/llm-service';
 import { checkAiScore } from './src/services/zerogpt-service';
@@ -363,7 +363,27 @@ const App: React.FC = () => {
             taggedSnippets: prev.taggedSnippets.filter(s => s.id !== id)
         }));
     };
-    
+
+    // Option Variable handlers
+    const handleAddOptionVariable = () => {
+        const newOptionVar: OptionVariable = { id: Date.now(), key: '', prompt: '', optionCount: 3 };
+        setCurrentProjectState(prev => ({ ...prev, optionVariables: [...(prev.optionVariables || []), newOptionVar] }));
+    };
+
+    const handleUpdateOptionVariable = (id: number, field: keyof OptionVariable, value: any) => {
+        setCurrentProjectState(prev => ({
+            ...prev,
+            optionVariables: (prev.optionVariables || []).map(ov => ov.id === id ? { ...ov, [field]: value } : ov)
+        }));
+    };
+
+    const handleDeleteOptionVariable = (id: number) => {
+        setCurrentProjectState(prev => ({
+            ...prev,
+            optionVariables: (prev.optionVariables || []).filter(ov => ov.id !== id)
+        }));
+    };
+
     const addTag = () => {
         if (currentProject && newTagName && !currentProject.state.tags.some(t => t.name === newTagName)) {
             setCurrentProjectState(prev => ({
@@ -1281,9 +1301,54 @@ const App: React.FC = () => {
                                 <p className="text-xs text-brand-gold/70 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-slate-800/50 p-1 rounded border border-brand-gold/50">[output_key]</span></p>
                                 <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 text-sm font-mono text-brand-gold">[{p.outputKey}]</div>))}</div>
                             </div>
+                            <div>
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Option Variables <span className="text-xs text-brand-gold/60 font-mono">?key:count?</span></h3>
+                                <p className="text-xs text-brand-gold/70 mb-2">Generate multiple options for the user to choose from. AI will create the specified number of options based on your prompt.</p>
+                                <div className="space-y-3">
+                                    {(currentProject.state.optionVariables || []).map(ov => (
+                                        <div key={ov.id} className="bg-slate-800/50 p-3 rounded-lg border border-pink-500/50 space-y-2">
+                                            <div className="flex gap-2 items-center">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Variable name (e.g., meta_title)"
+                                                    value={ov.key}
+                                                    onChange={e => handleUpdateOptionVariable(ov.id, 'key', e.target.value)}
+                                                    className="flex-1 bg-slate-800/80 border border-pink-500/50 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-pink-500 transition-all"
+                                                />
+                                                <div className="flex items-center gap-2 bg-slate-800/80 border border-pink-500/50 rounded-lg px-3 py-2">
+                                                    <span className="text-xs text-pink-400">Options:</span>
+                                                    <input
+                                                        type="range"
+                                                        min="1"
+                                                        max="10"
+                                                        value={ov.optionCount}
+                                                        onChange={e => handleUpdateOptionVariable(ov.id, 'optionCount', parseInt(e.target.value))}
+                                                        className="w-20 accent-pink-500"
+                                                    />
+                                                    <span className="text-sm font-bold text-pink-400 w-4">{ov.optionCount}</span>
+                                                </div>
+                                                <button onClick={() => handleDeleteOptionVariable(ov.id)} className="p-2 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                </button>
+                                            </div>
+                                            <textarea
+                                                placeholder="Prompt for generating options (e.g., Generate optimized meta titles for this article about <item_name>...)"
+                                                value={ov.prompt}
+                                                onChange={e => handleUpdateOptionVariable(ov.id, 'prompt', e.target.value)}
+                                                rows={3}
+                                                className="w-full bg-slate-800/80 border border-pink-500/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-pink-500 transition-all resize-y"
+                                            />
+                                            <div className="text-xs text-pink-400/70">
+                                                Use in prompts as: <span className="font-mono bg-slate-900/50 px-1.5 py-0.5 rounded border border-pink-500/30">?{ov.key || 'key'}:{ov.optionCount}?</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={handleAddOptionVariable} className="mt-3 text-pink-400 hover:text-pink-300 font-semibold text-sm transition">+ Add Option Variable</button>
+                            </div>
                         </div>
                     )}
-                    
+
                     {renderSection('5. Conditional Snippets', 'snippets', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-4">
                             <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Conditional Snippets <span className="text-xs text-brand-gold/60 font-mono">{'{{{key}}}'}</span></h3>
@@ -1324,7 +1389,7 @@ const App: React.FC = () => {
                                         </button>
                                         <button onClick={() => handleDeletePrompt(prompt.id)} className="p-2.5 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                     </div>
-                                    <textarea ref={el => promptTextareaRefs.current[prompt.id] = el} value={prompt.template} onChange={e => handleUpdatePrompt(prompt.id, 'template', e.target.value)} onContextMenu={(e) => { e.preventDefault(); setVariableContextMenu({ promptId: prompt.id, x: e.clientX, y: e.clientY }); }} rows={8} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"></textarea>
+                                    <textarea ref={el => promptTextareaRefs.current[prompt.id] = el} value={prompt.template} onChange={e => handleUpdatePrompt(prompt.id, 'template', e.target.value)} onContextMenu={(e) => { e.preventDefault(); setVariableContextMenu({ promptId: prompt.id, x: e.clientX, y: e.clientY }); }} rows={8} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"></textarea>
                                     <div className="flex flex-wrap gap-1.5 p-2 bg-slate-900/50 rounded-lg border border-brand-gold/30">
                                         <span className="text-xs text-brand-gold/60 w-full mb-1">Click to insert:</span>
                                         {/* Item Name */}
@@ -1344,6 +1409,10 @@ const App: React.FC = () => {
                                         {/* Prompt Output Variables */}
                                         {currentProject.state.promptTemplates.map(p => (
                                             <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `[${p.outputKey}]`)} className="px-2 py-1 text-xs font-mono bg-green-500/20 hover:bg-green-500/40 border border-green-500/50 rounded text-green-400 transition">{`[${p.outputKey}]`}</button>
+                                        ))}
+                                        {/* Option Variables */}
+                                        {(currentProject.state.optionVariables || []).map(ov => (
+                                            <button key={ov.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `?${ov.key}:${ov.optionCount}?`)} className="px-2 py-1 text-xs font-mono bg-pink-500/20 hover:bg-pink-500/40 border border-pink-500/50 rounded text-pink-400 transition">{`?${ov.key}:${ov.optionCount}?`}</button>
                                         ))}
                                     </div>
                                     <div className="text-right text-xs text-brand-gold">
@@ -1451,6 +1520,10 @@ const App: React.FC = () => {
                         {/* Prompt Output Variables */}
                         {currentProject.state.promptTemplates.map(p => (
                             <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(variableContextMenu.promptId, `[${p.outputKey}]`)} className="px-2 py-1 text-xs font-mono bg-green-500/20 hover:bg-green-500/40 border border-green-500/50 rounded text-green-400 transition">{`[${p.outputKey}]`}</button>
+                        ))}
+                        {/* Option Variables */}
+                        {(currentProject.state.optionVariables || []).map(ov => (
+                            <button key={ov.id} type="button" onClick={() => insertVariableIntoPrompt(variableContextMenu.promptId, `?${ov.key}:${ov.optionCount}?`)} className="px-2 py-1 text-xs font-mono bg-pink-500/20 hover:bg-pink-500/40 border border-pink-500/50 rounded text-pink-400 transition">{`?${ov.key}:${ov.optionCount}?`}</button>
                         ))}
                     </div>
                 </div>

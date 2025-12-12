@@ -27,6 +27,13 @@ export interface TaggedSnippet {
   values: { [tagName: string]: string };
 }
 
+export interface OptionVariable {
+  id: number;
+  key: string;
+  prompt: string;
+  optionCount: number;
+}
+
 export type WpContentType = 'pages' | 'posts';
 
 export interface ProjectState {
@@ -41,6 +48,7 @@ export interface ProjectState {
   placeholders: Placeholder[];
   taggedSnippets: TaggedSnippet[];
   promptTemplates: PromptTemplate[];
+  optionVariables: OptionVariable[];
 }
 
 export interface Project {
@@ -110,6 +118,7 @@ const initialProjectState: ProjectState = {
   placeholders: initialPlaceholders,
   taggedSnippets: initialTaggedSnippets,
   promptTemplates: initialPromptTemplates,
+  optionVariables: [],
 };
 
 const createNewProjectObject = (name: string = 'Untitled Project'): Project => ({
