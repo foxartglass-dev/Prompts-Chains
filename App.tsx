@@ -133,6 +133,7 @@ const App: React.FC = () => {
     const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
+    const [filterByClientId, setFilterByClientId] = useState<number | undefined>(undefined);
     const [currentWorkflowContext, setCurrentWorkflowContext] = useState<{
       workflowName?: string;
       clientName?: string;
@@ -1014,6 +1015,12 @@ const App: React.FC = () => {
                     setIsClientsOpen(false);
                     showNotification('Website selected', 'info');
                 }}
+                onOpenWorkflowResults={(clientId) => {
+                    setFilterByClientId(clientId);
+                    setCurrentWebsiteId(undefined);
+                    setIsClientsOpen(false);
+                    setIsArticlesOpen(true);
+                }}
             />
             <WebsitesPage
                 isOpen={isWebsitesOpen}
@@ -1027,8 +1034,12 @@ const App: React.FC = () => {
             <Analytics isOpen={isAnalyticsOpen} onClose={() => setIsAnalyticsOpen(false)} />
             <ArticleManager
                 isOpen={isArticlesOpen}
-                onClose={() => setIsArticlesOpen(false)}
+                onClose={() => {
+                    setIsArticlesOpen(false);
+                    setFilterByClientId(undefined);
+                }}
                 filterByWebsite={currentWebsiteId}
+                filterByClient={filterByClientId}
             />
             <TemplateLibrary
                 isOpen={isTemplatesOpen}
@@ -1167,12 +1178,12 @@ const App: React.FC = () => {
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsWorkflowNavOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsArticlesOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
-                            title="View Saved Articles"
+                            title="View Workflow Results"
                         >
                             <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            <span className="text-[10px] md:text-sm">Articles</span>
+                            <span className="text-[10px] md:text-sm whitespace-nowrap">Results</span>
                         </button>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsTemplatesOpen(true); }}

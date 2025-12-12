@@ -12,7 +12,19 @@ interface Client {
   websites?: Website[];
   locations?: Location[];
   workflows?: Workflow[];
+  articles?: Article[];
   articles_count?: number;
+}
+
+interface Article {
+  id: number;
+  keyword: string;
+  status: string;
+  tag?: string;
+  ai_score?: number;
+  word_count?: number;
+  workflow_name?: string;
+  created_at: string;
 }
 
 interface Website {
@@ -46,9 +58,10 @@ interface ClientsPageProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectWebsite?: (websiteId: number) => void;
+  onOpenWorkflowResults?: (clientId: number) => void;
 }
 
-const ClientsPage: React.FC<ClientsPageProps> = ({ isOpen, onClose, onSelectWebsite }) => {
+const ClientsPage: React.FC<ClientsPageProps> = ({ isOpen, onClose, onSelectWebsite, onOpenWorkflowResults }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
@@ -85,25 +98,28 @@ const ClientsPage: React.FC<ClientsPageProps> = ({ isOpen, onClose, onSelectWebs
       // Fetch additional data for each client
       const enrichedClients = await Promise.all(clientsList.map(async (client: Client) => {
         try {
-          const [websitesRes, locationsRes, workflowsRes] = await Promise.all([
+          const [websitesRes, locationsRes, workflowsRes, articlesRes] = await Promise.all([
             fetch(`/api/websites?clientId=${client.id}`),
             fetch(`/api/locations?clientId=${client.id}`),
-            fetch(`/api/workflows?clientId=${client.id}`)
+            fetch(`/api/workflows?clientId=${client.id}`),
+            fetch(`/api/articles?clientId=${client.id}&limit=5`)
           ]);
 
           const websitesData = await websitesRes.json();
           const locationsData = await locationsRes.json();
           const workflowsData = await workflowsRes.json();
+          const articlesData = articlesRes.ok ? await articlesRes.json() : { articles: [] };
 
           return {
             ...client,
             websites: websitesData.websites || [],
             locations: locationsData.locations || [],
-            workflows: workflowsData.workflows || workflowsData || []
+            workflows: workflowsData.workflows || workflowsData || [],
+            articles: Array.isArray(articlesData) ? articlesData : (articlesData.articles || [])
           };
         } catch (err) {
           console.error(`Failed to fetch data for client ${client.id}:`, err);
-          return { ...client, websites: [], locations: [], workflows: [] };
+          return { ...client, websites: [], locations: [], workflows: [], articles: [] };
         }
       }));
 
@@ -275,7 +291,7 @@ const ClientsPage: React.FC<ClientsPageProps> = ({ isOpen, onClose, onSelectWebs
                     {client.contact_name && (
                       <p className="text-sm text-gray-400">Contact: {client.contact_name}</p>
                     )}
-                    <div className="mt-4 flex gap-4 text-xs">
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs">
                       <span className="px-2 py-1 bg-brand-cyan/20 text-brand-cyan rounded-full">
                         {client.websites?.length || 0} Websites
                       </span>
@@ -285,6 +301,15 @@ const ClientsPage: React.FC<ClientsPageProps> = ({ isOpen, onClose, onSelectWebs
                       <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded-full">
                         {client.workflows?.length || 0} Workflows
                       </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onOpenWorkflowResults) onOpenWorkflowResults(client.id);
+                        }}
+                        className="px-2 py-1 bg-green-500/20 text-green-400 rounded-full hover:bg-green-500/30 transition"
+                      >
+                        {client.articles?.length || 0} Results
+                      </button>
                     </div>
                   </div>
                 ))
@@ -377,6 +402,60 @@ const ClientsPage: React.FC<ClientsPageProps> = ({ isOpen, onClose, onSelectWebs
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Workflow Results */}
+              <div className="bg-slate-800/50 rounded-xl p-6 border border-green-500/30">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-green-400">📄 Workflow Results ({selectedClient.articles?.length || 0})</h3>
+                  {onOpenWorkflowResults && (selectedClient.articles?.length || 0) > 0 && (
+                    <button
+                      onClick={() => onOpenWorkflowResults(selectedClient.id)}
+                      className="text-sm text-green-400 hover:text-green-300 underline"
+                    >
+                      View All
+                    </button>
+                  )}
+                </div>
+                {(selectedClient.articles?.length || 0) === 0 ? (
+                  <p className="text-gray-400 text-sm">No workflow results yet. Run a workflow to generate content.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedClient.articles?.slice(0, 5).map(article => (
+                      <div key={article.id} className="bg-slate-900/50 rounded-lg p-4 border border-green-500/30 flex justify-between items-center">
+                        <div>
+                          <h4 className="font-bold text-white">{article.keyword}</h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            {article.tag && (
+                              <span className="px-2 py-0.5 bg-brand-gold rounded text-xs text-slate-900 font-medium">
+                                {article.tag}
+                              </span>
+                            )}
+                            <span className={`px-2 py-0.5 rounded text-xs ${
+                              article.status === 'published' ? 'bg-green-500 text-white' :
+                              article.status === 'passed' ? 'bg-emerald-500 text-white' :
+                              article.status === 'flagged' ? 'bg-brand-gold text-slate-900' :
+                              'bg-blue-500 text-white'
+                            }`}>
+                              {article.status}
+                            </span>
+                            {article.workflow_name && (
+                              <span className="text-xs text-gray-400">{article.workflow_name}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs text-gray-500">
+                            {new Date(article.created_at).toLocaleDateString()}
+                          </span>
+                          {article.ai_score !== undefined && article.ai_score !== null && (
+                            <p className="text-xs text-gray-400">AI: {article.ai_score}%</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
