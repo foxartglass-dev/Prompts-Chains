@@ -49,6 +49,8 @@ export interface ProjectState {
   taggedSnippets: TaggedSnippet[];
   promptTemplates: PromptTemplate[];
   optionVariables: OptionVariable[];
+  projectNotes: string;
+  workflowNotes: string;
 }
 
 export interface Project {
@@ -119,6 +121,8 @@ const initialProjectState: ProjectState = {
   taggedSnippets: initialTaggedSnippets,
   promptTemplates: initialPromptTemplates,
   optionVariables: [],
+  projectNotes: '',
+  workflowNotes: '',
 };
 
 const createNewProjectObject = (name: string = 'Untitled Project'): Project => ({

@@ -333,10 +333,19 @@ const App: React.FC = () => {
         setCurrentProjectState(prev => ({ ...prev, promptTemplates: newPrompts }));
     };
 
+    // Sanitize placeholder name: no brackets, spaces become underscores
+    const sanitizePlaceholderName = (value: string): string => {
+        return value
+            .replace(/[{}\[\]<>?:]/g, '') // Remove brackets and special chars
+            .replace(/\s+/g, '_') // Spaces to underscores
+            .toLowerCase();
+    };
+
     const handleUpdatePlaceholder = (id: number, field: 'key' | 'value' | 'tag', value: string) => {
+        const sanitizedValue = field === 'key' ? sanitizePlaceholderName(value) : value;
         setCurrentProjectState(prev => ({
             ...prev,
-            placeholders: prev.placeholders.map(p => p.id === id ? { ...p, [field]: value } : p)
+            placeholders: prev.placeholders.map(p => p.id === id ? { ...p, [field]: sanitizedValue } : p)
         }));
     };
 
@@ -1358,6 +1367,47 @@ const App: React.FC = () => {
                                 </div>
                             </div>
 
+                            {/* Project Notes Section - 3 columns */}
+                            <div className="bg-slate-800/50 p-4 rounded-lg border border-blue-500/50">
+                                <h3 className="text-sm font-semibold text-blue-400 mb-2">Project Notes</h3>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <textarea
+                                        value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[0] || ''}
+                                        onChange={e => {
+                                            const cols = (currentProject.state.projectNotes || '').split('\n---COL---\n');
+                                            cols[0] = e.target.value;
+                                            setCurrentProjectState(p => ({...p, projectNotes: cols.join('\n---COL---\n')}));
+                                        }}
+                                        rows={3}
+                                        placeholder="Notes column 1..."
+                                        className="w-full bg-slate-900/50 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
+                                    />
+                                    <textarea
+                                        value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[1] || ''}
+                                        onChange={e => {
+                                            const cols = (currentProject.state.projectNotes || '').split('\n---COL---\n');
+                                            while (cols.length < 2) cols.push('');
+                                            cols[1] = e.target.value;
+                                            setCurrentProjectState(p => ({...p, projectNotes: cols.join('\n---COL---\n')}));
+                                        }}
+                                        rows={3}
+                                        placeholder="Notes column 2..."
+                                        className="w-full bg-slate-900/50 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
+                                    />
+                                    <textarea
+                                        value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[2] || ''}
+                                        onChange={e => {
+                                            const cols = (currentProject.state.projectNotes || '').split('\n---COL---\n');
+                                            while (cols.length < 3) cols.push('');
+                                            cols[2] = e.target.value;
+                                            setCurrentProjectState(p => ({...p, projectNotes: cols.join('\n---COL---\n')}));
+                                        }}
+                                        rows={3}
+                                        placeholder="Notes column 3..."
+                                        className="w-full bg-slate-900/50 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
+                                    />
+                                </div>
+                            </div>
 
                             {/* Item Input */}
                             <div>
@@ -1366,7 +1416,7 @@ const App: React.FC = () => {
                                 </label>
                                 <textarea
                                     id="manual-items"
-                                    rows={6}
+                                    rows={3}
                                     className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-sm focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all"
                                     placeholder="Topic A(H)&#10;Topic B(H)&#10;Product X(J)"
                                     value={manualItems}
@@ -1472,8 +1522,50 @@ const App: React.FC = () => {
 
                     {renderSection('4. Workflow Variables', 'placeholders', <Icon type="info" className="h-6 w-6"/>,
                         <div className="space-y-6">
+                            {/* Workflow Notes Section - 3 columns */}
+                            <div className="bg-slate-800/50 p-4 rounded-lg border border-purple-500/50">
+                                <h3 className="text-sm font-semibold text-purple-400 mb-2">Workflow Notes</h3>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <textarea
+                                        value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[0] || ''}
+                                        onChange={e => {
+                                            const cols = (currentProject.state.workflowNotes || '').split('\n---COL---\n');
+                                            cols[0] = e.target.value;
+                                            setCurrentProjectState(p => ({...p, workflowNotes: cols.join('\n---COL---\n')}));
+                                        }}
+                                        rows={3}
+                                        placeholder="Notes column 1..."
+                                        className="w-full bg-slate-900/50 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
+                                    />
+                                    <textarea
+                                        value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[1] || ''}
+                                        onChange={e => {
+                                            const cols = (currentProject.state.workflowNotes || '').split('\n---COL---\n');
+                                            while (cols.length < 2) cols.push('');
+                                            cols[1] = e.target.value;
+                                            setCurrentProjectState(p => ({...p, workflowNotes: cols.join('\n---COL---\n')}));
+                                        }}
+                                        rows={3}
+                                        placeholder="Notes column 2..."
+                                        className="w-full bg-slate-900/50 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
+                                    />
+                                    <textarea
+                                        value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[2] || ''}
+                                        onChange={e => {
+                                            const cols = (currentProject.state.workflowNotes || '').split('\n---COL---\n');
+                                            while (cols.length < 3) cols.push('');
+                                            cols[2] = e.target.value;
+                                            setCurrentProjectState(p => ({...p, workflowNotes: cols.join('\n---COL---\n')}));
+                                        }}
+                                        rows={3}
+                                        placeholder="Notes column 3..."
+                                        className="w-full bg-slate-900/50 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
+                                    />
+                                </div>
+                            </div>
+
                             <div>
-                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Global Variables <span className="text-xs text-brand-gold/60 font-mono">{'{key}'}</span></h3>
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Global Variables</h3>
                                 {selectedPlaceholders.size > 0 && (
                                     <div className="bg-slate-800/50 p-3 rounded-lg mb-3 flex items-center gap-3 border border-brand-gold/50">
                                         <span className="text-sm font-semibold text-brand-gold">{selectedPlaceholders.size} selected</span>
@@ -1484,25 +1576,42 @@ const App: React.FC = () => {
                                         <button onClick={handleBulkTagPlaceholders} disabled={!bulkActionTag} className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-white text-sm font-semibold disabled:bg-slate-600 transition">Apply Tag</button>
                                     </div>
                                 )}
+                                {/* Column Headers */}
+                                <div className="grid grid-cols-[auto,1fr,1fr,1fr,auto] gap-2 items-center mb-2 text-xs text-brand-gold/70 font-medium">
+                                    <div className="w-4"></div>
+                                    <div>Global Variable Placeholder Name</div>
+                                    <div>Value</div>
+                                    <div>Placeholder (live preview)</div>
+                                    <div className="w-10"></div>
+                                </div>
                                 <div className="space-y-2">
-                                {currentProject.state.placeholders.filter(p=>!p.tag).map(p => (<div key={p.id} className="grid grid-cols-[auto,1fr,1fr,auto] gap-2 items-center">
+                                {currentProject.state.placeholders.filter(p=>!p.tag).map(p => (<div key={p.id} className="grid grid-cols-[auto,1fr,1fr,1fr,auto] gap-2 items-center">
                                     <input type="checkbox" checked={selectedPlaceholders.has(p.id)} onChange={() => togglePlaceholderSelection(p.id)} className="form-checkbox h-4 w-4 bg-slate-800 border-brand-gold text-brand-gold focus:ring-brand-gold rounded"/>
-                                    <input type="text" placeholder="{key}" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
+                                    <input type="text" placeholder="variable_name" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
                                     <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
+                                    <div className="bg-slate-900/50 border border-brand-gold/30 rounded-lg px-3 py-2 text-brand-gold font-mono text-sm">{`{${p.key || ''}}`}</div>
                                     <button onClick={() => handleDeletePlaceholder(p.id)} className="p-2 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                 </div>))}
                                 </div>
                                 <button onClick={() => handleAddPlaceholder()} className="mt-3 text-brand-gold hover:text-brand-gold-light font-semibold text-sm transition">+ Add Global Variable</button>
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Tagged Variables <span className="text-xs text-brand-gold/60 font-mono">{'{key{TAG}}'}</span></h3>
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Tagged Variables</h3>
                                 {currentProject.state.tags.map(tag => (
                                     <div key={tag.id} className="mb-4">
                                         <p className="font-bold text-brand-gold text-sm mb-2">Tag: {tag.name}</p>
+                                        {/* Column Headers */}
+                                        <div className="grid grid-cols-[1fr,1fr,1fr,auto] gap-2 items-center mb-2 text-xs text-brand-gold/70 font-medium">
+                                            <div>Tag Variable Placeholder Name</div>
+                                            <div>Value</div>
+                                            <div>Placeholder (live preview)</div>
+                                            <div className="w-10"></div>
+                                        </div>
                                         <div className="space-y-2">
-                                            {currentProject.state.placeholders.filter(p=>p.tag===tag.name).map(p => (<div key={p.id} className="grid grid-cols-[1fr,1fr,auto] gap-2 items-center">
-                                                <input type="text" placeholder={`{key{${tag.name}}}`} value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                            {currentProject.state.placeholders.filter(p=>p.tag===tag.name).map(p => (<div key={p.id} className="grid grid-cols-[1fr,1fr,1fr,auto] gap-2 items-center">
+                                                <input type="text" placeholder="variable_name" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
                                                 <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                                <div className="bg-slate-900/50 border border-orange-500/30 rounded-lg px-3 py-2 text-orange-400 font-mono text-sm">{`{${p.key || ''}{${tag.name}}}`}</div>
                                                 <div className="relative group">
                                                     <button className="p-2 text-brand-gold hover:text-white transition">
                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
@@ -1616,24 +1725,24 @@ const App: React.FC = () => {
                                         <span className="text-xs text-brand-gold/60 w-full mb-1">Click to insert:</span>
                                         {/* Item Name */}
                                         <button type="button" onClick={() => insertVariableIntoPrompt(prompt.id, '<item_name>')} className="px-2 py-1 text-xs font-mono bg-brand-cyan/20 hover:bg-brand-cyan/40 border border-brand-cyan/50 rounded text-brand-cyan transition">{'<item_name>'}</button>
-                                        {/* Global Variables */}
-                                        {currentProject.state.placeholders.filter(p => !p.tag).map(p => (
+                                        {/* Global Variables - only show if key is not empty */}
+                                        {currentProject.state.placeholders.filter(p => !p.tag && p.key).map(p => (
                                             <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `{${p.key}}`)} className="px-2 py-1 text-xs font-mono bg-brand-gold/20 hover:bg-brand-gold/40 border border-brand-gold/50 rounded text-brand-gold transition">{`{${p.key}}`}</button>
                                         ))}
-                                        {/* Tagged Variables */}
-                                        {currentProject.state.placeholders.filter(p => p.tag).map(p => (
+                                        {/* Tagged Variables - only show if key is not empty */}
+                                        {currentProject.state.placeholders.filter(p => p.tag && p.key).map(p => (
                                             <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `{${p.key}{${p.tag}}}`)} className="px-2 py-1 text-xs font-mono bg-orange-500/20 hover:bg-orange-500/40 border border-orange-500/50 rounded text-orange-400 transition">{`{${p.key}{${p.tag}}}`}</button>
                                         ))}
-                                        {/* Conditional Snippets */}
-                                        {currentProject.state.taggedSnippets.map(s => (
+                                        {/* Conditional Snippets - only show if key is not empty */}
+                                        {currentProject.state.taggedSnippets.filter(s => s.key).map(s => (
                                             <button key={s.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `{{{${s.key}}}}`)} className="px-2 py-1 text-xs font-mono bg-purple-500/20 hover:bg-purple-500/40 border border-purple-500/50 rounded text-purple-400 transition">{`{{{${s.key}}}}`}</button>
                                         ))}
-                                        {/* Prompt Output Variables */}
-                                        {currentProject.state.promptTemplates.map(p => (
+                                        {/* Prompt Output Variables - only show if outputKey is not empty */}
+                                        {currentProject.state.promptTemplates.filter(p => p.outputKey).map(p => (
                                             <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `[${p.outputKey}]`)} className="px-2 py-1 text-xs font-mono bg-green-500/20 hover:bg-green-500/40 border border-green-500/50 rounded text-green-400 transition">{`[${p.outputKey}]`}</button>
                                         ))}
-                                        {/* Option Variables */}
-                                        {(currentProject.state.optionVariables || []).map(ov => (
+                                        {/* Option Variables - only show if key is not empty */}
+                                        {(currentProject.state.optionVariables || []).filter(ov => ov.key).map(ov => (
                                             <button key={ov.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `?${ov.key}:${ov.optionCount}?`)} className="px-2 py-1 text-xs font-mono bg-pink-500/20 hover:bg-pink-500/40 border border-pink-500/50 rounded text-pink-400 transition">{`?${ov.key}:${ov.optionCount}?`}</button>
                                         ))}
                                     </div>
