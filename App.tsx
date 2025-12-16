@@ -131,6 +131,7 @@ const App: React.FC = () => {
     const [isClientsOpen, setIsClientsOpen] = useState(false);
     const [isWebsitesOpen, setIsWebsitesOpen] = useState(false);
     const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
     const [filterByClientId, setFilterByClientId] = useState<number | undefined>(undefined);
@@ -211,12 +212,17 @@ const App: React.FC = () => {
                 clearTimeout(autoSaveTimerRef.current);
             }
 
-            // Set new 3-second debounced auto-save
-            autoSaveTimerRef.current = setTimeout(() => {
-                saveWorkflowToDatabase(false); // Silent save
-            }, 3000);
+            // Only auto-save if enabled
+            const autoSaveEnabled = currentProject?.state?.autoSaveEnabled ?? true;
+            const autoSaveSeconds = currentProject?.state?.autoSaveSeconds ?? 3;
+
+            if (autoSaveEnabled) {
+                autoSaveTimerRef.current = setTimeout(() => {
+                    saveWorkflowToDatabase(false); // Silent save
+                }, autoSaveSeconds * 1000);
+            }
         }
-    }, [currentWorkflowId, saveWorkflowToDatabase]);
+    }, [currentWorkflowId, saveWorkflowToDatabase, currentProject?.state?.autoSaveEnabled, currentProject?.state?.autoSaveSeconds]);
 
     // ========== ALL useEffect HOOKS ==========
 
@@ -1113,6 +1119,134 @@ const App: React.FC = () => {
                 }}
             />
             <Analytics isOpen={isAnalyticsOpen} onClose={() => setIsAnalyticsOpen(false)} />
+
+            {/* Settings Modal */}
+            {isSettingsOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+                    <div className="bg-slate-900 rounded-xl border border-brand-cyan/50 shadow-glow-cyan w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
+                        <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
+                            <h2 className="text-xl font-bold text-brand-cyan">Settings</h2>
+                            <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-white">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-6">
+                            {/* Auto-Save Settings */}
+                            <div className="bg-slate-800/50 p-4 rounded-lg border border-brand-cyan/30">
+                                <h3 className="text-lg font-semibold text-brand-cyan mb-3">Auto-Save</h3>
+                                <div className="flex items-center gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={currentProject.state.autoSaveEnabled ?? true}
+                                            onChange={e => setCurrentProjectState(p => ({...p, autoSaveEnabled: e.target.checked}))}
+                                            className="w-4 h-4 rounded bg-slate-700 border-brand-cyan text-brand-cyan focus:ring-brand-cyan"
+                                        />
+                                        <span className="text-white">Enable Auto-Save</span>
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-slate-400 text-sm">Delay:</span>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="60"
+                                            value={currentProject.state.autoSaveSeconds ?? 3}
+                                            onChange={e => setCurrentProjectState(p => ({...p, autoSaveSeconds: parseInt(e.target.value) || 3}))}
+                                            className="w-16 bg-slate-700 border border-brand-cyan/50 rounded px-2 py-1 text-white text-sm"
+                                        />
+                                        <span className="text-slate-400 text-sm">seconds</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Open Router Override */}
+                            <div className="bg-slate-800/50 p-4 rounded-lg border border-purple-500/30">
+                                <h3 className="text-lg font-semibold text-purple-400 mb-3">Open Router</h3>
+                                <label className="flex items-center gap-2 cursor-pointer mb-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={currentProject.state.useOpenRouter ?? false}
+                                        onChange={e => setCurrentProjectState(p => ({...p, useOpenRouter: e.target.checked}))}
+                                        className="w-4 h-4 rounded bg-slate-700 border-purple-500 text-purple-500 focus:ring-purple-500"
+                                    />
+                                    <span className="text-white">Use Open Router (overrides individual API keys)</span>
+                                </label>
+                                <input
+                                    type="password"
+                                    placeholder="Open Router API Key"
+                                    value={currentProject.state.apiKeys?.openRouter || ''}
+                                    onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, openRouter: e.target.value}}))}
+                                    className="w-full bg-slate-700 border border-purple-500/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500"
+                                />
+                            </div>
+
+                            {/* API Keys */}
+                            <div className="bg-slate-800/50 p-4 rounded-lg border border-brand-gold/30">
+                                <h3 className="text-lg font-semibold text-brand-gold mb-3">API Keys</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">Anthropic (Claude)</label>
+                                        <input
+                                            type="password"
+                                            placeholder="sk-ant-..."
+                                            value={currentProject.state.apiKeys?.anthropic || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, anthropic: e.target.value}}))}
+                                            className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">OpenAI (GPT)</label>
+                                        <input
+                                            type="password"
+                                            placeholder="sk-..."
+                                            value={currentProject.state.apiKeys?.openai || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, openai: e.target.value}}))}
+                                            className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">Google (Gemini)</label>
+                                        <input
+                                            type="password"
+                                            placeholder="AIza..."
+                                            value={currentProject.state.apiKeys?.gemini || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, gemini: e.target.value}}))}
+                                            className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">xAI (Grok)</label>
+                                        <input
+                                            type="password"
+                                            placeholder="xai-..."
+                                            value={currentProject.state.apiKeys?.grok || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, grok: e.target.value}}))}
+                                            className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
+                                        />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className="block text-xs font-medium text-slate-400 mb-1">ZeroGPT (AI Detection)</label>
+                                        <input
+                                            type="password"
+                                            placeholder="ZeroGPT API Key"
+                                            value={currentProject.state.apiKeys?.zeroGpt || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, zeroGpt: e.target.value}}))}
+                                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-slate-500"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p className="text-xs text-slate-500 text-center">
+                                API keys are saved with your workflow and auto-save will sync them to the database.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <ArticleManager
                 isOpen={isArticlesOpen}
                 onClose={() => {
@@ -1305,6 +1439,17 @@ const App: React.FC = () => {
                             </svg>
                             <span className="text-[10px] md:text-sm">Analytics</span>
                         </button>
+                        <button
+                            onClick={() => setIsSettingsOpen(true)}
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            title="Settings"
+                        >
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span className="text-[10px] md:text-sm">Settings</span>
+                        </button>
                     </div>
                 </div>
 
@@ -1356,12 +1501,6 @@ const App: React.FC = () => {
                                         Last saved: {lastSaveTime.toLocaleTimeString()}
                                     </span>
                                 )}
-                                {hasUnsavedChanges && !isSaving && (
-                                    <span className="text-xs text-yellow-400 flex items-center gap-1">
-                                        <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
-                                        Unsaved
-                                    </span>
-                                )}
                                 <button
                                     onClick={() => saveWorkflowToDatabase(true)}
                                     disabled={isSaving || !hasUnsavedChanges}
@@ -1369,8 +1508,8 @@ const App: React.FC = () => {
                                         isSaving
                                             ? 'bg-slate-700 text-slate-400 cursor-wait'
                                             : hasUnsavedChanges
-                                                ? 'bg-brand-cyan hover:bg-brand-cyan-dark text-white'
-                                                : 'bg-green-600/20 text-green-400 border border-green-500/50'
+                                                ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900'
+                                                : 'bg-brand-cyan text-white'
                                     }`}
                                 >
                                     {isSaving ? (
@@ -1407,157 +1546,143 @@ const App: React.FC = () => {
                 {/* Left Column */}
                 <div className="flex flex-col gap-8">
                     {renderSection('1. Setup & Run', 'setup', <Icon type="settings" className="h-6 w-6"/>,
-                        <div className="space-y-4">
-                             {/* API Keys and Model Selection */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">ZeroGPT API Key (Optional)</label>
-                                    <input type="password" placeholder="ZeroGPT API Key" value={currentProject.state.apiKeys.zeroGpt} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, zeroGpt: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
+                        <div className="space-y-3">
+                            {/* Row 1: AI Model + Filename + Import/Export */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {/* Left side: AI Model + Filename */}
+                                <div className="space-y-2">
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">AI Model</label>
+                                        <select
+                                            value={currentProject.state.model}
+                                            onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
+                                        >
+                                            <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Latest)</option>
+                                            <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                            <option value="claude-3-haiku-20240307">Claude 3 Haiku (Fast)</option>
+                                            <option value="gpt-4o">GPT-4o</option>
+                                            <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">Filename Template</label>
+                                        <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold" />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">Anthropic API Key (Required)</label>
-                                    <input type="password" placeholder="sk-ant-..." value={currentProject.state.apiKeys.anthropic} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, anthropic: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
-                                </div>
-                            </div>
-                             <div>
-                                <label className="block text-sm font-medium text-brand-gold mb-1.5">AI Model</label>
-                                <select
-                                    value={currentProject.state.model}
-                                    onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
-                                    className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all"
-                                >
-                                    <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Latest)</option>
-                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                                    <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                                    <option value="claude-3-haiku-20240307">Claude 3 Haiku (Fast)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-brand-gold mb-1.5">Filename Template</label>
-                                <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
-                            </div>
-                            
-                            {/* Import / Export Workflow */}
-                             <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50 space-y-3">
-                                <h3 className="text-lg font-semibold text-brand-gold">Import / Export</h3>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => {
-                                            // Export current workflow state as JSON
-                                            const exportData = {
-                                                name: currentWorkflowContext.workflowName || currentProject.name,
-                                                exportedAt: new Date().toISOString(),
-                                                state: currentProject.state
-                                            };
-                                            const filename = `${(currentWorkflowContext.workflowName || currentProject.name).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-workflow.json`;
-                                            downloadProjectConfig(exportData, filename);
-                                            showNotification('Workflow exported to JSON!', 'success');
-                                        }}
-                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                                        Export
-                                    </button>
-                                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition cursor-pointer border border-brand-gold">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                                        Import
-                                        <input
-                                            type="file"
-                                            accept=".json"
-                                            className="hidden"
-                                            onChange={async (e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) {
-                                                    try {
-                                                        const text = await file.text();
-                                                        const data = JSON.parse(text);
-                                                        // Import the state into current workflow
-                                                        if (data.state) {
-                                                            setCurrentProjectState(() => data.state);
-                                                            showNotification('Workflow imported! Changes will auto-save.', 'success');
-                                                        } else {
-                                                            showNotification('Invalid workflow file format.', 'error');
-                                                        }
-                                                    } catch (error) {
-                                                        showNotification('Failed to import. Invalid JSON.', 'error');
-                                                    }
-                                                }
-                                                e.target.value = '';
+                                {/* Right side: Import/Export */}
+                                <div className="flex flex-col justify-end gap-2">
+                                    <label className="block text-xs font-medium text-brand-gold">Import / Export</label>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => {
+                                                const exportData = {
+                                                    name: currentWorkflowContext.workflowName || currentProject.name,
+                                                    exportedAt: new Date().toISOString(),
+                                                    state: currentProject.state
+                                                };
+                                                const filename = `${(currentWorkflowContext.workflowName || currentProject.name).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-workflow.json`;
+                                                downloadProjectConfig(exportData, filename);
+                                                showNotification('Workflow exported!', 'success');
                                             }}
+                                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-xs transition"
+                                        >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                            Export
+                                        </button>
+                                        <label className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-xs transition cursor-pointer">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                                            Import
+                                            <input
+                                                type="file"
+                                                accept=".json"
+                                                className="hidden"
+                                                onChange={async (e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        try {
+                                                            const text = await file.text();
+                                                            const data = JSON.parse(text);
+                                                            if (data.state) {
+                                                                setCurrentProjectState(() => data.state);
+                                                                showNotification('Workflow imported!', 'success');
+                                                            } else {
+                                                                showNotification('Invalid format.', 'error');
+                                                            }
+                                                        } catch (error) {
+                                                            showNotification('Failed to import.', 'error');
+                                                        }
+                                                    }
+                                                    e.target.value = '';
+                                                }}
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Project Notes + Add Items Row */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Project Notes - 2/3 width, 2 columns */}
+                                <div className="md:col-span-2 bg-slate-900 p-3 rounded-lg border border-brand-cyan/50">
+                                    <h3 className="text-sm font-semibold text-brand-cyan mb-2">Project Notes</h3>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <textarea
+                                            value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[0] || ''}
+                                            onChange={e => {
+                                                const cols = (currentProject.state.projectNotes || '').split('\n---COL---\n');
+                                                cols[0] = e.target.value;
+                                                setCurrentProjectState(p => ({...p, projectNotes: cols.join('\n---COL---\n')}));
+                                            }}
+                                            rows={4}
+                                            placeholder="Notes column 1..."
+                                            className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
                                         />
-                                    </label>
+                                        <textarea
+                                            value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[1] || ''}
+                                            onChange={e => {
+                                                const cols = (currentProject.state.projectNotes || '').split('\n---COL---\n');
+                                                while (cols.length < 2) cols.push('');
+                                                cols[1] = e.target.value;
+                                                setCurrentProjectState(p => ({...p, projectNotes: cols.join('\n---COL---\n')}));
+                                            }}
+                                            rows={4}
+                                            placeholder="Notes column 2..."
+                                            className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                        />
+                                    </div>
                                 </div>
-                                <p className="text-xs text-slate-400">Export saves your current workflow configuration. Import loads a previously exported workflow.</p>
-                            </div>
-
-                            {/* Project Notes Section - 3 columns */}
-                            <div className="bg-slate-900 p-4 rounded-lg border border-blue-500/50">
-                                <h3 className="text-sm font-semibold text-blue-400 mb-2">Project Notes</h3>
-                                <div className="grid grid-cols-3 gap-2">
+                                {/* Add Items - 1/3 width */}
+                                <div className="bg-slate-900 p-3 rounded-lg border border-brand-gold/50">
+                                    <label htmlFor="manual-items" className="block text-sm font-medium text-brand-gold mb-1.5">
+                                        Add Items <span className="text-xs text-brand-gold/60">(one per line)</span>
+                                    </label>
                                     <textarea
-                                        value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[0] || ''}
-                                        onChange={e => {
-                                            const cols = (currentProject.state.projectNotes || '').split('\n---COL---\n');
-                                            cols[0] = e.target.value;
-                                            setCurrentProjectState(p => ({...p, projectNotes: cols.join('\n---COL---\n')}));
-                                        }}
+                                        id="manual-items"
                                         rows={3}
-                                        placeholder="Notes column 1..."
-                                        className="w-full bg-slate-900 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
+                                        className="w-full bg-slate-900 border border-brand-gold/30 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                        placeholder="Topic A(H)&#10;Topic B(H)"
+                                        value={manualItems}
+                                        onChange={(e) => setManualItems(e.target.value)}
                                     />
-                                    <textarea
-                                        value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[1] || ''}
-                                        onChange={e => {
-                                            const cols = (currentProject.state.projectNotes || '').split('\n---COL---\n');
-                                            while (cols.length < 2) cols.push('');
-                                            cols[1] = e.target.value;
-                                            setCurrentProjectState(p => ({...p, projectNotes: cols.join('\n---COL---\n')}));
-                                        }}
-                                        rows={3}
-                                        placeholder="Notes column 2..."
-                                        className="w-full bg-slate-900 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
-                                    />
-                                    <textarea
-                                        value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[2] || ''}
-                                        onChange={e => {
-                                            const cols = (currentProject.state.projectNotes || '').split('\n---COL---\n');
-                                            while (cols.length < 3) cols.push('');
-                                            cols[2] = e.target.value;
-                                            setCurrentProjectState(p => ({...p, projectNotes: cols.join('\n---COL---\n')}));
-                                        }}
-                                        rows={3}
-                                        placeholder="Notes column 3..."
-                                        className="w-full bg-slate-900 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
-                                    />
+                                    <div className="mt-2 flex flex-col gap-2">
+                                        <button
+                                            onClick={handleManualAddItems}
+                                            className="w-full bg-brand-gold hover:bg-brand-gold-dark text-slate-900 font-bold py-2 px-3 rounded-lg transition text-xs"
+                                        >
+                                            Add Items from Text
+                                        </button>
+                                        <label htmlFor="file-upload" className="cursor-pointer text-xs text-center text-brand-gold hover:text-brand-gold-light transition">
+                                            {fileName ? `File: ${fileName}` : 'Or, upload CSV'}
+                                            <input id="file-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Item Input */}
-                            <div>
-                                <label htmlFor="manual-items" className="block text-sm font-medium text-brand-gold mb-1.5">
-                                    Add Items (one per line) <span className="text-xs text-brand-gold/60 font-mono">{'<item_name>'}</span>
-                                </label>
-                                <textarea
-                                    id="manual-items"
-                                    rows={3}
-                                    className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-sm focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all"
-                                    placeholder="Topic A(H)&#10;Topic B(H)&#10;Product X(J)"
-                                    value={manualItems}
-                                    onChange={(e) => setManualItems(e.target.value)}
-                                />
-                                <div className="mt-3 flex items-center justify-between">
-                                    <button
-                                        onClick={handleManualAddItems}
-                                        className="bg-brand-gold hover:bg-brand-gold-dark text-slate-900 font-bold py-2.5 px-4 rounded-lg transition text-sm border border-brand-gold"
-                                    >
-                                        Add Items from Text
-                                    </button>
-                                    <label htmlFor="file-upload" className="cursor-pointer text-sm text-brand-gold hover:text-brand-gold-light transition">
-                                        {fileName ? `File: ${fileName}` : 'Or, upload a CSV file'}
-                                        <input id="file-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
-                                    </label>
-                                </div>
-                            </div>
                             <button onClick={processWorkflow} disabled={isRunDisabled} className={`w-full flex items-center justify-center font-bold py-4 px-6 rounded-xl transition-all btn-press border-2 ${isRunDisabled ? 'bg-slate-900 border-brand-cyan text-brand-cyan/50 cursor-not-allowed' : 'bg-gradient-to-r from-brand-cyan to-brand-cyan-dark hover:from-brand-cyan-dark hover:to-brand-cyan text-white border-transparent shadow-card hover:shadow-glow-cyan'}`}>
                                 {isProcessing ? <Icon type="working" className="h-5 w-5 animate-spin mr-2" /> : <Icon type="play" className="h-5 w-5 mr-2" />}
                                 {getRunButtonText()}

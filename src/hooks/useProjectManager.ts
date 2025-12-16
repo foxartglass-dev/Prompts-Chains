@@ -37,7 +37,17 @@ export interface OptionVariable {
 export type WpContentType = 'pages' | 'posts';
 
 export interface ProjectState {
-  apiKeys: { zeroGpt: string; anthropic: string };
+  apiKeys: {
+    zeroGpt: string;
+    anthropic: string;
+    openai: string;
+    gemini: string;
+    grok: string;
+    openRouter: string;
+  };
+  useOpenRouter: boolean;
+  autoSaveEnabled: boolean;
+  autoSaveSeconds: number;
   provider: string;
   model: string;
   fileNameTemplate: string;
@@ -109,7 +119,10 @@ const initialTaggedSnippets: TaggedSnippet[] = [
 ];
 
 const initialProjectState: ProjectState = {
-  apiKeys: { zeroGpt: '', anthropic: '' },
+  apiKeys: { zeroGpt: '', anthropic: '', openai: '', gemini: '', grok: '', openRouter: '' },
+  useOpenRouter: false,
+  autoSaveEnabled: true,
+  autoSaveSeconds: 3,
   provider: 'anthropic',
   model: 'claude-sonnet-4-5-20250929',
   fileNameTemplate: '{tag}-{item_name}-output',
