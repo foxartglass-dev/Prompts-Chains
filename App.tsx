@@ -1270,11 +1270,11 @@ const App: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">ZeroGPT API Key (Optional)</label>
-                                    <input type="password" placeholder="ZeroGPT API Key" value={currentProject.state.apiKeys.zeroGpt} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, zeroGpt: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
+                                    <input type="password" placeholder="ZeroGPT API Key" value={currentProject.state.apiKeys.zeroGpt} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, zeroGpt: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">Anthropic API Key (Required)</label>
-                                    <input type="password" placeholder="sk-ant-..." value={currentProject.state.apiKeys.anthropic} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, anthropic: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
+                                    <input type="password" placeholder="sk-ant-..." value={currentProject.state.apiKeys.anthropic} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, anthropic: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
                                 </div>
                             </div>
                              <div>
@@ -1282,7 +1282,7 @@ const App: React.FC = () => {
                                 <select
                                     value={currentProject.state.model}
                                     onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
-                                    className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all"
+                                    className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all"
                                 >
                                     <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Latest)</option>
                                     <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
@@ -1292,11 +1292,11 @@ const App: React.FC = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-brand-gold mb-1.5">Filename Template</label>
-                                <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
+                                <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
                             </div>
                             
                             {/* Project Management */}
-                             <div className="bg-slate-800/50 p-4 rounded-lg border border-brand-gold/50 space-y-3">
+                             <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50 space-y-3">
                                 <h3 className="text-lg font-semibold text-brand-gold">Project Management</h3>
                                 <div className="grid grid-cols-2 gap-2">
                                     <button onClick={handleCreateNewProject} className="w-full text-center px-4 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold">+ New Project</button>
@@ -1306,7 +1306,7 @@ const App: React.FC = () => {
                                             if(project) setCurrentProject(project);
                                         }}
                                         value={currentProject.id}
-                                        className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-gold"
+                                        className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-gold"
                                     >
                                         <option value="" disabled>Load Project</option>
                                         {projects.map(p => (
@@ -1320,7 +1320,7 @@ const App: React.FC = () => {
                                         placeholder="Enter project name..."
                                         value={currentProject.name === 'Untitled Project' ? '' : currentProject.name}
                                         onChange={e => setCurrentProject({...currentProject, name: e.target.value || 'Untitled Project'})}
-                                        className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-gold"
+                                        className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-gold"
                                     />
                                     <button onClick={handleSaveProject} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold transition">Save</button>
                                     <button onClick={handleDeleteProject} className="p-2.5 bg-red-600/80 hover:bg-red-600 rounded-lg text-white transition" title="Delete current project">
@@ -1368,7 +1368,7 @@ const App: React.FC = () => {
                             </div>
 
                             {/* Project Notes Section - 3 columns */}
-                            <div className="bg-slate-800/50 p-4 rounded-lg border border-blue-500/50">
+                            <div className="bg-slate-900 p-4 rounded-lg border border-blue-500/50">
                                 <h3 className="text-sm font-semibold text-blue-400 mb-2">Project Notes</h3>
                                 <div className="grid grid-cols-3 gap-2">
                                     <textarea
@@ -1380,7 +1380,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 1..."
-                                        className="w-full bg-slate-900/50 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
+                                        className="w-full bg-slate-900 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
                                     />
                                     <textarea
                                         value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[1] || ''}
@@ -1392,7 +1392,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 2..."
-                                        className="w-full bg-slate-900/50 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
+                                        className="w-full bg-slate-900 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
                                     />
                                     <textarea
                                         value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[2] || ''}
@@ -1404,7 +1404,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 3..."
-                                        className="w-full bg-slate-900/50 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
+                                        className="w-full bg-slate-900 border border-blue-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-blue-500 resize-y"
                                     />
                                 </div>
                             </div>
@@ -1417,7 +1417,7 @@ const App: React.FC = () => {
                                 <textarea
                                     id="manual-items"
                                     rows={3}
-                                    className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-sm focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all"
+                                    className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-sm focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all"
                                     placeholder="Topic A(H)&#10;Topic B(H)&#10;Product X(J)"
                                     value={manualItems}
                                     onChange={(e) => setManualItems(e.target.value)}
@@ -1445,9 +1445,9 @@ const App: React.FC = () => {
                     {items.length > 0 && renderSection('2. Loaded Items', 'loadedItems', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-2">
                             <p className="text-brand-gold">{items.length} item(s) loaded.</p>
-                            <div className="max-h-60 overflow-y-auto bg-slate-900/50 rounded-lg p-2 border border-brand-gold/50">
+                            <div className="max-h-60 overflow-y-auto bg-slate-900 rounded-lg p-2 border border-brand-gold/50">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="text-xs text-brand-gold uppercase bg-slate-800/50">
+                                    <thead className="text-xs text-brand-gold uppercase bg-slate-900">
                                         <tr>
                                             <th scope="col" className="px-4 py-2.5 rounded-tl-lg">Item Name</th>
                                             <th scope="col" className="px-4 py-2.5 rounded-tr-lg">Tag</th>
@@ -1455,7 +1455,7 @@ const App: React.FC = () => {
                                     </thead>
                                     <tbody>
                                         {items.map(s => (
-                                            <tr key={s.id} className="border-b border-slate-700/50 hover:bg-slate-800/50 transition-colors">
+                                            <tr key={s.id} className="border-b border-slate-700/50 hover:bg-slate-900 transition-colors">
                                                 <td className="px-4 py-2 font-medium text-white">{s.name}</td>
                                                 <td className="px-4 py-2"><span className="px-2 py-0.5 bg-brand-cyan/20 text-brand-cyan rounded-full text-xs">{s.tag || 'N/A'}</span></td>
                                             </tr>
@@ -1474,11 +1474,11 @@ const App: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
-                                    <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">Content Type</label>
-                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all">
+                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all">
                                         <option value="pages">Page</option>
                                         <option value="posts">Post</option>
                                     </select>
@@ -1490,7 +1490,7 @@ const App: React.FC = () => {
                                     type="text"
                                     value={currentProject.state.wpTitleTemplate}
                                     onChange={e => setCurrentProjectState(p => ({...p, wpTitleTemplate: e.target.value}))}
-                                    className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                    className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                 />
                                 <p className="text-xs text-brand-gold/70 mt-1">
                                     Use variables like {'<item_name>'} or {'{city}'}.
@@ -1499,11 +1499,11 @@ const App: React.FC = () => {
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Username</label>
-                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials.user} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, user: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials.user} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, user: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WP Application Password</label>
-                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials.password} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, password: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials.password} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, password: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                             </div>
                             <p className="text-xs text-brand-gold/70">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
@@ -1513,7 +1513,7 @@ const App: React.FC = () => {
                      {renderSection('3. Tag Manager', 'tags', <Icon type="settings" className="h-6 w-6"/>,
                         <div className="space-y-3">
                              <div className="flex gap-2">
-                                <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-gold transition-all"/>
                                 <button onClick={addTag} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-white font-semibold transition">Add</button>
                             </div>
                             <div className="flex flex-wrap gap-2">{currentProject.state.tags.map(t => (<div key={t.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-brand-gold"><span>{t.name}</span><button onClick={() => removeTag(t.id)} className="text-brand-gold/60 hover:text-white transition"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>))}</div>
@@ -1523,7 +1523,7 @@ const App: React.FC = () => {
                     {renderSection('4. Workflow Variables', 'placeholders', <Icon type="info" className="h-6 w-6"/>,
                         <div className="space-y-6">
                             {/* Workflow Notes Section - 3 columns */}
-                            <div className="bg-slate-800/50 p-4 rounded-lg border border-purple-500/50">
+                            <div className="bg-slate-900 p-4 rounded-lg border border-purple-500/50">
                                 <h3 className="text-sm font-semibold text-purple-400 mb-2">Workflow Notes</h3>
                                 <div className="grid grid-cols-3 gap-2">
                                     <textarea
@@ -1535,7 +1535,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 1..."
-                                        className="w-full bg-slate-900/50 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
+                                        className="w-full bg-slate-900 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
                                     />
                                     <textarea
                                         value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[1] || ''}
@@ -1547,7 +1547,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 2..."
-                                        className="w-full bg-slate-900/50 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
+                                        className="w-full bg-slate-900 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
                                     />
                                     <textarea
                                         value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[2] || ''}
@@ -1559,7 +1559,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 3..."
-                                        className="w-full bg-slate-900/50 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
+                                        className="w-full bg-slate-900 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
                                     />
                                 </div>
                             </div>
@@ -1567,9 +1567,9 @@ const App: React.FC = () => {
                             <div>
                                 <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Global Variables</h3>
                                 {selectedPlaceholders.size > 0 && (
-                                    <div className="bg-slate-800/50 p-3 rounded-lg mb-3 flex items-center gap-3 border border-brand-gold/50">
+                                    <div className="bg-slate-900 p-3 rounded-lg mb-3 flex items-center gap-3 border border-brand-gold/50">
                                         <span className="text-sm font-semibold text-brand-gold">{selectedPlaceholders.size} selected</span>
-                                        <select value={bulkActionTag} onChange={e => setBulkActionTag(e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-brand-gold">
+                                        <select value={bulkActionTag} onChange={e => setBulkActionTag(e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-brand-gold">
                                             <option value="">Select Tag...</option>
                                             {currentProject.state.tags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                                         </select>
@@ -1587,9 +1587,9 @@ const App: React.FC = () => {
                                 <div className="space-y-2">
                                 {currentProject.state.placeholders.filter(p=>!p.tag).map(p => (<div key={p.id} className="grid grid-cols-[auto,1fr,1fr,1fr,auto] gap-2 items-center">
                                     <input type="checkbox" checked={selectedPlaceholders.has(p.id)} onChange={() => togglePlaceholderSelection(p.id)} className="form-checkbox h-4 w-4 bg-slate-800 border-brand-gold text-brand-gold focus:ring-brand-gold rounded"/>
-                                    <input type="text" placeholder="variable_name" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
-                                    <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
-                                    <div className="bg-slate-900/50 border border-brand-gold/30 rounded-lg px-3 py-2 text-brand-gold font-mono text-sm">{`{${p.key || ''}}`}</div>
+                                    <input type="text" placeholder="variable_name" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
+                                    <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
+                                    <div className="bg-slate-900 border border-brand-gold/30 rounded-lg px-3 py-2 text-brand-gold font-mono text-sm">{`{${p.key || ''}}`}</div>
                                     <button onClick={() => handleDeletePlaceholder(p.id)} className="p-2 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                 </div>))}
                                 </div>
@@ -1609,9 +1609,9 @@ const App: React.FC = () => {
                                         </div>
                                         <div className="space-y-2">
                                             {currentProject.state.placeholders.filter(p=>p.tag===tag.name).map(p => (<div key={p.id} className="grid grid-cols-[1fr,1fr,1fr,auto] gap-2 items-center">
-                                                <input type="text" placeholder="variable_name" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
-                                                <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
-                                                <div className="bg-slate-900/50 border border-orange-500/30 rounded-lg px-3 py-2 text-orange-400 font-mono text-sm">{`{${p.key || ''}{${tag.name}}}`}</div>
+                                                <input type="text" placeholder="variable_name" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                                <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                                <div className="bg-slate-900 border border-orange-500/30 rounded-lg px-3 py-2 text-orange-400 font-mono text-sm">{`{${p.key || ''}{${tag.name}}}`}</div>
                                                 <div className="relative group">
                                                     <button className="p-2 text-brand-gold hover:text-white transition">
                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
@@ -1629,7 +1629,7 @@ const App: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-gold/60 font-mono">[output_key]</span> <span className="text-xs text-brand-gold/60">(Read-only)</span></h3>
-                                <p className="text-xs text-brand-gold/70 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-slate-800/50 p-1 rounded border border-brand-gold/50">[output_key]</span></p>
+                                <p className="text-xs text-brand-gold/70 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-slate-900 p-1 rounded border border-brand-gold/50">[output_key]</span></p>
                                 <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 text-sm font-mono text-brand-gold">[{p.outputKey}]</div>))}</div>
                             </div>
                             <div>
@@ -1637,16 +1637,16 @@ const App: React.FC = () => {
                                 <p className="text-xs text-brand-gold/70 mb-2">Generate multiple options for the user to choose from. AI will create the specified number of options based on your prompt.</p>
                                 <div className="space-y-3">
                                     {(currentProject.state.optionVariables || []).map(ov => (
-                                        <div key={ov.id} className="bg-slate-800/50 p-3 rounded-lg border border-pink-500/50 space-y-2">
+                                        <div key={ov.id} className="bg-slate-900 p-3 rounded-lg border border-pink-500/50 space-y-2">
                                             <div className="flex gap-2 items-center">
                                                 <input
                                                     type="text"
                                                     placeholder="Variable name (e.g., meta_title)"
                                                     value={ov.key}
                                                     onChange={e => handleUpdateOptionVariable(ov.id, 'key', e.target.value)}
-                                                    className="flex-1 bg-slate-800/80 border border-pink-500/50 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-pink-500 transition-all"
+                                                    className="flex-1 bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-pink-500 transition-all"
                                                 />
-                                                <div className="flex items-center gap-2 bg-slate-800/80 border border-pink-500/50 rounded-lg px-3 py-2">
+                                                <div className="flex items-center gap-2 bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2">
                                                     <span className="text-xs text-pink-400">Options:</span>
                                                     <input
                                                         type="range"
@@ -1667,10 +1667,10 @@ const App: React.FC = () => {
                                                 value={ov.prompt}
                                                 onChange={e => handleUpdateOptionVariable(ov.id, 'prompt', e.target.value)}
                                                 rows={3}
-                                                className="w-full bg-slate-800/80 border border-pink-500/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-pink-500 transition-all resize-y"
+                                                className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-pink-500 transition-all resize-y"
                                             />
                                             <div className="text-xs text-pink-400/70">
-                                                Use in prompts as: <span className="font-mono bg-slate-900/50 px-1.5 py-0.5 rounded border border-pink-500/30">?{ov.key || 'key'}:{ov.optionCount}?</span>
+                                                Use in prompts as: <span className="font-mono bg-slate-900 px-1.5 py-0.5 rounded border border-pink-500/30">?{ov.key || 'key'}:{ov.optionCount}?</span>
                                             </div>
                                         </div>
                                     ))}
@@ -1684,16 +1684,16 @@ const App: React.FC = () => {
                         <div className="space-y-4">
                             <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Conditional Snippets <span className="text-xs text-brand-gold/60 font-mono">{'{{{key}}}'}</span></h3>
                              {currentProject.state.taggedSnippets.map(s => (
-                                <div key={s.id} className="bg-slate-800/50 p-4 rounded-lg space-y-2 border border-brand-gold/50">
+                                <div key={s.id} className="bg-slate-900 p-4 rounded-lg space-y-2 border border-brand-gold/50">
                                     <div className="flex gap-2 items-center">
-                                        <input type="text" placeholder={`{{{SnippetName}}}`} value={s.key} onChange={e => handleSnippetChange(s.id, 'key', e.target.value)} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                        <input type="text" placeholder={`{{{SnippetName}}}`} value={s.key} onChange={e => handleSnippetChange(s.id, 'key', e.target.value)} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-gold transition-all"/>
                                         <button onClick={() => removeSnippet(s.id)} className="p-2.5 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                     </div>
                                     <div className={`grid grid-cols-1 md:grid-cols-${Math.min(currentProject.state.tags.length, 3)} gap-2`}>
                                         {currentProject.state.tags.map(tag => (
                                             <div key={tag.id}>
                                                 <label className="block text-xs font-medium text-brand-gold mb-1.5">For Tag: <span className="text-brand-gold">{tag.name}</span></label>
-                                                <textarea placeholder={`Value for tag: (${tag.name})`} value={s.values[tag.name] || ''} onChange={e => handleSnippetChange(s.id, 'values', { ...s.values, [tag.name]: e.target.value })} rows={3} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all" />
+                                                <textarea placeholder={`Value for tag: (${tag.name})`} value={s.values[tag.name] || ''} onChange={e => handleSnippetChange(s.id, 'values', { ...s.values, [tag.name]: e.target.value })} rows={3} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all" />
                                             </div>
                                         ))}
                                     </div>
@@ -1710,18 +1710,18 @@ const App: React.FC = () => {
                         <div className="space-y-4">
                             {currentProject.state.promptTemplates.map((prompt, index) => (
                                 <div key={prompt.id} draggable onDragStart={() => draggedPromptId.current = prompt.id} onDragOver={e => e.preventDefault()} onDrop={() => handleReorderPrompts(draggedPromptId.current!, prompt.id)}
-                                    className="bg-slate-800/50 p-4 rounded-lg space-y-3 border border-brand-gold/50 cursor-grab active:cursor-grabbing hover:border-brand-gold/70 transition-colors">
+                                    className="bg-slate-900 p-4 rounded-lg space-y-3 border border-brand-gold/50 cursor-grab active:cursor-grabbing hover:border-brand-gold/70 transition-colors">
                                     <div className="flex items-center gap-2">
                                         <span className="text-brand-gold font-bold text-lg">{index + 1}</span>
-                                        <input type="text" value={prompt.name} onChange={e => handleUpdatePrompt(prompt.id, 'name', e.target.value)} placeholder="Prompt Name" className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-gold transition-all"/>
-                                        <input type="text" value={prompt.outputKey} onChange={e => handleUpdatePrompt(prompt.id, 'outputKey', e.target.value)} placeholder="Output Key" className="w-1/3 bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all" title="Output Placeholder Key"/>
+                                        <input type="text" value={prompt.name} onChange={e => handleUpdatePrompt(prompt.id, 'name', e.target.value)} placeholder="Prompt Name" className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                        <input type="text" value={prompt.outputKey} onChange={e => handleUpdatePrompt(prompt.id, 'outputKey', e.target.value)} placeholder="Output Key" className="w-1/3 bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all" title="Output Placeholder Key"/>
                                         <button onClick={() => handleDuplicatePrompt(prompt.id)} className="p-2 text-brand-gold hover:text-white transition" title="Duplicate Prompt">
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                                         </button>
                                         <button onClick={() => handleDeletePrompt(prompt.id)} className="p-2.5 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                     </div>
-                                    <textarea ref={el => promptTextareaRefs.current[prompt.id] = el} value={prompt.template} onChange={e => handleUpdatePrompt(prompt.id, 'template', e.target.value)} onContextMenu={(e) => { e.preventDefault(); setVariableContextMenu({ promptId: prompt.id, x: e.clientX, y: e.clientY }); }} rows={8} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"></textarea>
-                                    <div className="flex flex-wrap gap-1.5 p-2 bg-slate-900/50 rounded-lg border border-brand-gold/30">
+                                    <textarea draggable={false} onDragStart={(e) => e.stopPropagation()} ref={el => promptTextareaRefs.current[prompt.id] = el} value={prompt.template} onChange={e => handleUpdatePrompt(prompt.id, 'template', e.target.value)} onContextMenu={(e) => { e.preventDefault(); setVariableContextMenu({ promptId: prompt.id, x: e.clientX, y: e.clientY }); }} rows={8} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y min-h-[100px]"></textarea>
+                                    <div className="flex flex-wrap gap-1.5 p-2 bg-slate-900 rounded-lg border border-brand-gold/30">
                                         <span className="text-xs text-brand-gold/60 w-full mb-1">Click to insert:</span>
                                         {/* Item Name */}
                                         <button type="button" onClick={() => insertVariableIntoPrompt(prompt.id, '<item_name>')} className="px-2 py-1 text-xs font-mono bg-brand-cyan/20 hover:bg-brand-cyan/40 border border-brand-cyan/50 rounded text-brand-cyan transition">{'<item_name>'}</button>
@@ -1748,7 +1748,7 @@ const App: React.FC = () => {
                                     </div>
                                     <div className="text-right text-xs text-brand-gold">
                                         <label htmlFor={`output-action-${prompt.id}`} className="mr-2 font-semibold">Output Action:</label>
-                                        <select id={`output-action-${prompt.id}`} value={prompt.outputAction || ''} onChange={e => handleUpdatePrompt(prompt.id, 'outputAction', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-xs text-white focus:ring-2 focus:ring-brand-gold transition-all">
+                                        <select id={`output-action-${prompt.id}`} value={prompt.outputAction || ''} onChange={e => handleUpdatePrompt(prompt.id, 'outputAction', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-xs text-white focus:ring-2 focus:ring-brand-gold transition-all">
                                             <option value="">(none)</option>
                                             <option value="addToFinal">Add to final document</option>
                                             <option value="download">Mark for individual download</option>
@@ -1789,7 +1789,7 @@ const App: React.FC = () => {
                             </div>
                             <div className="p-5 space-y-4">
                                 {pendingResults.map(pending => (
-                                    <div key={pending.id} className="bg-slate-800/50 rounded-lg border border-pink-500/50 overflow-hidden">
+                                    <div key={pending.id} className="bg-slate-900 rounded-lg border border-pink-500/50 overflow-hidden">
                                         <div className="p-4 border-b border-pink-500/30 flex items-center justify-between">
                                             <div>
                                                 <h3 className="font-bold text-white">{pending.item.name}</h3>
@@ -1812,7 +1812,7 @@ const App: React.FC = () => {
                                         </div>
                                         <div className="p-4 space-y-4">
                                             {pending.optionSelections.map(selection => (
-                                                <div key={selection.variableKey} className="bg-slate-900/50 rounded-lg p-3 border border-pink-500/30">
+                                                <div key={selection.variableKey} className="bg-slate-900 rounded-lg p-3 border border-pink-500/30">
                                                     <div className="flex items-center justify-between mb-3">
                                                         <h4 className="font-semibold text-pink-400">?{selection.variableKey}?</h4>
                                                         <button
@@ -1826,7 +1826,7 @@ const App: React.FC = () => {
                                                         {selection.options.map((option, idx) => (
                                                             <label
                                                                 key={idx}
-                                                                className={`flex items-start gap-3 p-2 rounded-lg cursor-pointer transition ${selection.selectedIndex === idx ? 'bg-pink-500/30 border border-pink-500' : 'bg-slate-800/50 border border-transparent hover:border-pink-500/50'}`}
+                                                                className={`flex items-start gap-3 p-2 rounded-lg cursor-pointer transition ${selection.selectedIndex === idx ? 'bg-pink-500/30 border border-pink-500' : 'bg-slate-900 border border-transparent hover:border-pink-500/50'}`}
                                                             >
                                                                 <input
                                                                     type="radio"
@@ -1840,7 +1840,7 @@ const App: React.FC = () => {
                                                         ))}
                                                         {/* Custom option */}
                                                         <label
-                                                            className={`flex items-start gap-3 p-2 rounded-lg cursor-pointer transition ${selection.selectedIndex === -1 ? 'bg-pink-500/30 border border-pink-500' : 'bg-slate-800/50 border border-transparent hover:border-pink-500/50'}`}
+                                                            className={`flex items-start gap-3 p-2 rounded-lg cursor-pointer transition ${selection.selectedIndex === -1 ? 'bg-pink-500/30 border border-pink-500' : 'bg-slate-900 border border-transparent hover:border-pink-500/50'}`}
                                                         >
                                                             <input
                                                                 type="radio"
@@ -1856,7 +1856,7 @@ const App: React.FC = () => {
                                                                     value={selection.customValue}
                                                                     onChange={(e) => handleCustomOptionValue(pending.id, selection.variableKey, e.target.value)}
                                                                     placeholder="Enter custom value..."
-                                                                    className="w-full bg-slate-800/80 border border-pink-500/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-pink-500 transition"
+                                                                    className="w-full bg-slate-900 border border-pink-500/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-pink-500 transition"
                                                                     onClick={() => handleSelectOption(pending.id, selection.variableKey, -1)}
                                                                 />
                                                             </div>
@@ -1892,7 +1892,7 @@ const App: React.FC = () => {
                                         }
                                     };
                                     return (
-                                        <div key={result.item.id} className="bg-slate-800/80 p-4 rounded-lg border border-brand-gold/30 hover:border-brand-gold/50 transition-colors">
+                                        <div key={result.item.id} className="bg-slate-900 p-4 rounded-lg border border-brand-gold/30 hover:border-brand-gold/50 transition-colors">
                                             <div className="flex items-center justify-between">
                                                 <div>
                                                     <p className="font-bold text-white">{result.item.name}</p>
