@@ -1435,7 +1435,7 @@ const App: React.FC = () => {
                                     </label>
                                 </div>
                             </div>
-                            <button onClick={processWorkflow} disabled={isRunDisabled} className="w-full flex items-center justify-center bg-gradient-to-r from-brand-cyan to-brand-cyan-dark hover:from-brand-cyan-dark hover:to-brand-cyan text-white font-bold py-4 px-6 rounded-xl transition-all shadow-card hover:shadow-glow-cyan disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed disabled:shadow-none btn-press">
+                            <button onClick={processWorkflow} disabled={isRunDisabled} className={`w-full flex items-center justify-center font-bold py-4 px-6 rounded-xl transition-all btn-press border-2 ${isRunDisabled ? 'bg-slate-900 border-brand-cyan text-brand-cyan/50 cursor-not-allowed' : 'bg-gradient-to-r from-brand-cyan to-brand-cyan-dark hover:from-brand-cyan-dark hover:to-brand-cyan text-white border-transparent shadow-card hover:shadow-glow-cyan'}`}>
                                 {isProcessing ? <Icon type="working" className="h-5 w-5 animate-spin mr-2" /> : <Icon type="play" className="h-5 w-5 mr-2" />}
                                 {getRunButtonText()}
                             </button>
