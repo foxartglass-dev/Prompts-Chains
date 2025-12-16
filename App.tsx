@@ -1558,14 +1558,27 @@ const App: React.FC = () => {
                                             onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
                                             className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
                                         >
-                                            <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Latest)</option>
-                                            <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                                            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                                            <option value="claude-3-haiku-20240307">Claude 3 Haiku (Fast)</option>
-                                            <option value="gpt-4o">GPT-4o</option>
-                                            <option value="gpt-4o-mini">GPT-4o Mini</option>
-                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                            <optgroup label="Claude (Anthropic)">
+                                                <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast)</option>
+                                                <option value="claude-opus-4-5-20251101">Claude Opus 4.5 (Premium)</option>
+                                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                                <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                                <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                            </optgroup>
+                                            <optgroup label="GPT (OpenAI)">
+                                                <option value="gpt-5.2-2025-12-11">GPT-5.2 (Latest)</option>
+                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini (Fast)</option>
+                                                <option value="gpt-5-nano-2025-08-07">GPT-5 Nano (Fastest)</option>
+                                                <option value="gpt-4o">GPT-4o</option>
+                                                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                            </optgroup>
+                                            <optgroup label="Gemini (Google)">
+                                                <option value="gemini-3.0">Gemini 3.0 (Latest)</option>
+                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                            </optgroup>
                                         </select>
                                     </div>
                                     <div>
@@ -1771,8 +1784,8 @@ const App: React.FC = () => {
                     {renderSection('4. Workflow Variables', 'placeholders', <Icon type="info" className="h-6 w-6"/>,
                         <div className="space-y-6">
                             {/* Workflow Notes Section - 3 columns */}
-                            <div className="bg-slate-900 p-4 rounded-lg border border-purple-500/50">
-                                <h3 className="text-sm font-semibold text-purple-400 mb-2">Workflow Notes</h3>
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-cyan">
+                                <h3 className="text-sm font-semibold text-brand-cyan mb-2">Workflow Notes</h3>
                                 <div className="grid grid-cols-3 gap-2">
                                     <textarea
                                         value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[0] || ''}
@@ -1783,7 +1796,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 1..."
-                                        className="w-full bg-slate-900 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
+                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
                                     />
                                     <textarea
                                         value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[1] || ''}
@@ -1795,7 +1808,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 2..."
-                                        className="w-full bg-slate-900 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
+                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
                                     />
                                     <textarea
                                         value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[2] || ''}
@@ -1807,12 +1820,13 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 3..."
-                                        className="w-full bg-slate-900 border border-purple-500/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-purple-500 resize-y"
+                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
                                     />
                                 </div>
                             </div>
 
-                            <div>
+                            {/* Global Variables */}
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Global Variables</h3>
                                 {selectedPlaceholders.size > 0 && (
                                     <div className="bg-slate-900 p-3 rounded-lg mb-3 flex items-center gap-3 border border-brand-gold/50">
@@ -1843,7 +1857,9 @@ const App: React.FC = () => {
                                 </div>
                                 <button onClick={() => handleAddPlaceholder()} className="mt-3 text-brand-gold hover:text-brand-gold-light font-semibold text-sm transition">+ Add Global Variable</button>
                             </div>
-                            <div>
+
+                            {/* Tagged Variables */}
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Tagged Variables</h3>
                                 {currentProject.state.tags.map(tag => (
                                     <div key={tag.id} className="mb-4">
@@ -1875,36 +1891,40 @@ const App: React.FC = () => {
                                     </div>
                                 ))}
                             </div>
-                            <div>
+
+                            {/* Prompt Output Variables */}
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-gold/60 font-mono">[output_key]</span> <span className="text-xs text-brand-gold/60">(Read-only)</span></h3>
                                 <p className="text-xs text-brand-gold/70 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-slate-900 p-1 rounded border border-brand-gold/50">[output_key]</span></p>
                                 <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 text-sm font-mono text-brand-gold">[{p.outputKey}]</div>))}</div>
                             </div>
-                            <div>
+
+                            {/* Option Variables */}
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Option Variables <span className="text-xs text-brand-gold/60 font-mono">?key:count?</span></h3>
                                 <p className="text-xs text-brand-gold/70 mb-2">Generate multiple options for the user to choose from. AI will create the specified number of options based on your prompt.</p>
                                 <div className="space-y-3">
                                     {(currentProject.state.optionVariables || []).map(ov => (
-                                        <div key={ov.id} className="bg-slate-900 p-3 rounded-lg border border-pink-500/50 space-y-2">
+                                        <div key={ov.id} className="bg-slate-900 p-3 rounded-lg border border-brand-gold/50 space-y-2">
                                             <div className="flex gap-2 items-center">
                                                 <input
                                                     type="text"
                                                     placeholder="Variable name (e.g., meta_title)"
                                                     value={ov.key}
                                                     onChange={e => handleUpdateOptionVariable(ov.id, 'key', e.target.value)}
-                                                    className="flex-1 bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-pink-500 transition-all"
+                                                    className="flex-1 bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-gold transition-all"
                                                 />
-                                                <div className="flex items-center gap-2 bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2">
-                                                    <span className="text-xs text-pink-400">Options:</span>
+                                                <div className="flex items-center gap-2 bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2">
+                                                    <span className="text-xs text-brand-gold">Options:</span>
                                                     <input
                                                         type="range"
                                                         min="1"
                                                         max="10"
                                                         value={ov.optionCount}
                                                         onChange={e => handleUpdateOptionVariable(ov.id, 'optionCount', parseInt(e.target.value))}
-                                                        className="w-20 accent-pink-500"
+                                                        className="w-20 accent-yellow-500"
                                                     />
-                                                    <span className="text-sm font-bold text-pink-400 w-4">{ov.optionCount}</span>
+                                                    <span className="text-sm font-bold text-brand-gold w-4">{ov.optionCount}</span>
                                                 </div>
                                                 <button onClick={() => handleDeleteOptionVariable(ov.id)} className="p-2 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition">
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -1915,15 +1935,15 @@ const App: React.FC = () => {
                                                 value={ov.prompt}
                                                 onChange={e => handleUpdateOptionVariable(ov.id, 'prompt', e.target.value)}
                                                 rows={3}
-                                                className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-pink-500 transition-all resize-y"
+                                                className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all resize-y"
                                             />
-                                            <div className="text-xs text-pink-400/70">
-                                                Use in prompts as: <span className="font-mono bg-slate-900 px-1.5 py-0.5 rounded border border-pink-500/30">?{ov.key || 'key'}:{ov.optionCount}?</span>
+                                            <div className="text-xs text-brand-gold/70">
+                                                Use in prompts as: <span className="font-mono bg-slate-900 px-1.5 py-0.5 rounded border border-brand-gold/30">?{ov.key || 'key'}:{ov.optionCount}?</span>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                                <button onClick={handleAddOptionVariable} className="mt-3 text-pink-400 hover:text-pink-300 font-semibold text-sm transition">+ Add Option Variable</button>
+                                <button onClick={handleAddOptionVariable} className="mt-3 text-brand-gold hover:text-brand-gold-light font-semibold text-sm transition">+ Add Option Variable</button>
                             </div>
                         </div>
                     )}
