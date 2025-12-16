@@ -143,8 +143,14 @@ const App: React.FC = () => {
     }>({});
     const [variableContextMenu, setVariableContextMenu] = useState<{promptId: number, x: number, y: number} | null>(null);
 
+    // Auto-save state
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
+
     // Refs
     const prevProjectIdRef = useRef<string | null>(null);
+    const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
     const logContainerRef = useRef<HTMLDivElement>(null);
     const draggedPromptId = useRef<number | null>(null);
     const promptTextareaRefs = useRef<{[key: number]: HTMLTextAreaElement | null}>({});
@@ -158,6 +164,59 @@ const App: React.FC = () => {
             return updatedLogs;
         });
     }, []);
+
+    // Save workflow to database
+    const saveWorkflowToDatabase = useCallback(async (showMessage: boolean = true) => {
+        if (!currentWorkflowId || !currentProject) return false;
+
+        setIsSaving(true);
+        try {
+            const response = await fetch(`/api/workflows/${currentWorkflowId}/state`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state: currentProject.state })
+            });
+
+            if (response.ok) {
+                setHasUnsavedChanges(false);
+                setLastSaveTime(new Date());
+                if (showMessage) {
+                    showNotification('Workflow saved!', 'success');
+                }
+                return true;
+            } else {
+                if (showMessage) {
+                    showNotification('Failed to save workflow', 'error');
+                }
+                return false;
+            }
+        } catch (error) {
+            console.error('Error saving workflow:', error);
+            if (showMessage) {
+                showNotification('Failed to save workflow', 'error');
+            }
+            return false;
+        } finally {
+            setIsSaving(false);
+        }
+    }, [currentWorkflowId, currentProject, showNotification]);
+
+    // Mark changes when project state changes (for auto-save)
+    const markUnsavedChanges = useCallback(() => {
+        if (currentWorkflowId) {
+            setHasUnsavedChanges(true);
+
+            // Clear existing timer
+            if (autoSaveTimerRef.current) {
+                clearTimeout(autoSaveTimerRef.current);
+            }
+
+            // Set new 3-second debounced auto-save
+            autoSaveTimerRef.current = setTimeout(() => {
+                saveWorkflowToDatabase(false); // Silent save
+            }, 3000);
+        }
+    }, [currentWorkflowId, saveWorkflowToDatabase]);
 
     // ========== ALL useEffect HOOKS ==========
 
@@ -220,6 +279,19 @@ const App: React.FC = () => {
             prevProjectIdRef.current = currentId;
         }
     }, [currentProject]);
+
+    // Effect to trigger auto-save when project state changes
+    useEffect(() => {
+        if (currentWorkflowId && currentProject) {
+            markUnsavedChanges();
+        }
+        // Cleanup timer on unmount
+        return () => {
+            if (autoSaveTimerRef.current) {
+                clearTimeout(autoSaveTimerRef.current);
+            }
+        };
+    }, [currentProject?.state, currentWorkflowId]); // Only trigger on state changes, not on currentProject change
 
     // ========== CONDITIONAL RETURNS (after all hooks) ==========
 
@@ -1064,7 +1136,7 @@ const App: React.FC = () => {
                 isOpen={isWorkflowNavOpen}
                 onClose={() => setIsWorkflowNavOpen(false)}
                 currentWorkflowId={currentWorkflowId}
-                onSelectWorkflow={(workflow) => {
+                onSelectWorkflow={async (workflow) => {
                     setCurrentWorkflowId(workflow.id);
                     setCurrentWebsiteId(workflow.website_id || undefined);
                     setCurrentWorkflowContext({
@@ -1074,7 +1146,26 @@ const App: React.FC = () => {
                         isStandalone: !workflow.client_id,
                         projectName: undefined // Will be fetched if needed
                     });
-                    showNotification(`Loaded workflow: ${workflow.name}`, 'info');
+
+                    // Load workflow state from database
+                    try {
+                        const response = await fetch(`/api/workflows/${workflow.id}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.workflow && data.workflow.state && Object.keys(data.workflow.state).length > 0) {
+                                // Load the saved state
+                                setCurrentProjectState(() => data.workflow.state);
+                                setHasUnsavedChanges(false);
+                                showNotification(`Loaded workflow: ${workflow.name}`, 'success');
+                            } else {
+                                // No saved state, start fresh
+                                showNotification(`Loaded workflow: ${workflow.name} (new)`, 'info');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error loading workflow state:', error);
+                        showNotification(`Loaded workflow: ${workflow.name}`, 'info');
+                    }
                 }}
                 onCreateWorkflow={async (name, clientId, websiteId, personalProjectId) => {
                     // Create a new workflow in the database
@@ -1220,42 +1311,93 @@ const App: React.FC = () => {
                 {/* Workflow Context Breadcrumb */}
                 {currentWorkflowContext.workflowName && (
                     <div className="bg-card/50 rounded-lg px-4 py-3 border border-slate-700/50 shadow-card">
-                        <div className="flex items-center gap-2 text-sm">
-                            {currentWorkflowContext.isStandalone ? (
-                                <>
-                                    <span className="px-3 py-1 bg-purple-600/20 border border-purple-500/50 rounded-full text-purple-300 font-medium">
-                                        Standalone
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2 text-sm">
+                                {currentWorkflowContext.isStandalone ? (
+                                    <>
+                                        <span className="px-3 py-1 bg-purple-600/20 border border-purple-500/50 rounded-full text-purple-300 font-medium">
+                                            Standalone
+                                        </span>
+                                        {currentWorkflowContext.projectName && (
+                                            <>
+                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                                <span className="text-purple-400">{currentWorkflowContext.projectName}</span>
+                                            </>
+                                        )}
+                                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                        <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="px-3 py-1 bg-brand-cyan/20 border border-brand-cyan/50 rounded-full text-brand-cyan font-medium">
+                                            Client
+                                        </span>
+                                        {currentWorkflowContext.clientName && (
+                                            <>
+                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                                <span className="text-brand-cyan">{currentWorkflowContext.clientName}</span>
+                                            </>
+                                        )}
+                                        {currentWorkflowContext.websiteName && (
+                                            <>
+                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                                <span className="text-brand-cyan-light">{currentWorkflowContext.websiteName}</span>
+                                            </>
+                                        )}
+                                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                        <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
+                                    </>
+                                )}
+                            </div>
+                            {/* Save Workflow Button */}
+                            <div className="flex items-center gap-3">
+                                {lastSaveTime && (
+                                    <span className="text-xs text-slate-400">
+                                        Last saved: {lastSaveTime.toLocaleTimeString()}
                                     </span>
-                                    {currentWorkflowContext.projectName && (
-                                        <>
-                                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                            <span className="text-purple-400">{currentWorkflowContext.projectName}</span>
-                                        </>
-                                    )}
-                                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                    <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span className="px-3 py-1 bg-brand-cyan/20 border border-brand-cyan/50 rounded-full text-brand-cyan font-medium">
-                                        Client
+                                )}
+                                {hasUnsavedChanges && !isSaving && (
+                                    <span className="text-xs text-yellow-400 flex items-center gap-1">
+                                        <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
+                                        Unsaved
                                     </span>
-                                    {currentWorkflowContext.clientName && (
+                                )}
+                                <button
+                                    onClick={() => saveWorkflowToDatabase(true)}
+                                    disabled={isSaving || !hasUnsavedChanges}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition ${
+                                        isSaving
+                                            ? 'bg-slate-700 text-slate-400 cursor-wait'
+                                            : hasUnsavedChanges
+                                                ? 'bg-brand-cyan hover:bg-brand-cyan-dark text-white'
+                                                : 'bg-green-600/20 text-green-400 border border-green-500/50'
+                                    }`}
+                                >
+                                    {isSaving ? (
                                         <>
-                                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                            <span className="text-brand-cyan">{currentWorkflowContext.clientName}</span>
+                                            <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Saving...
+                                        </>
+                                    ) : hasUnsavedChanges ? (
+                                        <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                                            </svg>
+                                            Save Workflow
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                            </svg>
+                                            Saved
                                         </>
                                     )}
-                                    {currentWorkflowContext.websiteName && (
-                                        <>
-                                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                            <span className="text-brand-cyan-light">{currentWorkflowContext.websiteName}</span>
-                                        </>
-                                    )}
-                                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                    <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
-                                </>
-                            )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -1295,57 +1437,30 @@ const App: React.FC = () => {
                                 <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
                             </div>
                             
-                            {/* Project Management */}
+                            {/* Import / Export Workflow */}
                              <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50 space-y-3">
-                                <h3 className="text-lg font-semibold text-brand-gold">Project Management</h3>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={handleCreateNewProject} className="w-full text-center px-4 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold">+ New Project</button>
-                                    <select
-                                        onChange={(e) => {
-                                            const project = projects.find(p => p.id === e.target.value);
-                                            if(project) setCurrentProject(project);
-                                        }}
-                                        value={currentProject.id}
-                                        className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-gold"
-                                    >
-                                        <option value="" disabled>Load Project</option>
-                                        {projects.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                                <h3 className="text-lg font-semibold text-brand-gold">Import / Export</h3>
                                 <div className="flex gap-2">
-                                     <input
-                                        type="text"
-                                        placeholder="Enter project name..."
-                                        value={currentProject.name === 'Untitled Project' ? '' : currentProject.name}
-                                        onChange={e => setCurrentProject({...currentProject, name: e.target.value || 'Untitled Project'})}
-                                        className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-gold"
-                                    />
-                                    <button onClick={handleSaveProject} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold transition">Save</button>
-                                    <button onClick={handleDeleteProject} className="p-2.5 bg-red-600/80 hover:bg-red-600 rounded-lg text-white transition" title="Delete current project">
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                    </button>
-                                </div>
-                                {/* JSON Export/Import */}
-                                <div className="flex gap-2 mt-2">
                                     <button
                                         onClick={() => {
-                                            const data = exportProjectHook();
-                                            if (data) {
-                                                const filename = `${currentProject.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-config.json`;
-                                                downloadProjectConfig(data, filename);
-                                                showNotification('Project exported to JSON!', 'success');
-                                            }
+                                            // Export current workflow state as JSON
+                                            const exportData = {
+                                                name: currentWorkflowContext.workflowName || currentProject.name,
+                                                exportedAt: new Date().toISOString(),
+                                                state: currentProject.state
+                                            };
+                                            const filename = `${(currentWorkflowContext.workflowName || currentProject.name).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-workflow.json`;
+                                            downloadProjectConfig(exportData, filename);
+                                            showNotification('Workflow exported to JSON!', 'success');
                                         }}
                                         className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold"
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                                        Export JSON
+                                        Export
                                     </button>
                                     <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition cursor-pointer border border-brand-gold">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                                        Import JSON
+                                        Import
                                         <input
                                             type="file"
                                             accept=".json"
@@ -1354,10 +1469,17 @@ const App: React.FC = () => {
                                                 const file = e.target.files?.[0];
                                                 if (file) {
                                                     try {
-                                                        const data = await loadProjectConfigFromFile(file) as Project;
-                                                        importProjectHook(data);
+                                                        const text = await file.text();
+                                                        const data = JSON.parse(text);
+                                                        // Import the state into current workflow
+                                                        if (data.state) {
+                                                            setCurrentProjectState(() => data.state);
+                                                            showNotification('Workflow imported! Changes will auto-save.', 'success');
+                                                        } else {
+                                                            showNotification('Invalid workflow file format.', 'error');
+                                                        }
                                                     } catch (error) {
-                                                        showNotification('Failed to import project. Invalid JSON.', 'error');
+                                                        showNotification('Failed to import. Invalid JSON.', 'error');
                                                     }
                                                 }
                                                 e.target.value = '';
@@ -1365,6 +1487,7 @@ const App: React.FC = () => {
                                         />
                                     </label>
                                 </div>
+                                <p className="text-xs text-slate-400">Export saves your current workflow configuration. Import loads a previously exported workflow.</p>
                             </div>
 
                             {/* Project Notes Section - 3 columns */}
