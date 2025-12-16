@@ -27,10 +27,27 @@ export interface TaggedSnippet {
   values: { [tagName: string]: string };
 }
 
+export interface OptionVariable {
+  id: number;
+  key: string;
+  prompt: string;
+  optionCount: number;
+}
+
 export type WpContentType = 'pages' | 'posts';
 
 export interface ProjectState {
-  apiKeys: { zeroGpt: string; anthropic: string };
+  apiKeys: {
+    zeroGpt: string;
+    anthropic: string;
+    openai: string;
+    gemini: string;
+    grok: string;
+    openRouter: string;
+  };
+  useOpenRouter: boolean;
+  autoSaveEnabled: boolean;
+  autoSaveSeconds: number;
   provider: string;
   model: string;
   fileNameTemplate: string;
@@ -41,6 +58,9 @@ export interface ProjectState {
   placeholders: Placeholder[];
   taggedSnippets: TaggedSnippet[];
   promptTemplates: PromptTemplate[];
+  optionVariables: OptionVariable[];
+  projectNotes: string;
+  workflowNotes: string;
 }
 
 export interface Project {
@@ -99,7 +119,10 @@ const initialTaggedSnippets: TaggedSnippet[] = [
 ];
 
 const initialProjectState: ProjectState = {
-  apiKeys: { zeroGpt: '', anthropic: '' },
+  apiKeys: { zeroGpt: '', anthropic: '', openai: '', gemini: '', grok: '', openRouter: '' },
+  useOpenRouter: false,
+  autoSaveEnabled: true,
+  autoSaveSeconds: 3,
   provider: 'anthropic',
   model: 'claude-sonnet-4-5-20250929',
   fileNameTemplate: '{tag}-{item_name}-output',
@@ -110,6 +133,9 @@ const initialProjectState: ProjectState = {
   placeholders: initialPlaceholders,
   taggedSnippets: initialTaggedSnippets,
   promptTemplates: initialPromptTemplates,
+  optionVariables: [],
+  projectNotes: '',
+  workflowNotes: '',
 };
 
 const createNewProjectObject = (name: string = 'Untitled Project'): Project => ({

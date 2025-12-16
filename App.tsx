@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import useProjectManager, {
-  PromptTemplate, Placeholder, TaggedSnippet, Tag, WpContentType, Project
+  PromptTemplate, Placeholder, TaggedSnippet, Tag, WpContentType, Project, OptionVariable
 } from './src/hooks/useProjectManager';
 import { generateLlmContent } from './src/services/llm-service';
 import { checkAiScore } from './src/services/zerogpt-service';
@@ -57,6 +57,25 @@ interface Result {
   wpError?: string;
 }
 
+// Option Variable pending selection types
+interface OptionSelection {
+  variableKey: string;
+  options: string[];
+  selectedIndex: number | null;  // null = not selected, -1 = custom
+  customValue: string;
+}
+
+interface PendingResult {
+  id: number;
+  item: WorkflowItem;
+  finalOutput: string;
+  metaTitles: string[];
+  metaDescriptions: string[];
+  allOutputs: Record<string, string>;
+  timestamp: string;
+  optionSelections: OptionSelection[];
+}
+
 // Make JSZip available from the global scope (force rebuild)
 declare const JSZip: any;
 
@@ -98,6 +117,7 @@ const App: React.FC = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [results, setResults] = useState<Result[]>([]);
+    const [pendingResults, setPendingResults] = useState<PendingResult[]>([]);
     const [fileName, setFileName] = useState('');
     const [activeCollapsible, setActiveCollapsible] = useState<string | null>('setup');
     const [newTagName, setNewTagName] = useState('');
@@ -111,8 +131,10 @@ const App: React.FC = () => {
     const [isClientsOpen, setIsClientsOpen] = useState(false);
     const [isWebsitesOpen, setIsWebsitesOpen] = useState(false);
     const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
+    const [filterByClientId, setFilterByClientId] = useState<number | undefined>(undefined);
     const [currentWorkflowContext, setCurrentWorkflowContext] = useState<{
       workflowName?: string;
       clientName?: string;
@@ -120,11 +142,19 @@ const App: React.FC = () => {
       projectName?: string;
       isStandalone?: boolean;
     }>({});
+    const [variableContextMenu, setVariableContextMenu] = useState<{promptId: number, x: number, y: number} | null>(null);
+
+    // Auto-save state
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
 
     // Refs
     const prevProjectIdRef = useRef<string | null>(null);
+    const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
     const logContainerRef = useRef<HTMLDivElement>(null);
     const draggedPromptId = useRef<number | null>(null);
+    const promptTextareaRefs = useRef<{[key: number]: HTMLTextAreaElement | null}>({});
 
     // useCallback for logging (must be before conditional returns)
     const addLog = useCallback((message: string, status: LogStatus, itemId?: number) => {
@@ -136,7 +166,76 @@ const App: React.FC = () => {
         });
     }, []);
 
+    // Save workflow to database
+    const saveWorkflowToDatabase = useCallback(async (showMessage: boolean = true) => {
+        if (!currentWorkflowId || !currentProject) return false;
+
+        setIsSaving(true);
+        try {
+            const response = await fetch(`/api/workflows/${currentWorkflowId}/state`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state: currentProject.state })
+            });
+
+            if (response.ok) {
+                setHasUnsavedChanges(false);
+                setLastSaveTime(new Date());
+                if (showMessage) {
+                    showNotification('Workflow saved!', 'success');
+                }
+                return true;
+            } else {
+                if (showMessage) {
+                    showNotification('Failed to save workflow', 'error');
+                }
+                return false;
+            }
+        } catch (error) {
+            console.error('Error saving workflow:', error);
+            if (showMessage) {
+                showNotification('Failed to save workflow', 'error');
+            }
+            return false;
+        } finally {
+            setIsSaving(false);
+        }
+    }, [currentWorkflowId, currentProject, showNotification]);
+
+    // Mark changes when project state changes (for auto-save)
+    const markUnsavedChanges = useCallback(() => {
+        if (currentWorkflowId) {
+            setHasUnsavedChanges(true);
+
+            // Clear existing timer
+            if (autoSaveTimerRef.current) {
+                clearTimeout(autoSaveTimerRef.current);
+            }
+
+            // Only auto-save if enabled
+            const autoSaveEnabled = currentProject?.state?.autoSaveEnabled ?? true;
+            const autoSaveSeconds = currentProject?.state?.autoSaveSeconds ?? 3;
+
+            if (autoSaveEnabled) {
+                autoSaveTimerRef.current = setTimeout(() => {
+                    saveWorkflowToDatabase(false); // Silent save
+                }, autoSaveSeconds * 1000);
+            }
+        }
+    }, [currentWorkflowId, saveWorkflowToDatabase, currentProject?.state?.autoSaveEnabled, currentProject?.state?.autoSaveSeconds]);
+
     // ========== ALL useEffect HOOKS ==========
+
+    // Click-away detection for variable context menu
+    useEffect(() => {
+        const handleClickAway = (e: MouseEvent) => {
+            if (variableContextMenu) {
+                setVariableContextMenu(null);
+            }
+        };
+        document.addEventListener('click', handleClickAway);
+        return () => document.removeEventListener('click', handleClickAway);
+    }, [variableContextMenu]);
 
     // Check if PIN lock is enabled on mount
     useEffect(() => {
@@ -186,6 +285,19 @@ const App: React.FC = () => {
             prevProjectIdRef.current = currentId;
         }
     }, [currentProject]);
+
+    // Effect to trigger auto-save when project state changes
+    useEffect(() => {
+        if (currentWorkflowId && currentProject) {
+            markUnsavedChanges();
+        }
+        // Cleanup timer on unmount
+        return () => {
+            if (autoSaveTimerRef.current) {
+                clearTimeout(autoSaveTimerRef.current);
+            }
+        };
+    }, [currentProject?.state, currentWorkflowId]); // Only trigger on state changes, not on currentProject change
 
     // ========== CONDITIONAL RETURNS (after all hooks) ==========
 
@@ -239,6 +351,29 @@ const App: React.FC = () => {
         }));
     };
 
+    const insertVariableIntoPrompt = (promptId: number, variable: string) => {
+        const textarea = promptTextareaRefs.current[promptId];
+        if (!textarea) return;
+
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const currentValue = textarea.value;
+
+        // Replace selected text or insert at cursor
+        const newValue = currentValue.substring(0, start) + variable + currentValue.substring(end);
+
+        handleUpdatePrompt(promptId, 'template', newValue);
+
+        // Close context menu if open
+        setVariableContextMenu(null);
+
+        // Restore focus and cursor position after the inserted variable
+        setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + variable.length, start + variable.length);
+        }, 0);
+    };
+
     const handleAddPrompt = () => {
         const newPrompt: PromptTemplate = { id: Date.now(), name: 'New Prompt', template: '', outputKey: `new_output_${Date.now()}` };
         setCurrentProjectState(prev => ({ ...prev, promptTemplates: [...prev.promptTemplates, newPrompt] }));
@@ -276,10 +411,19 @@ const App: React.FC = () => {
         setCurrentProjectState(prev => ({ ...prev, promptTemplates: newPrompts }));
     };
 
+    // Sanitize placeholder name: no brackets, spaces become underscores
+    const sanitizePlaceholderName = (value: string): string => {
+        return value
+            .replace(/[{}\[\]<>?:]/g, '') // Remove brackets and special chars
+            .replace(/\s+/g, '_') // Spaces to underscores
+            .toLowerCase();
+    };
+
     const handleUpdatePlaceholder = (id: number, field: 'key' | 'value' | 'tag', value: string) => {
+        const sanitizedValue = field === 'key' ? sanitizePlaceholderName(value) : value;
         setCurrentProjectState(prev => ({
             ...prev,
-            placeholders: prev.placeholders.map(p => p.id === id ? { ...p, [field]: value } : p)
+            placeholders: prev.placeholders.map(p => p.id === id ? { ...p, [field]: sanitizedValue } : p)
         }));
     };
 
@@ -327,7 +471,150 @@ const App: React.FC = () => {
             taggedSnippets: prev.taggedSnippets.filter(s => s.id !== id)
         }));
     };
-    
+
+    // Option Variable handlers
+    const handleAddOptionVariable = () => {
+        const newOptionVar: OptionVariable = { id: Date.now(), key: '', prompt: '', optionCount: 3 };
+        setCurrentProjectState(prev => ({ ...prev, optionVariables: [...(prev.optionVariables || []), newOptionVar] }));
+    };
+
+    const handleUpdateOptionVariable = (id: number, field: keyof OptionVariable, value: any) => {
+        setCurrentProjectState(prev => ({
+            ...prev,
+            optionVariables: (prev.optionVariables || []).map(ov => ov.id === id ? { ...ov, [field]: value } : ov)
+        }));
+    };
+
+    const handleDeleteOptionVariable = (id: number) => {
+        setCurrentProjectState(prev => ({
+            ...prev,
+            optionVariables: (prev.optionVariables || []).filter(ov => ov.id !== id)
+        }));
+    };
+
+    // Pending Result Selection Handlers
+    const handleSelectOption = (pendingId: number, variableKey: string, optionIndex: number) => {
+        setPendingResults(prev => prev.map(pr => {
+            if (pr.id !== pendingId) return pr;
+            return {
+                ...pr,
+                optionSelections: pr.optionSelections.map(os =>
+                    os.variableKey === variableKey ? { ...os, selectedIndex: optionIndex } : os
+                )
+            };
+        }));
+    };
+
+    const handleCustomOptionValue = (pendingId: number, variableKey: string, value: string) => {
+        setPendingResults(prev => prev.map(pr => {
+            if (pr.id !== pendingId) return pr;
+            return {
+                ...pr,
+                optionSelections: pr.optionSelections.map(os =>
+                    os.variableKey === variableKey ? { ...os, customValue: value, selectedIndex: -1 } : os
+                )
+            };
+        }));
+    };
+
+    const handleFinalizePendingResult = async (pendingId: number) => {
+        if (!currentProject) return;
+        const pending = pendingResults.find(pr => pr.id === pendingId);
+        if (!pending) return;
+
+        // Check all options are selected
+        const unresolved = pending.optionSelections.filter(os => os.selectedIndex === null);
+        if (unresolved.length > 0) {
+            showNotification(`Please select options for: ${unresolved.map(u => u.variableKey).join(', ')}`, 'error');
+            return;
+        }
+
+        // Apply selections to final output
+        let finalizedOutput = pending.finalOutput;
+        pending.optionSelections.forEach(os => {
+            const selectedValue = os.selectedIndex === -1 ? os.customValue : os.options[os.selectedIndex!];
+            // Replace ?key:count? pattern with selected value
+            const pattern = new RegExp(`\\?${os.variableKey}:\\d+\\?`, 'g');
+            finalizedOutput = finalizedOutput.replace(pattern, selectedValue);
+        });
+
+        // Check AI score for finalized content
+        addLog(`[${pending.item.name}] Finalizing selections and checking AI score...`, LogStatus.WORKING, pending.item.id);
+        const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalizedOutput);
+        const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
+
+        const txtContent = `${finalizedOutput}\n\n---META TITLES---\n${pending.metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${pending.metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
+
+        const jsonContent = JSON.stringify({
+            item_name: pending.item.name, tag: pending.item.tag, final_output: finalizedOutput, parsed_titles: pending.metaTitles,
+            parsed_summaries: pending.metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp: pending.timestamp,
+        }, null, 2);
+
+        // Move to results
+        setResults(prev => [...prev, {
+            item: pending.item,
+            finalOutput: finalizedOutput,
+            metaTitles: pending.metaTitles,
+            metaDescriptions: pending.metaDescriptions,
+            aiScore,
+            wordCount,
+            status,
+            timestamp: pending.timestamp,
+            jsonContent,
+            txtContent,
+            allOutputs: pending.allOutputs,
+            wpStatus: 'idle'
+        }]);
+
+        // Remove from pending
+        setPendingResults(prev => prev.filter(pr => pr.id !== pendingId));
+        addLog(`[${pending.item.name}] Finalized! Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, pending.item.id);
+    };
+
+    const handleAiChooseOption = async (pendingId: number, variableKey: string) => {
+        if (!currentProject) return;
+        const pending = pendingResults.find(pr => pr.id === pendingId);
+        if (!pending) return;
+        const selection = pending.optionSelections.find(os => os.variableKey === variableKey);
+        if (!selection || selection.options.length === 0) return;
+
+        addLog(`[${pending.item.name}] AI choosing best option for ${variableKey}...`, LogStatus.WORKING, pending.item.id);
+
+        const prompt = `You are selecting the best option from a list. Given this context about "${pending.item.name}", choose the single best option from the following numbered list. Reply with ONLY the number (1, 2, 3, etc.) of the best option:\n\n${selection.options.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}`;
+
+        try {
+            const response = await generateLlmContent(
+                prompt,
+                currentProject.state.provider,
+                currentProject.state.model,
+                { anthropic: currentProject.state.apiKeys.anthropic }
+            );
+            const chosenNumber = parseInt(response.trim().match(/\d+/)?.[0] || '1');
+            const chosenIndex = Math.max(0, Math.min(chosenNumber - 1, selection.options.length - 1));
+            handleSelectOption(pendingId, variableKey, chosenIndex);
+            addLog(`[${pending.item.name}] AI chose option ${chosenIndex + 1} for ${variableKey}`, LogStatus.SUCCESS, pending.item.id);
+        } catch (error) {
+            addLog(`[${pending.item.name}] AI selection failed, defaulting to option 1`, LogStatus.ERROR, pending.item.id);
+            handleSelectOption(pendingId, variableKey, 0);
+        }
+    };
+
+    const handleAiChooseAllForPending = async (pendingId: number) => {
+        const pending = pendingResults.find(pr => pr.id === pendingId);
+        if (!pending) return;
+        for (const selection of pending.optionSelections) {
+            if (selection.selectedIndex === null) {
+                await handleAiChooseOption(pendingId, selection.variableKey);
+            }
+        }
+    };
+
+    const handleAiChooseAllPending = async () => {
+        for (const pending of pendingResults) {
+            await handleAiChooseAllForPending(pending.id);
+        }
+    };
+
     const addTag = () => {
         if (currentProject && newTagName && !currentProject.state.tags.some(t => t.name === newTagName)) {
             setCurrentProjectState(prev => ({
@@ -415,7 +702,7 @@ const App: React.FC = () => {
              filledTemplate = filledTemplate.replace(new RegExp(`{${p.key}}`, 'g'), p.value);
         });
 
-        filledTemplate = filledTemplate.replace(/{item_name}/g, item.name);
+        filledTemplate = filledTemplate.replace(/<item_name>/g, item.name);
 
         return filledTemplate;
     };
@@ -477,50 +764,118 @@ const App: React.FC = () => {
                 const mainContentKeys = finalPrompts.length > 0 ? finalPrompts.map(p => p.outputKey) : [currentProject.state.promptTemplates[currentProject.state.promptTemplates.length - 1]?.outputKey].filter(Boolean);
                 
                 const combinedOutput = mainContentKeys.map(key => promptOutputs[key]).join('\n\n---\n\n');
-                
+
                 const { finalOutput, metaTitles, metaDescriptions } = parseFinalOutput(combinedOutput);
                 addLog(`[${item.name}] Generated final content.`, LogStatus.INFO, item.id);
 
-                addLog(`[${item.name}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, item.id);
-                const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
-                addLog(`[${item.name}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
+                // Check for option variables in the final output
+                const optionVarPattern = /\?([^:?]+):(\d+)\?/g;
+                const optionMatches = [...finalOutput.matchAll(optionVarPattern)];
+                const optionVariables = currentProject.state.optionVariables || [];
 
-                const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
-                const timestamp = new Date().toISOString();
-                
-                const txtContent = `${finalOutput}\n\n---META TITLES---\n${metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
-                
-                const jsonContent = JSON.stringify({
-                    item_name: item.name, tag: item.tag, final_output: finalOutput, parsed_titles: metaTitles,
-                    parsed_summaries: metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp,
-                }, null, 2);
+                if (optionMatches.length > 0 && optionVariables.length > 0) {
+                    // Has option variables - generate options and store as pending
+                    addLog(`[${item.name}] Found ${optionMatches.length} option variable(s), generating options...`, LogStatus.INFO, item.id);
 
-                setResults(prev => [...prev, { item, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
-                addLog(`[${item.name}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
+                    const optionSelections: OptionSelection[] = [];
 
-                // Save article to database
-                try {
-                    await fetch('/api/articles', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            workflowId: currentWorkflowId || null,
-                            websiteId: currentWebsiteId || null,
-                            keyword: item.name,
-                            tag: item.tag,
-                            finalContent: finalOutput,
-                            metaTitles,
-                            metaDescriptions,
-                            chainOutputs: promptOutputs,
-                            aiScore,
-                            wordCount,
-                            status: status.toLowerCase()
-                        })
-                    });
-                    addLog(`[${item.name}] Article saved to database.`, LogStatus.INFO, item.id);
-                } catch (saveError) {
-                    // Don't fail the whole process if saving fails
-                    console.error('Failed to save article:', saveError);
+                    for (const match of optionMatches) {
+                        const varKey = match[1];
+                        const optionCount = parseInt(match[2]);
+                        const optionVar = optionVariables.find(ov => ov.key === varKey);
+
+                        if (optionVar) {
+                            addLog(`[${item.name}] Generating ${optionCount} options for "${varKey}"...`, LogStatus.WORKING, item.id);
+
+                            // Fill the option variable prompt with context
+                            let optionPrompt = optionVar.prompt;
+                            optionPrompt = optionPrompt.replace(/<item_name>/g, item.name);
+                            // Add instruction to generate numbered list
+                            optionPrompt += `\n\nGenerate exactly ${optionCount} options. Format as a numbered list:\n1. [option]\n2. [option]\netc.`;
+
+                            const optionsResponse = await generateLlmContent(
+                                optionPrompt,
+                                currentProject.state.provider,
+                                currentProject.state.model,
+                                { anthropic: currentProject.state.apiKeys.anthropic }
+                            );
+
+                            // Parse the numbered list response
+                            const options = optionsResponse
+                                .split('\n')
+                                .map(line => line.replace(/^\d+\.\s*/, '').trim())
+                                .filter(line => line.length > 0)
+                                .slice(0, optionCount);
+
+                            optionSelections.push({
+                                variableKey: varKey,
+                                options,
+                                selectedIndex: null,
+                                customValue: ''
+                            });
+
+                            addLog(`[${item.name}] Generated ${options.length} options for "${varKey}"`, LogStatus.SUCCESS, item.id);
+                        }
+                    }
+
+                    const timestamp = new Date().toISOString();
+
+                    // Store as pending result
+                    setPendingResults(prev => [...prev, {
+                        id: Date.now() + item.id,
+                        item,
+                        finalOutput,
+                        metaTitles,
+                        metaDescriptions,
+                        allOutputs: promptOutputs,
+                        timestamp,
+                        optionSelections
+                    }]);
+
+                    addLog(`[${item.name}] Added to pending selections (${optionSelections.length} option(s) need selection)`, LogStatus.INFO, item.id);
+                } else {
+                    // No option variables - proceed normally
+                    addLog(`[${item.name}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, item.id);
+                    const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
+                    addLog(`[${item.name}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
+
+                    const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
+                    const timestamp = new Date().toISOString();
+
+                    const txtContent = `${finalOutput}\n\n---META TITLES---\n${metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
+
+                    const jsonContent = JSON.stringify({
+                        item_name: item.name, tag: item.tag, final_output: finalOutput, parsed_titles: metaTitles,
+                        parsed_summaries: metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp,
+                    }, null, 2);
+
+                    setResults(prev => [...prev, { item, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
+                    addLog(`[${item.name}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
+
+                    // Save article to database
+                    try {
+                        await fetch('/api/articles', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                workflowId: currentWorkflowId || null,
+                                websiteId: currentWebsiteId || null,
+                                keyword: item.name,
+                                tag: item.tag,
+                                finalContent: finalOutput,
+                                metaTitles,
+                                metaDescriptions,
+                                chainOutputs: promptOutputs,
+                                aiScore,
+                                wordCount,
+                                status: status.toLowerCase()
+                            })
+                        });
+                        addLog(`[${item.name}] Article saved to database.`, LogStatus.INFO, item.id);
+                    } catch (saveError) {
+                        // Don't fail the whole process if saving fails
+                        console.error('Failed to save article:', saveError);
+                    }
                 }
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
@@ -747,6 +1102,12 @@ const App: React.FC = () => {
                     setIsClientsOpen(false);
                     showNotification('Website selected', 'info');
                 }}
+                onOpenWorkflowResults={(clientId) => {
+                    setFilterByClientId(clientId);
+                    setCurrentWebsiteId(undefined);
+                    setIsClientsOpen(false);
+                    setIsArticlesOpen(true);
+                }}
             />
             <WebsitesPage
                 isOpen={isWebsitesOpen}
@@ -758,10 +1119,142 @@ const App: React.FC = () => {
                 }}
             />
             <Analytics isOpen={isAnalyticsOpen} onClose={() => setIsAnalyticsOpen(false)} />
+
+            {/* Settings Modal */}
+            {isSettingsOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+                    <div className="bg-slate-900 rounded-xl border border-brand-cyan/50 shadow-glow-cyan w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
+                        <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
+                            <h2 className="text-xl font-bold text-brand-cyan">Settings</h2>
+                            <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-white">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-6">
+                            {/* Auto-Save Settings */}
+                            <div className="bg-slate-800/50 p-4 rounded-lg border border-brand-cyan/30">
+                                <h3 className="text-lg font-semibold text-brand-cyan mb-3">Auto-Save</h3>
+                                <div className="flex items-center gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={currentProject.state.autoSaveEnabled ?? true}
+                                            onChange={e => setCurrentProjectState(p => ({...p, autoSaveEnabled: e.target.checked}))}
+                                            className="w-4 h-4 rounded bg-slate-700 border-brand-cyan text-brand-cyan focus:ring-brand-cyan"
+                                        />
+                                        <span className="text-white">Enable Auto-Save</span>
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-slate-400 text-sm">Delay:</span>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="60"
+                                            value={currentProject.state.autoSaveSeconds ?? 3}
+                                            onChange={e => setCurrentProjectState(p => ({...p, autoSaveSeconds: parseInt(e.target.value) || 3}))}
+                                            className="w-16 bg-slate-700 border border-brand-cyan/50 rounded px-2 py-1 text-white text-sm"
+                                        />
+                                        <span className="text-slate-400 text-sm">seconds</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Open Router Override */}
+                            <div className="bg-slate-800/50 p-4 rounded-lg border border-purple-500/30">
+                                <h3 className="text-lg font-semibold text-purple-400 mb-3">Open Router</h3>
+                                <label className="flex items-center gap-2 cursor-pointer mb-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={currentProject.state.useOpenRouter ?? false}
+                                        onChange={e => setCurrentProjectState(p => ({...p, useOpenRouter: e.target.checked}))}
+                                        className="w-4 h-4 rounded bg-slate-700 border-purple-500 text-purple-500 focus:ring-purple-500"
+                                    />
+                                    <span className="text-white">Use Open Router (overrides individual API keys)</span>
+                                </label>
+                                <input
+                                    type="password"
+                                    placeholder="Open Router API Key"
+                                    value={currentProject.state.apiKeys?.openRouter || ''}
+                                    onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, openRouter: e.target.value}}))}
+                                    className="w-full bg-slate-700 border border-purple-500/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500"
+                                />
+                            </div>
+
+                            {/* API Keys */}
+                            <div className="bg-slate-800/50 p-4 rounded-lg border border-brand-gold/30">
+                                <h3 className="text-lg font-semibold text-brand-gold mb-3">API Keys</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">Anthropic (Claude)</label>
+                                        <input
+                                            type="password"
+                                            placeholder="sk-ant-..."
+                                            value={currentProject.state.apiKeys?.anthropic || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, anthropic: e.target.value}}))}
+                                            className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">OpenAI (GPT)</label>
+                                        <input
+                                            type="password"
+                                            placeholder="sk-..."
+                                            value={currentProject.state.apiKeys?.openai || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, openai: e.target.value}}))}
+                                            className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">Google (Gemini)</label>
+                                        <input
+                                            type="password"
+                                            placeholder="AIza..."
+                                            value={currentProject.state.apiKeys?.gemini || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, gemini: e.target.value}}))}
+                                            className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">xAI (Grok)</label>
+                                        <input
+                                            type="password"
+                                            placeholder="xai-..."
+                                            value={currentProject.state.apiKeys?.grok || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, grok: e.target.value}}))}
+                                            className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
+                                        />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className="block text-xs font-medium text-slate-400 mb-1">ZeroGPT (AI Detection)</label>
+                                        <input
+                                            type="password"
+                                            placeholder="ZeroGPT API Key"
+                                            value={currentProject.state.apiKeys?.zeroGpt || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, zeroGpt: e.target.value}}))}
+                                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-slate-500"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p className="text-xs text-slate-500 text-center">
+                                API keys are saved with your workflow and auto-save will sync them to the database.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <ArticleManager
                 isOpen={isArticlesOpen}
-                onClose={() => setIsArticlesOpen(false)}
+                onClose={() => {
+                    setIsArticlesOpen(false);
+                    setFilterByClientId(undefined);
+                }}
                 filterByWebsite={currentWebsiteId}
+                filterByClient={filterByClientId}
             />
             <TemplateLibrary
                 isOpen={isTemplatesOpen}
@@ -777,7 +1270,7 @@ const App: React.FC = () => {
                 isOpen={isWorkflowNavOpen}
                 onClose={() => setIsWorkflowNavOpen(false)}
                 currentWorkflowId={currentWorkflowId}
-                onSelectWorkflow={(workflow) => {
+                onSelectWorkflow={async (workflow) => {
                     setCurrentWorkflowId(workflow.id);
                     setCurrentWebsiteId(workflow.website_id || undefined);
                     setCurrentWorkflowContext({
@@ -787,7 +1280,26 @@ const App: React.FC = () => {
                         isStandalone: !workflow.client_id,
                         projectName: undefined // Will be fetched if needed
                     });
-                    showNotification(`Loaded workflow: ${workflow.name}`, 'info');
+
+                    // Load workflow state from database
+                    try {
+                        const response = await fetch(`/api/workflows/${workflow.id}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.workflow && data.workflow.state && Object.keys(data.workflow.state).length > 0) {
+                                // Load the saved state
+                                setCurrentProjectState(() => data.workflow.state);
+                                setHasUnsavedChanges(false);
+                                showNotification(`Loaded workflow: ${workflow.name}`, 'success');
+                            } else {
+                                // No saved state, start fresh
+                                showNotification(`Loaded workflow: ${workflow.name} (new)`, 'info');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error loading workflow state:', error);
+                        showNotification(`Loaded workflow: ${workflow.name}`, 'info');
+                    }
                 }}
                 onCreateWorkflow={async (name, clientId, websiteId, personalProjectId) => {
                     // Create a new workflow in the database
@@ -859,7 +1371,7 @@ const App: React.FC = () => {
                     <div className="grid grid-cols-4 gap-1.5 sm:gap-2 md:flex md:gap-2 md:flex-wrap justify-center md:justify-end">
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsWorkflowNavOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsAgencyOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Manage Clients & Locations"
                         >
                             <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -869,7 +1381,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsClientsOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="View All Clients"
                         >
                             <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -879,7 +1391,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWorkflowNavOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Browse Workflows"
                         >
                             <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -889,7 +1401,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsAnalyticsOpen(false); setIsWebsitesOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="View All Websites"
                         >
                             <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -899,17 +1411,17 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsWorkflowNavOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsArticlesOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
-                            title="View Saved Articles"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            title="View Workflow Results"
                         >
                             <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            <span className="text-[10px] md:text-sm">Articles</span>
+                            <span className="text-[10px] md:text-sm whitespace-nowrap">Results</span>
                         </button>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsTemplatesOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Template Library"
                         >
                             <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -919,7 +1431,7 @@ const App: React.FC = () => {
                         </button>
                         <button
                             onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-800 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Analytics Dashboard"
                         >
                             <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -927,48 +1439,104 @@ const App: React.FC = () => {
                             </svg>
                             <span className="text-[10px] md:text-sm">Analytics</span>
                         </button>
+                        <button
+                            onClick={() => setIsSettingsOpen(true)}
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            title="Settings"
+                        >
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span className="text-[10px] md:text-sm">Settings</span>
+                        </button>
                     </div>
                 </div>
 
                 {/* Workflow Context Breadcrumb */}
                 {currentWorkflowContext.workflowName && (
                     <div className="bg-card/50 rounded-lg px-4 py-3 border border-slate-700/50 shadow-card">
-                        <div className="flex items-center gap-2 text-sm">
-                            {currentWorkflowContext.isStandalone ? (
-                                <>
-                                    <span className="px-3 py-1 bg-purple-600/20 border border-purple-500/50 rounded-full text-purple-300 font-medium">
-                                        Standalone
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2 text-sm">
+                                {currentWorkflowContext.isStandalone ? (
+                                    <>
+                                        <span className="px-3 py-1 bg-purple-600/20 border border-purple-500/50 rounded-full text-purple-300 font-medium">
+                                            Standalone
+                                        </span>
+                                        {currentWorkflowContext.projectName && (
+                                            <>
+                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                                <span className="text-purple-400">{currentWorkflowContext.projectName}</span>
+                                            </>
+                                        )}
+                                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                        <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="px-3 py-1 bg-brand-cyan/20 border border-brand-cyan/50 rounded-full text-brand-cyan font-medium">
+                                            Client
+                                        </span>
+                                        {currentWorkflowContext.clientName && (
+                                            <>
+                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                                <span className="text-brand-cyan">{currentWorkflowContext.clientName}</span>
+                                            </>
+                                        )}
+                                        {currentWorkflowContext.websiteName && (
+                                            <>
+                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                                <span className="text-brand-cyan-light">{currentWorkflowContext.websiteName}</span>
+                                            </>
+                                        )}
+                                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                        <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
+                                    </>
+                                )}
+                            </div>
+                            {/* Save Workflow Button */}
+                            <div className="flex items-center gap-3">
+                                {lastSaveTime && (
+                                    <span className="text-xs text-slate-400">
+                                        Last saved: {lastSaveTime.toLocaleTimeString()}
                                     </span>
-                                    {currentWorkflowContext.projectName && (
+                                )}
+                                <button
+                                    onClick={() => saveWorkflowToDatabase(true)}
+                                    disabled={isSaving || !hasUnsavedChanges}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition ${
+                                        isSaving
+                                            ? 'bg-slate-700 text-slate-400 cursor-wait'
+                                            : hasUnsavedChanges
+                                                ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900'
+                                                : 'bg-brand-cyan text-white'
+                                    }`}
+                                >
+                                    {isSaving ? (
                                         <>
-                                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                            <span className="text-purple-400">{currentWorkflowContext.projectName}</span>
+                                            <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Saving...
+                                        </>
+                                    ) : hasUnsavedChanges ? (
+                                        <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                                            </svg>
+                                            Save Workflow
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                            </svg>
+                                            Saved
                                         </>
                                     )}
-                                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                    <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span className="px-3 py-1 bg-brand-cyan/20 border border-brand-cyan/50 rounded-full text-brand-cyan font-medium">
-                                        Client
-                                    </span>
-                                    {currentWorkflowContext.clientName && (
-                                        <>
-                                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                            <span className="text-brand-cyan">{currentWorkflowContext.clientName}</span>
-                                        </>
-                                    )}
-                                    {currentWorkflowContext.websiteName && (
-                                        <>
-                                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                            <span className="text-brand-cyan-light">{currentWorkflowContext.websiteName}</span>
-                                        </>
-                                    )}
-                                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                    <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
-                                </>
-                            )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -978,136 +1546,157 @@ const App: React.FC = () => {
                 {/* Left Column */}
                 <div className="flex flex-col gap-8">
                     {renderSection('1. Setup & Run', 'setup', <Icon type="settings" className="h-6 w-6"/>,
-                        <div className="space-y-4">
-                             {/* API Keys and Model Selection */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">ZeroGPT API Key (Optional)</label>
-                                    <input type="password" placeholder="ZeroGPT API Key" value={currentProject.state.apiKeys.zeroGpt} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, zeroGpt: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
+                        <div className="space-y-3">
+                            {/* Row 1: AI Model + Filename + Import/Export */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {/* Left side: AI Model + Filename */}
+                                <div className="space-y-2">
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">AI Model</label>
+                                        <select
+                                            value={currentProject.state.model}
+                                            onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
+                                        >
+                                            <optgroup label="Claude (Anthropic)">
+                                                <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast)</option>
+                                                <option value="claude-opus-4-5-20251101">Claude Opus 4.5 (Premium)</option>
+                                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                                <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                                <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                            </optgroup>
+                                            <optgroup label="GPT (OpenAI)">
+                                                <option value="gpt-5.2-2025-12-11">GPT-5.2 (Latest)</option>
+                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini (Fast)</option>
+                                                <option value="gpt-5-nano-2025-08-07">GPT-5 Nano (Fastest)</option>
+                                                <option value="gpt-4o">GPT-4o</option>
+                                                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                            </optgroup>
+                                            <optgroup label="Gemini (Google)">
+                                                <option value="gemini-3.0">Gemini 3.0 (Latest)</option>
+                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                            </optgroup>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1">Filename Template</label>
+                                        <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold" />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">Anthropic API Key (Required)</label>
-                                    <input type="password" placeholder="sk-ant-..." value={currentProject.state.apiKeys.anthropic} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, anthropic: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
-                                </div>
-                            </div>
-                             <div>
-                                <label className="block text-sm font-medium text-brand-gold mb-1.5">AI Model</label>
-                                <select
-                                    value={currentProject.state.model}
-                                    onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
-                                    className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all"
-                                >
-                                    <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Latest)</option>
-                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                                    <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                                    <option value="claude-3-haiku-20240307">Claude 3 Haiku (Fast)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-brand-gold mb-1.5">Filename Template</label>
-                                <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all" />
-                            </div>
-                            
-                            {/* Project Management */}
-                             <div className="bg-slate-800/50 p-4 rounded-lg border border-brand-gold/50 space-y-3">
-                                <h3 className="text-lg font-semibold text-brand-gold">Project Management</h3>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={handleCreateNewProject} className="w-full text-center px-4 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold">+ New Project</button>
-                                    <select
-                                        onChange={(e) => {
-                                            const project = projects.find(p => p.id === e.target.value);
-                                            if(project) setCurrentProject(project);
-                                        }}
-                                        value={currentProject.id}
-                                        className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-gold"
-                                    >
-                                        <option value="" disabled>Load Project</option>
-                                        {projects.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="flex gap-2">
-                                     <input
-                                        type="text"
-                                        placeholder="Enter project name..."
-                                        value={currentProject.name === 'Untitled Project' ? '' : currentProject.name}
-                                        onChange={e => setCurrentProject({...currentProject, name: e.target.value || 'Untitled Project'})}
-                                        className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-gold"
-                                    />
-                                    <button onClick={handleSaveProject} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold transition">Save</button>
-                                    <button onClick={handleDeleteProject} className="p-2.5 bg-red-600/80 hover:bg-red-600 rounded-lg text-white transition" title="Delete current project">
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                    </button>
-                                </div>
-                                {/* JSON Export/Import */}
-                                <div className="flex gap-2 mt-2">
-                                    <button
-                                        onClick={() => {
-                                            const data = exportProjectHook();
-                                            if (data) {
-                                                const filename = `${currentProject.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-config.json`;
-                                                downloadProjectConfig(data, filename);
-                                                showNotification('Project exported to JSON!', 'success');
-                                            }
-                                        }}
-                                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition border border-brand-gold"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                                        Export JSON
-                                    </button>
-                                    <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-sm transition cursor-pointer border border-brand-gold">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                                        Import JSON
-                                        <input
-                                            type="file"
-                                            accept=".json"
-                                            className="hidden"
-                                            onChange={async (e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) {
-                                                    try {
-                                                        const data = await loadProjectConfigFromFile(file) as Project;
-                                                        importProjectHook(data);
-                                                    } catch (error) {
-                                                        showNotification('Failed to import project. Invalid JSON.', 'error');
-                                                    }
-                                                }
-                                                e.target.value = '';
+                                {/* Right side: Import/Export */}
+                                <div className="flex flex-col justify-end gap-2">
+                                    <label className="block text-xs font-medium text-brand-gold">Import / Export</label>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => {
+                                                const exportData = {
+                                                    name: currentWorkflowContext.workflowName || currentProject.name,
+                                                    exportedAt: new Date().toISOString(),
+                                                    state: currentProject.state
+                                                };
+                                                const filename = `${(currentWorkflowContext.workflowName || currentProject.name).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-workflow.json`;
+                                                downloadProjectConfig(exportData, filename);
+                                                showNotification('Workflow exported!', 'success');
                                             }}
+                                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-xs transition"
+                                        >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                            Export
+                                        </button>
+                                        <label className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-xs transition cursor-pointer">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                                            Import
+                                            <input
+                                                type="file"
+                                                accept=".json"
+                                                className="hidden"
+                                                onChange={async (e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        try {
+                                                            const text = await file.text();
+                                                            const data = JSON.parse(text);
+                                                            if (data.state) {
+                                                                setCurrentProjectState(() => data.state);
+                                                                showNotification('Workflow imported!', 'success');
+                                                            } else {
+                                                                showNotification('Invalid format.', 'error');
+                                                            }
+                                                        } catch (error) {
+                                                            showNotification('Failed to import.', 'error');
+                                                        }
+                                                    }
+                                                    e.target.value = '';
+                                                }}
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Project Notes + Add Items Row */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Project Notes - 2/3 width, 2 columns */}
+                                <div className="md:col-span-2 bg-slate-900 p-3 rounded-lg border border-brand-cyan/50">
+                                    <h3 className="text-sm font-semibold text-brand-cyan mb-2">Project Notes</h3>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <textarea
+                                            value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[0] || ''}
+                                            onChange={e => {
+                                                const cols = (currentProject.state.projectNotes || '').split('\n---COL---\n');
+                                                cols[0] = e.target.value;
+                                                setCurrentProjectState(p => ({...p, projectNotes: cols.join('\n---COL---\n')}));
+                                            }}
+                                            rows={4}
+                                            placeholder="Notes column 1..."
+                                            className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
                                         />
+                                        <textarea
+                                            value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[1] || ''}
+                                            onChange={e => {
+                                                const cols = (currentProject.state.projectNotes || '').split('\n---COL---\n');
+                                                while (cols.length < 2) cols.push('');
+                                                cols[1] = e.target.value;
+                                                setCurrentProjectState(p => ({...p, projectNotes: cols.join('\n---COL---\n')}));
+                                            }}
+                                            rows={4}
+                                            placeholder="Notes column 2..."
+                                            className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                        />
+                                    </div>
+                                </div>
+                                {/* Add Items - 1/3 width */}
+                                <div className="bg-slate-900 p-3 rounded-lg border border-brand-gold/50">
+                                    <label htmlFor="manual-items" className="block text-sm font-medium text-brand-gold mb-1.5">
+                                        Add Items <span className="text-xs text-brand-gold/60">(one per line)</span>
                                     </label>
+                                    <textarea
+                                        id="manual-items"
+                                        rows={3}
+                                        className="w-full bg-slate-900 border border-brand-gold/30 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                        placeholder="Topic A(H)&#10;Topic B(H)"
+                                        value={manualItems}
+                                        onChange={(e) => setManualItems(e.target.value)}
+                                    />
+                                    <div className="mt-2 flex flex-col gap-2">
+                                        <button
+                                            onClick={handleManualAddItems}
+                                            className="w-full bg-brand-gold hover:bg-brand-gold-dark text-slate-900 font-bold py-2 px-3 rounded-lg transition text-xs"
+                                        >
+                                            Add Items from Text
+                                        </button>
+                                        <label htmlFor="file-upload" className="cursor-pointer text-xs text-center text-brand-gold hover:text-brand-gold-light transition">
+                                            {fileName ? `File: ${fileName}` : 'Or, upload CSV'}
+                                            <input id="file-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
 
-
-                            {/* Item Input */}
-                            <div>
-                                <label htmlFor="manual-items" className="block text-sm font-medium text-brand-gold mb-1.5">
-                                    Add Items (one per line)
-                                </label>
-                                <textarea
-                                    id="manual-items"
-                                    rows={6}
-                                    className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-sm focus:ring-2 focus:ring-brand-gold focus:border-brand-gold transition-all"
-                                    placeholder="Topic A(H)&#10;Topic B(H)&#10;Product X(J)"
-                                    value={manualItems}
-                                    onChange={(e) => setManualItems(e.target.value)}
-                                />
-                                <div className="mt-3 flex items-center justify-between">
-                                    <button
-                                        onClick={handleManualAddItems}
-                                        className="bg-brand-gold hover:bg-brand-gold-dark text-slate-900 font-bold py-2.5 px-4 rounded-lg transition text-sm border border-brand-gold"
-                                    >
-                                        Add Items from Text
-                                    </button>
-                                    <label htmlFor="file-upload" className="cursor-pointer text-sm text-brand-gold hover:text-brand-gold-light transition">
-                                        {fileName ? `File: ${fileName}` : 'Or, upload a CSV file'}
-                                        <input id="file-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
-                                    </label>
-                                </div>
-                            </div>
-                            <button onClick={processWorkflow} disabled={isRunDisabled} className="w-full flex items-center justify-center bg-gradient-to-r from-brand-cyan to-brand-cyan-dark hover:from-brand-cyan-dark hover:to-brand-cyan text-white font-bold py-4 px-6 rounded-xl transition-all shadow-card hover:shadow-glow-cyan disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed disabled:shadow-none btn-press">
+                            <button onClick={processWorkflow} disabled={isRunDisabled} className={`w-full flex items-center justify-center font-bold py-4 px-6 rounded-xl transition-all btn-press border-2 ${isRunDisabled ? 'bg-slate-900 border-brand-cyan text-brand-cyan/50 cursor-not-allowed' : 'bg-gradient-to-r from-brand-cyan to-brand-cyan-dark hover:from-brand-cyan-dark hover:to-brand-cyan text-white border-transparent shadow-card hover:shadow-glow-cyan'}`}>
                                 {isProcessing ? <Icon type="working" className="h-5 w-5 animate-spin mr-2" /> : <Icon type="play" className="h-5 w-5 mr-2" />}
                                 {getRunButtonText()}
                             </button>
@@ -1117,9 +1706,9 @@ const App: React.FC = () => {
                     {items.length > 0 && renderSection('2. Loaded Items', 'loadedItems', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-2">
                             <p className="text-brand-gold">{items.length} item(s) loaded.</p>
-                            <div className="max-h-60 overflow-y-auto bg-slate-900/50 rounded-lg p-2 border border-brand-gold/50">
+                            <div className="max-h-60 overflow-y-auto bg-slate-900 rounded-lg p-2 border border-brand-gold/50">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="text-xs text-brand-gold uppercase bg-slate-800/50">
+                                    <thead className="text-xs text-brand-gold uppercase bg-slate-900">
                                         <tr>
                                             <th scope="col" className="px-4 py-2.5 rounded-tl-lg">Item Name</th>
                                             <th scope="col" className="px-4 py-2.5 rounded-tr-lg">Tag</th>
@@ -1127,7 +1716,7 @@ const App: React.FC = () => {
                                     </thead>
                                     <tbody>
                                         {items.map(s => (
-                                            <tr key={s.id} className="border-b border-slate-700/50 hover:bg-slate-800/50 transition-colors">
+                                            <tr key={s.id} className="border-b border-slate-700/50 hover:bg-slate-900 transition-colors">
                                                 <td className="px-4 py-2 font-medium text-white">{s.name}</td>
                                                 <td className="px-4 py-2"><span className="px-2 py-0.5 bg-brand-cyan/20 text-brand-cyan rounded-full text-xs">{s.tag || 'N/A'}</span></td>
                                             </tr>
@@ -1146,11 +1735,11 @@ const App: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
-                                    <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">Content Type</label>
-                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all">
+                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all">
                                         <option value="pages">Page</option>
                                         <option value="posts">Post</option>
                                     </select>
@@ -1162,20 +1751,20 @@ const App: React.FC = () => {
                                     type="text"
                                     value={currentProject.state.wpTitleTemplate}
                                     onChange={e => setCurrentProjectState(p => ({...p, wpTitleTemplate: e.target.value}))}
-                                    className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                    className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                 />
                                 <p className="text-xs text-brand-gold/70 mt-1">
-                                    Use variables like {'{item_name}'} or {'{city}'}.
+                                    Use variables like {'<item_name>'} or {'{city}'}.
                                 </p>
                             </div>
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Username</label>
-                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials.user} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, user: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials.user} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, user: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WP Application Password</label>
-                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials.password} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, password: e.target.value}}))} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials.password} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, password: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                             </div>
                             <p className="text-xs text-brand-gold/70">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
@@ -1185,7 +1774,7 @@ const App: React.FC = () => {
                      {renderSection('3. Tag Manager', 'tags', <Icon type="settings" className="h-6 w-6"/>,
                         <div className="space-y-3">
                              <div className="flex gap-2">
-                                <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-gold transition-all"/>
                                 <button onClick={addTag} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-white font-semibold transition">Add</button>
                             </div>
                             <div className="flex flex-wrap gap-2">{currentProject.state.tags.map(t => (<div key={t.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-brand-gold"><span>{t.name}</span><button onClick={() => removeTag(t.id)} className="text-brand-gold/60 hover:text-white transition"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>))}</div>
@@ -1194,42 +1783,104 @@ const App: React.FC = () => {
 
                     {renderSection('4. Workflow Variables', 'placeholders', <Icon type="info" className="h-6 w-6"/>,
                         <div className="space-y-6">
-                            <div>
+                            {/* Workflow Notes Section - 3 columns */}
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-cyan">
+                                <h3 className="text-sm font-semibold text-brand-cyan mb-2">Workflow Notes</h3>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <textarea
+                                        value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[0] || ''}
+                                        onChange={e => {
+                                            const cols = (currentProject.state.workflowNotes || '').split('\n---COL---\n');
+                                            cols[0] = e.target.value;
+                                            setCurrentProjectState(p => ({...p, workflowNotes: cols.join('\n---COL---\n')}));
+                                        }}
+                                        rows={3}
+                                        placeholder="Notes column 1..."
+                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                    />
+                                    <textarea
+                                        value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[1] || ''}
+                                        onChange={e => {
+                                            const cols = (currentProject.state.workflowNotes || '').split('\n---COL---\n');
+                                            while (cols.length < 2) cols.push('');
+                                            cols[1] = e.target.value;
+                                            setCurrentProjectState(p => ({...p, workflowNotes: cols.join('\n---COL---\n')}));
+                                        }}
+                                        rows={3}
+                                        placeholder="Notes column 2..."
+                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                    />
+                                    <textarea
+                                        value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[2] || ''}
+                                        onChange={e => {
+                                            const cols = (currentProject.state.workflowNotes || '').split('\n---COL---\n');
+                                            while (cols.length < 3) cols.push('');
+                                            cols[2] = e.target.value;
+                                            setCurrentProjectState(p => ({...p, workflowNotes: cols.join('\n---COL---\n')}));
+                                        }}
+                                        rows={3}
+                                        placeholder="Notes column 3..."
+                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Global Variables */}
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Global Variables</h3>
                                 {selectedPlaceholders.size > 0 && (
-                                    <div className="bg-slate-800/50 p-3 rounded-lg mb-3 flex items-center gap-3 border border-brand-gold/50">
+                                    <div className="bg-slate-900 p-3 rounded-lg mb-3 flex items-center gap-3 border border-brand-gold/50">
                                         <span className="text-sm font-semibold text-brand-gold">{selectedPlaceholders.size} selected</span>
-                                        <select value={bulkActionTag} onChange={e => setBulkActionTag(e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-brand-gold">
+                                        <select value={bulkActionTag} onChange={e => setBulkActionTag(e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-brand-gold">
                                             <option value="">Select Tag...</option>
                                             {currentProject.state.tags.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                                         </select>
                                         <button onClick={handleBulkTagPlaceholders} disabled={!bulkActionTag} className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-white text-sm font-semibold disabled:bg-slate-600 transition">Apply Tag</button>
                                     </div>
                                 )}
+                                {/* Column Headers */}
+                                <div className="grid grid-cols-[auto,1fr,1fr,1fr,auto] gap-2 items-center mb-2 text-xs text-brand-gold/70 font-medium">
+                                    <div className="w-4"></div>
+                                    <div>Global Variable Placeholder Name</div>
+                                    <div>Value</div>
+                                    <div>Placeholder (live preview)</div>
+                                    <div className="w-10"></div>
+                                </div>
                                 <div className="space-y-2">
-                                {currentProject.state.placeholders.filter(p=>!p.tag).map(p => (<div key={p.id} className="grid grid-cols-[auto,1fr,1fr,auto] gap-2 items-center">
-                                    <input type="checkbox" checked={selectedPlaceholders.has(p.id)} onChange={() => togglePlaceholderSelection(p.id)} className="form-checkbox h-4 w-4 bg-slate-800 border-brand-gold text-brand-gold focus:ring-brand-gold rounded"/>
-                                    <input type="text" placeholder="{key}" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
-                                    <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
+                                {currentProject.state.placeholders.filter(p=>!p.tag).map(p => (<div key={p.id} className="grid grid-cols-[auto,1fr,1fr,1fr,auto] gap-2 items-center">
+                                    <input type="checkbox" checked={selectedPlaceholders.has(p.id)} onChange={() => togglePlaceholderSelection(p.id)} className="form-checkbox h-4 w-4 bg-slate-900 border-brand-gold text-brand-gold focus:ring-brand-gold rounded"/>
+                                    <input type="text" placeholder="variable_name" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
+                                    <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-brand-gold text-sm transition-all"/>
+                                    <div className="bg-slate-900 border border-brand-gold/30 rounded-lg px-3 py-2 text-brand-gold font-mono text-sm">{`{${p.key || ''}}`}</div>
                                     <button onClick={() => handleDeletePlaceholder(p.id)} className="p-2 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                 </div>))}
                                 </div>
                                 <button onClick={() => handleAddPlaceholder()} className="mt-3 text-brand-gold hover:text-brand-gold-light font-semibold text-sm transition">+ Add Global Variable</button>
                             </div>
-                            <div>
+
+                            {/* Tagged Variables */}
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Tagged Variables</h3>
                                 {currentProject.state.tags.map(tag => (
                                     <div key={tag.id} className="mb-4">
                                         <p className="font-bold text-brand-gold text-sm mb-2">Tag: {tag.name}</p>
+                                        {/* Column Headers */}
+                                        <div className="grid grid-cols-[1fr,1fr,1fr,auto] gap-2 items-center mb-2 text-xs text-brand-gold/70 font-medium">
+                                            <div>Tag Variable Placeholder Name</div>
+                                            <div>Value</div>
+                                            <div>Placeholder (live preview)</div>
+                                            <div className="w-10"></div>
+                                        </div>
                                         <div className="space-y-2">
-                                            {currentProject.state.placeholders.filter(p=>p.tag===tag.name).map(p => (<div key={p.id} className="grid grid-cols-[1fr,1fr,auto] gap-2 items-center">
-                                                <input type="text" placeholder={`{key{${tag.name}}}`} value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
-                                                <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                            {currentProject.state.placeholders.filter(p=>p.tag===tag.name).map(p => (<div key={p.id} className="grid grid-cols-[1fr,1fr,1fr,auto] gap-2 items-center">
+                                                <input type="text" placeholder="variable_name" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                                <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                                <div className="bg-slate-900 border border-orange-500/30 rounded-lg px-3 py-2 text-orange-400 font-mono text-sm">{`{${p.key || ''}{${tag.name}}}`}</div>
                                                 <div className="relative group">
                                                     <button className="p-2 text-brand-gold hover:text-white transition">
                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
                                                     </button>
-                                                    <div className="absolute right-0 bottom-full z-10 mb-2 w-max bg-slate-800 border border-brand-gold/50 text-white text-xs rounded-lg shadow-card-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
+                                                    <div className="absolute right-0 bottom-full z-10 mb-2 w-max bg-slate-900 border border-brand-gold/50 text-white text-xs rounded-lg shadow-card-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
                                                         <button onClick={() => handleMakePlaceholderUniversal(p.id)} className="block w-full text-left px-3 py-2 hover:bg-slate-700 rounded-t-lg transition">Make Global</button>
                                                         <button onClick={() => handleDeletePlaceholder(p.id)} className="block w-full text-left px-3 py-2 hover:bg-slate-700 rounded-b-lg text-red-400 transition">Delete Variable</button>
                                                     </div>
@@ -1240,27 +1891,77 @@ const App: React.FC = () => {
                                     </div>
                                 ))}
                             </div>
-                            <div>
-                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-gold/60">(Read-only)</span></h3>
-                                <p className="text-xs text-brand-gold/70 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-slate-800/50 p-1 rounded border border-brand-gold/50">[output_key]</span></p>
+
+                            {/* Prompt Output Variables */}
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-gold/60 font-mono">[output_key]</span> <span className="text-xs text-brand-gold/60">(Read-only)</span></h3>
+                                <p className="text-xs text-brand-gold/70 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-slate-900 p-1 rounded border border-brand-gold/50">[output_key]</span></p>
                                 <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 text-sm font-mono text-brand-gold">[{p.outputKey}]</div>))}</div>
+                            </div>
+
+                            {/* Option Variables */}
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Option Variables <span className="text-xs text-brand-gold/60 font-mono">?key:count?</span></h3>
+                                <p className="text-xs text-brand-gold/70 mb-2">Generate multiple options for the user to choose from. AI will create the specified number of options based on your prompt.</p>
+                                <div className="space-y-3">
+                                    {(currentProject.state.optionVariables || []).map(ov => (
+                                        <div key={ov.id} className="bg-slate-900 p-3 rounded-lg border border-brand-gold/50 space-y-2">
+                                            <div className="flex gap-2 items-center">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Variable name (e.g., meta_title)"
+                                                    value={ov.key}
+                                                    onChange={e => handleUpdateOptionVariable(ov.id, 'key', e.target.value)}
+                                                    className="flex-1 bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-brand-gold transition-all"
+                                                />
+                                                <div className="flex items-center gap-2 bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2">
+                                                    <span className="text-xs text-brand-gold">Options:</span>
+                                                    <input
+                                                        type="range"
+                                                        min="1"
+                                                        max="10"
+                                                        value={ov.optionCount}
+                                                        onChange={e => handleUpdateOptionVariable(ov.id, 'optionCount', parseInt(e.target.value))}
+                                                        className="w-20 accent-yellow-500"
+                                                    />
+                                                    <span className="text-sm font-bold text-brand-gold w-4">{ov.optionCount}</span>
+                                                </div>
+                                                <button onClick={() => handleDeleteOptionVariable(ov.id)} className="p-2 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                </button>
+                                            </div>
+                                            <textarea
+                                                placeholder="Prompt for generating options (e.g., Generate optimized meta titles for this article about <item_name>...)"
+                                                value={ov.prompt}
+                                                onChange={e => handleUpdateOptionVariable(ov.id, 'prompt', e.target.value)}
+                                                rows={3}
+                                                className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all resize-y"
+                                            />
+                                            <div className="text-xs text-brand-gold/70">
+                                                Use in prompts as: <span className="font-mono bg-slate-900 px-1.5 py-0.5 rounded border border-brand-gold/30">?{ov.key || 'key'}:{ov.optionCount}?</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={handleAddOptionVariable} className="mt-3 text-brand-gold hover:text-brand-gold-light font-semibold text-sm transition">+ Add Option Variable</button>
                             </div>
                         </div>
                     )}
-                    
+
                     {renderSection('5. Conditional Snippets', 'snippets', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-4">
+                            <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Conditional Snippets <span className="text-xs text-brand-gold/60 font-mono">{'{{{key}}}'}</span></h3>
                              {currentProject.state.taggedSnippets.map(s => (
-                                <div key={s.id} className="bg-slate-800/50 p-4 rounded-lg space-y-2 border border-brand-gold/50">
+                                <div key={s.id} className="bg-slate-900 p-4 rounded-lg space-y-2 border border-brand-gold/50">
                                     <div className="flex gap-2 items-center">
-                                        <input type="text" placeholder={`{{{SnippetName}}}`} value={s.key} onChange={e => handleSnippetChange(s.id, 'key', e.target.value)} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                        <input type="text" placeholder={`{{{SnippetName}}}`} value={s.key} onChange={e => handleSnippetChange(s.id, 'key', e.target.value)} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-gold transition-all"/>
                                         <button onClick={() => removeSnippet(s.id)} className="p-2.5 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                     </div>
                                     <div className={`grid grid-cols-1 md:grid-cols-${Math.min(currentProject.state.tags.length, 3)} gap-2`}>
                                         {currentProject.state.tags.map(tag => (
                                             <div key={tag.id}>
                                                 <label className="block text-xs font-medium text-brand-gold mb-1.5">For Tag: <span className="text-brand-gold">{tag.name}</span></label>
-                                                <textarea placeholder={`Value for tag: (${tag.name})`} value={s.values[tag.name] || ''} onChange={e => handleSnippetChange(s.id, 'values', { ...s.values, [tag.name]: e.target.value })} rows={3} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all" />
+                                                <textarea placeholder={`Value for tag: (${tag.name})`} value={s.values[tag.name] || ''} onChange={e => handleSnippetChange(s.id, 'values', { ...s.values, [tag.name]: e.target.value })} rows={3} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all" />
                                             </div>
                                         ))}
                                     </div>
@@ -1277,20 +1978,45 @@ const App: React.FC = () => {
                         <div className="space-y-4">
                             {currentProject.state.promptTemplates.map((prompt, index) => (
                                 <div key={prompt.id} draggable onDragStart={() => draggedPromptId.current = prompt.id} onDragOver={e => e.preventDefault()} onDrop={() => handleReorderPrompts(draggedPromptId.current!, prompt.id)}
-                                    className="bg-slate-800/50 p-4 rounded-lg space-y-3 border border-brand-gold/50 cursor-grab active:cursor-grabbing hover:border-brand-gold/70 transition-colors">
+                                    className="bg-slate-900 p-4 rounded-lg space-y-3 border border-brand-gold/50 cursor-grab active:cursor-grabbing hover:border-brand-gold/70 transition-colors">
                                     <div className="flex items-center gap-2">
                                         <span className="text-brand-gold font-bold text-lg">{index + 1}</span>
-                                        <input type="text" value={prompt.name} onChange={e => handleUpdatePrompt(prompt.id, 'name', e.target.value)} placeholder="Prompt Name" className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-gold transition-all"/>
-                                        <input type="text" value={prompt.outputKey} onChange={e => handleUpdatePrompt(prompt.id, 'outputKey', e.target.value)} placeholder="Output Key" className="w-1/3 bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all" title="Output Placeholder Key"/>
+                                        <input type="text" value={prompt.name} onChange={e => handleUpdatePrompt(prompt.id, 'name', e.target.value)} placeholder="Prompt Name" className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-semibold focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                        <input type="text" value={prompt.outputKey} onChange={e => handleUpdatePrompt(prompt.id, 'outputKey', e.target.value)} placeholder="Output Key" className="w-1/3 bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all" title="Output Placeholder Key"/>
                                         <button onClick={() => handleDuplicatePrompt(prompt.id)} className="p-2 text-brand-gold hover:text-white transition" title="Duplicate Prompt">
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                                         </button>
                                         <button onClick={() => handleDeletePrompt(prompt.id)} className="p-2.5 bg-red-600/50 hover:bg-red-600 rounded-lg text-white transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                     </div>
-                                    <textarea value={prompt.template} onChange={e => handleUpdatePrompt(prompt.id, 'template', e.target.value)} rows={8} className="w-full bg-slate-800/80 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"></textarea>
+                                    <textarea draggable={false} onDragStart={(e) => e.stopPropagation()} ref={el => promptTextareaRefs.current[prompt.id] = el} value={prompt.template} onChange={e => handleUpdatePrompt(prompt.id, 'template', e.target.value)} onContextMenu={(e) => { e.preventDefault(); setVariableContextMenu({ promptId: prompt.id, x: e.clientX, y: e.clientY }); }} rows={8} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y min-h-[100px]"></textarea>
+                                    <div className="flex flex-wrap gap-1.5 p-2 bg-slate-900 rounded-lg border border-brand-gold/30">
+                                        <span className="text-xs text-brand-gold/60 w-full mb-1">Click to insert:</span>
+                                        {/* Item Name */}
+                                        <button type="button" onClick={() => insertVariableIntoPrompt(prompt.id, '<item_name>')} className="px-2 py-1 text-xs font-mono bg-brand-cyan/20 hover:bg-brand-cyan/40 border border-brand-cyan/50 rounded text-brand-cyan transition">{'<item_name>'}</button>
+                                        {/* Global Variables - only show if key is not empty */}
+                                        {currentProject.state.placeholders.filter(p => !p.tag && p.key).map(p => (
+                                            <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `{${p.key}}`)} className="px-2 py-1 text-xs font-mono bg-brand-gold/20 hover:bg-brand-gold/40 border border-brand-gold/50 rounded text-brand-gold transition">{`{${p.key}}`}</button>
+                                        ))}
+                                        {/* Tagged Variables - only show if key is not empty */}
+                                        {currentProject.state.placeholders.filter(p => p.tag && p.key).map(p => (
+                                            <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `{${p.key}{${p.tag}}}`)} className="px-2 py-1 text-xs font-mono bg-orange-500/20 hover:bg-orange-500/40 border border-orange-500/50 rounded text-orange-400 transition">{`{${p.key}{${p.tag}}}`}</button>
+                                        ))}
+                                        {/* Conditional Snippets - only show if key is not empty */}
+                                        {currentProject.state.taggedSnippets.filter(s => s.key).map(s => (
+                                            <button key={s.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `{{{${s.key}}}}`)} className="px-2 py-1 text-xs font-mono bg-purple-500/20 hover:bg-purple-500/40 border border-purple-500/50 rounded text-purple-400 transition">{`{{{${s.key}}}}`}</button>
+                                        ))}
+                                        {/* Prompt Output Variables - only show if outputKey is not empty */}
+                                        {currentProject.state.promptTemplates.filter(p => p.outputKey).map(p => (
+                                            <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `[${p.outputKey}]`)} className="px-2 py-1 text-xs font-mono bg-green-500/20 hover:bg-green-500/40 border border-green-500/50 rounded text-green-400 transition">{`[${p.outputKey}]`}</button>
+                                        ))}
+                                        {/* Option Variables - only show if key is not empty */}
+                                        {(currentProject.state.optionVariables || []).filter(ov => ov.key).map(ov => (
+                                            <button key={ov.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `?${ov.key}:${ov.optionCount}?`)} className="px-2 py-1 text-xs font-mono bg-pink-500/20 hover:bg-pink-500/40 border border-pink-500/50 rounded text-pink-400 transition">{`?${ov.key}:${ov.optionCount}?`}</button>
+                                        ))}
+                                    </div>
                                     <div className="text-right text-xs text-brand-gold">
                                         <label htmlFor={`output-action-${prompt.id}`} className="mr-2 font-semibold">Output Action:</label>
-                                        <select id={`output-action-${prompt.id}`} value={prompt.outputAction || ''} onChange={e => handleUpdatePrompt(prompt.id, 'outputAction', e.target.value)} className="bg-slate-800/80 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-xs text-white focus:ring-2 focus:ring-brand-gold transition-all">
+                                        <select id={`output-action-${prompt.id}`} value={prompt.outputAction || ''} onChange={e => handleUpdatePrompt(prompt.id, 'outputAction', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-xs text-white focus:ring-2 focus:ring-brand-gold transition-all">
                                             <option value="">(none)</option>
                                             <option value="addToFinal">Add to final document</option>
                                             <option value="download">Mark for individual download</option>
@@ -1312,6 +2038,107 @@ const App: React.FC = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* Pending Selections Section */}
+                    {pendingResults.length > 0 && (
+                        <div className="bg-card rounded-xl shadow-glow-gold card-3d border-2 border-pink-500">
+                            <div className="p-5 flex items-center justify-between border-b border-pink-500/30">
+                                <h2 className="text-xl font-bold flex items-center text-pink-400">
+                                    <svg className="h-6 w-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    <span>Pending Selections ({pendingResults.length})</span>
+                                </h2>
+                                <button
+                                    onClick={handleAiChooseAllPending}
+                                    className="flex items-center bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                                >
+                                    <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                                    AI Choose All
+                                </button>
+                            </div>
+                            <div className="p-5 space-y-4">
+                                {pendingResults.map(pending => (
+                                    <div key={pending.id} className="bg-slate-900 rounded-lg border border-pink-500/50 overflow-hidden">
+                                        <div className="p-4 border-b border-pink-500/30 flex items-center justify-between">
+                                            <div>
+                                                <h3 className="font-bold text-white">{pending.item.name}</h3>
+                                                <p className="text-xs text-pink-400/70">{pending.optionSelections.filter(os => os.selectedIndex === null).length} option(s) need selection</p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleAiChooseAllForPending(pending.id)}
+                                                    className="px-3 py-1.5 bg-pink-500/20 hover:bg-pink-500/40 border border-pink-500/50 rounded-lg text-pink-400 text-sm transition"
+                                                >
+                                                    AI Choose All
+                                                </button>
+                                                <button
+                                                    onClick={() => handleFinalizePendingResult(pending.id)}
+                                                    className="px-3 py-1.5 bg-green-500/20 hover:bg-green-500/40 border border-green-500/50 rounded-lg text-green-400 text-sm transition"
+                                                >
+                                                    Finalize
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="p-4 space-y-4">
+                                            {pending.optionSelections.map(selection => (
+                                                <div key={selection.variableKey} className="bg-slate-900 rounded-lg p-3 border border-pink-500/30">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <h4 className="font-semibold text-pink-400">?{selection.variableKey}?</h4>
+                                                        <button
+                                                            onClick={() => handleAiChooseOption(pending.id, selection.variableKey)}
+                                                            className="text-xs px-2 py-1 bg-pink-500/20 hover:bg-pink-500/40 border border-pink-500/50 rounded text-pink-400 transition"
+                                                        >
+                                                            AI Choose
+                                                        </button>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {selection.options.map((option, idx) => (
+                                                            <label
+                                                                key={idx}
+                                                                className={`flex items-start gap-3 p-2 rounded-lg cursor-pointer transition ${selection.selectedIndex === idx ? 'bg-pink-500/30 border border-pink-500' : 'bg-slate-900 border border-transparent hover:border-pink-500/50'}`}
+                                                            >
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`${pending.id}-${selection.variableKey}`}
+                                                                    checked={selection.selectedIndex === idx}
+                                                                    onChange={() => handleSelectOption(pending.id, selection.variableKey, idx)}
+                                                                    className="mt-1 accent-pink-500"
+                                                                />
+                                                                <span className="text-sm text-white">{option}</span>
+                                                            </label>
+                                                        ))}
+                                                        {/* Custom option */}
+                                                        <label
+                                                            className={`flex items-start gap-3 p-2 rounded-lg cursor-pointer transition ${selection.selectedIndex === -1 ? 'bg-pink-500/30 border border-pink-500' : 'bg-slate-900 border border-transparent hover:border-pink-500/50'}`}
+                                                        >
+                                                            <input
+                                                                type="radio"
+                                                                name={`${pending.id}-${selection.variableKey}`}
+                                                                checked={selection.selectedIndex === -1}
+                                                                onChange={() => handleSelectOption(pending.id, selection.variableKey, -1)}
+                                                                className="mt-1 accent-pink-500"
+                                                            />
+                                                            <div className="flex-1">
+                                                                <span className="text-sm text-pink-400/70 block mb-1">Custom:</span>
+                                                                <input
+                                                                    type="text"
+                                                                    value={selection.customValue}
+                                                                    onChange={(e) => handleCustomOptionValue(pending.id, selection.variableKey, e.target.value)}
+                                                                    placeholder="Enter custom value..."
+                                                                    className="w-full bg-slate-900 border border-pink-500/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-pink-500 transition"
+                                                                    onClick={() => handleSelectOption(pending.id, selection.variableKey, -1)}
+                                                                />
+                                                            </div>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                      {results.length > 0 && <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan">
                         <div className="p-5 flex items-center justify-between border-b border-brand-cyan/30">
                             <h2 className={`text-xl font-bold flex items-center text-brand-gold`}><Icon type="success" className="h-6 w-6"/><span className="ml-3">Results ({results.length})</span></h2>
@@ -1333,7 +2160,7 @@ const App: React.FC = () => {
                                         }
                                     };
                                     return (
-                                        <div key={result.item.id} className="bg-slate-800/80 p-4 rounded-lg border border-brand-gold/30 hover:border-brand-gold/50 transition-colors">
+                                        <div key={result.item.id} className="bg-slate-900 p-4 rounded-lg border border-brand-gold/30 hover:border-brand-gold/50 transition-colors">
                                             <div className="flex items-center justify-between">
                                                 <div>
                                                     <p className="font-bold text-white">{result.item.name}</p>
@@ -1366,6 +2193,41 @@ const App: React.FC = () => {
                     </div>}
                 </div>
             </main>
+
+            {/* Floating Variable Context Menu */}
+            {variableContextMenu && currentProject && (
+                <div
+                    style={{ position: 'fixed', left: variableContextMenu.x, top: variableContextMenu.y, zIndex: 9999 }}
+                    className="bg-slate-900 border border-brand-gold/50 rounded-lg shadow-xl p-3 max-w-sm max-h-64 overflow-y-auto"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="text-xs text-brand-gold/60 mb-2 font-semibold">Insert Variable:</div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {/* Item Name */}
+                        <button type="button" onClick={() => insertVariableIntoPrompt(variableContextMenu.promptId, '<item_name>')} className="px-2 py-1 text-xs font-mono bg-brand-cyan/20 hover:bg-brand-cyan/40 border border-brand-cyan/50 rounded text-brand-cyan transition">{'<item_name>'}</button>
+                        {/* Global Variables */}
+                        {currentProject.state.placeholders.filter(p => !p.tag).map(p => (
+                            <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(variableContextMenu.promptId, `{${p.key}}`)} className="px-2 py-1 text-xs font-mono bg-brand-gold/20 hover:bg-brand-gold/40 border border-brand-gold/50 rounded text-brand-gold transition">{`{${p.key}}`}</button>
+                        ))}
+                        {/* Tagged Variables */}
+                        {currentProject.state.placeholders.filter(p => p.tag).map(p => (
+                            <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(variableContextMenu.promptId, `{${p.key}{${p.tag}}}`)} className="px-2 py-1 text-xs font-mono bg-orange-500/20 hover:bg-orange-500/40 border border-orange-500/50 rounded text-orange-400 transition">{`{${p.key}{${p.tag}}}`}</button>
+                        ))}
+                        {/* Conditional Snippets */}
+                        {currentProject.state.taggedSnippets.map(s => (
+                            <button key={s.id} type="button" onClick={() => insertVariableIntoPrompt(variableContextMenu.promptId, `{{{${s.key}}}}`)} className="px-2 py-1 text-xs font-mono bg-purple-500/20 hover:bg-purple-500/40 border border-purple-500/50 rounded text-purple-400 transition">{`{{{${s.key}}}}`}</button>
+                        ))}
+                        {/* Prompt Output Variables */}
+                        {currentProject.state.promptTemplates.map(p => (
+                            <button key={p.id} type="button" onClick={() => insertVariableIntoPrompt(variableContextMenu.promptId, `[${p.outputKey}]`)} className="px-2 py-1 text-xs font-mono bg-green-500/20 hover:bg-green-500/40 border border-green-500/50 rounded text-green-400 transition">{`[${p.outputKey}]`}</button>
+                        ))}
+                        {/* Option Variables */}
+                        {(currentProject.state.optionVariables || []).map(ov => (
+                            <button key={ov.id} type="button" onClick={() => insertVariableIntoPrompt(variableContextMenu.promptId, `?${ov.key}:${ov.optionCount}?`)} className="px-2 py-1 text-xs font-mono bg-pink-500/20 hover:bg-pink-500/40 border border-pink-500/50 rounded text-pink-400 transition">{`?${ov.key}:${ov.optionCount}?`}</button>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

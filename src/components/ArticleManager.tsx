@@ -54,6 +54,12 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [clientFilter, setClientFilter] = useState<string>('');
+  const [websiteFilter, setWebsiteFilter] = useState<string>('');
+
+  // Get unique clients and websites for filter dropdowns
+  const uniqueClients = [...new Set(articles.map(a => a.client_name).filter(Boolean))];
+  const uniqueWebsites = [...new Set(articles.map(a => a.website_name).filter(Boolean))];
 
   // Editor state
   const [editContent, setEditContent] = useState('');
@@ -275,9 +281,12 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
     setShowVersions(false);
   };
 
-  const filteredArticles = articles.filter(a =>
-    a.keyword.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredArticles = articles.filter(a => {
+    const matchesSearch = a.keyword.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesClient = !clientFilter || a.client_name === clientFilter;
+    const matchesWebsite = !websiteFilter || a.website_name === websiteFilter;
+    return matchesSearch && matchesClient && matchesWebsite;
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -299,7 +308,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
           <div className="flex items-center gap-4">
-            <h2 className="text-xl font-semibold text-brand-gold">Article Library</h2>
+            <h2 className="text-xl font-semibold text-brand-gold">Workflow Results</h2>
             {viewMode !== 'list' && (
               <button
                 onClick={backToList}
@@ -349,6 +358,26 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                   <option value="edited">Edited</option>
                   <option value="published">Published</option>
                 </select>
+                <select
+                  value={clientFilter}
+                  onChange={(e) => setClientFilter(e.target.value)}
+                  className="bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
+                >
+                  <option value="">All Clients</option>
+                  {uniqueClients.map((client) => (
+                    <option key={client} value={client}>{client}</option>
+                  ))}
+                </select>
+                <select
+                  value={websiteFilter}
+                  onChange={(e) => setWebsiteFilter(e.target.value)}
+                  className="bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
+                >
+                  <option value="">All Websites</option>
+                  {uniqueWebsites.map((website) => (
+                    <option key={website} value={website}>{website}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Article List */}
@@ -364,6 +393,8 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                         <th className="p-2">Keyword</th>
                         <th className="p-2">Tag</th>
                         <th className="p-2">Status</th>
+                        <th className="p-2">Client</th>
+                        <th className="p-2">Website</th>
                         <th className="p-2">AI Score</th>
                         <th className="p-2">Words</th>
                         <th className="p-2">Workflow</th>
@@ -398,6 +429,8 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                               <span className="ml-1 text-yellow-400 text-xs" title="Article has WP link but status isn't 'published' - may need sync">⚠️</span>
                             )}
                           </td>
+                          <td className="p-2 text-gray-400 text-xs">{article.client_name || '-'}</td>
+                          <td className="p-2 text-gray-400 text-xs">{article.website_name || '-'}</td>
                           <td className="p-2 text-gray-300">
                             {article.ai_score !== null ? `${article.ai_score}%` : '-'}
                           </td>
