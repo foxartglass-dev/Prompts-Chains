@@ -1598,15 +1598,16 @@ const App: React.FC = () => {
                                                 <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
                                             </optgroup>
                                             <optgroup label="GPT (OpenAI)">
-                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
-                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-4.1-2025-04-14">GPT-4.1</option>
+                                                <option value="gpt-4.1-mini-2025-04-14">GPT-4.1 Mini</option>
+                                                <option value="gpt-4.1-nano-2025-04-14">GPT-4.1 Nano</option>
                                                 <option value="gpt-4o">GPT-4o</option>
                                                 <option value="gpt-4o-mini">GPT-4o Mini</option>
                                             </optgroup>
                                             <optgroup label="Gemini (Google)">
-                                                <option value="gemini-3.0">Gemini 3.0</option>
-                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                                             </optgroup>
                                         </select>
                                     </div>
@@ -1627,15 +1628,16 @@ const App: React.FC = () => {
                                                 <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
                                             </optgroup>
                                             <optgroup label="GPT (OpenAI)">
-                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
-                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-4.1-2025-04-14">GPT-4.1</option>
+                                                <option value="gpt-4.1-mini-2025-04-14">GPT-4.1 Mini</option>
+                                                <option value="gpt-4.1-nano-2025-04-14">GPT-4.1 Nano</option>
                                                 <option value="gpt-4o">GPT-4o</option>
                                                 <option value="gpt-4o-mini">GPT-4o Mini</option>
                                             </optgroup>
                                             <optgroup label="Gemini (Google)">
-                                                <option value="gemini-3.0">Gemini 3.0</option>
-                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                                             </optgroup>
                                         </select>
                                     </div>
@@ -1656,15 +1658,16 @@ const App: React.FC = () => {
                                                 <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
                                             </optgroup>
                                             <optgroup label="GPT (OpenAI)">
-                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
-                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-4.1-2025-04-14">GPT-4.1</option>
+                                                <option value="gpt-4.1-mini-2025-04-14">GPT-4.1 Mini</option>
+                                                <option value="gpt-4.1-nano-2025-04-14">GPT-4.1 Nano</option>
                                                 <option value="gpt-4o">GPT-4o</option>
                                                 <option value="gpt-4o-mini">GPT-4o Mini</option>
                                             </optgroup>
                                             <optgroup label="Gemini (Google)">
-                                                <option value="gemini-3.0">Gemini 3.0</option>
-                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                                             </optgroup>
                                         </select>
                                     </div>
