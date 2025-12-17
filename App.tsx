@@ -1578,103 +1578,104 @@ const App: React.FC = () => {
                 <div className="flex flex-col gap-8">
                     {renderSection('1. Setup & Run', 'setup', <Icon type="settings" className="h-6 w-6"/>,
                         <div className="space-y-3">
-                            {/* Row 1: AI Models + Filename + Import/Export */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {/* Left side: AI Models + Filename */}
-                                <div className="space-y-2">
-                                    <p className="text-[10px] text-brand-gold/60 mb-1">Test multiple models against the same workflow</p>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        <div>
-                                            <label className="block text-xs font-medium text-brand-gold mb-1">AI Model 1</label>
-                                            <select
-                                                value={currentProject.state.model}
-                                                onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
-                                                className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
-                                            >
-                                                <optgroup label="Claude (Anthropic)">
-                                                    <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
-                                                    <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
-                                                    <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
-                                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                                                    <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                                                    <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-                                                </optgroup>
-                                                <optgroup label="GPT (OpenAI)">
-                                                    <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
-                                                    <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
-                                                    <option value="gpt-4o">GPT-4o</option>
-                                                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                                                </optgroup>
-                                                <optgroup label="Gemini (Google)">
-                                                    <option value="gemini-3.0">Gemini 3.0</option>
-                                                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                                </optgroup>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-brand-gold mb-1">AI Model 2</label>
-                                            <select
-                                                value={currentProject.state.model2 || 'not-in-use'}
-                                                onChange={e => setCurrentProjectState(p => ({...p, model2: e.target.value}))}
-                                                className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
-                                            >
-                                                <option value="not-in-use">Not In Use</option>
-                                                <optgroup label="Claude (Anthropic)">
-                                                    <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
-                                                    <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
-                                                    <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
-                                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                                                    <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                                                    <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-                                                </optgroup>
-                                                <optgroup label="GPT (OpenAI)">
-                                                    <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
-                                                    <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
-                                                    <option value="gpt-4o">GPT-4o</option>
-                                                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                                                </optgroup>
-                                                <optgroup label="Gemini (Google)">
-                                                    <option value="gemini-3.0">Gemini 3.0</option>
-                                                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                                </optgroup>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-brand-gold mb-1">AI Model 3</label>
-                                            <select
-                                                value={currentProject.state.model3 || 'not-in-use'}
-                                                onChange={e => setCurrentProjectState(p => ({...p, model3: e.target.value}))}
-                                                className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
-                                            >
-                                                <option value="not-in-use">Not In Use</option>
-                                                <optgroup label="Claude (Anthropic)">
-                                                    <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
-                                                    <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
-                                                    <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
-                                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                                                    <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                                                    <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-                                                </optgroup>
-                                                <optgroup label="GPT (OpenAI)">
-                                                    <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
-                                                    <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
-                                                    <option value="gpt-4o">GPT-4o</option>
-                                                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                                                </optgroup>
-                                                <optgroup label="Gemini (Google)">
-                                                    <option value="gemini-3.0">Gemini 3.0</option>
-                                                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                                </optgroup>
-                                            </select>
-                                        </div>
+                            {/* Row 1: AI Models - Full Width */}
+                            <div className="space-y-2">
+                                <p className="text-[10px] text-brand-gold mb-1">Test multiple models against the same workflow</p>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 1</label>
+                                        <select
+                                            value={currentProject.state.model}
+                                            onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
+                                        >
+                                            <optgroup label="Claude (Anthropic)">
+                                                <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                                                <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
+                                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                                <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                                <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                            </optgroup>
+                                            <optgroup label="GPT (OpenAI)">
+                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-4o">GPT-4o</option>
+                                                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                            </optgroup>
+                                            <optgroup label="Gemini (Google)">
+                                                <option value="gemini-3.0">Gemini 3.0</option>
+                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                            </optgroup>
+                                        </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-brand-gold mb-1">Filename Template</label>
-                                        <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold" />
+                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 2</label>
+                                        <select
+                                            value={currentProject.state.model2 || 'not-in-use'}
+                                            onChange={e => setCurrentProjectState(p => ({...p, model2: e.target.value}))}
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
+                                        >
+                                            <option value="not-in-use">Not In Use</option>
+                                            <optgroup label="Claude (Anthropic)">
+                                                <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                                                <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
+                                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                                <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                                <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                            </optgroup>
+                                            <optgroup label="GPT (OpenAI)">
+                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-4o">GPT-4o</option>
+                                                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                            </optgroup>
+                                            <optgroup label="Gemini (Google)">
+                                                <option value="gemini-3.0">Gemini 3.0</option>
+                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                            </optgroup>
+                                        </select>
                                     </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 3</label>
+                                        <select
+                                            value={currentProject.state.model3 || 'not-in-use'}
+                                            onChange={e => setCurrentProjectState(p => ({...p, model3: e.target.value}))}
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
+                                        >
+                                            <option value="not-in-use">Not In Use</option>
+                                            <optgroup label="Claude (Anthropic)">
+                                                <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                                                <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
+                                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                                <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                                <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                            </optgroup>
+                                            <optgroup label="GPT (OpenAI)">
+                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-4o">GPT-4o</option>
+                                                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                            </optgroup>
+                                            <optgroup label="Gemini (Google)">
+                                                <option value="gemini-3.0">Gemini 3.0</option>
+                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                            </optgroup>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Row 2: Filename + Import/Export */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-brand-gold mb-1">Filename Template</label>
+                                    <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold" />
                                 </div>
                                 {/* Right side: Import/Export */}
                                 <div className="flex flex-col justify-end gap-2">
