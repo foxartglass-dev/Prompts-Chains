@@ -587,7 +587,7 @@ const App: React.FC = () => {
                 prompt,
                 currentProject.state.provider,
                 currentProject.state.model,
-                { anthropic: currentProject.state.apiKeys.anthropic }
+                { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini }
             );
             const chosenNumber = parseInt(response.trim().match(/\d+/)?.[0] || '1');
             const chosenIndex = Math.max(0, Math.min(chosenNumber - 1, selection.options.length - 1));
@@ -771,7 +771,7 @@ const App: React.FC = () => {
                             filledPrompt,
                             currentProject.state.provider,
                             activeModel,
-                            { anthropic: currentProject.state.apiKeys.anthropic }
+                            { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini }
                         );
                         if (output.startsWith('Error:')) throw new Error(output);
                         promptOutputs[prompt.outputKey] = output;
@@ -814,7 +814,7 @@ const App: React.FC = () => {
                                     optionPrompt,
                                     currentProject.state.provider,
                                     activeModel,
-                                    { anthropic: currentProject.state.apiKeys.anthropic }
+                                    { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini }
                                 );
 
                                 // Parse the numbered list response
@@ -1598,9 +1598,9 @@ const App: React.FC = () => {
                                                 <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
                                             </optgroup>
                                             <optgroup label="GPT (OpenAI)">
-                                                <option value="gpt-4.1-2025-04-14">GPT-4.1</option>
-                                                <option value="gpt-4.1-mini-2025-04-14">GPT-4.1 Mini</option>
-                                                <option value="gpt-4.1-nano-2025-04-14">GPT-4.1 Nano</option>
+                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-5-nano-2025-08-07">GPT-5 Nano</option>
                                                 <option value="gpt-4o">GPT-4o</option>
                                                 <option value="gpt-4o-mini">GPT-4o Mini</option>
                                             </optgroup>
@@ -1628,9 +1628,9 @@ const App: React.FC = () => {
                                                 <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
                                             </optgroup>
                                             <optgroup label="GPT (OpenAI)">
-                                                <option value="gpt-4.1-2025-04-14">GPT-4.1</option>
-                                                <option value="gpt-4.1-mini-2025-04-14">GPT-4.1 Mini</option>
-                                                <option value="gpt-4.1-nano-2025-04-14">GPT-4.1 Nano</option>
+                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-5-nano-2025-08-07">GPT-5 Nano</option>
                                                 <option value="gpt-4o">GPT-4o</option>
                                                 <option value="gpt-4o-mini">GPT-4o Mini</option>
                                             </optgroup>
@@ -1658,9 +1658,9 @@ const App: React.FC = () => {
                                                 <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
                                             </optgroup>
                                             <optgroup label="GPT (OpenAI)">
-                                                <option value="gpt-4.1-2025-04-14">GPT-4.1</option>
-                                                <option value="gpt-4.1-mini-2025-04-14">GPT-4.1 Mini</option>
-                                                <option value="gpt-4.1-nano-2025-04-14">GPT-4.1 Nano</option>
+                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-5-nano-2025-08-07">GPT-5 Nano</option>
                                                 <option value="gpt-4o">GPT-4o</option>
                                                 <option value="gpt-4o-mini">GPT-4o Mini</option>
                                             </optgroup>
