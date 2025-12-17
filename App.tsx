@@ -1596,7 +1596,7 @@ const App: React.FC = () => {
                                 </div>
                                 {/* Right side: Import/Export */}
                                 <div className="flex flex-col justify-end gap-2">
-                                    <label className="block text-xs font-medium text-brand-gold">Import / Export</label>
+                                    <label className="block text-xs font-medium text-brand-gold text-center">Import / Export Workflow</label>
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => {
@@ -1648,8 +1648,8 @@ const App: React.FC = () => {
                             {/* Project Notes + Add Items Row */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {/* Project Notes - 2/3 width, 2 columns */}
-                                <div className="md:col-span-2 bg-slate-900 p-3 rounded-lg border-2 border-brand-cyan">
-                                    <h3 className="text-sm font-semibold text-brand-cyan mb-2">Project Notes</h3>
+                                <div className="md:col-span-2 bg-slate-900 p-3 rounded-lg border-2 border-brand-gold">
+                                    <h3 className="text-sm font-semibold text-brand-gold mb-2">Project Notes</h3>
                                     <div className="grid grid-cols-2 gap-2">
                                         <textarea
                                             value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[0] || ''}
@@ -1660,7 +1660,7 @@ const App: React.FC = () => {
                                             }}
                                             rows={4}
                                             placeholder="Notes column 1..."
-                                            className="w-full bg-slate-900 border-2 border-brand-cyan rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                            className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold resize-y"
                                         />
                                         <textarea
                                             value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[1] || ''}
@@ -1672,15 +1672,14 @@ const App: React.FC = () => {
                                             }}
                                             rows={4}
                                             placeholder="Notes column 2..."
-                                            className="w-full bg-slate-900 border-2 border-brand-cyan rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                            className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold resize-y"
                                         />
                                     </div>
                                 </div>
                                 {/* Add Items - 1/3 width */}
                                 <div className="bg-slate-900 p-3 rounded-lg border border-brand-gold/50">
-                                    <label className="block text-sm font-medium text-brand-gold mb-0.5">To Start Workflow</label>
-                                    <label htmlFor="manual-items" className="block text-sm font-medium text-brand-gold mb-1.5">
-                                        Add Items <span className="text-xs text-brand-gold/60">(one per line)</span>
+                                    <label htmlFor="manual-items" className="block text-sm font-medium text-brand-gold mb-1.5 text-center">
+                                        To Start This Workflow Add Items <span className="text-xs text-brand-gold/60">(one per line)</span>
                                     </label>
                                     <textarea
                                         id="manual-items"
@@ -1902,9 +1901,9 @@ const App: React.FC = () => {
                             </div>
 
                             {/* Prompt Output Variables */}
-                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-cyan">
-                                <h3 className="text-lg font-semibold text-brand-cyan mb-2 border-b border-brand-cyan/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-cyan/60 font-mono">[output_key]</span> <span className="text-xs text-brand-cyan/60">(Read-only)</span></h3>
-                                <p className="text-[10px] text-brand-cyan/70 mb-2">These are generated from the 'Output Key' from the Prompt Workflows for use in later prompts like: <span className="font-mono text-brand-cyan">[output_key]</span></p>
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
+                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-gold/60 font-mono">[output_key]</span> <span className="text-xs text-brand-gold/60">(Read-only)</span></h3>
+                                <p className="text-[10px] text-brand-gold/70 mb-2">These are generated from the 'Output Key' from the Prompt Workflows for use in later prompts like: <span className="font-mono text-brand-gold">[output_key]</span></p>
                                 <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-brand-cyan/10 border-2 border-brand-cyan rounded-full px-3 py-1 text-sm font-mono text-brand-cyan">[{p.outputKey}]</div>))}</div>
                             </div>
 
