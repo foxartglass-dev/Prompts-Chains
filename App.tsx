@@ -733,153 +733,176 @@ const App: React.FC = () => {
             return;
         }
 
+        // Collect active models
+        const activeModels: { model: string; label: string }[] = [
+            { model: currentProject.state.model, label: 'Model 1' }
+        ];
+        if (currentProject.state.model2 && currentProject.state.model2 !== 'not-in-use') {
+            activeModels.push({ model: currentProject.state.model2, label: 'Model 2' });
+        }
+        if (currentProject.state.model3 && currentProject.state.model3 !== 'not-in-use') {
+            activeModels.push({ model: currentProject.state.model3, label: 'Model 3' });
+        }
+
         setIsProcessing(true);
         setResults([]);
         setLogs([]);
-        addLog(`Starting batch processing for ${items.length} items using ${currentProject.state.provider}/${currentProject.state.model}...`, LogStatus.INFO);
+
+        const modelNames = activeModels.map(m => m.model.split('-').slice(0, 2).join('-')).join(', ');
+        addLog(`Starting batch processing for ${items.length} items using ${activeModels.length} model(s): ${modelNames}...`, LogStatus.INFO);
         const startTime = Date.now();
 
         for (const item of items) {
-            const promptOutputs: Record<string, string> = {};
-            try {
-                if (!item.tag) throw new Error(`Item "${item.name}" is missing a tag.`);
-                if (!currentProject.state.tags.find(t => t.name === item.tag)) throw new Error(`Tag "${item.tag}" is not defined.`);
+            // Run workflow for each active model
+            for (const { model: activeModel, label: modelLabel } of activeModels) {
+                const promptOutputs: Record<string, string> = {};
+                const itemLabel = activeModels.length > 1 ? `${item.name} (${modelLabel})` : item.name;
+
+                try {
+                    if (!item.tag) throw new Error(`Item "${item.name}" is missing a tag.`);
+                    if (!currentProject.state.tags.find(t => t.name === item.tag)) throw new Error(`Tag "${item.tag}" is not defined.`);
+
+                    addLog(`[${itemLabel}] Starting process...`, LogStatus.WORKING, item.id);
+
+                    for (const prompt of currentProject.state.promptTemplates) {
+                        addLog(`[${itemLabel}] Running prompt: "${prompt.name}"...`, LogStatus.INFO, item.id);
+                        const filledPrompt = fillPrompt(prompt.template, item, promptOutputs);
+                        const output = await generateLlmContent(
+                            filledPrompt,
+                            currentProject.state.provider,
+                            activeModel,
+                            { anthropic: currentProject.state.apiKeys.anthropic }
+                        );
+                        if (output.startsWith('Error:')) throw new Error(output);
+                        promptOutputs[prompt.outputKey] = output;
+                    }
                 
-                addLog(`[${item.name}] Starting process...`, LogStatus.WORKING, item.id);
+                    const finalPrompts = currentProject.state.promptTemplates.filter(p => p.outputAction === 'addToFinal');
+                    const mainContentKeys = finalPrompts.length > 0 ? finalPrompts.map(p => p.outputKey) : [currentProject.state.promptTemplates[currentProject.state.promptTemplates.length - 1]?.outputKey].filter(Boolean);
 
-                for (const prompt of currentProject.state.promptTemplates) {
-                    addLog(`[${item.name}] Running prompt: "${prompt.name}"...`, LogStatus.INFO, item.id);
-                    const filledPrompt = fillPrompt(prompt.template, item, promptOutputs);
-                    const output = await generateLlmContent(
-                        filledPrompt,
-                        currentProject.state.provider,
-                        currentProject.state.model,
-                        { anthropic: currentProject.state.apiKeys.anthropic }
-                    );
-                    if (output.startsWith('Error:')) throw new Error(output);
-                    promptOutputs[prompt.outputKey] = output;
-                }
-                
-                const finalPrompts = currentProject.state.promptTemplates.filter(p => p.outputAction === 'addToFinal');
-                const mainContentKeys = finalPrompts.length > 0 ? finalPrompts.map(p => p.outputKey) : [currentProject.state.promptTemplates[currentProject.state.promptTemplates.length - 1]?.outputKey].filter(Boolean);
-                
-                const combinedOutput = mainContentKeys.map(key => promptOutputs[key]).join('\n\n---\n\n');
+                    const combinedOutput = mainContentKeys.map(key => promptOutputs[key]).join('\n\n---\n\n');
 
-                const { finalOutput, metaTitles, metaDescriptions } = parseFinalOutput(combinedOutput);
-                addLog(`[${item.name}] Generated final content.`, LogStatus.INFO, item.id);
+                    const { finalOutput, metaTitles, metaDescriptions } = parseFinalOutput(combinedOutput);
+                    addLog(`[${itemLabel}] Generated final content.`, LogStatus.INFO, item.id);
 
-                // Check for option variables in the final output
-                const optionVarPattern = /\?([^:?]+):(\d+)\?/g;
-                const optionMatches = [...finalOutput.matchAll(optionVarPattern)];
-                const optionVariables = currentProject.state.optionVariables || [];
+                    // Check for option variables in the final output
+                    const optionVarPattern = /\?([^:?]+):(\d+)\?/g;
+                    const optionMatches = [...finalOutput.matchAll(optionVarPattern)];
+                    const optionVariables = currentProject.state.optionVariables || [];
 
-                if (optionMatches.length > 0 && optionVariables.length > 0) {
-                    // Has option variables - generate options and store as pending
-                    addLog(`[${item.name}] Found ${optionMatches.length} option variable(s), generating options...`, LogStatus.INFO, item.id);
+                    if (optionMatches.length > 0 && optionVariables.length > 0) {
+                        // Has option variables - generate options and store as pending
+                        addLog(`[${itemLabel}] Found ${optionMatches.length} option variable(s), generating options...`, LogStatus.INFO, item.id);
 
-                    const optionSelections: OptionSelection[] = [];
+                        const optionSelections: OptionSelection[] = [];
 
-                    for (const match of optionMatches) {
-                        const varKey = match[1];
-                        const optionCount = parseInt(match[2]);
-                        const optionVar = optionVariables.find(ov => ov.key === varKey);
+                        for (const match of optionMatches) {
+                            const varKey = match[1];
+                            const optionCount = parseInt(match[2]);
+                            const optionVar = optionVariables.find(ov => ov.key === varKey);
 
-                        if (optionVar) {
-                            addLog(`[${item.name}] Generating ${optionCount} options for "${varKey}"...`, LogStatus.WORKING, item.id);
+                            if (optionVar) {
+                                addLog(`[${itemLabel}] Generating ${optionCount} options for "${varKey}"...`, LogStatus.WORKING, item.id);
 
-                            // Fill the option variable prompt with context
-                            let optionPrompt = optionVar.prompt;
-                            optionPrompt = optionPrompt.replace(/<item_name>/g, item.name);
-                            // Add instruction to generate numbered list
-                            optionPrompt += `\n\nGenerate exactly ${optionCount} options. Format as a numbered list:\n1. [option]\n2. [option]\netc.`;
+                                // Fill the option variable prompt with context
+                                let optionPrompt = optionVar.prompt;
+                                optionPrompt = optionPrompt.replace(/<item_name>/g, item.name);
+                                // Add instruction to generate numbered list
+                                optionPrompt += `\n\nGenerate exactly ${optionCount} options. Format as a numbered list:\n1. [option]\n2. [option]\netc.`;
 
-                            const optionsResponse = await generateLlmContent(
-                                optionPrompt,
-                                currentProject.state.provider,
-                                currentProject.state.model,
-                                { anthropic: currentProject.state.apiKeys.anthropic }
-                            );
+                                const optionsResponse = await generateLlmContent(
+                                    optionPrompt,
+                                    currentProject.state.provider,
+                                    activeModel,
+                                    { anthropic: currentProject.state.apiKeys.anthropic }
+                                );
 
-                            // Parse the numbered list response
-                            const options = optionsResponse
-                                .split('\n')
-                                .map(line => line.replace(/^\d+\.\s*/, '').trim())
-                                .filter(line => line.length > 0)
-                                .slice(0, optionCount);
+                                // Parse the numbered list response
+                                const options = optionsResponse
+                                    .split('\n')
+                                    .map(line => line.replace(/^\d+\.\s*/, '').trim())
+                                    .filter(line => line.length > 0)
+                                    .slice(0, optionCount);
 
-                            optionSelections.push({
-                                variableKey: varKey,
-                                options,
-                                selectedIndex: null,
-                                customValue: ''
+                                optionSelections.push({
+                                    variableKey: varKey,
+                                    options,
+                                    selectedIndex: null,
+                                    customValue: ''
+                                });
+
+                                addLog(`[${itemLabel}] Generated ${options.length} options for "${varKey}"`, LogStatus.SUCCESS, item.id);
+                            }
+                        }
+
+                        const timestamp = new Date().toISOString();
+
+                        // Store as pending result with model info
+                        setPendingResults(prev => [...prev, {
+                            id: Date.now() + item.id + activeModels.indexOf({ model: activeModel, label: modelLabel }),
+                            item: { ...item, name: activeModels.length > 1 ? `${item.name} [${modelLabel}]` : item.name },
+                            finalOutput,
+                            metaTitles,
+                            metaDescriptions,
+                            allOutputs: promptOutputs,
+                            timestamp,
+                            optionSelections
+                        }]);
+
+                        addLog(`[${itemLabel}] Added to pending selections (${optionSelections.length} option(s) need selection)`, LogStatus.INFO, item.id);
+                    } else {
+                        // No option variables - proceed normally
+                        addLog(`[${itemLabel}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, item.id);
+                        const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
+                        addLog(`[${itemLabel}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
+
+                        const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
+                        const timestamp = new Date().toISOString();
+
+                        // Include model info in content when multi-model testing
+                        const modelSuffix = activeModels.length > 1 ? `\n\n---MODEL: ${activeModel}---` : '';
+                        const txtContent = `${finalOutput}${modelSuffix}\n\n---META TITLES---\n${metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
+
+                        const jsonContent = JSON.stringify({
+                            item_name: item.name, tag: item.tag, model: activeModel, final_output: finalOutput, parsed_titles: metaTitles,
+                            parsed_summaries: metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp,
+                        }, null, 2);
+
+                        // Create result item with model label if multi-model
+                        const resultItem = activeModels.length > 1 ? { ...item, name: `${item.name} [${modelLabel}]` } : item;
+                        setResults(prev => [...prev, { item: resultItem, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
+                        addLog(`[${itemLabel}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
+
+                        // Save article to database
+                        try {
+                            await fetch('/api/articles', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    workflowId: currentWorkflowId || null,
+                                    websiteId: currentWebsiteId || null,
+                                    keyword: item.name,
+                                    tag: item.tag,
+                                    model: activeModel,
+                                    finalContent: finalOutput,
+                                    metaTitles,
+                                    metaDescriptions,
+                                    chainOutputs: promptOutputs,
+                                    aiScore,
+                                    wordCount,
+                                    status: status.toLowerCase()
+                                })
                             });
-
-                            addLog(`[${item.name}] Generated ${options.length} options for "${varKey}"`, LogStatus.SUCCESS, item.id);
+                            addLog(`[${itemLabel}] Article saved to database.`, LogStatus.INFO, item.id);
+                        } catch (saveError) {
+                            // Don't fail the whole process if saving fails
+                            console.error('Failed to save article:', saveError);
                         }
                     }
-
-                    const timestamp = new Date().toISOString();
-
-                    // Store as pending result
-                    setPendingResults(prev => [...prev, {
-                        id: Date.now() + item.id,
-                        item,
-                        finalOutput,
-                        metaTitles,
-                        metaDescriptions,
-                        allOutputs: promptOutputs,
-                        timestamp,
-                        optionSelections
-                    }]);
-
-                    addLog(`[${item.name}] Added to pending selections (${optionSelections.length} option(s) need selection)`, LogStatus.INFO, item.id);
-                } else {
-                    // No option variables - proceed normally
-                    addLog(`[${item.name}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, item.id);
-                    const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
-                    addLog(`[${item.name}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
-
-                    const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
-                    const timestamp = new Date().toISOString();
-
-                    const txtContent = `${finalOutput}\n\n---META TITLES---\n${metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
-
-                    const jsonContent = JSON.stringify({
-                        item_name: item.name, tag: item.tag, final_output: finalOutput, parsed_titles: metaTitles,
-                        parsed_summaries: metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp,
-                    }, null, 2);
-
-                    setResults(prev => [...prev, { item, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
-                    addLog(`[${item.name}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
-
-                    // Save article to database
-                    try {
-                        await fetch('/api/articles', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                workflowId: currentWorkflowId || null,
-                                websiteId: currentWebsiteId || null,
-                                keyword: item.name,
-                                tag: item.tag,
-                                finalContent: finalOutput,
-                                metaTitles,
-                                metaDescriptions,
-                                chainOutputs: promptOutputs,
-                                aiScore,
-                                wordCount,
-                                status: status.toLowerCase()
-                            })
-                        });
-                        addLog(`[${item.name}] Article saved to database.`, LogStatus.INFO, item.id);
-                    } catch (saveError) {
-                        // Don't fail the whole process if saving fails
-                        console.error('Failed to save article:', saveError);
-                    }
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+                    addLog(`[${itemLabel}] Failed: ${errorMessage}`, LogStatus.ERROR, item.id);
                 }
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-                addLog(`[${item.name}] Failed: ${errorMessage}`, LogStatus.ERROR, item.id);
             }
         }
         
@@ -1555,39 +1578,98 @@ const App: React.FC = () => {
                 <div className="flex flex-col gap-8">
                     {renderSection('1. Setup & Run', 'setup', <Icon type="settings" className="h-6 w-6"/>,
                         <div className="space-y-3">
-                            {/* Row 1: AI Model + Filename + Import/Export */}
+                            {/* Row 1: AI Models + Filename + Import/Export */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {/* Left side: AI Model + Filename */}
+                                {/* Left side: AI Models + Filename */}
                                 <div className="space-y-2">
-                                    <div>
-                                        <label className="block text-xs font-medium text-brand-gold mb-1">AI Model</label>
-                                        <select
-                                            value={currentProject.state.model}
-                                            onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
-                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
-                                        >
-                                            <optgroup label="Claude (Anthropic)">
-                                                <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
-                                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast)</option>
-                                                <option value="claude-opus-4-5-20251101">Claude Opus 4.5 (Premium)</option>
-                                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                                                <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-                                                <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-                                            </optgroup>
-                                            <optgroup label="GPT (OpenAI)">
-                                                <option value="gpt-5.2-2025-12-11">GPT-5.2 (Latest)</option>
-                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini (Fast)</option>
-                                                <option value="gpt-5-nano-2025-08-07">GPT-5 Nano (Fastest)</option>
-                                                <option value="gpt-4o">GPT-4o</option>
-                                                <option value="gpt-4o-mini">GPT-4o Mini</option>
-                                            </optgroup>
-                                            <optgroup label="Gemini (Google)">
-                                                <option value="gemini-3.0">Gemini 3.0 (Latest)</option>
-                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                                            </optgroup>
-                                        </select>
+                                    <p className="text-[10px] text-brand-gold/60 mb-1">Test multiple models against the same workflow</p>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div>
+                                            <label className="block text-xs font-medium text-brand-gold mb-1">AI Model 1</label>
+                                            <select
+                                                value={currentProject.state.model}
+                                                onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
+                                                className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
+                                            >
+                                                <optgroup label="Claude (Anthropic)">
+                                                    <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                                    <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                                                    <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
+                                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                                    <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                                    <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                                </optgroup>
+                                                <optgroup label="GPT (OpenAI)">
+                                                    <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                    <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                    <option value="gpt-4o">GPT-4o</option>
+                                                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                                </optgroup>
+                                                <optgroup label="Gemini (Google)">
+                                                    <option value="gemini-3.0">Gemini 3.0</option>
+                                                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                                </optgroup>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-brand-gold mb-1">AI Model 2</label>
+                                            <select
+                                                value={currentProject.state.model2 || 'not-in-use'}
+                                                onChange={e => setCurrentProjectState(p => ({...p, model2: e.target.value}))}
+                                                className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
+                                            >
+                                                <option value="not-in-use">Not In Use</option>
+                                                <optgroup label="Claude (Anthropic)">
+                                                    <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                                    <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                                                    <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
+                                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                                    <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                                    <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                                </optgroup>
+                                                <optgroup label="GPT (OpenAI)">
+                                                    <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                    <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                    <option value="gpt-4o">GPT-4o</option>
+                                                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                                </optgroup>
+                                                <optgroup label="Gemini (Google)">
+                                                    <option value="gemini-3.0">Gemini 3.0</option>
+                                                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                                </optgroup>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-brand-gold mb-1">AI Model 3</label>
+                                            <select
+                                                value={currentProject.state.model3 || 'not-in-use'}
+                                                onChange={e => setCurrentProjectState(p => ({...p, model3: e.target.value}))}
+                                                className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
+                                            >
+                                                <option value="not-in-use">Not In Use</option>
+                                                <optgroup label="Claude (Anthropic)">
+                                                    <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                                    <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                                                    <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
+                                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                                    <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                                    <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                                </optgroup>
+                                                <optgroup label="GPT (OpenAI)">
+                                                    <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                    <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                    <option value="gpt-4o">GPT-4o</option>
+                                                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                                </optgroup>
+                                                <optgroup label="Gemini (Google)">
+                                                    <option value="gemini-3.0">Gemini 3.0</option>
+                                                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                                </optgroup>
+                                            </select>
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="block text-xs font-medium text-brand-gold mb-1">Filename Template</label>
