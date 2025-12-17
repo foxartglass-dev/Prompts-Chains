@@ -1792,8 +1792,8 @@ const App: React.FC = () => {
                     {renderSection('4. Workflow Variables', 'placeholders', <Icon type="info" className="h-6 w-6"/>,
                         <div className="space-y-6">
                             {/* Workflow Notes Section - 3 columns */}
-                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-cyan">
-                                <h3 className="text-sm font-semibold text-brand-cyan mb-2">Workflow Notes</h3>
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
+                                <h3 className="text-sm font-semibold text-brand-gold mb-2">Workflow Notes</h3>
                                 <div className="grid grid-cols-3 gap-2">
                                     <textarea
                                         value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[0] || ''}
@@ -1804,7 +1804,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 1..."
-                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold resize-y"
                                     />
                                     <textarea
                                         value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[1] || ''}
@@ -1816,7 +1816,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 2..."
-                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold resize-y"
                                     />
                                     <textarea
                                         value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[2] || ''}
@@ -1828,7 +1828,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 3..."
-                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold resize-y"
                                     />
                                 </div>
                             </div>
