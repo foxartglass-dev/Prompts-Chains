@@ -1,8 +1,8 @@
 import express from 'express';
 import { anthropicProvider } from './providers/anthropic.js';
 import { openaiProvider } from './providers/openai.js';
+import { geminiProvider } from './providers/gemini.js';
 // Future providers:
-// import { geminiProvider } from './providers/gemini.js';
 // import { grokProvider } from './providers/grok.js';
 
 const router = express.Router();
@@ -11,7 +11,7 @@ const router = express.Router();
 const providers = {
   anthropic: anthropicProvider,
   openai: openaiProvider,
-  // gemini: geminiProvider,
+  gemini: geminiProvider,
   // grok: grokProvider,
 };
 
