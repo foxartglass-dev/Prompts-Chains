@@ -172,6 +172,9 @@ function applyDefaults(project: Project, defaults: any): Project {
       ...project.state,
       apiKeys: {
         anthropic: project.state.apiKeys.anthropic || defaults.anthropicApiKey || '',
+        openai: project.state.apiKeys.openai || defaults.openaiApiKey || '',
+        gemini: project.state.apiKeys.gemini || defaults.geminiApiKey || '',
+        xai: project.state.apiKeys.xai || defaults.xaiApiKey || '',
         zeroGpt: project.state.apiKeys.zeroGpt || defaults.zeroGptApiKey || '',
       },
       wpCredentials: {

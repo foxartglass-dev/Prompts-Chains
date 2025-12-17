@@ -117,6 +117,9 @@ app.get('/api/config', (req, res) => {
   res.json({
     defaults: {
       anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+      openaiApiKey: process.env.OPENAI_API_KEY || '',
+      geminiApiKey: process.env.GEMINI_API_KEY || '',
+      xaiApiKey: process.env.XAI_API_KEY || '',
       zeroGptApiKey: process.env.ZEROGPT_API_KEY || '',
       wpUrl: process.env.WP_URL || '',
       wpUser: process.env.WP_USER || '',
