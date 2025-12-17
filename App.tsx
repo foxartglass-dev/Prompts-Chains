@@ -587,7 +587,7 @@ const App: React.FC = () => {
                 prompt,
                 currentProject.state.provider,
                 currentProject.state.model,
-                { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini }
+                { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini, xai: currentProject.state.apiKeys.xai }
             );
             const chosenNumber = parseInt(response.trim().match(/\d+/)?.[0] || '1');
             const chosenIndex = Math.max(0, Math.min(chosenNumber - 1, selection.options.length - 1));
@@ -771,7 +771,7 @@ const App: React.FC = () => {
                             filledPrompt,
                             currentProject.state.provider,
                             activeModel,
-                            { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini }
+                            { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini, xai: currentProject.state.apiKeys.xai }
                         );
                         if (output.startsWith('Error:')) throw new Error(output);
                         promptOutputs[prompt.outputKey] = output;
@@ -814,7 +814,7 @@ const App: React.FC = () => {
                                     optionPrompt,
                                     currentProject.state.provider,
                                     activeModel,
-                                    { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini }
+                                    { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini, xai: currentProject.state.apiKeys.xai }
                                 );
 
                                 // Parse the numbered list response

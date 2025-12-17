@@ -84,6 +84,17 @@ export async function generateContent(request: GenerateRequest): Promise<string>
 }
 
 /**
+ * Detect provider from model ID
+ */
+function detectProviderFromModel(modelId: string): string {
+  if (modelId.startsWith('claude-')) return 'anthropic';
+  if (modelId.startsWith('gpt-')) return 'openai';
+  if (modelId.startsWith('gemini-')) return 'gemini';
+  if (modelId.startsWith('grok-')) return 'xai';
+  return 'anthropic'; // default fallback
+}
+
+/**
  * Wrapper for the workflow engine - matches the old API signature
  * This makes it easy to swap in the new architecture
  */
@@ -91,13 +102,16 @@ export async function generateLlmContent(
   prompt: string,
   provider: string,
   model: string,
-  apiKeys: { anthropic?: string; openai?: string; gemini?: string }
+  apiKeys: { anthropic?: string; openai?: string; gemini?: string; xai?: string }
 ): Promise<string> {
-  // Map provider to API key
-  const apiKey = apiKeys[provider as keyof typeof apiKeys];
+  // Auto-detect provider from model ID (more reliable than provider param)
+  const detectedProvider = detectProviderFromModel(model);
+
+  // Map detected provider to API key
+  const apiKey = apiKeys[detectedProvider as keyof typeof apiKeys];
 
   return generateContent({
-    provider,
+    provider: detectedProvider,
     model,
     prompt,
     apiKey,
