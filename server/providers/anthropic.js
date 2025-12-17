@@ -9,6 +9,9 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000; // Start with 2 seconds
 const RETRYABLE_STATUS_CODES = [502, 503, 504, 529];
 
+// Timeout for API requests (5 minutes to handle long generations)
+const REQUEST_TIMEOUT_MS = 300000;
+
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const anthropicProvider = {
@@ -32,6 +35,10 @@ export const anthropicProvider = {
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
+        // Create AbortController for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
         const response = await fetch(ANTHROPIC_API_URL, {
           method: 'POST',
           headers: {
@@ -44,7 +51,10 @@ export const anthropicProvider = {
             max_tokens: maxTokens,
             messages: [{ role: 'user', content: prompt }],
           }),
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         // Get response text first to handle empty responses
         const responseText = await response.text();
