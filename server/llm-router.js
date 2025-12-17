@@ -58,6 +58,12 @@ router.post('/generate', async (req, res) => {
 
   // API key can come from request body or environment variable
   const resolvedApiKey = apiKey || process.env[provider.envKey];
+
+  // Debug logging (shows first 8 chars of key for troubleshooting)
+  const keyPreview = resolvedApiKey ? `${resolvedApiKey.substring(0, 8)}...` : 'NONE';
+  const keySource = apiKey ? 'request' : 'env';
+  console.log(`[${providerId}] Model: ${model}, Key source: ${keySource}, Key preview: ${keyPreview}`);
+
   if (!resolvedApiKey) {
     return res.status(400).json({
       error: `API key required for ${providerId}. Provide in request or set ${provider.envKey} env var.`
