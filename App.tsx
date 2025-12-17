@@ -119,7 +119,7 @@ const App: React.FC = () => {
     const [results, setResults] = useState<Result[]>([]);
     const [pendingResults, setPendingResults] = useState<PendingResult[]>([]);
     const [fileName, setFileName] = useState('');
-    const [activeCollapsible, setActiveCollapsible] = useState<string | null>('setup');
+    const [openSections, setOpenSections] = useState<Set<string>>(new Set(['setup']));
     const [newTagName, setNewTagName] = useState('');
     const [selectedPlaceholders, setSelectedPlaceholders] = useState<Set<number>>(new Set());
     const [bulkActionTag, setBulkActionTag] = useState('');
@@ -641,7 +641,7 @@ const App: React.FC = () => {
         setItems(itemsData);
         addLog(`Successfully loaded ${itemsData.length} items.`, LogStatus.SUCCESS);
         if (itemsData.length > 0) {
-            setActiveCollapsible('loadedItems');
+            setOpenSections(prev => new Set([...prev, 'loadedItems']));
         }
     };
 
@@ -1052,7 +1052,15 @@ const App: React.FC = () => {
         });
     };
     
-    const toggleCollapsible = (section: string) => setActiveCollapsible(activeCollapsible === section ? null : section);
+    const toggleCollapsible = (section: string) => setOpenSections(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(section)) {
+            newSet.delete(section);
+        } else {
+            newSet.add(section);
+        }
+        return newSet;
+    });
 
     if (!currentProject) {
         return (
@@ -1067,9 +1075,9 @@ const App: React.FC = () => {
         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
           {icon}
           <span className="ml-3">{title}</span>
-           <svg className={`w-5 h-5 ml-auto transform transition-transform ${(activeCollapsible === id || (!activeCollapsible && defaultOpen && id === 'setup')) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+           <svg className={`w-5 h-5 ml-auto transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </h2>
-        <div className={`transition-all duration-300 ease-in-out ${(activeCollapsible === id || (!activeCollapsible && defaultOpen && id === 'setup')) ? 'max-h-[5000px]' : 'max-h-0 overflow-hidden'}`}>
+        <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? 'max-h-[5000px]' : 'max-h-0 overflow-hidden'}`}>
             <div className="p-5 pt-0 border-t border-brand-cyan/30">{children}</div>
         </div>
       </div>
@@ -1601,12 +1609,12 @@ const App: React.FC = () => {
                                                 downloadProjectConfig(exportData, filename);
                                                 showNotification('Workflow exported!', 'success');
                                             }}
-                                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-xs transition"
+                                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold text-xs transition"
                                         >
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                                             Export
                                         </button>
-                                        <label className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-xs transition cursor-pointer">
+                                        <label className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold text-xs transition cursor-pointer">
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                                             Import
                                             <input
@@ -1640,7 +1648,7 @@ const App: React.FC = () => {
                             {/* Project Notes + Add Items Row */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {/* Project Notes - 2/3 width, 2 columns */}
-                                <div className="md:col-span-2 bg-slate-900 p-3 rounded-lg border border-brand-cyan/50">
+                                <div className="md:col-span-2 bg-slate-900 p-3 rounded-lg border-2 border-brand-cyan">
                                     <h3 className="text-sm font-semibold text-brand-cyan mb-2">Project Notes</h3>
                                     <div className="grid grid-cols-2 gap-2">
                                         <textarea
@@ -1652,7 +1660,7 @@ const App: React.FC = () => {
                                             }}
                                             rows={4}
                                             placeholder="Notes column 1..."
-                                            className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                            className="w-full bg-slate-900 border-2 border-brand-cyan rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
                                         />
                                         <textarea
                                             value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[1] || ''}
@@ -1664,12 +1672,13 @@ const App: React.FC = () => {
                                             }}
                                             rows={4}
                                             placeholder="Notes column 2..."
-                                            className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                            className="w-full bg-slate-900 border-2 border-brand-cyan rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
                                         />
                                     </div>
                                 </div>
                                 {/* Add Items - 1/3 width */}
                                 <div className="bg-slate-900 p-3 rounded-lg border border-brand-gold/50">
+                                    <label className="block text-sm font-medium text-brand-gold mb-0.5">To Start Workflow</label>
                                     <label htmlFor="manual-items" className="block text-sm font-medium text-brand-gold mb-1.5">
                                         Add Items <span className="text-xs text-brand-gold/60">(one per line)</span>
                                     </label>
@@ -1861,8 +1870,8 @@ const App: React.FC = () => {
                             {/* Tagged Variables */}
                             <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Tagged Variables</h3>
-                                {currentProject.state.tags.map(tag => (
-                                    <div key={tag.id} className="mb-4">
+                                {currentProject.state.tags.map((tag, tagIndex) => (
+                                    <div key={tag.id} className={`mb-4 ${tagIndex > 0 ? 'pt-4 border-t-2 border-brand-gold' : ''}`}>
                                         <p className="font-bold text-brand-gold text-sm mb-2">Tag: {tag.name}</p>
                                         {/* Column Headers */}
                                         <div className="grid grid-cols-[1fr,1fr,1fr,auto] gap-2 items-center mb-2 text-xs text-brand-gold/70 font-medium">
@@ -1875,7 +1884,7 @@ const App: React.FC = () => {
                                             {currentProject.state.placeholders.filter(p=>p.tag===tag.name).map(p => (<div key={p.id} className="grid grid-cols-[1fr,1fr,1fr,auto] gap-2 items-center">
                                                 <input type="text" placeholder="variable_name" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
                                                 <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
-                                                <div className="bg-slate-900 border border-orange-500/30 rounded-lg px-3 py-2 text-orange-400 font-mono text-sm">{`{${p.key || ''}{${tag.name}}}`}</div>
+                                                <div className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-brand-gold font-mono text-sm">{`{${p.key || ''}{${tag.name}}}`}</div>
                                                 <div className="relative group">
                                                     <button className="p-2 text-brand-gold hover:text-white transition">
                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
@@ -1893,10 +1902,10 @@ const App: React.FC = () => {
                             </div>
 
                             {/* Prompt Output Variables */}
-                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
-                                <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-gold/60 font-mono">[output_key]</span> <span className="text-xs text-brand-gold/60">(Read-only)</span></h3>
-                                <p className="text-xs text-brand-gold/70 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-slate-900 p-1 rounded border border-brand-gold/50">[output_key]</span></p>
-                                <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 text-sm font-mono text-brand-gold">[{p.outputKey}]</div>))}</div>
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-cyan">
+                                <h3 className="text-lg font-semibold text-brand-cyan mb-2 border-b border-brand-cyan/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-cyan/60 font-mono">[output_key]</span> <span className="text-xs text-brand-cyan/60">(Read-only)</span></h3>
+                                <p className="text-[10px] text-brand-cyan/70 mb-2">These are generated from the 'Output Key' from the Prompt Workflows for use in later prompts like: <span className="font-mono text-brand-cyan">[output_key]</span></p>
+                                <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-brand-cyan/10 border-2 border-brand-cyan rounded-full px-3 py-1 text-sm font-mono text-brand-cyan">[{p.outputKey}]</div>))}</div>
                             </div>
 
                             {/* Option Variables */}
