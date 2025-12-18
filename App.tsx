@@ -15,6 +15,7 @@ import WorkflowNavigation from './src/components/WorkflowNavigation';
 import ClientsPage from './src/components/ClientsPage';
 import WebsitesPage from './src/components/WebsitesPage';
 import Analytics from './src/components/Analytics';
+import PendingMetaNotification from './src/components/PendingMetaNotification';
 
 // Types for workflow
 interface WorkflowItem {
@@ -707,24 +708,92 @@ const App: React.FC = () => {
         return filledTemplate;
     };
     
-    const parseFinalOutput = (text: string) => {
-        const metaTitlesSeparator = '---META TITLES---';
-        const metaDescriptionsSeparator = '---META DESCRIPTIONS---';
-        const articleEnd = text.indexOf(metaTitlesSeparator);
-        const finalOutput = articleEnd !== -1 ? text.substring(0, articleEnd).trim() : text;
-        const titlesStart = text.indexOf(metaTitlesSeparator);
-        const descriptionsStart = text.indexOf(metaDescriptionsSeparator);
+    // Helper to clean LLM meta responses - filters out preamble text
+    const cleanMetaResponse = (response: string, minLength: number = 20): string[] => {
+        // Patterns that indicate preamble/intro text (not actual meta content)
+        const preamblePatterns = [
+            /^(here\s+(are|is)|based\s+on|the\s+primary|i('ve|'ll| have| will)|let\s+me|sure|okay|certainly)/i,
+            /^(\*\*)?option\s*\d+/i,           // "Option 1", "**Option 1**"
+            /^\(\d+\s*characters?\)/i,          // "(158 characters)"
+            /^\*\*[^*]+\*\*:?\s*$/,             // Lines that are just "**something**"
+            /^(meta\s+)?(title|description)s?(\s+options?)?:?\s*$/i,  // "Meta titles:", "Description options"
+            /characters?\s*(including|each|long)/i,  // "all between 150-168 characters"
+            /target\s+keyword/i,                // "the primary target keyword is..."
+        ];
+
+        return response
+            .split('\n')
+            .map(line => {
+                // Remove number prefixes like "1.", "2.", etc.
+                let cleaned = line.replace(/^\d+[\.\)\-]\s*/, '').trim();
+                // Remove markdown bold/italic
+                cleaned = cleaned.replace(/\*\*/g, '').replace(/\*/g, '').trim();
+                // Remove leading/trailing quotes
+                cleaned = cleaned.replace(/^["']|["']$/g, '').trim();
+                return cleaned;
+            })
+            .filter(line => {
+                // Filter out empty lines
+                if (line.length < minLength) return false;
+                // Filter out preamble patterns
+                for (const pattern of preamblePatterns) {
+                    if (pattern.test(line)) return false;
+                }
+                // Filter out lines that look like they contain character counts
+                if (/\(\d+\s*characters?\)/.test(line)) return false;
+                return true;
+            });
+    };
+
+    // Generate meta titles and descriptions using separate LLM calls
+    const generateMetaSeparately = async (
+        articleContent: string,
+        provider: string,
+        model: string,
+        apiKeys: { anthropic: string; openai: string; gemini: string; xai: string },
+        metaTitleCount: number,
+        metaDescriptionCount: number,
+        metaTitlePrompt: string,
+        metaDescriptionPrompt: string
+    ): Promise<{ metaTitles: string[]; metaDescriptions: string[] }> => {
         let metaTitles: string[] = [];
-        if(titlesStart !== -1){
-            const titlesBlock = text.substring(titlesStart + metaTitlesSeparator.length, descriptionsStart !== -1 ? descriptionsStart : undefined).trim();
-            metaTitles = titlesBlock.split('\n').map(line => line.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
-        }
         let metaDescriptions: string[] = [];
-        if(descriptionsStart !== -1){
-            const descriptionsBlock = text.substring(descriptionsStart + metaDescriptionsSeparator.length).trim();
-            metaDescriptions = descriptionsBlock.split('\n').map(line => line.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
+
+        // Generate meta titles (typically 50-70 chars, use 25 as min filter)
+        if (metaTitleCount > 0 && metaTitlePrompt) {
+            const titlePrompt = metaTitlePrompt
+                .replace(/{count}/g, String(metaTitleCount))
+                .replace(/{article_content}/g, articleContent.substring(0, 5000)); // Limit content length
+
+            try {
+                const titleResponse = await generateLlmContent(titlePrompt, provider, model, apiKeys);
+                metaTitles = cleanMetaResponse(titleResponse, 25).slice(0, metaTitleCount);
+            } catch (error) {
+                console.error('Failed to generate meta titles:', error);
+            }
         }
-        return { finalOutput, metaTitles, metaDescriptions };
+
+        // Generate meta descriptions (typically 150-168 chars, use 80 as min filter)
+        if (metaDescriptionCount > 0 && metaDescriptionPrompt) {
+            const descPrompt = metaDescriptionPrompt
+                .replace(/{count}/g, String(metaDescriptionCount))
+                .replace(/{article_content}/g, articleContent.substring(0, 5000));
+
+            try {
+                const descResponse = await generateLlmContent(descPrompt, provider, model, apiKeys);
+                metaDescriptions = cleanMetaResponse(descResponse, 80).slice(0, metaDescriptionCount);
+            } catch (error) {
+                console.error('Failed to generate meta descriptions:', error);
+            }
+        }
+
+        return { metaTitles, metaDescriptions };
+    };
+
+    // Legacy parser - just returns the text as-is without extracting meta
+    const parseFinalOutput = (text: string) => {
+        // No longer extract meta from content - it's generated separately
+        return { finalOutput: text.trim(), metaTitles: [] as string[], metaDescriptions: [] as string[] };
     };
 
     const processWorkflow = async () => {
@@ -782,8 +851,33 @@ const App: React.FC = () => {
 
                     const combinedOutput = mainContentKeys.map(key => promptOutputs[key]).join('\n\n---\n\n');
 
-                    const { finalOutput, metaTitles, metaDescriptions } = parseFinalOutput(combinedOutput);
+                    const { finalOutput } = parseFinalOutput(combinedOutput);
                     addLog(`[${itemLabel}] Generated final content.`, LogStatus.INFO, item.id);
+
+                    // Check if any prompt has generateMetaFromOutput enabled
+                    let metaTitles: string[] = [];
+                    let metaDescriptions: string[] = [];
+
+                    const metaSourcePrompt = currentProject.state.promptTemplates.find(p => p.generateMetaFromOutput);
+                    if (metaSourcePrompt) {
+                        const metaSourceContent = promptOutputs[metaSourcePrompt.outputKey] || finalOutput;
+                        addLog(`[${itemLabel}] Generating SEO meta from "${metaSourcePrompt.name}" output...`, LogStatus.WORKING, item.id);
+
+                        const metaResult = await generateMetaSeparately(
+                            metaSourceContent,
+                            currentProject.state.provider,
+                            activeModel,
+                            { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini, xai: currentProject.state.apiKeys.xai },
+                            currentProject.state.metaTitleCount || 3,
+                            currentProject.state.metaDescriptionCount || 3,
+                            currentProject.state.metaTitlePrompt || 'Generate {count} SEO meta titles for this article:\n\n{article_content}\n\nFormat as numbered list.',
+                            currentProject.state.metaDescriptionPrompt || 'Generate {count} SEO meta descriptions for this article:\n\n{article_content}\n\nFormat as numbered list.'
+                        );
+
+                        metaTitles = metaResult.metaTitles;
+                        metaDescriptions = metaResult.metaDescriptions;
+                        addLog(`[${itemLabel}] Generated ${metaTitles.length} meta titles and ${metaDescriptions.length} meta descriptions.`, LogStatus.SUCCESS, item.id);
+                    }
 
                     // Check for option variables in the final output
                     const optionVarPattern = /\?([^:?]+):(\d+)\?/g;
@@ -984,6 +1078,37 @@ const App: React.FC = () => {
 
                 updateResultStatus(result.item.id, 'published', data.page?.link);
                 addLog(`[${result.item.name}] Successfully published as Elementor page!`, LogStatus.SUCCESS, result.item.id);
+
+                // Auto-push SEO meta if count=1 for both
+                const metaTitleCount = currentProject.state.metaTitleCount || 3;
+                const metaDescCount = currentProject.state.metaDescriptionCount || 3;
+                if (metaTitleCount === 1 && metaDescCount === 1 && result.metaTitles.length > 0 && result.metaDescriptions.length > 0 && data.page?.id) {
+                    addLog(`[${result.item.name}] Auto-pushing SEO meta to AIOSEO...`, LogStatus.WORKING, result.item.id);
+                    try {
+                        const seoResponse = await fetch('/api/seo/push-direct', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                wpUrl: url,
+                                wpUser: user,
+                                wpPassword: password,
+                                postId: data.page.id,
+                                metaTitle: result.metaTitles[0],
+                                metaDescription: result.metaDescriptions[0],
+                                seoPlugin: 'aioseo',
+                                postType: 'pages'
+                            })
+                        });
+                        if (seoResponse.ok) {
+                            addLog(`[${result.item.name}] SEO meta pushed successfully!`, LogStatus.SUCCESS, result.item.id);
+                        } else {
+                            const seoError = await seoResponse.json();
+                            addLog(`[${result.item.name}] SEO push failed: ${seoError.error || 'Unknown error'}`, LogStatus.ERROR, result.item.id);
+                        }
+                    } catch (seoErr) {
+                        addLog(`[${result.item.name}] SEO push error: ${seoErr instanceof Error ? seoErr.message : 'Unknown'}`, LogStatus.ERROR, result.item.id);
+                    }
+                }
             } else {
                 // Use regular WordPress endpoint
                 response = await fetch('/api/wordpress/publish', {
@@ -1010,6 +1135,37 @@ const App: React.FC = () => {
 
                 updateResultStatus(result.item.id, 'published', data.link);
                 addLog(`[${result.item.name}] Successfully published to WordPress!`, LogStatus.SUCCESS, result.item.id);
+
+                // Auto-push SEO meta if count=1 for both
+                const metaTitleCount2 = currentProject.state.metaTitleCount || 3;
+                const metaDescCount2 = currentProject.state.metaDescriptionCount || 3;
+                if (metaTitleCount2 === 1 && metaDescCount2 === 1 && result.metaTitles.length > 0 && result.metaDescriptions.length > 0 && data.id) {
+                    addLog(`[${result.item.name}] Auto-pushing SEO meta to AIOSEO...`, LogStatus.WORKING, result.item.id);
+                    try {
+                        const seoResponse = await fetch('/api/seo/push-direct', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                wpUrl: url,
+                                wpUser: user,
+                                wpPassword: password,
+                                postId: data.id,
+                                metaTitle: result.metaTitles[0],
+                                metaDescription: result.metaDescriptions[0],
+                                seoPlugin: 'aioseo',
+                                postType: currentProject.state.wpContentType
+                            })
+                        });
+                        if (seoResponse.ok) {
+                            addLog(`[${result.item.name}] SEO meta pushed successfully!`, LogStatus.SUCCESS, result.item.id);
+                        } else {
+                            const seoError = await seoResponse.json();
+                            addLog(`[${result.item.name}] SEO push failed: ${seoError.error || 'Unknown error'}`, LogStatus.ERROR, result.item.id);
+                        }
+                    } catch (seoErr) {
+                        addLog(`[${result.item.name}] SEO push error: ${seoErr instanceof Error ? seoErr.message : 'Unknown'}`, LogStatus.ERROR, result.item.id);
+                    }
+                }
             }
 
         } catch (error) {
@@ -1286,6 +1442,8 @@ const App: React.FC = () => {
                 }}
                 filterByWebsite={currentWebsiteId}
                 filterByClient={filterByClientId}
+                wpCredentials={currentProject?.state.wpCredentials}
+                wpContentType={currentProject?.state.wpContentType}
             />
             <TemplateLibrary
                 isOpen={isTemplatesOpen}
@@ -1481,6 +1639,16 @@ const App: React.FC = () => {
                             </svg>
                             <span className="text-[10px] md:text-sm">Settings</span>
                         </button>
+
+                        {/* Pending Meta Notification Bell */}
+                        <div className="relative hidden md:block">
+                            <PendingMetaNotification
+                                onOpenArticle={(articleId) => {
+                                    setIsArticlesOpen(true);
+                                    // The ArticleManager will handle opening the specific article
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -1865,6 +2033,71 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                             <p className="text-xs text-brand-gold/70">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
+
+                            {/* Meta SEO Generation Settings */}
+                            <div className="mt-6 pt-6 border-t border-pink-500/30">
+                                <h3 className="text-lg font-semibold text-pink-400 mb-4 flex items-center gap-2">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                                    Meta SEO Generation
+                                </h3>
+                                <p className="text-xs text-pink-400/70 mb-4">
+                                    When a prompt has "Generate Meta SEO" enabled, these settings control how meta titles and descriptions are generated.
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Title Options</label>
+                                        <select
+                                            value={currentProject.state.metaTitleCount || 3}
+                                            onChange={e => setCurrentProjectState(p => ({...p, metaTitleCount: parseInt(e.target.value)}))}
+                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-pink-500 transition-all"
+                                        >
+                                            <option value="1">1 (Auto-push to SEO)</option>
+                                            <option value="2">2 (Draft mode - select one)</option>
+                                            <option value="3">3 (Draft mode - select one)</option>
+                                            <option value="5">5 (Draft mode - select one)</option>
+                                        </select>
+                                        <p className="text-xs text-pink-400/50 mt-1">1 = auto-push, 2+ = choose from options</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Description Options</label>
+                                        <select
+                                            value={currentProject.state.metaDescriptionCount || 3}
+                                            onChange={e => setCurrentProjectState(p => ({...p, metaDescriptionCount: parseInt(e.target.value)}))}
+                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-pink-500 transition-all"
+                                        >
+                                            <option value="1">1 (Auto-push to SEO)</option>
+                                            <option value="2">2 (Draft mode - select one)</option>
+                                            <option value="3">3 (Draft mode - select one)</option>
+                                            <option value="5">5 (Draft mode - select one)</option>
+                                        </select>
+                                        <p className="text-xs text-pink-400/50 mt-1">1 = auto-push, 2+ = choose from options</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Title Generation Prompt</label>
+                                        <textarea
+                                            value={currentProject.state.metaTitlePrompt || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, metaTitlePrompt: e.target.value}))}
+                                            rows={3}
+                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-pink-500 transition-all resize-y"
+                                            placeholder="Prompt for generating meta titles..."
+                                        />
+                                        <p className="text-xs text-pink-400/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Description Generation Prompt</label>
+                                        <textarea
+                                            value={currentProject.state.metaDescriptionPrompt || ''}
+                                            onChange={e => setCurrentProjectState(p => ({...p, metaDescriptionPrompt: e.target.value}))}
+                                            rows={3}
+                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-pink-500 transition-all resize-y"
+                                            placeholder="Prompt for generating meta descriptions..."
+                                        />
+                                        <p className="text-xs text-pink-400/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -2111,13 +2344,26 @@ const App: React.FC = () => {
                                             <button key={ov.id} type="button" onClick={() => insertVariableIntoPrompt(prompt.id, `?${ov.key}:${ov.optionCount}?`)} className="px-2 py-1 text-xs font-mono bg-pink-500/20 hover:bg-pink-500/40 border border-pink-500/50 rounded text-pink-400 transition">{`?${ov.key}:${ov.optionCount}?`}</button>
                                         ))}
                                     </div>
-                                    <div className="text-right text-xs text-brand-gold">
-                                        <label htmlFor={`output-action-${prompt.id}`} className="mr-2 font-semibold">Output Action:</label>
-                                        <select id={`output-action-${prompt.id}`} value={prompt.outputAction || ''} onChange={e => handleUpdatePrompt(prompt.id, 'outputAction', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-xs text-white focus:ring-2 focus:ring-brand-gold transition-all">
-                                            <option value="">(none)</option>
-                                            <option value="addToFinal">Add to final document</option>
-                                            <option value="download">Mark for individual download</option>
-                                        </select>
+                                    <div className="flex items-center justify-between text-xs text-brand-gold">
+                                        <div className="flex items-center gap-3">
+                                            <label className="flex items-center gap-1.5 cursor-pointer group">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={prompt.generateMetaFromOutput || false}
+                                                    onChange={e => handleUpdatePrompt(prompt.id, 'generateMetaFromOutput', e.target.checked)}
+                                                    className="w-3.5 h-3.5 rounded border-pink-500/50 text-pink-500 focus:ring-pink-500 bg-slate-900"
+                                                />
+                                                <span className="text-pink-400 group-hover:text-pink-300 transition">Generate Meta SEO</span>
+                                            </label>
+                                        </div>
+                                        <div>
+                                            <label htmlFor={`output-action-${prompt.id}`} className="mr-2 font-semibold">Output Action:</label>
+                                            <select id={`output-action-${prompt.id}`} value={prompt.outputAction || ''} onChange={e => handleUpdatePrompt(prompt.id, 'outputAction', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-2 py-1.5 text-xs text-white focus:ring-2 focus:ring-brand-gold transition-all">
+                                                <option value="">(none)</option>
+                                                <option value="addToFinal">Add to final document</option>
+                                                <option value="download">Mark for individual download</option>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
