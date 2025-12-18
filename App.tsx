@@ -708,6 +708,43 @@ const App: React.FC = () => {
         return filledTemplate;
     };
     
+    // Helper to clean LLM meta responses - filters out preamble text
+    const cleanMetaResponse = (response: string, minLength: number = 20): string[] => {
+        // Patterns that indicate preamble/intro text (not actual meta content)
+        const preamblePatterns = [
+            /^(here\s+(are|is)|based\s+on|the\s+primary|i('ve|'ll| have| will)|let\s+me|sure|okay|certainly)/i,
+            /^(\*\*)?option\s*\d+/i,           // "Option 1", "**Option 1**"
+            /^\(\d+\s*characters?\)/i,          // "(158 characters)"
+            /^\*\*[^*]+\*\*:?\s*$/,             // Lines that are just "**something**"
+            /^(meta\s+)?(title|description)s?(\s+options?)?:?\s*$/i,  // "Meta titles:", "Description options"
+            /characters?\s*(including|each|long)/i,  // "all between 150-168 characters"
+            /target\s+keyword/i,                // "the primary target keyword is..."
+        ];
+
+        return response
+            .split('\n')
+            .map(line => {
+                // Remove number prefixes like "1.", "2.", etc.
+                let cleaned = line.replace(/^\d+[\.\)\-]\s*/, '').trim();
+                // Remove markdown bold/italic
+                cleaned = cleaned.replace(/\*\*/g, '').replace(/\*/g, '').trim();
+                // Remove leading/trailing quotes
+                cleaned = cleaned.replace(/^["']|["']$/g, '').trim();
+                return cleaned;
+            })
+            .filter(line => {
+                // Filter out empty lines
+                if (line.length < minLength) return false;
+                // Filter out preamble patterns
+                for (const pattern of preamblePatterns) {
+                    if (pattern.test(line)) return false;
+                }
+                // Filter out lines that look like they contain character counts
+                if (/\(\d+\s*characters?\)/.test(line)) return false;
+                return true;
+            });
+    };
+
     // Generate meta titles and descriptions using separate LLM calls
     const generateMetaSeparately = async (
         articleContent: string,
@@ -722,7 +759,7 @@ const App: React.FC = () => {
         let metaTitles: string[] = [];
         let metaDescriptions: string[] = [];
 
-        // Generate meta titles
+        // Generate meta titles (typically 50-70 chars, use 25 as min filter)
         if (metaTitleCount > 0 && metaTitlePrompt) {
             const titlePrompt = metaTitlePrompt
                 .replace(/{count}/g, String(metaTitleCount))
@@ -730,17 +767,13 @@ const App: React.FC = () => {
 
             try {
                 const titleResponse = await generateLlmContent(titlePrompt, provider, model, apiKeys);
-                metaTitles = titleResponse
-                    .split('\n')
-                    .map(line => line.replace(/^\d+\.\s*/, '').trim())
-                    .filter(line => line.length > 0)
-                    .slice(0, metaTitleCount);
+                metaTitles = cleanMetaResponse(titleResponse, 25).slice(0, metaTitleCount);
             } catch (error) {
                 console.error('Failed to generate meta titles:', error);
             }
         }
 
-        // Generate meta descriptions
+        // Generate meta descriptions (typically 150-168 chars, use 80 as min filter)
         if (metaDescriptionCount > 0 && metaDescriptionPrompt) {
             const descPrompt = metaDescriptionPrompt
                 .replace(/{count}/g, String(metaDescriptionCount))
@@ -748,11 +781,7 @@ const App: React.FC = () => {
 
             try {
                 const descResponse = await generateLlmContent(descPrompt, provider, model, apiKeys);
-                metaDescriptions = descResponse
-                    .split('\n')
-                    .map(line => line.replace(/^\d+\.\s*/, '').trim())
-                    .filter(line => line.length > 0)
-                    .slice(0, metaDescriptionCount);
+                metaDescriptions = cleanMetaResponse(descResponse, 80).slice(0, metaDescriptionCount);
             } catch (error) {
                 console.error('Failed to generate meta descriptions:', error);
             }

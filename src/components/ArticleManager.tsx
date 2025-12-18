@@ -900,40 +900,45 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                       )}
                     </div>
                     <div className="flex gap-3">
+                      {/* Show Save Selection when user has made a selection but not saved yet */}
                       {(selectedTitleIndex !== null || selectedDescIndex !== null) && (
-                        <>
-                          <button
-                            onClick={saveMetaSelection}
-                            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white transition"
-                          >
-                            Save Selection
-                          </button>
-                          {selectedArticle.wp_post_id && (
-                            <button
-                              onClick={pushToSeo}
-                              disabled={pushingSeo}
-                              className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 rounded-lg text-sm text-white font-medium transition disabled:opacity-50 flex items-center gap-2"
-                            >
-                              {pushingSeo ? (
-                                <>
-                                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                  </svg>
-                                  Pushing...
-                                </>
-                              ) : (
-                                <>
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                  </svg>
-                                  Push to {selectedArticle.seo_plugin || 'Yoast'}
-                                </>
-                              )}
-                            </button>
-                          )}
-                        </>
+                        <button
+                          onClick={saveMetaSelection}
+                          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white transition"
+                        >
+                          Save Selection
+                        </button>
                       )}
+
+                      {/* Show Push button when: article is published to WP AND (selection made OR meta already selected) */}
+                      {selectedArticle.wp_post_id && (
+                        (selectedTitleIndex !== null || selectedDescIndex !== null || selectedArticle.meta_seo_status === 'selected') && (
+                          <button
+                            onClick={pushToSeo}
+                            disabled={pushingSeo}
+                            className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 rounded-lg text-sm text-white font-medium transition disabled:opacity-50 flex items-center gap-2"
+                          >
+                            {pushingSeo ? (
+                              <>
+                                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Pushing...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                Push to {selectedArticle.seo_plugin || 'AIOSEO'}
+                              </>
+                            )}
+                          </button>
+                        )
+                      )}
+
+                      {/* Show warning when not published to WP yet */}
                       {!selectedArticle.wp_post_id && (selectedTitleIndex !== null || selectedDescIndex !== null) && (
                         <span className="text-xs text-yellow-400 flex items-center gap-1">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
