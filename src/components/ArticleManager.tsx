@@ -21,6 +21,11 @@ interface Article {
   parent_article_id: number | null;
   created_at: string;
   updated_at: string;
+  // Meta SEO selection fields
+  selected_meta_title: string | null;
+  selected_meta_description: string | null;
+  meta_seo_status: 'pending' | 'selected' | 'pushed' | null;
+  meta_pushed_at: string | null;
   // Joined fields
   workflow_name?: string;
   website_name?: string;
@@ -28,6 +33,7 @@ interface Article {
   wp_url?: string;
   wp_user?: string;
   wp_app_password?: string;
+  seo_plugin?: string;
 }
 
 interface ArticleManagerProps {
@@ -72,6 +78,14 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
   const [versions, setVersions] = useState<Article[]>([]);
   const [showVersions, setShowVersions] = useState(false);
 
+  // Meta selection state
+  const [selectedTitleIndex, setSelectedTitleIndex] = useState<number | null>(null);
+  const [selectedDescIndex, setSelectedDescIndex] = useState<number | null>(null);
+  const [customMetaTitle, setCustomMetaTitle] = useState('');
+  const [customMetaDesc, setCustomMetaDesc] = useState('');
+  const [pushingSeo, setPushingSeo] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       fetchArticles();
@@ -113,6 +127,36 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       setEditContent(data.article.final_content || '');
       setEditMetaTitles(data.article.meta_titles || []);
       setEditMetaDescriptions(data.article.meta_descriptions || []);
+
+      // Initialize meta selection state from article
+      const article = data.article;
+      if (article.selected_meta_title) {
+        const titleIdx = (article.meta_titles || []).indexOf(article.selected_meta_title);
+        if (titleIdx >= 0) {
+          setSelectedTitleIndex(titleIdx);
+          setCustomMetaTitle('');
+        } else {
+          setSelectedTitleIndex(-1); // Custom
+          setCustomMetaTitle(article.selected_meta_title);
+        }
+      } else {
+        setSelectedTitleIndex(null);
+        setCustomMetaTitle('');
+      }
+
+      if (article.selected_meta_description) {
+        const descIdx = (article.meta_descriptions || []).indexOf(article.selected_meta_description);
+        if (descIdx >= 0) {
+          setSelectedDescIndex(descIdx);
+          setCustomMetaDesc('');
+        } else {
+          setSelectedDescIndex(-1); // Custom
+          setCustomMetaDesc(article.selected_meta_description);
+        }
+      } else {
+        setSelectedDescIndex(null);
+        setCustomMetaDesc('');
+      }
     } catch (err) {
       setError('Failed to fetch article');
     } finally {
@@ -262,6 +306,126 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       setError('Failed to publish');
     } finally {
       setPublishing(false);
+    }
+  };
+
+  // Get the currently selected meta values
+  const getSelectedMetaTitle = () => {
+    if (selectedTitleIndex === -1) return customMetaTitle;
+    if (selectedTitleIndex !== null && selectedArticle?.meta_titles?.[selectedTitleIndex]) {
+      return selectedArticle.meta_titles[selectedTitleIndex];
+    }
+    return null;
+  };
+
+  const getSelectedMetaDesc = () => {
+    if (selectedDescIndex === -1) return customMetaDesc;
+    if (selectedDescIndex !== null && selectedArticle?.meta_descriptions?.[selectedDescIndex]) {
+      return selectedArticle.meta_descriptions[selectedDescIndex];
+    }
+    return null;
+  };
+
+  // Save meta selection (without pushing to SEO yet)
+  const saveMetaSelection = async () => {
+    if (!selectedArticle) return;
+
+    const metaTitle = getSelectedMetaTitle();
+    const metaDesc = getSelectedMetaDesc();
+
+    if (!metaTitle && !metaDesc) {
+      setError('Please select at least one meta title or description');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/seo/select/${selectedArticle.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedMetaTitle: metaTitle,
+          selectedMetaDescription: metaDesc
+        })
+      });
+
+      const data = await res.json();
+      if (data.article) {
+        setSelectedArticle(data.article);
+        fetchArticles();
+      }
+    } catch (err) {
+      setError('Failed to save meta selection');
+    }
+  };
+
+  // Push selected meta to SEO plugin
+  const pushToSeo = async () => {
+    if (!selectedArticle) return;
+
+    const metaTitle = getSelectedMetaTitle();
+    const metaDesc = getSelectedMetaDesc();
+
+    if (!metaTitle && !metaDesc) {
+      setError('Please select a meta title and/or description first');
+      return;
+    }
+
+    if (!selectedArticle.wp_post_id) {
+      setError('Article must be published to WordPress first');
+      return;
+    }
+
+    setPushingSeo(true);
+    try {
+      const res = await fetch(`/api/seo/push/${selectedArticle.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          metaTitle,
+          metaDescription: metaDesc
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        // Refresh article to show updated status
+        fetchArticle(selectedArticle.id);
+        fetchArticles();
+      } else {
+        setError(data.error || 'Failed to push to SEO plugin');
+      }
+    } catch (err) {
+      setError('Failed to push to SEO plugin');
+    } finally {
+      setPushingSeo(false);
+    }
+  };
+
+  // Delete article
+  const deleteArticle = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this article? This cannot be undone.')) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/articles/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        fetchArticles();
+        if (selectedArticle?.id === id) {
+          backToList();
+        }
+      } else {
+        setError('Failed to delete article');
+      }
+    } catch (err) {
+      setError('Failed to delete article');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -439,10 +603,10 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                           <td className="p-2 text-gray-400 text-xs">
                             {new Date(article.created_at).toLocaleDateString()}
                           </td>
-                          <td className="p-2">
+                          <td className="p-2 flex items-center gap-2">
                             <button
                               onClick={() => viewArticle(article)}
-                              className="text-brand-cyan hover:text-brand-cyan-light text-xs mr-2"
+                              className="text-brand-cyan hover:text-brand-cyan-light text-xs"
                             >
                               View
                             </button>
@@ -456,6 +620,13 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                                 WP Link
                               </a>
                             )}
+                            <button
+                              onClick={() => deleteArticle(article.id)}
+                              className="text-red-400 hover:text-red-300 text-xs"
+                              title="Delete article"
+                            >
+                              Delete
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -569,58 +740,207 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                   )}
                 </div>
 
-                {/* Meta section */}
+                {/* Meta SEO Selection Section */}
                 <div className="border-t border-brand-cyan/30 p-4 bg-gray-800/50">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-400 mb-2">Meta Titles</h4>
-                      {viewMode === 'view' ? (
-                        <ul className="text-sm text-gray-300 space-y-1">
-                          {(selectedArticle.meta_titles || []).map((title, i) => (
-                            <li key={i}>{i + 1}. {title}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="space-y-1">
-                          {editMetaTitles.map((title, i) => (
-                            <input
-                              key={i}
-                              value={title}
-                              onChange={(e) => {
-                                const newTitles = [...editMetaTitles];
-                                newTitles[i] = e.target.value;
-                                setEditMetaTitles(newTitles);
-                              }}
-                              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white"
-                            />
-                          ))}
-                        </div>
+                  {/* SEO Status Banner */}
+                  {selectedArticle.meta_seo_status && (
+                    <div className={`mb-4 p-2 rounded text-sm flex items-center justify-between ${
+                      selectedArticle.meta_seo_status === 'pushed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                      selectedArticle.meta_seo_status === 'selected' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
+                      'bg-pink-500/20 text-pink-400 border border-pink-500/30'
+                    }`}>
+                      <span>
+                        {selectedArticle.meta_seo_status === 'pushed' && '✓ Meta pushed to SEO plugin'}
+                        {selectedArticle.meta_seo_status === 'selected' && '⏳ Meta selected - ready to push'}
+                        {selectedArticle.meta_seo_status === 'pending' && '⚠ Meta selection pending'}
+                      </span>
+                      {selectedArticle.meta_pushed_at && (
+                        <span className="text-xs opacity-70">
+                          Pushed: {new Date(selectedArticle.meta_pushed_at).toLocaleString()}
+                        </span>
                       )}
                     </div>
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-400 mb-2">Meta Descriptions</h4>
-                      {viewMode === 'view' ? (
-                        <ul className="text-sm text-gray-300 space-y-1">
-                          {(selectedArticle.meta_descriptions || []).map((desc, i) => (
-                            <li key={i}>{i + 1}. {desc}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="space-y-1">
-                          {editMetaDescriptions.map((desc, i) => (
-                            <textarea
-                              key={i}
-                              value={desc}
-                              onChange={(e) => {
-                                const newDescs = [...editMetaDescriptions];
-                                newDescs[i] = e.target.value;
-                                setEditMetaDescriptions(newDescs);
+                  )}
+
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Meta Titles Selection */}
+                    <div className="bg-slate-900 rounded-lg p-4 border border-brand-gold/30">
+                      <h4 className="text-sm font-semibold text-brand-gold mb-3 flex items-center justify-between">
+                        <span>Meta Titles</span>
+                        {selectedTitleIndex !== null && (
+                          <span className="text-xs bg-brand-gold/20 px-2 py-0.5 rounded">Selected</span>
+                        )}
+                      </h4>
+                      <div className="space-y-2">
+                        {(selectedArticle.meta_titles || []).map((title, i) => (
+                          <label
+                            key={i}
+                            className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
+                              selectedTitleIndex === i
+                                ? 'bg-brand-gold/20 border-brand-gold'
+                                : 'bg-gray-800 border-transparent hover:border-brand-gold/50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="metaTitle"
+                              checked={selectedTitleIndex === i}
+                              onChange={() => {
+                                setSelectedTitleIndex(i);
+                                setCustomMetaTitle('');
                               }}
-                              className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white resize-none"
-                              rows={2}
+                              className="mt-1 accent-yellow-500"
                             />
-                          ))}
-                        </div>
+                            <span className="text-sm text-white">{title}</span>
+                          </label>
+                        ))}
+                        {/* Custom option */}
+                        <label
+                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
+                            selectedTitleIndex === -1
+                              ? 'bg-brand-gold/20 border-brand-gold'
+                              : 'bg-gray-800 border-transparent hover:border-brand-gold/50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="metaTitle"
+                            checked={selectedTitleIndex === -1}
+                            onChange={() => setSelectedTitleIndex(-1)}
+                            className="mt-1 accent-yellow-500"
+                          />
+                          <div className="flex-1">
+                            <span className="text-sm text-brand-gold/70 block mb-1">Custom:</span>
+                            <input
+                              type="text"
+                              value={customMetaTitle}
+                              onChange={(e) => {
+                                setCustomMetaTitle(e.target.value);
+                                setSelectedTitleIndex(-1);
+                              }}
+                              placeholder="Enter custom meta title..."
+                              className="w-full bg-gray-900 border border-brand-gold/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-gold transition"
+                              onClick={() => setSelectedTitleIndex(-1)}
+                            />
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Meta Descriptions Selection */}
+                    <div className="bg-slate-900 rounded-lg p-4 border border-brand-cyan/30">
+                      <h4 className="text-sm font-semibold text-brand-cyan mb-3 flex items-center justify-between">
+                        <span>Meta Descriptions</span>
+                        {selectedDescIndex !== null && (
+                          <span className="text-xs bg-brand-cyan/20 px-2 py-0.5 rounded">Selected</span>
+                        )}
+                      </h4>
+                      <div className="space-y-2">
+                        {(selectedArticle.meta_descriptions || []).map((desc, i) => (
+                          <label
+                            key={i}
+                            className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
+                              selectedDescIndex === i
+                                ? 'bg-brand-cyan/20 border-brand-cyan'
+                                : 'bg-gray-800 border-transparent hover:border-brand-cyan/50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="metaDesc"
+                              checked={selectedDescIndex === i}
+                              onChange={() => {
+                                setSelectedDescIndex(i);
+                                setCustomMetaDesc('');
+                              }}
+                              className="mt-1 accent-cyan-500"
+                            />
+                            <span className="text-sm text-white">{desc}</span>
+                          </label>
+                        ))}
+                        {/* Custom option */}
+                        <label
+                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
+                            selectedDescIndex === -1
+                              ? 'bg-brand-cyan/20 border-brand-cyan'
+                              : 'bg-gray-800 border-transparent hover:border-brand-cyan/50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="metaDesc"
+                            checked={selectedDescIndex === -1}
+                            onChange={() => setSelectedDescIndex(-1)}
+                            className="mt-1 accent-cyan-500"
+                          />
+                          <div className="flex-1">
+                            <span className="text-sm text-brand-cyan/70 block mb-1">Custom:</span>
+                            <textarea
+                              value={customMetaDesc}
+                              onChange={(e) => {
+                                setCustomMetaDesc(e.target.value);
+                                setSelectedDescIndex(-1);
+                              }}
+                              placeholder="Enter custom meta description..."
+                              className="w-full bg-gray-900 border border-brand-cyan/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-cyan transition resize-none"
+                              rows={2}
+                              onClick={() => setSelectedDescIndex(-1)}
+                            />
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="text-xs text-gray-500">
+                      {selectedArticle.seo_plugin && (
+                        <span>SEO Plugin: <span className="text-gray-400 capitalize">{selectedArticle.seo_plugin}</span></span>
+                      )}
+                    </div>
+                    <div className="flex gap-3">
+                      {(selectedTitleIndex !== null || selectedDescIndex !== null) && (
+                        <>
+                          <button
+                            onClick={saveMetaSelection}
+                            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white transition"
+                          >
+                            Save Selection
+                          </button>
+                          {selectedArticle.wp_post_id && (
+                            <button
+                              onClick={pushToSeo}
+                              disabled={pushingSeo}
+                              className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 rounded-lg text-sm text-white font-medium transition disabled:opacity-50 flex items-center gap-2"
+                            >
+                              {pushingSeo ? (
+                                <>
+                                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Pushing...
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                  </svg>
+                                  Push to {selectedArticle.seo_plugin || 'Yoast'}
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {!selectedArticle.wp_post_id && (selectedTitleIndex !== null || selectedDescIndex !== null) && (
+                        <span className="text-xs text-yellow-400 flex items-center gap-1">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          Publish to WordPress first to push SEO
+                        </span>
                       )}
                     </div>
                   </div>

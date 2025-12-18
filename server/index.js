@@ -17,6 +17,7 @@ import elementorRouter from './routes/elementor.js';
 import imagesRouter from './routes/images.js';
 import stylelockRouter from './routes/stylelock.js';
 import knowledgeRouter from './routes/knowledge.js';
+import seoRouter from './routes/seo.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
 dotenv.config();
@@ -172,6 +173,7 @@ app.use('/api/elementor', elementorRouter);
 app.use('/api/images', imagesRouter);
 app.use('/api/stylelock', stylelockRouter);
 app.use('/api/knowledge', knowledgeRouter);
+app.use('/api/seo', seoRouter);
 
 // Database status endpoint
 app.get('/api/db/status', async (req, res) => {

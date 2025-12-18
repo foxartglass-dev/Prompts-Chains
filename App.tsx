@@ -15,6 +15,7 @@ import WorkflowNavigation from './src/components/WorkflowNavigation';
 import ClientsPage from './src/components/ClientsPage';
 import WebsitesPage from './src/components/WebsitesPage';
 import Analytics from './src/components/Analytics';
+import PendingMetaNotification from './src/components/PendingMetaNotification';
 
 // Types for workflow
 interface WorkflowItem {
@@ -1481,6 +1482,16 @@ const App: React.FC = () => {
                             </svg>
                             <span className="text-[10px] md:text-sm">Settings</span>
                         </button>
+
+                        {/* Pending Meta Notification Bell */}
+                        <div className="relative hidden md:block">
+                            <PendingMetaNotification
+                                onOpenArticle={(articleId) => {
+                                    setIsArticlesOpen(true);
+                                    // The ArticleManager will handle opening the specific article
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
 
