@@ -119,7 +119,7 @@ const App: React.FC = () => {
     const [results, setResults] = useState<Result[]>([]);
     const [pendingResults, setPendingResults] = useState<PendingResult[]>([]);
     const [fileName, setFileName] = useState('');
-    const [activeCollapsible, setActiveCollapsible] = useState<string | null>('setup');
+    const [openSections, setOpenSections] = useState<Set<string>>(new Set(['setup']));
     const [newTagName, setNewTagName] = useState('');
     const [selectedPlaceholders, setSelectedPlaceholders] = useState<Set<number>>(new Set());
     const [bulkActionTag, setBulkActionTag] = useState('');
@@ -587,7 +587,7 @@ const App: React.FC = () => {
                 prompt,
                 currentProject.state.provider,
                 currentProject.state.model,
-                { anthropic: currentProject.state.apiKeys.anthropic }
+                { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini, xai: currentProject.state.apiKeys.xai }
             );
             const chosenNumber = parseInt(response.trim().match(/\d+/)?.[0] || '1');
             const chosenIndex = Math.max(0, Math.min(chosenNumber - 1, selection.options.length - 1));
@@ -641,7 +641,7 @@ const App: React.FC = () => {
         setItems(itemsData);
         addLog(`Successfully loaded ${itemsData.length} items.`, LogStatus.SUCCESS);
         if (itemsData.length > 0) {
-            setActiveCollapsible('loadedItems');
+            setOpenSections(prev => new Set([...prev, 'loadedItems']));
         }
     };
 
@@ -733,153 +733,176 @@ const App: React.FC = () => {
             return;
         }
 
+        // Collect active models
+        const activeModels: { model: string; label: string }[] = [
+            { model: currentProject.state.model, label: 'Model 1' }
+        ];
+        if (currentProject.state.model2 && currentProject.state.model2 !== 'not-in-use') {
+            activeModels.push({ model: currentProject.state.model2, label: 'Model 2' });
+        }
+        if (currentProject.state.model3 && currentProject.state.model3 !== 'not-in-use') {
+            activeModels.push({ model: currentProject.state.model3, label: 'Model 3' });
+        }
+
         setIsProcessing(true);
         setResults([]);
         setLogs([]);
-        addLog(`Starting batch processing for ${items.length} items using ${currentProject.state.provider}/${currentProject.state.model}...`, LogStatus.INFO);
+
+        const modelNames = activeModels.map(m => m.model.split('-').slice(0, 2).join('-')).join(', ');
+        addLog(`Starting batch processing for ${items.length} items using ${activeModels.length} model(s): ${modelNames}...`, LogStatus.INFO);
         const startTime = Date.now();
 
         for (const item of items) {
-            const promptOutputs: Record<string, string> = {};
-            try {
-                if (!item.tag) throw new Error(`Item "${item.name}" is missing a tag.`);
-                if (!currentProject.state.tags.find(t => t.name === item.tag)) throw new Error(`Tag "${item.tag}" is not defined.`);
+            // Run workflow for each active model
+            for (const { model: activeModel, label: modelLabel } of activeModels) {
+                const promptOutputs: Record<string, string> = {};
+                const itemLabel = activeModels.length > 1 ? `${item.name} (${modelLabel})` : item.name;
+
+                try {
+                    if (!item.tag) throw new Error(`Item "${item.name}" is missing a tag.`);
+                    if (!currentProject.state.tags.find(t => t.name === item.tag)) throw new Error(`Tag "${item.tag}" is not defined.`);
+
+                    addLog(`[${itemLabel}] Starting process...`, LogStatus.WORKING, item.id);
+
+                    for (const prompt of currentProject.state.promptTemplates) {
+                        addLog(`[${itemLabel}] Running prompt: "${prompt.name}"...`, LogStatus.INFO, item.id);
+                        const filledPrompt = fillPrompt(prompt.template, item, promptOutputs);
+                        const output = await generateLlmContent(
+                            filledPrompt,
+                            currentProject.state.provider,
+                            activeModel,
+                            { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini, xai: currentProject.state.apiKeys.xai }
+                        );
+                        if (output.startsWith('Error:')) throw new Error(output);
+                        promptOutputs[prompt.outputKey] = output;
+                    }
                 
-                addLog(`[${item.name}] Starting process...`, LogStatus.WORKING, item.id);
+                    const finalPrompts = currentProject.state.promptTemplates.filter(p => p.outputAction === 'addToFinal');
+                    const mainContentKeys = finalPrompts.length > 0 ? finalPrompts.map(p => p.outputKey) : [currentProject.state.promptTemplates[currentProject.state.promptTemplates.length - 1]?.outputKey].filter(Boolean);
 
-                for (const prompt of currentProject.state.promptTemplates) {
-                    addLog(`[${item.name}] Running prompt: "${prompt.name}"...`, LogStatus.INFO, item.id);
-                    const filledPrompt = fillPrompt(prompt.template, item, promptOutputs);
-                    const output = await generateLlmContent(
-                        filledPrompt,
-                        currentProject.state.provider,
-                        currentProject.state.model,
-                        { anthropic: currentProject.state.apiKeys.anthropic }
-                    );
-                    if (output.startsWith('Error:')) throw new Error(output);
-                    promptOutputs[prompt.outputKey] = output;
-                }
-                
-                const finalPrompts = currentProject.state.promptTemplates.filter(p => p.outputAction === 'addToFinal');
-                const mainContentKeys = finalPrompts.length > 0 ? finalPrompts.map(p => p.outputKey) : [currentProject.state.promptTemplates[currentProject.state.promptTemplates.length - 1]?.outputKey].filter(Boolean);
-                
-                const combinedOutput = mainContentKeys.map(key => promptOutputs[key]).join('\n\n---\n\n');
+                    const combinedOutput = mainContentKeys.map(key => promptOutputs[key]).join('\n\n---\n\n');
 
-                const { finalOutput, metaTitles, metaDescriptions } = parseFinalOutput(combinedOutput);
-                addLog(`[${item.name}] Generated final content.`, LogStatus.INFO, item.id);
+                    const { finalOutput, metaTitles, metaDescriptions } = parseFinalOutput(combinedOutput);
+                    addLog(`[${itemLabel}] Generated final content.`, LogStatus.INFO, item.id);
 
-                // Check for option variables in the final output
-                const optionVarPattern = /\?([^:?]+):(\d+)\?/g;
-                const optionMatches = [...finalOutput.matchAll(optionVarPattern)];
-                const optionVariables = currentProject.state.optionVariables || [];
+                    // Check for option variables in the final output
+                    const optionVarPattern = /\?([^:?]+):(\d+)\?/g;
+                    const optionMatches = [...finalOutput.matchAll(optionVarPattern)];
+                    const optionVariables = currentProject.state.optionVariables || [];
 
-                if (optionMatches.length > 0 && optionVariables.length > 0) {
-                    // Has option variables - generate options and store as pending
-                    addLog(`[${item.name}] Found ${optionMatches.length} option variable(s), generating options...`, LogStatus.INFO, item.id);
+                    if (optionMatches.length > 0 && optionVariables.length > 0) {
+                        // Has option variables - generate options and store as pending
+                        addLog(`[${itemLabel}] Found ${optionMatches.length} option variable(s), generating options...`, LogStatus.INFO, item.id);
 
-                    const optionSelections: OptionSelection[] = [];
+                        const optionSelections: OptionSelection[] = [];
 
-                    for (const match of optionMatches) {
-                        const varKey = match[1];
-                        const optionCount = parseInt(match[2]);
-                        const optionVar = optionVariables.find(ov => ov.key === varKey);
+                        for (const match of optionMatches) {
+                            const varKey = match[1];
+                            const optionCount = parseInt(match[2]);
+                            const optionVar = optionVariables.find(ov => ov.key === varKey);
 
-                        if (optionVar) {
-                            addLog(`[${item.name}] Generating ${optionCount} options for "${varKey}"...`, LogStatus.WORKING, item.id);
+                            if (optionVar) {
+                                addLog(`[${itemLabel}] Generating ${optionCount} options for "${varKey}"...`, LogStatus.WORKING, item.id);
 
-                            // Fill the option variable prompt with context
-                            let optionPrompt = optionVar.prompt;
-                            optionPrompt = optionPrompt.replace(/<item_name>/g, item.name);
-                            // Add instruction to generate numbered list
-                            optionPrompt += `\n\nGenerate exactly ${optionCount} options. Format as a numbered list:\n1. [option]\n2. [option]\netc.`;
+                                // Fill the option variable prompt with context
+                                let optionPrompt = optionVar.prompt;
+                                optionPrompt = optionPrompt.replace(/<item_name>/g, item.name);
+                                // Add instruction to generate numbered list
+                                optionPrompt += `\n\nGenerate exactly ${optionCount} options. Format as a numbered list:\n1. [option]\n2. [option]\netc.`;
 
-                            const optionsResponse = await generateLlmContent(
-                                optionPrompt,
-                                currentProject.state.provider,
-                                currentProject.state.model,
-                                { anthropic: currentProject.state.apiKeys.anthropic }
-                            );
+                                const optionsResponse = await generateLlmContent(
+                                    optionPrompt,
+                                    currentProject.state.provider,
+                                    activeModel,
+                                    { anthropic: currentProject.state.apiKeys.anthropic, openai: currentProject.state.apiKeys.openai, gemini: currentProject.state.apiKeys.gemini, xai: currentProject.state.apiKeys.xai }
+                                );
 
-                            // Parse the numbered list response
-                            const options = optionsResponse
-                                .split('\n')
-                                .map(line => line.replace(/^\d+\.\s*/, '').trim())
-                                .filter(line => line.length > 0)
-                                .slice(0, optionCount);
+                                // Parse the numbered list response
+                                const options = optionsResponse
+                                    .split('\n')
+                                    .map(line => line.replace(/^\d+\.\s*/, '').trim())
+                                    .filter(line => line.length > 0)
+                                    .slice(0, optionCount);
 
-                            optionSelections.push({
-                                variableKey: varKey,
-                                options,
-                                selectedIndex: null,
-                                customValue: ''
+                                optionSelections.push({
+                                    variableKey: varKey,
+                                    options,
+                                    selectedIndex: null,
+                                    customValue: ''
+                                });
+
+                                addLog(`[${itemLabel}] Generated ${options.length} options for "${varKey}"`, LogStatus.SUCCESS, item.id);
+                            }
+                        }
+
+                        const timestamp = new Date().toISOString();
+
+                        // Store as pending result with model info
+                        setPendingResults(prev => [...prev, {
+                            id: Date.now() + item.id + activeModels.indexOf({ model: activeModel, label: modelLabel }),
+                            item: { ...item, name: activeModels.length > 1 ? `${item.name} [${modelLabel}]` : item.name },
+                            finalOutput,
+                            metaTitles,
+                            metaDescriptions,
+                            allOutputs: promptOutputs,
+                            timestamp,
+                            optionSelections
+                        }]);
+
+                        addLog(`[${itemLabel}] Added to pending selections (${optionSelections.length} option(s) need selection)`, LogStatus.INFO, item.id);
+                    } else {
+                        // No option variables - proceed normally
+                        addLog(`[${itemLabel}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, item.id);
+                        const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
+                        addLog(`[${itemLabel}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
+
+                        const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
+                        const timestamp = new Date().toISOString();
+
+                        // Include model info in content when multi-model testing
+                        const modelSuffix = activeModels.length > 1 ? `\n\n---MODEL: ${activeModel}---` : '';
+                        const txtContent = `${finalOutput}${modelSuffix}\n\n---META TITLES---\n${metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
+
+                        const jsonContent = JSON.stringify({
+                            item_name: item.name, tag: item.tag, model: activeModel, final_output: finalOutput, parsed_titles: metaTitles,
+                            parsed_summaries: metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp,
+                        }, null, 2);
+
+                        // Create result item with model label if multi-model
+                        const resultItem = activeModels.length > 1 ? { ...item, name: `${item.name} [${modelLabel}]` } : item;
+                        setResults(prev => [...prev, { item: resultItem, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
+                        addLog(`[${itemLabel}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
+
+                        // Save article to database
+                        try {
+                            await fetch('/api/articles', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    workflowId: currentWorkflowId || null,
+                                    websiteId: currentWebsiteId || null,
+                                    keyword: item.name,
+                                    tag: item.tag,
+                                    model: activeModel,
+                                    finalContent: finalOutput,
+                                    metaTitles,
+                                    metaDescriptions,
+                                    chainOutputs: promptOutputs,
+                                    aiScore,
+                                    wordCount,
+                                    status: status.toLowerCase()
+                                })
                             });
-
-                            addLog(`[${item.name}] Generated ${options.length} options for "${varKey}"`, LogStatus.SUCCESS, item.id);
+                            addLog(`[${itemLabel}] Article saved to database.`, LogStatus.INFO, item.id);
+                        } catch (saveError) {
+                            // Don't fail the whole process if saving fails
+                            console.error('Failed to save article:', saveError);
                         }
                     }
-
-                    const timestamp = new Date().toISOString();
-
-                    // Store as pending result
-                    setPendingResults(prev => [...prev, {
-                        id: Date.now() + item.id,
-                        item,
-                        finalOutput,
-                        metaTitles,
-                        metaDescriptions,
-                        allOutputs: promptOutputs,
-                        timestamp,
-                        optionSelections
-                    }]);
-
-                    addLog(`[${item.name}] Added to pending selections (${optionSelections.length} option(s) need selection)`, LogStatus.INFO, item.id);
-                } else {
-                    // No option variables - proceed normally
-                    addLog(`[${item.name}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, item.id);
-                    const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
-                    addLog(`[${item.name}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
-
-                    const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
-                    const timestamp = new Date().toISOString();
-
-                    const txtContent = `${finalOutput}\n\n---META TITLES---\n${metaTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---META DESCRIPTIONS---\n${metaDescriptions.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
-
-                    const jsonContent = JSON.stringify({
-                        item_name: item.name, tag: item.tag, final_output: finalOutput, parsed_titles: metaTitles,
-                        parsed_summaries: metaDescriptions, ai_detection_score: aiScore, flagged: status === 'FLAGGED', word_count: wordCount, timestamp,
-                    }, null, 2);
-
-                    setResults(prev => [...prev, { item, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
-                    addLog(`[${item.name}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
-
-                    // Save article to database
-                    try {
-                        await fetch('/api/articles', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                workflowId: currentWorkflowId || null,
-                                websiteId: currentWebsiteId || null,
-                                keyword: item.name,
-                                tag: item.tag,
-                                finalContent: finalOutput,
-                                metaTitles,
-                                metaDescriptions,
-                                chainOutputs: promptOutputs,
-                                aiScore,
-                                wordCount,
-                                status: status.toLowerCase()
-                            })
-                        });
-                        addLog(`[${item.name}] Article saved to database.`, LogStatus.INFO, item.id);
-                    } catch (saveError) {
-                        // Don't fail the whole process if saving fails
-                        console.error('Failed to save article:', saveError);
-                    }
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+                    addLog(`[${itemLabel}] Failed: ${errorMessage}`, LogStatus.ERROR, item.id);
                 }
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-                addLog(`[${item.name}] Failed: ${errorMessage}`, LogStatus.ERROR, item.id);
             }
         }
         
@@ -1052,7 +1075,15 @@ const App: React.FC = () => {
         });
     };
     
-    const toggleCollapsible = (section: string) => setActiveCollapsible(activeCollapsible === section ? null : section);
+    const toggleCollapsible = (section: string) => setOpenSections(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(section)) {
+            newSet.delete(section);
+        } else {
+            newSet.add(section);
+        }
+        return newSet;
+    });
 
     if (!currentProject) {
         return (
@@ -1067,9 +1098,9 @@ const App: React.FC = () => {
         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
           {icon}
           <span className="ml-3">{title}</span>
-           <svg className={`w-5 h-5 ml-auto transform transition-transform ${(activeCollapsible === id || (!activeCollapsible && defaultOpen && id === 'setup')) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+           <svg className={`w-5 h-5 ml-auto transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </h2>
-        <div className={`transition-all duration-300 ease-in-out ${(activeCollapsible === id || (!activeCollapsible && defaultOpen && id === 'setup')) ? 'max-h-[5000px]' : 'max-h-0 overflow-hidden'}`}>
+        <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? 'max-h-[5000px]' : 'max-h-0 overflow-hidden'}`}>
             <div className="p-5 pt-0 border-t border-brand-cyan/30">{children}</div>
         </div>
       </div>
@@ -1547,48 +1578,114 @@ const App: React.FC = () => {
                 <div className="flex flex-col gap-8">
                     {renderSection('1. Setup & Run', 'setup', <Icon type="settings" className="h-6 w-6"/>,
                         <div className="space-y-3">
-                            {/* Row 1: AI Model + Filename + Import/Export */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {/* Left side: AI Model + Filename */}
-                                <div className="space-y-2">
+                            {/* Row 1: AI Models - Full Width */}
+                            <div className="space-y-2">
+                                <p className="text-[10px] text-brand-gold mb-1">Test multiple models against the same workflow</p>
+                                <div className="grid grid-cols-3 gap-3">
                                     <div>
-                                        <label className="block text-xs font-medium text-brand-gold mb-1">AI Model</label>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 1</label>
                                         <select
                                             value={currentProject.state.model}
                                             onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
-                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
                                         >
                                             <optgroup label="Claude (Anthropic)">
                                                 <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
-                                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast)</option>
-                                                <option value="claude-opus-4-5-20251101">Claude Opus 4.5 (Premium)</option>
+                                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                                                <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
                                                 <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
                                                 <option value="claude-3-opus-20240229">Claude 3 Opus</option>
                                                 <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
                                             </optgroup>
                                             <optgroup label="GPT (OpenAI)">
-                                                <option value="gpt-5.2-2025-12-11">GPT-5.2 (Latest)</option>
-                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini (Fast)</option>
-                                                <option value="gpt-5-nano-2025-08-07">GPT-5 Nano (Fastest)</option>
+                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-5-nano-2025-08-07">GPT-5 Nano</option>
                                                 <option value="gpt-4o">GPT-4o</option>
                                                 <option value="gpt-4o-mini">GPT-4o Mini</option>
                                             </optgroup>
                                             <optgroup label="Gemini (Google)">
-                                                <option value="gemini-3.0">Gemini 3.0 (Latest)</option>
-                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                                <option value="gemini-3-pro-preview">Gemini 3.0 Pro (Latest)</option>
+                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Thinking)</option>
+                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast)</option>
+                                                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Fastest)</option>
                                             </optgroup>
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-brand-gold mb-1">Filename Template</label>
-                                        <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold" />
+                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 2</label>
+                                        <select
+                                            value={currentProject.state.model2 || 'not-in-use'}
+                                            onChange={e => setCurrentProjectState(p => ({...p, model2: e.target.value}))}
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
+                                        >
+                                            <option value="not-in-use">Not In Use</option>
+                                            <optgroup label="Claude (Anthropic)">
+                                                <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                                                <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
+                                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                                <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                                <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                            </optgroup>
+                                            <optgroup label="GPT (OpenAI)">
+                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-5-nano-2025-08-07">GPT-5 Nano</option>
+                                                <option value="gpt-4o">GPT-4o</option>
+                                                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                            </optgroup>
+                                            <optgroup label="Gemini (Google)">
+                                                <option value="gemini-3-pro-preview">Gemini 3.0 Pro (Latest)</option>
+                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Thinking)</option>
+                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast)</option>
+                                                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Fastest)</option>
+                                            </optgroup>
+                                        </select>
                                     </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 3</label>
+                                        <select
+                                            value={currentProject.state.model3 || 'not-in-use'}
+                                            onChange={e => setCurrentProjectState(p => ({...p, model3: e.target.value}))}
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold"
+                                        >
+                                            <option value="not-in-use">Not In Use</option>
+                                            <optgroup label="Claude (Anthropic)">
+                                                <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                                                <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
+                                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                                <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                                <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                            </optgroup>
+                                            <optgroup label="GPT (OpenAI)">
+                                                <option value="gpt-5.2-2025-12-11">GPT-5.2</option>
+                                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
+                                                <option value="gpt-5-nano-2025-08-07">GPT-5 Nano</option>
+                                                <option value="gpt-4o">GPT-4o</option>
+                                                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                            </optgroup>
+                                            <optgroup label="Gemini (Google)">
+                                                <option value="gemini-3-pro-preview">Gemini 3.0 Pro (Latest)</option>
+                                                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Thinking)</option>
+                                                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast)</option>
+                                                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Fastest)</option>
+                                            </optgroup>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Row 2: Filename + Import/Export */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-brand-gold mb-1">Filename Template</label>
+                                    <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold" />
                                 </div>
                                 {/* Right side: Import/Export */}
                                 <div className="flex flex-col justify-end gap-2">
-                                    <label className="block text-xs font-medium text-brand-gold">Import / Export</label>
+                                    <label className="block text-xs font-medium text-brand-gold text-center">Import / Export Workflow</label>
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => {
@@ -1601,12 +1698,12 @@ const App: React.FC = () => {
                                                 downloadProjectConfig(exportData, filename);
                                                 showNotification('Workflow exported!', 'success');
                                             }}
-                                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-xs transition"
+                                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold text-xs transition"
                                         >
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                                             Export
                                         </button>
-                                        <label className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-gold hover:bg-brand-gold-dark rounded-lg text-slate-900 font-semibold text-xs transition cursor-pointer">
+                                        <label className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold text-xs transition cursor-pointer">
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                                             Import
                                             <input
@@ -1640,8 +1737,8 @@ const App: React.FC = () => {
                             {/* Project Notes + Add Items Row */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {/* Project Notes - 2/3 width, 2 columns */}
-                                <div className="md:col-span-2 bg-slate-900 p-3 rounded-lg border border-brand-cyan/50">
-                                    <h3 className="text-sm font-semibold text-brand-cyan mb-2">Project Notes</h3>
+                                <div className="md:col-span-2 bg-slate-900 p-3 rounded-lg border-2 border-brand-gold">
+                                    <h3 className="text-sm font-semibold text-brand-gold mb-2">Project Notes</h3>
                                     <div className="grid grid-cols-2 gap-2">
                                         <textarea
                                             value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[0] || ''}
@@ -1652,7 +1749,7 @@ const App: React.FC = () => {
                                             }}
                                             rows={4}
                                             placeholder="Notes column 1..."
-                                            className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                            className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold resize-y"
                                         />
                                         <textarea
                                             value={(currentProject.state.projectNotes || '').split('\n---COL---\n')[1] || ''}
@@ -1664,14 +1761,14 @@ const App: React.FC = () => {
                                             }}
                                             rows={4}
                                             placeholder="Notes column 2..."
-                                            className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                            className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold resize-y"
                                         />
                                     </div>
                                 </div>
                                 {/* Add Items - 1/3 width */}
                                 <div className="bg-slate-900 p-3 rounded-lg border border-brand-gold/50">
-                                    <label htmlFor="manual-items" className="block text-sm font-medium text-brand-gold mb-1.5">
-                                        Add Items <span className="text-xs text-brand-gold/60">(one per line)</span>
+                                    <label htmlFor="manual-items" className="block text-sm font-medium text-brand-gold mb-1.5 text-center">
+                                        To Start This Workflow Add Items <span className="text-xs text-brand-gold/60">(one per line)</span>
                                     </label>
                                     <textarea
                                         id="manual-items"
@@ -1784,8 +1881,8 @@ const App: React.FC = () => {
                     {renderSection('4. Workflow Variables', 'placeholders', <Icon type="info" className="h-6 w-6"/>,
                         <div className="space-y-6">
                             {/* Workflow Notes Section - 3 columns */}
-                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-cyan">
-                                <h3 className="text-sm font-semibold text-brand-cyan mb-2">Workflow Notes</h3>
+                            <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
+                                <h3 className="text-sm font-semibold text-brand-gold mb-2">Workflow Notes</h3>
                                 <div className="grid grid-cols-3 gap-2">
                                     <textarea
                                         value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[0] || ''}
@@ -1796,7 +1893,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 1..."
-                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold resize-y"
                                     />
                                     <textarea
                                         value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[1] || ''}
@@ -1808,7 +1905,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 2..."
-                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold resize-y"
                                     />
                                     <textarea
                                         value={(currentProject.state.workflowNotes || '').split('\n---COL---\n')[2] || ''}
@@ -1820,7 +1917,7 @@ const App: React.FC = () => {
                                         }}
                                         rows={3}
                                         placeholder="Notes column 3..."
-                                        className="w-full bg-slate-900 border border-brand-cyan/30 rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-cyan resize-y"
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold resize-y"
                                     />
                                 </div>
                             </div>
@@ -1861,8 +1958,8 @@ const App: React.FC = () => {
                             {/* Tagged Variables */}
                             <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Tagged Variables</h3>
-                                {currentProject.state.tags.map(tag => (
-                                    <div key={tag.id} className="mb-4">
+                                {currentProject.state.tags.map((tag, tagIndex) => (
+                                    <div key={tag.id} className={`mb-4 ${tagIndex > 0 ? 'pt-4 border-t-2 border-brand-gold' : ''}`}>
                                         <p className="font-bold text-brand-gold text-sm mb-2">Tag: {tag.name}</p>
                                         {/* Column Headers */}
                                         <div className="grid grid-cols-[1fr,1fr,1fr,auto] gap-2 items-center mb-2 text-xs text-brand-gold/70 font-medium">
@@ -1875,7 +1972,7 @@ const App: React.FC = () => {
                                             {currentProject.state.placeholders.filter(p=>p.tag===tag.name).map(p => (<div key={p.id} className="grid grid-cols-[1fr,1fr,1fr,auto] gap-2 items-center">
                                                 <input type="text" placeholder="variable_name" value={p.key} onChange={e => handleUpdatePlaceholder(p.id, 'key', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
                                                 <input type="text" placeholder="value" value={p.value} onChange={e => handleUpdatePlaceholder(p.id, 'value', e.target.value)} className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-gold transition-all"/>
-                                                <div className="bg-slate-900 border border-orange-500/30 rounded-lg px-3 py-2 text-orange-400 font-mono text-sm">{`{${p.key || ''}{${tag.name}}}`}</div>
+                                                <div className="bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-brand-gold font-mono text-sm">{`{${p.key || ''}{${tag.name}}}`}</div>
                                                 <div className="relative group">
                                                     <button className="p-2 text-brand-gold hover:text-white transition">
                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
@@ -1895,8 +1992,8 @@ const App: React.FC = () => {
                             {/* Prompt Output Variables */}
                             <div className="bg-slate-900 p-4 rounded-lg border-2 border-brand-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold mb-2 border-b border-brand-gold/30 pb-1">Prompt Output Variables <span className="text-xs text-brand-gold/60 font-mono">[output_key]</span> <span className="text-xs text-brand-gold/60">(Read-only)</span></h3>
-                                <p className="text-xs text-brand-gold/70 mb-2">These are generated from the 'Output Key' in your Prompt Workflow steps. Use them in later prompts like: <span className="font-mono bg-slate-900 p-1 rounded border border-brand-gold/50">[output_key]</span></p>
-                                <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 text-sm font-mono text-brand-gold">[{p.outputKey}]</div>))}</div>
+                                <p className="text-[10px] text-brand-gold/70 mb-2">These are generated from the 'Output Key' from the Prompt Workflows for use in later prompts like: <span className="font-mono text-brand-gold">[output_key]</span></p>
+                                <div className="flex flex-wrap gap-2">{currentProject.state.promptTemplates.map(p=>(<div key={p.id} className="bg-brand-cyan/10 border-2 border-brand-cyan rounded-full px-3 py-1 text-sm font-mono text-brand-cyan">[{p.outputKey}]</div>))}</div>
                             </div>
 
                             {/* Option Variables */}

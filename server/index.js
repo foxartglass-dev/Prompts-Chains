@@ -28,6 +28,9 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Increase server timeout for long-running AI requests (5 minutes)
+const SERVER_TIMEOUT_MS = 300000;
+
 // CORS for local development
 app.use(cors({
   origin: isProduction
@@ -114,6 +117,9 @@ app.get('/api/config', (req, res) => {
   res.json({
     defaults: {
       anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+      openaiApiKey: process.env.OPENAI_API_KEY || '',
+      geminiApiKey: process.env.GEMINI_API_KEY || '',
+      xaiApiKey: process.env.XAI_API_KEY || '',
       zeroGptApiKey: process.env.ZEROGPT_API_KEY || '',
       wpUrl: process.env.WP_URL || '',
       wpUser: process.env.WP_USER || '',
@@ -323,8 +329,13 @@ if (isProduction) {
   });
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`PromptFlow API server running on http://localhost:${PORT}`);
   console.log(`Mode: ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
   console.log(`Available providers: anthropic (more coming soon)`);
 });
+
+// Set server timeout for long-running AI requests
+server.setTimeout(SERVER_TIMEOUT_MS);
+server.keepAliveTimeout = SERVER_TIMEOUT_MS;
+server.headersTimeout = SERVER_TIMEOUT_MS + 1000;

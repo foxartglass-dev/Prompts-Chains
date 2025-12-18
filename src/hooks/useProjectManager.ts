@@ -50,6 +50,8 @@ export interface ProjectState {
   autoSaveSeconds: number;
   provider: string;
   model: string;
+  model2: string;  // For multi-model testing (empty or 'not-in-use' means disabled)
+  model3: string;  // For multi-model testing (empty or 'not-in-use' means disabled)
   fileNameTemplate: string;
   wpCredentials: { url: string; user: string; password: string };
   wpContentType: WpContentType;
@@ -125,6 +127,8 @@ const initialProjectState: ProjectState = {
   autoSaveSeconds: 3,
   provider: 'anthropic',
   model: 'claude-sonnet-4-5-20250929',
+  model2: 'not-in-use',
+  model3: 'not-in-use',
   fileNameTemplate: '{tag}-{item_name}-output',
   wpCredentials: { url: '', user: '', password: '' },
   wpContentType: 'posts',
@@ -168,6 +172,9 @@ function applyDefaults(project: Project, defaults: any): Project {
       ...project.state,
       apiKeys: {
         anthropic: project.state.apiKeys.anthropic || defaults.anthropicApiKey || '',
+        openai: project.state.apiKeys.openai || defaults.openaiApiKey || '',
+        gemini: project.state.apiKeys.gemini || defaults.geminiApiKey || '',
+        xai: project.state.apiKeys.xai || defaults.xaiApiKey || '',
         zeroGpt: project.state.apiKeys.zeroGpt || defaults.zeroGptApiKey || '',
       },
       wpCredentials: {
