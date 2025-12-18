@@ -1442,6 +1442,8 @@ const App: React.FC = () => {
                 }}
                 filterByWebsite={currentWebsiteId}
                 filterByClient={filterByClientId}
+                wpCredentials={currentProject?.state.wpCredentials}
+                wpContentType={currentProject?.state.wpContentType}
             />
             <TemplateLibrary
                 isOpen={isTemplatesOpen}

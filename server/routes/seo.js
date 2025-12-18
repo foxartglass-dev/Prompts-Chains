@@ -154,13 +154,18 @@ router.post('/push-direct', async (req, res) => {
 router.patch('/select/:articleId', requireDb, async (req, res) => {
   try {
     const { articleId } = req.params;
-    const { selectedMetaTitle, selectedMetaDescription } = req.body;
+    const { selectedMetaTitle, selectedMetaDescription, metaSeoStatus } = req.body;
+
+    // Use provided status or default to 'selected'
+    const status = metaSeoStatus || 'selected';
+    const pushedAt = status === 'pushed' ? sql`CURRENT_TIMESTAMP` : sql`meta_pushed_at`;
 
     const result = await sql`
       UPDATE articles
       SET selected_meta_title = COALESCE(${selectedMetaTitle}, selected_meta_title),
           selected_meta_description = COALESCE(${selectedMetaDescription}, selected_meta_description),
-          meta_seo_status = 'selected',
+          meta_seo_status = ${status},
+          meta_pushed_at = ${pushedAt},
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${articleId}
       RETURNING *

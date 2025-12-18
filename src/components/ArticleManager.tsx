@@ -42,6 +42,8 @@ interface ArticleManagerProps {
   filterByWebsite?: number;
   filterByClient?: number;
   filterByWorkflow?: number;
+  wpCredentials?: { url: string; user: string; password: string };
+  wpContentType?: 'pages' | 'posts';
 }
 
 type ViewMode = 'list' | 'view' | 'edit';
@@ -51,7 +53,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
   onClose,
   filterByWebsite,
   filterByClient,
-  filterByWorkflow
+  filterByWorkflow,
+  wpCredentials,
+  wpContentType = 'pages'
 }) => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
@@ -211,13 +215,13 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
   const publishToWordPress = async (useElementor: boolean = true) => {
     if (!selectedArticle) return;
 
-    // Check for WP credentials
-    const wpUrl = selectedArticle.wp_url;
-    const wpUser = selectedArticle.wp_user;
-    const wpPassword = selectedArticle.wp_app_password;
+    // Check for WP credentials - use article's website credentials first, fall back to passed props
+    const wpUrl = selectedArticle.wp_url || wpCredentials?.url;
+    const wpUser = selectedArticle.wp_user || wpCredentials?.user;
+    const wpPassword = selectedArticle.wp_app_password || wpCredentials?.password;
 
     if (!wpUrl || !wpUser || !wpPassword) {
-      setError('WordPress credentials not configured for this website');
+      setError('WordPress credentials not configured. Please set them in Settings > WordPress Publishing.');
       return;
     }
 
@@ -375,20 +379,48 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       return;
     }
 
+    // Get WP credentials - use article's website credentials first, fall back to passed props
+    const wpUrl = selectedArticle.wp_url || wpCredentials?.url;
+    const wpUser = selectedArticle.wp_user || wpCredentials?.user;
+    const wpPassword = selectedArticle.wp_app_password || wpCredentials?.password;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      setError('WordPress credentials not configured. Please set them in Settings > WordPress Publishing.');
+      return;
+    }
+
     setPushingSeo(true);
     try {
-      const res = await fetch(`/api/seo/push/${selectedArticle.id}`, {
+      // Use direct push endpoint with credentials
+      const res = await fetch('/api/seo/push-direct', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          wpUrl,
+          wpUser,
+          wpPassword,
+          postId: selectedArticle.wp_post_id,
           metaTitle,
-          metaDescription: metaDesc
+          metaDescription: metaDesc,
+          seoPlugin: selectedArticle.seo_plugin || 'aioseo',
+          postType: wpContentType
         })
       });
 
       const data = await res.json();
 
       if (data.success) {
+        // Update the article's meta status in the database
+        await fetch(`/api/seo/select/${selectedArticle.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            selectedMetaTitle: metaTitle,
+            selectedMetaDescription: metaDesc,
+            metaSeoStatus: 'pushed'
+          })
+        });
+
         // Refresh article to show updated status
         fetchArticle(selectedArticle.id);
         fetchArticles();
