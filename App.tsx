@@ -1005,8 +1005,14 @@ const App: React.FC = () => {
         setIsProcessing(false);
     };
     
+    // Helper to strip tag suffix like "(H)" from item names
+    const stripTagFromName = (name: string): string => {
+        return name.replace(/\s*\([^)]+\)\s*$/, '').trim();
+    };
+
     const fillSimpleTemplate = (template: string, data: Record<string, string | null | undefined>): string => {
-        return template.replace(/{([^{}]+)}/g, (match, key) => {
+        // Support <angle brackets> syntax as shown in UI hints
+        return template.replace(/<([^<>]+)>/g, (match, key) => {
             const trimmedKey = key.trim();
             const value = data[trimmedKey];
             return value !== null && value !== undefined ? String(value) : match;
@@ -1039,7 +1045,7 @@ const App: React.FC = () => {
 
             const templateData = {
                 ...placeholderData,
-                item_name: result.item.name,
+                item_name: stripTagFromName(result.item.name),
                 tag: result.item.tag,
                 status: result.status,
             };
