@@ -342,6 +342,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       return;
     }
 
+    setSaving(true);
     try {
       const res = await fetch(`/api/seo/select/${selectedArticle.id}`, {
         method: 'PATCH',
@@ -353,12 +354,23 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       });
 
       const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to save meta selection');
+        return;
+      }
+
       if (data.article) {
         setSelectedArticle(data.article);
         fetchArticles();
+      } else {
+        setError('Failed to save meta selection - no article returned');
       }
     } catch (err) {
+      console.error('Save meta selection error:', err);
       setError('Failed to save meta selection');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -402,7 +414,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
           postId: selectedArticle.wp_post_id,
           metaTitle,
           metaDescription: metaDesc,
-          seoPlugin: selectedArticle.seo_plugin || 'aioseo',
+          seoPlugin: 'aioseo',
           postType: wpContentType
         })
       });
@@ -927,18 +939,17 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                   {/* Action Buttons */}
                   <div className="mt-4 flex items-center justify-between">
                     <div className="text-xs text-gray-500">
-                      {selectedArticle.seo_plugin && (
-                        <span>SEO Plugin: <span className="text-gray-400 capitalize">{selectedArticle.seo_plugin}</span></span>
-                      )}
+                      <span>SEO Plugin: <span className="text-gray-400">AIOSEO</span></span>
                     </div>
                     <div className="flex gap-3">
                       {/* Show Save Selection when user has made a selection but not saved yet */}
                       {(selectedTitleIndex !== null || selectedDescIndex !== null) && (
                         <button
                           onClick={saveMetaSelection}
-                          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white transition"
+                          disabled={saving}
+                          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white transition disabled:opacity-50"
                         >
-                          Save Selection
+                          {saving ? 'Saving...' : 'Save Selection'}
                         </button>
                       )}
 
@@ -963,7 +974,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                 </svg>
-                                Push to {selectedArticle.seo_plugin || 'AIOSEO'}
+                                Push to AIOSEO
                               </>
                             )}
                           </button>
