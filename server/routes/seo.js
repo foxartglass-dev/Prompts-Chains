@@ -114,6 +114,42 @@ router.post('/push/:articleId', requireDb, async (req, res) => {
   }
 });
 
+// POST direct push meta to SEO plugin (without needing an article in database)
+router.post('/push-direct', async (req, res) => {
+  try {
+    const { wpUrl, wpUser, wpPassword, postId, metaTitle, metaDescription, seoPlugin, postType } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword || !postId) {
+      return res.status(400).json({ error: 'WordPress credentials and post ID are required' });
+    }
+
+    const pushResult = await pushMetaToSeoPlugin({
+      wpUrl,
+      wpUser,
+      wpPassword,
+      postId,
+      metaTitle,
+      metaDescription,
+      seoPlugin: seoPlugin || 'aioseo',
+      postType: postType || 'pages'
+    });
+
+    if (!pushResult.success) {
+      return res.status(500).json({ error: pushResult.error });
+    }
+
+    res.json({
+      success: true,
+      message: pushResult.message,
+      postId
+    });
+
+  } catch (error) {
+    console.error('Error pushing meta directly:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // PATCH select meta title/description for an article (without pushing yet)
 router.patch('/select/:articleId', requireDb, async (req, res) => {
   try {

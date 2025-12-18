@@ -12,6 +12,7 @@
  * @param {string} options.metaTitle - The meta title to set
  * @param {string} options.metaDescription - The meta description to set
  * @param {string} options.seoPlugin - Which SEO plugin ('yoast', 'rankmath', 'aioseo', 'seopress')
+ * @param {string} options.postType - WordPress post type ('posts' or 'pages'), defaults to 'pages'
  * @returns {Promise<{success: boolean, message?: string, error?: string}>}
  */
 export async function pushMetaToSeoPlugin({
@@ -21,7 +22,8 @@ export async function pushMetaToSeoPlugin({
   postId,
   metaTitle,
   metaDescription,
-  seoPlugin = 'yoast'
+  seoPlugin = 'aioseo',
+  postType = 'pages'
 }) {
   if (!wpUrl || !wpUser || !wpPassword || !postId) {
     return { success: false, error: 'Missing required WordPress credentials or post ID' };
@@ -32,7 +34,50 @@ export async function pushMetaToSeoPlugin({
   const authHeader = 'Basic ' + Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
 
   try {
-    // Get the meta field names for the specified plugin
+    // AIOSEO uses a different approach - aioseo_meta_data in the request body
+    if (seoPlugin === 'aioseo') {
+      const aioseoPayload = {
+        aioseo_meta_data: {}
+      };
+
+      if (metaTitle) {
+        aioseoPayload.aioseo_meta_data.title = metaTitle;
+      }
+
+      if (metaDescription) {
+        aioseoPayload.aioseo_meta_data.description = metaDescription;
+      }
+
+      console.log(`Pushing to AIOSEO: ${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, aioseoPayload);
+
+      const response = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify(aioseoPayload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('AIOSEO push failed:', errorData);
+        return {
+          success: false,
+          error: `AIOSEO API error: ${response.status} - ${errorData.message || 'Unknown error'}. Note: AIOSEO REST API requires Plus plan or higher.`
+        };
+      }
+
+      const result = await response.json();
+      return {
+        success: true,
+        message: `Meta pushed to AIOSEO successfully`,
+        postId: result.id,
+        link: result.link
+      };
+    }
+
+    // For other plugins, use the meta field approach
     const metaFields = getMetaFieldNames(seoPlugin);
 
     if (!metaFields) {
@@ -51,7 +96,7 @@ export async function pushMetaToSeoPlugin({
     }
 
     // Update the post meta via WordPress REST API
-    const response = await fetch(`${baseUrl}/wp-json/wp/v2/pages/${postId}`, {
+    const response = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -74,7 +119,8 @@ export async function pushMetaToSeoPlugin({
         metaTitle,
         metaDescription,
         seoPlugin,
-        metaFields
+        metaFields,
+        postType
       });
 
       if (fallbackResult.success) {
@@ -148,13 +194,14 @@ async function tryPluginSpecificEndpoint({
   metaTitle,
   metaDescription,
   seoPlugin,
-  metaFields
+  metaFields,
+  postType = 'pages'
 }) {
   try {
     // Yoast has a specific meta endpoint in newer versions
     if (seoPlugin === 'yoast') {
       // Try updating via post meta directly
-      const metaResponse = await fetch(`${baseUrl}/wp-json/wp/v2/pages/${postId}`, {
+      const metaResponse = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -265,9 +312,9 @@ export async function detectSeoPlugin({ wpUrl, wpUser, wpPassword }) {
  */
 export function getSupportedPlugins() {
   return [
+    { id: 'aioseo', name: 'All in One SEO', description: 'Comprehensive SEO toolkit (default)' },
     { id: 'yoast', name: 'Yoast SEO', description: 'Most popular WordPress SEO plugin' },
     { id: 'rankmath', name: 'Rank Math', description: 'Feature-rich SEO plugin' },
-    { id: 'aioseo', name: 'All in One SEO', description: 'Comprehensive SEO toolkit' },
     { id: 'seopress', name: 'SEOPress', description: 'Lightweight SEO plugin' },
     { id: 'none', name: 'None / Manual', description: 'No automatic SEO pushing' }
   ];

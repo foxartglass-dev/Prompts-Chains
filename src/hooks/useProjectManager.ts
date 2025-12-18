@@ -7,6 +7,7 @@ export interface PromptTemplate {
   template: string;
   outputKey: string;
   outputAction?: 'addToFinal' | 'download';
+  generateMetaFromOutput?: boolean;  // If true, this prompt's output will be used to generate SEO meta
 }
 
 export interface Placeholder {
@@ -44,6 +45,7 @@ export interface ProjectState {
     gemini: string;
     grok: string;
     openRouter: string;
+    xai: string;
   };
   useOpenRouter: boolean;
   autoSaveEnabled: boolean;
@@ -63,6 +65,11 @@ export interface ProjectState {
   optionVariables: OptionVariable[];
   projectNotes: string;
   workflowNotes: string;
+  // Meta SEO generation settings
+  metaTitleCount: number;      // How many meta title options to generate (1 = auto-push, >1 = draft mode)
+  metaDescriptionCount: number; // How many meta description options to generate
+  metaTitlePrompt: string;     // Prompt template for generating meta titles
+  metaDescriptionPrompt: string; // Prompt template for generating meta descriptions
 }
 
 export interface Project {
@@ -121,7 +128,7 @@ const initialTaggedSnippets: TaggedSnippet[] = [
 ];
 
 const initialProjectState: ProjectState = {
-  apiKeys: { zeroGpt: '', anthropic: '', openai: '', gemini: '', grok: '', openRouter: '' },
+  apiKeys: { zeroGpt: '', anthropic: '', openai: '', gemini: '', grok: '', openRouter: '', xai: '' },
   useOpenRouter: false,
   autoSaveEnabled: true,
   autoSaveSeconds: 3,
@@ -140,6 +147,11 @@ const initialProjectState: ProjectState = {
   optionVariables: [],
   projectNotes: '',
   workflowNotes: '',
+  // Meta SEO defaults
+  metaTitleCount: 3,
+  metaDescriptionCount: 3,
+  metaTitlePrompt: 'Based on the following article content, generate {count} compelling SEO meta titles (60-70 characters each) that will attract clicks while accurately representing the content.\n\nArticle:\n{article_content}\n\nFormat as a numbered list:\n1. [title]\n2. [title]\netc.',
+  metaDescriptionPrompt: 'Based on the following article content, generate {count} engaging SEO meta descriptions (150-160 characters each) that summarize the content and encourage clicks.\n\nArticle:\n{article_content}\n\nFormat as a numbered list:\n1. [description]\n2. [description]\netc.',
 };
 
 const createNewProjectObject = (name: string = 'Untitled Project'): Project => ({
