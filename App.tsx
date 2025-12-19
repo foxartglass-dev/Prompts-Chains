@@ -1688,7 +1688,7 @@ const App: React.FC = () => {
                     {/* Logo - Centered on mobile */}
                     <div className="flex items-center justify-center md:justify-start">
                         <div className="flex flex-col items-center md:items-start">
-                            {/* Top row: Graph icon + PromptFlow text */}
+                            {/* Top row: Graph icon + PromptFlow logo image */}
                             <div className="flex items-center">
                                 {/* Logo SVG - Digi Branded AI style bars */}
                                 <svg width="40" height="40" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-2 md:mr-3 md:w-12 md:h-12">
@@ -1704,9 +1704,8 @@ const App: React.FC = () => {
                                     <circle cx="30" cy="12" r="3" fill="#F5A623"/>
                                     <circle cx="38" cy="6" r="3" fill="#F5A623"/>
                                 </svg>
-                                <h1 className="text-xl md:text-2xl font-bold flex items-baseline">
-                                    <span className="text-brand-cyan">Prompt</span><span className="text-brand-gold">Flo</span><span className="text-brand-gold relative">w<svg className="absolute w-4 h-4 md:w-5 md:h-5 text-brand-gold" style={{left: '0.35em', top: '-0.5em'}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20L20 4" /><path d="M12 4L20 4L20 12" /></svg></span>
-                                </h1>
+                                {/* PromptFlow logo image */}
+                                <img src="/promptflow-logo.png" alt="PromptFlow" className="h-8 md:h-10" />
                             </div>
                             {/* Tagline underneath, centered */}
                             <p className="text-[10px] md:text-xs text-slate-400 mt-1 text-center md:text-left w-full">Advanced Workflow Automator</p>
