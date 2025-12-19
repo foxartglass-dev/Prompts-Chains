@@ -215,8 +215,11 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
         setCustomMetaDesc('');
       }
 
-      // Set local SEO plugin from article's website
-      setLocalSeoPlugin(article.seo_plugin || 'aioseo');
+      // Set local SEO plugin from article's website (only on initial load, not refresh)
+      // Check if we're loading a different article
+      if (!selectedArticle || selectedArticle.id !== article.id) {
+        setLocalSeoPlugin(article.seo_plugin || 'aioseo');
+      }
     } catch (err) {
       setError('Failed to fetch article');
     } finally {
