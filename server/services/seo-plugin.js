@@ -202,7 +202,12 @@ export async function pushMetaToSeoPlugin({
     // Rank Math exposes these fields via REST API when "Headless CMS Support" is enabled
     if (seoPlugin === 'rankmath') {
       const targetUrl = `${baseUrl}/wp-json/wp/v2/${postType}/${postId}`;
-      console.log(`Pushing to Rank Math: ${targetUrl}`);
+      console.log(`=== RANK MATH DEBUG ===`);
+      console.log(`Base URL: ${baseUrl}`);
+      console.log(`Post Type: ${postType}`);
+      console.log(`Post ID: ${postId}`);
+      console.log(`Target URL: ${targetUrl}`);
+      console.log(`Auth user: ${wpUser}`);
 
       // First, verify the page exists by doing a GET request
       // IMPORTANT: Use context=edit for draft pages - they're not visible without it
@@ -217,7 +222,9 @@ export async function pushMetaToSeoPlugin({
         });
 
         if (!verifyResponse.ok) {
+          const verifyError = await verifyResponse.text().catch(() => 'Could not read response');
           console.log(`Page verification failed: ${verifyResponse.status}`);
+          console.log(`Verify error response: ${verifyError}`);
 
           // Try the other post type (posts vs pages)
           const altPostType = postType === 'pages' ? 'posts' : 'pages';
