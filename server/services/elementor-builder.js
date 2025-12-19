@@ -152,7 +152,9 @@ function buildContainer(elements, options = {}) {
     direction = 'column',
     isInner = false,
     padding = { top: '0', right: '0', bottom: '0', left: '0' },
-    gap = '20'
+    gap = '20',
+    contentWidth = 'boxed',
+    boxedWidth = 1140
   } = options;
 
   return {
@@ -161,7 +163,8 @@ function buildContainer(elements, options = {}) {
     isInner: isInner,
     settings: {
       flex_direction: direction,
-      content_width: 'full',
+      content_width: contentWidth,
+      boxed_width: { unit: 'px', size: boxedWidth },
       flex_gap: { column: gap, row: gap, unit: 'px' },
       padding: { unit: 'px', ...padding, isLinked: false }
     },
@@ -177,9 +180,10 @@ function buildContainer(elements, options = {}) {
  * @returns {Object} Elementor container
  */
 function buildHeroSection(title, introChunk, options = {}) {
-  const { ctaText = 'Book Now!', ctaUrl = '#' } = options;
+  // CTA button disabled by default - set ctaText and ctaUrl in options to enable
+  const { ctaText = '', ctaUrl = '' } = options;
 
-  // Left side: Title + intro text + CTA button
+  // Left side: Title + intro text (+ optional CTA button)
   const leftElements = [];
 
   if (title) {
@@ -196,7 +200,8 @@ function buildHeroSection(title, introChunk, options = {}) {
 
   const leftContainer = buildContainer(leftElements, {
     isInner: true,
-    direction: 'column'
+    direction: 'column',
+    contentWidth: 'full'
   });
 
   // Right side: Hero image (if available)
@@ -218,14 +223,17 @@ function buildHeroSection(title, introChunk, options = {}) {
 
   const rightContainer = buildContainer(rightElements, {
     isInner: true,
-    direction: 'column'
+    direction: 'column',
+    contentWidth: 'full'
   });
 
   // Main hero container (row direction for side-by-side)
   return buildContainer([leftContainer, rightContainer], {
     direction: 'row',
-    padding: { top: '90', right: '0', bottom: '90', left: '0' },
-    gap: '50'
+    padding: { top: '90', right: '20', bottom: '90', left: '20' },
+    gap: '50',
+    contentWidth: 'boxed',
+    boxedWidth: 1140
   });
 }
 
@@ -251,7 +259,9 @@ function buildContentSection(chunk) {
 
   return buildContainer(elements, {
     direction: 'column',
-    padding: { top: '30', right: '0', bottom: '30', left: '0' }
+    padding: { top: '30', right: '20', bottom: '30', left: '20' },
+    contentWidth: 'boxed',
+    boxedWidth: 1140
   });
 }
 
@@ -351,10 +361,11 @@ function buildElementorPage(chunkedContent, options = {}) {
     pageElements.push(buildStatsBarPlaceholder());
   }
 
-  // Wrap everything in a root container
+  // Wrap everything in a root container (full width, sections handle their own boxing)
   const rootContainer = buildContainer(pageElements, {
     direction: 'column',
-    padding: { top: '0', right: '0', bottom: '0', left: '0' }
+    padding: { top: '0', right: '0', bottom: '0', left: '0' },
+    contentWidth: 'full'
   });
 
   return {

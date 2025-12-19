@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import SEOSetupGuide from './SEOSetupGuide';
 
 interface Article {
   id: number;
@@ -28,6 +29,11 @@ interface Article {
   meta_pushed_at: string | null;
   // Joined fields
   workflow_name?: string;
+  workflow_state?: {
+    wpTitleTemplate?: string;
+    placeholders?: Array<{ key: string; value: string; tag?: string }>;
+    [key: string]: unknown;
+  };
   website_name?: string;
   client_name?: string;
   wp_url?: string;
@@ -89,6 +95,53 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
   const [customMetaDesc, setCustomMetaDesc] = useState('');
   const [pushingSeo, setPushingSeo] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [expandedContent, setExpandedContent] = useState(false);
+  const [localSeoPlugin, setLocalSeoPlugin] = useState<string>('aioseo');
+  const [showSEOGuide, setShowSEOGuide] = useState(false);
+
+  // Helper to strip tag suffix like "(H)" from item names
+  const stripTagFromName = (name: string): string => {
+    return name.replace(/\s*\([^)]+\)\s*$/, '').trim();
+  };
+
+  // Fill a simple template with data (supports <angle brackets> syntax)
+  const fillSimpleTemplate = (template: string, data: Record<string, string | null | undefined>): string => {
+    return template.replace(/<([^<>]+)>/g, (match, key) => {
+      const trimmedKey = key.trim();
+      const value = data[trimmedKey];
+      return value !== null && value !== undefined ? String(value) : match;
+    });
+  };
+
+  // Generate the page title from template or fall back to keyword
+  const generatePageTitle = (article: Article): string => {
+    const wpTitleTemplate = article.workflow_state?.wpTitleTemplate;
+
+    if (wpTitleTemplate) {
+      // Build template data from workflow placeholders
+      const placeholderData = (article.workflow_state?.placeholders || []).reduce((acc, p) => {
+        if (!p.tag) {
+          acc[p.key] = p.value;
+        }
+        return acc;
+      }, {} as Record<string, string>);
+
+      const templateData = {
+        ...placeholderData,
+        item_name: stripTagFromName(article.keyword),
+        tag: article.tag || '',
+        status: article.status || '',
+      };
+
+      const generatedTitle = fillSimpleTemplate(wpTitleTemplate, templateData);
+      if (generatedTitle.trim()) {
+        return generatedTitle;
+      }
+    }
+
+    // Fall back to keyword with tag stripped
+    return stripTagFromName(article.keyword);
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -161,6 +214,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
         setSelectedDescIndex(null);
         setCustomMetaDesc('');
       }
+
+      // Set local SEO plugin from article's website
+      setLocalSeoPlugin(article.seo_plugin || 'aioseo');
     } catch (err) {
       setError('Failed to fetch article');
     } finally {
@@ -230,6 +286,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       let res;
       let wpData;
 
+      // Generate the page title from template
+      const pageTitle = generatePageTitle(selectedArticle);
+
       if (useElementor) {
         // Use Elementor publishing endpoint
         res = await fetch('/api/elementor/publish', {
@@ -239,7 +298,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
             wpUrl,
             wpUser,
             wpPassword,
-            title: selectedArticle.keyword,
+            title: pageTitle,
             content: editContent || selectedArticle.final_content,
             status: 'draft',
             ctaText: 'Book Now!',
@@ -279,7 +338,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
             wpUser,
             wpPassword,
             contentType: 'pages',
-            title: selectedArticle.keyword,
+            title: pageTitle,
             content: editContent || selectedArticle.final_content,
             status: 'draft'
           })
@@ -414,7 +473,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
           postId: selectedArticle.wp_post_id,
           metaTitle,
           metaDescription: metaDesc,
-          seoPlugin: 'aioseo',
+          seoPlugin: localSeoPlugin,
           postType: wpContentType
         })
       });
@@ -686,7 +745,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
               {/* Main content area */}
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Article header */}
-                <div className="p-4 border-b border-brand-cyan/30">
+                <div className="p-4 border-b border-brand-cyan/30 flex-shrink-0">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-lg font-semibold text-white">{selectedArticle.keyword}</h3>
@@ -763,10 +822,35 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                   </div>
                 </div>
 
-                {/* Content area */}
-                <div className="flex-1 overflow-auto p-4">
+                {/* Scrollable content wrapper */}
+                <div className="flex-1 overflow-y-auto">
+                  {/* Content area - expandable */}
+                  <div className={`p-4 transition-all ${expandedContent ? 'min-h-[60vh]' : 'max-h-48'}`}>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs text-gray-500">Article Content</span>
+                    <button
+                      onClick={() => setExpandedContent(!expandedContent)}
+                      className="text-xs text-brand-cyan hover:text-brand-cyan-light flex items-center gap-1"
+                    >
+                      {expandedContent ? (
+                        <>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                          </svg>
+                          Collapse
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                          </svg>
+                          Expand
+                        </>
+                      )}
+                    </button>
+                  </div>
                   {viewMode === 'view' ? (
-                    <div className="prose prose-invert max-w-none">
+                    <div className="prose prose-invert max-w-none h-full overflow-auto">
                       <div
                         className="text-gray-200 whitespace-pre-wrap"
                         dangerouslySetInnerHTML={{
@@ -782,10 +866,10 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                       placeholder="Article content..."
                     />
                   )}
-                </div>
+                  </div>
 
-                {/* Meta SEO Selection Section */}
-                <div className="border-t border-brand-cyan/30 p-4 bg-gray-800/50">
+                  {/* Meta SEO Selection Section */}
+                  <div className="border-t border-brand-cyan/30 p-4 pb-24 bg-gray-800/50">
                   {/* SEO Status Banner */}
                   {selectedArticle.meta_seo_status && (
                     <div className={`mb-4 p-2 rounded text-sm flex items-center justify-between ${
@@ -938,24 +1022,47 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
 
                   {/* Action Buttons */}
                   <div className="mt-4 flex items-center justify-between">
-                    <div className="text-xs text-gray-500">
-                      <span>SEO Plugin: <span className="text-gray-400">AIOSEO</span></span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">SEO Plugin:</span>
+                      <select
+                        value={localSeoPlugin}
+                        onChange={(e) => setLocalSeoPlugin(e.target.value)}
+                        className="bg-slate-900 border border-brand-cyan/50 rounded px-2 py-1 text-white text-xs"
+                      >
+                        <option value="aioseo">All in One SEO</option>
+                        <option value="yoast">Yoast SEO</option>
+                        <option value="rankmath">Rank Math</option>
+                        <option value="seopress">SEOPress</option>
+                        <option value="none">Direct to WP</option>
+                      </select>
+                      <button
+                        onClick={() => setShowSEOGuide(true)}
+                        className="p-1 text-brand-cyan hover:bg-brand-cyan/20 rounded transition-colors"
+                        title="SEO Plugin Setup Guide"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
                     </div>
                     <div className="flex gap-3">
-                      {/* Show Save Selection when user has made a selection but not saved yet */}
-                      {(selectedTitleIndex !== null || selectedDescIndex !== null) && (
+                      {/* Show Save Selection when user has made a selection OR meta options exist */}
+                      {(selectedTitleIndex !== null || selectedDescIndex !== null ||
+                        (selectedArticle.meta_titles?.length > 0 || selectedArticle.meta_descriptions?.length > 0)) && (
                         <button
                           onClick={saveMetaSelection}
-                          disabled={saving}
+                          disabled={saving || (selectedTitleIndex === null && selectedDescIndex === null)}
                           className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white transition disabled:opacity-50"
                         >
                           {saving ? 'Saving...' : 'Save Selection'}
                         </button>
                       )}
 
-                      {/* Show Push button when: article is published to WP AND (selection made OR meta already selected) */}
+                      {/* Show Push button when: article is published to WP AND (selection made OR meta already selected OR has meta options) */}
                       {selectedArticle.wp_post_id && (
-                        (selectedTitleIndex !== null || selectedDescIndex !== null || selectedArticle.meta_seo_status === 'selected') && (
+                        (selectedTitleIndex !== null || selectedDescIndex !== null ||
+                         selectedArticle.meta_seo_status === 'selected' || selectedArticle.meta_seo_status === 'pushed' ||
+                         selectedArticle.selected_meta_title || selectedArticle.selected_meta_description) && (
                           <button
                             onClick={pushToSeo}
                             disabled={pushingSeo}
@@ -974,7 +1081,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                 </svg>
-                                Push to AIOSEO
+                                Push to {localSeoPlugin === 'none' ? 'WordPress' : localSeoPlugin.charAt(0).toUpperCase() + localSeoPlugin.slice(1)}
                               </>
                             )}
                           </button>
@@ -991,6 +1098,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                         </span>
                       )}
                     </div>
+                  </div>
                   </div>
                 </div>
               </div>
@@ -1067,6 +1175,13 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
           )}
         </div>
       </div>
+
+      {/* SEO Plugin Setup Guide */}
+      <SEOSetupGuide
+        isOpen={showSEOGuide}
+        onClose={() => setShowSEOGuide(false)}
+        initialPlugin={localSeoPlugin}
+      />
     </div>
   );
 };

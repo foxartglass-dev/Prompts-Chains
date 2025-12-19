@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import StyleLockPanel from './StyleLockPanel';
+import SEOSetupGuide from './SEOSetupGuide';
 
 interface Website {
   id: number;
@@ -7,8 +8,10 @@ interface Website {
   client_name?: string;
   name: string;
   url: string;
-  wp_username?: string;
+  wp_url?: string;
+  wp_user?: string;
   wp_app_password?: string;
+  seo_plugin?: string;
   image_generation_enabled?: boolean;
   image_style_dna?: any;
   image_reference_urls?: string[];
@@ -88,6 +91,7 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
   } | null>(null);
   const [runningStylelock, setRunningStylelock] = useState(false);
   const [targetDescription, setTargetDescription] = useState('');
+  const [showSEOGuide, setShowSEOGuide] = useState(false);
 
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -468,15 +472,20 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                       {website.client_name && (
                         <p className="text-xs text-gray-400 mt-2">Client: {website.client_name}</p>
                       )}
-                      <div className="mt-3 flex gap-2">
+                      <div className="mt-3 flex gap-2 flex-wrap">
                         {website.image_generation_enabled && (
                           <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded-full">
                             AI Images
                           </span>
                         )}
-                        {website.wp_username && (
+                        {website.wp_user && (
                           <span className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full">
                             WP Connected
+                          </span>
+                        )}
+                        {website.seo_plugin && website.seo_plugin !== 'none' && (
+                          <span className="text-xs px-2 py-1 bg-purple-500/20 text-purple-400 rounded-full capitalize">
+                            {website.seo_plugin}
                           </span>
                         )}
                       </div>
@@ -502,11 +511,60 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                   <h4 className="text-sm text-gray-400 mb-1">Client</h4>
                   <p className="text-white font-semibold">{selectedWebsite.client_name || 'No client'}</p>
                 </div>
-                <div className="bg-slate-800/50 rounded-xl p-5 border border-purple-500/30">
-                  <h4 className="text-sm text-gray-400 mb-1">WordPress Status</h4>
-                  <p className={`font-semibold ${selectedWebsite.wp_username ? 'text-green-400' : 'text-yellow-400'}`}>
-                    {selectedWebsite.wp_username ? 'Connected' : 'Not Configured'}
-                  </p>
+                {/* WordPress Status + SEO Plugin combined */}
+                <div className="bg-slate-800/50 rounded-xl p-5 border border-purple-500/30 flex items-center gap-4">
+                  <div className="flex-shrink-0">
+                    <h4 className="text-sm text-gray-400 mb-1">WordPress</h4>
+                    <p className={`font-semibold text-sm ${selectedWebsite.wp_user ? 'text-green-400' : 'text-yellow-400'}`}>
+                      {selectedWebsite.wp_user ? 'Connected' : 'Not Set'}
+                    </p>
+                  </div>
+                  <div className="w-px h-10 bg-slate-600"></div>
+                  <div className="flex-1">
+                    <h4 className="text-sm text-gray-400 mb-1">SEO Plugin</h4>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={selectedWebsite.seo_plugin || 'aioseo'}
+                        onChange={async (e) => {
+                          const newPlugin = e.target.value;
+                          try {
+                            const res = await fetch(`/api/websites/${selectedWebsite.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                name: selectedWebsite.name,
+                                url: selectedWebsite.url,
+                                seoPlugin: newPlugin
+                              })
+                            });
+                            if (res.ok) {
+                              const data = await res.json();
+                              setSelectedWebsite(data.website);
+                              fetchWebsites();
+                            }
+                          } catch (error) {
+                            console.error('Failed to update SEO plugin:', error);
+                          }
+                        }}
+                        className="bg-slate-900 border border-brand-cyan/50 rounded px-2 py-1 text-white text-sm flex-1"
+                      >
+                        <option value="aioseo">All in One SEO</option>
+                        <option value="yoast">Yoast SEO</option>
+                        <option value="rankmath">Rank Math</option>
+                        <option value="seopress">SEOPress</option>
+                        <option value="none">Direct to WP</option>
+                      </select>
+                      <button
+                        onClick={() => setShowSEOGuide(true)}
+                        className="p-1.5 text-brand-cyan hover:bg-brand-cyan/20 rounded transition-colors"
+                        title="SEO Plugin Setup Guide"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -773,6 +831,13 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
           </div>
         </div>
       )}
+
+      {/* SEO Plugin Setup Guide */}
+      <SEOSetupGuide
+        isOpen={showSEOGuide}
+        onClose={() => setShowSEOGuide(false)}
+        initialPlugin={selectedWebsite?.seo_plugin || 'aioseo'}
+      />
     </div>
   );
 };

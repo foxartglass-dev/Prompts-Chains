@@ -166,6 +166,7 @@ router.put('/:id', requireDb, async (req, res) => {
           elementor_cta_text = COALESCE(${elementorCtaText}, elementor_cta_text),
           elementor_cta_url = COALESCE(${elementorCtaUrl}, elementor_cta_url),
           elementor_include_stats_bar = COALESCE(${elementorIncludeStatsBar}, elementor_include_stats_bar),
+          seo_plugin = COALESCE(${req.body.seoPlugin || req.body.seo_plugin}, seo_plugin),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *

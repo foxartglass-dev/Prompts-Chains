@@ -34,8 +34,56 @@ export async function pushMetaToSeoPlugin({
   const authHeader = 'Basic ' + Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
 
   try {
+    // DIRECT TO WP (no SEO plugin) - Use WordPress excerpt for description
+    // and custom meta fields for direct SEO control
+    if (seoPlugin === 'none') {
+      console.log(`Pushing directly to WordPress: ${baseUrl}/wp-json/wp/v2/${postType}/${postId}`);
+
+      // Build payload with excerpt for description (many themes use this for meta description)
+      const payload = {};
+      if (metaDescription) {
+        payload.excerpt = metaDescription;
+      }
+
+      // Also try to set custom meta fields that some themes read
+      const metaPayload = {};
+      if (metaTitle) metaPayload['_seo_title'] = metaTitle;
+      if (metaDescription) metaPayload['_seo_description'] = metaDescription;
+
+      // Update the post
+      const response = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({
+          ...payload,
+          meta: metaPayload
+        })
+      });
+
+      const responseData = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        return {
+          success: true,
+          message: `Meta saved directly to WordPress. The description is stored in the excerpt field. Note: For proper SEO meta tags, you may need an SEO plugin or theme that reads these values.`,
+          postId: responseData.id,
+          link: responseData.link
+        };
+      }
+
+      return {
+        success: false,
+        error: `WordPress API error: ${response.status} - ${responseData.message || 'Unknown error'}`
+      };
+    }
+
     // AIOSEO uses a different approach - aioseo_meta_data in the request body
+    // NOTE: This requires AIOSEO Plus/Pro/Elite. Free version ignores this field.
     if (seoPlugin === 'aioseo') {
+      // First try the premium aioseo_meta_data approach
       const aioseoPayload = {
         aioseo_meta_data: {}
       };
@@ -68,20 +116,224 @@ export async function pushMetaToSeoPlugin({
         };
       }
 
+      // Also try to set via post meta as fallback (for free version)
+      // This may help if AIOSEO reads from these fields
+      try {
+        await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader
+          },
+          body: JSON.stringify({
+            meta: {
+              _aioseo_title: metaTitle || '',
+              _aioseo_description: metaDescription || ''
+            }
+          })
+        });
+        console.log('Also attempted post meta fallback for AIOSEO');
+      } catch (metaErr) {
+        console.log('Post meta fallback failed (expected for protected fields):', metaErr.message);
+      }
+
       const result = await response.json();
       return {
         success: true,
-        message: `Meta pushed to AIOSEO successfully`,
+        message: `Meta sent to AIOSEO. Note: If using AIOSEO Free, you may need AIOSEO Plus/Pro for REST API support, or clear any AIOSEO template tags in the page settings.`,
         postId: result.id,
         link: result.link
       };
     }
 
-    // For other plugins, use the meta field approach
+    // YOAST SEO - Try multiple approaches
+    // Note: Yoast's official REST API is read-only, so we try post meta directly
+    if (seoPlugin === 'yoast') {
+      console.log(`Pushing to Yoast: ${baseUrl}/wp-json/wp/v2/${postType}/${postId}`);
+
+      // Try setting post meta directly (requires meta fields to be registered)
+      const metaPayload = {};
+      if (metaTitle) metaPayload['_yoast_wpseo_title'] = metaTitle;
+      if (metaDescription) metaPayload['_yoast_wpseo_metadesc'] = metaDescription;
+
+      const response = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({ meta: metaPayload })
+      });
+
+      const responseData = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        // Check if meta was actually saved by looking at the response
+        const metaSaved = responseData.meta &&
+          (responseData.meta._yoast_wpseo_title || responseData.meta._yoast_wpseo_metadesc);
+
+        if (metaSaved) {
+          return {
+            success: true,
+            message: `Meta pushed to Yoast SEO successfully.`,
+            postId: responseData.id,
+            link: responseData.link
+          };
+        }
+
+        // Request succeeded but meta may not have been saved
+        return {
+          success: true,
+          message: `Request sent to WordPress. Note: Yoast requires registering meta fields in functions.php for REST API access. Add this code:\n\nadd_action('init', function() {\n  register_post_meta('page', '_yoast_wpseo_title', ['show_in_rest' => true, 'single' => true, 'type' => 'string']);\n  register_post_meta('page', '_yoast_wpseo_metadesc', ['show_in_rest' => true, 'single' => true, 'type' => 'string']);\n});`,
+          postId: responseData.id,
+          link: responseData.link,
+          requiresSetup: true
+        };
+      }
+
+      // If meta approach failed, return helpful error
+      return {
+        success: false,
+        error: `Yoast API error: ${response.status}. Yoast's REST API is read-only by default. Add register_post_meta() calls in functions.php to enable writing.`
+      };
+    }
+
+    // RANK MATH - Use post meta approach (most reliable)
+    // Rank Math exposes these fields via REST API when "Headless CMS Support" is enabled
+    if (seoPlugin === 'rankmath') {
+      console.log(`Pushing to Rank Math: ${baseUrl}/wp-json/wp/v2/${postType}/${postId}`);
+
+      // Primary approach: Post meta (works when Headless CMS Support is enabled)
+      const metaPayload = {};
+      if (metaTitle) metaPayload['rank_math_title'] = metaTitle;
+      if (metaDescription) metaPayload['rank_math_description'] = metaDescription;
+
+      const response = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({ meta: metaPayload })
+      });
+
+      const responseData = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        // Check if meta was actually saved
+        const metaSaved = responseData.meta &&
+          (responseData.meta.rank_math_title || responseData.meta.rank_math_description);
+
+        if (metaSaved) {
+          return {
+            success: true,
+            message: `Meta pushed to Rank Math successfully.`,
+            postId: responseData.id,
+            link: responseData.link
+          };
+        }
+
+        // Request succeeded but meta may not have been saved - try internal API as fallback
+        console.log('Post meta may not have saved, trying Rank Math internal API...');
+        try {
+          const rmResponse = await fetch(`${baseUrl}/wp-json/rankmath/v1/updateMeta`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authHeader
+            },
+            body: JSON.stringify({
+              objectID: parseInt(postId),
+              objectType: postType === 'pages' ? 'page' : 'post',
+              meta: {
+                rank_math_title: metaTitle || '',
+                rank_math_description: metaDescription || ''
+              }
+            })
+          });
+
+          if (rmResponse.ok) {
+            return {
+              success: true,
+              message: 'Meta pushed to Rank Math via internal API.',
+              postId: responseData.id,
+              link: responseData.link
+            };
+          }
+        } catch (rmErr) {
+          console.log('Rank Math internal API also failed:', rmErr.message);
+        }
+
+        // Neither worked - return with setup instructions
+        return {
+          success: true,
+          message: `Request sent to WordPress. For Rank Math REST API support:\n1. Go to Rank Math > General Settings > Others\n2. Enable "Headless CMS Support"\n3. Save changes and try again.`,
+          postId: responseData.id,
+          link: responseData.link,
+          requiresSetup: true
+        };
+      }
+
+      return {
+        success: false,
+        error: `Rank Math API error: ${response.status}. Enable "Headless CMS Support" in Rank Math > General Settings > Others.`
+      };
+    }
+
+    // SEOPRESS - Uses specific meta fields
+    if (seoPlugin === 'seopress') {
+      console.log(`Pushing to SEOPress: ${baseUrl}/wp-json/wp/v2/${postType}/${postId}`);
+
+      const metaPayload = {};
+      if (metaTitle) metaPayload['_seopress_titles_title'] = metaTitle;
+      if (metaDescription) metaPayload['_seopress_titles_desc'] = metaDescription;
+
+      const response = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({ meta: metaPayload })
+      });
+
+      const responseData = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        // Check if meta was saved
+        const metaSaved = responseData.meta &&
+          (responseData.meta._seopress_titles_title || responseData.meta._seopress_titles_desc);
+
+        if (metaSaved) {
+          return {
+            success: true,
+            message: `Meta pushed to SEOPress successfully.`,
+            postId: responseData.id,
+            link: responseData.link
+          };
+        }
+
+        // Request succeeded but meta may need REST API enabled
+        return {
+          success: true,
+          message: `Request sent to WordPress. If meta doesn't appear in SEOPress:\n1. Go to SEOPress > Advanced\n2. Ensure REST API is enabled\n3. Check that meta fields are exposed to REST API.`,
+          postId: responseData.id,
+          link: responseData.link,
+          requiresSetup: true
+        };
+      }
+
+      return {
+        success: false,
+        error: `SEOPress API error: ${response.status}. Check that SEOPress REST API is enabled in SEOPress > Advanced.`
+      };
+    }
+
+    // For any other/unknown plugins, use the generic meta field approach
     const metaFields = getMetaFieldNames(seoPlugin);
 
     if (!metaFields) {
-      return { success: false, error: `Unsupported SEO plugin: ${seoPlugin}` };
+      return { success: false, error: `Unsupported SEO plugin: ${seoPlugin}. Supported plugins: yoast, rankmath, aioseo, seopress, none` };
     }
 
     // Build the meta update payload
@@ -109,24 +361,6 @@ export async function pushMetaToSeoPlugin({
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-
-      // Some SEO plugins require their own REST endpoints
-      // Try the plugin-specific endpoint as fallback
-      const fallbackResult = await tryPluginSpecificEndpoint({
-        baseUrl,
-        authHeader,
-        postId,
-        metaTitle,
-        metaDescription,
-        seoPlugin,
-        metaFields,
-        postType
-      });
-
-      if (fallbackResult.success) {
-        return fallbackResult;
-      }
-
       return {
         success: false,
         error: `WordPress API error: ${response.status} - ${errorData.message || 'Unknown error'}`
@@ -181,72 +415,6 @@ function getMetaFieldNames(seoPlugin) {
   };
 
   return pluginFields[seoPlugin] || null;
-}
-
-/**
- * Try plugin-specific REST endpoints as fallback
- * Some plugins expose their own API endpoints
- */
-async function tryPluginSpecificEndpoint({
-  baseUrl,
-  authHeader,
-  postId,
-  metaTitle,
-  metaDescription,
-  seoPlugin,
-  metaFields,
-  postType = 'pages'
-}) {
-  try {
-    // Yoast has a specific meta endpoint in newer versions
-    if (seoPlugin === 'yoast') {
-      // Try updating via post meta directly
-      const metaResponse = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({
-          yoast_head_json: {
-            title: metaTitle,
-            description: metaDescription
-          }
-        })
-      });
-
-      if (metaResponse.ok) {
-        return { success: true, message: 'Meta pushed via Yoast head JSON' };
-      }
-    }
-
-    // Rank Math has its own REST API
-    if (seoPlugin === 'rankmath') {
-      const rmResponse = await fetch(`${baseUrl}/wp-json/rankmath/v1/updateMeta`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({
-          objectID: postId,
-          objectType: 'post',
-          meta: {
-            rank_math_title: metaTitle,
-            rank_math_description: metaDescription
-          }
-        })
-      });
-
-      if (rmResponse.ok) {
-        return { success: true, message: 'Meta pushed via Rank Math API' };
-      }
-    }
-
-    return { success: false };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
 }
 
 /**
@@ -308,15 +476,40 @@ export async function detectSeoPlugin({ wpUrl, wpUser, wpPassword }) {
 }
 
 /**
- * Get the list of supported SEO plugins
+ * Get the list of supported SEO plugins with setup requirements
  */
 export function getSupportedPlugins() {
   return [
-    { id: 'aioseo', name: 'All in One SEO', description: 'Comprehensive SEO toolkit (default)' },
-    { id: 'yoast', name: 'Yoast SEO', description: 'Most popular WordPress SEO plugin' },
-    { id: 'rankmath', name: 'Rank Math', description: 'Feature-rich SEO plugin' },
-    { id: 'seopress', name: 'SEOPress', description: 'Lightweight SEO plugin' },
-    { id: 'none', name: 'None / Manual', description: 'No automatic SEO pushing' }
+    {
+      id: 'aioseo',
+      name: 'All in One SEO',
+      description: 'Requires Plus/Pro/Elite for REST API',
+      setupNotes: 'AIOSEO REST API requires a paid version (Plus, Pro, or Elite). Free version will not receive API updates.'
+    },
+    {
+      id: 'yoast',
+      name: 'Yoast SEO',
+      description: 'Requires functions.php code',
+      setupNotes: 'Add register_post_meta() calls to functions.php to enable REST API writing for Yoast meta fields.'
+    },
+    {
+      id: 'rankmath',
+      name: 'Rank Math',
+      description: 'Enable "Headless CMS Support"',
+      setupNotes: 'Go to Rank Math > General Settings > Others and enable "Headless CMS Support".'
+    },
+    {
+      id: 'seopress',
+      name: 'SEOPress',
+      description: 'Enable REST API in settings',
+      setupNotes: 'Check SEOPress > Advanced to ensure REST API is enabled.'
+    },
+    {
+      id: 'none',
+      name: 'Direct to WP',
+      description: 'Uses excerpt field for description',
+      setupNotes: 'Saves meta title to custom field and description to WordPress excerpt. Some themes use excerpt as meta description.'
+    }
   ];
 }
 

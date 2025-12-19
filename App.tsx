@@ -11,11 +11,13 @@ import PinLock from './src/components/PinLock';
 import AgencyManager from './src/components/AgencyManager';
 import ArticleManager from './src/components/ArticleManager';
 import TemplateLibrary from './src/components/TemplateLibrary';
+import SaveTemplatePopup from './src/components/SaveTemplatePopup';
 import WorkflowNavigation from './src/components/WorkflowNavigation';
 import ClientsPage from './src/components/ClientsPage';
 import WebsitesPage from './src/components/WebsitesPage';
 import Analytics from './src/components/Analytics';
 import PendingMetaNotification from './src/components/PendingMetaNotification';
+import IdeasBacklog from './src/components/IdeasBacklog';
 
 // Types for workflow
 interface WorkflowItem {
@@ -128,10 +130,12 @@ const App: React.FC = () => {
     const [isAgencyOpen, setIsAgencyOpen] = useState(false);
     const [isArticlesOpen, setIsArticlesOpen] = useState(false);
     const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+    const [showSaveTemplatePopup, setShowSaveTemplatePopup] = useState(false);
     const [isWorkflowNavOpen, setIsWorkflowNavOpen] = useState(false);
     const [isClientsOpen, setIsClientsOpen] = useState(false);
     const [isWebsitesOpen, setIsWebsitesOpen] = useState(false);
     const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+    const [isIdeasOpen, setIsIdeasOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
@@ -1005,8 +1009,14 @@ const App: React.FC = () => {
         setIsProcessing(false);
     };
     
+    // Helper to strip tag suffix like "(H)" from item names
+    const stripTagFromName = (name: string): string => {
+        return name.replace(/\s*\([^)]+\)\s*$/, '').trim();
+    };
+
     const fillSimpleTemplate = (template: string, data: Record<string, string | null | undefined>): string => {
-        return template.replace(/{([^{}]+)}/g, (match, key) => {
+        // Support <angle brackets> syntax as shown in UI hints
+        return template.replace(/<([^<>]+)>/g, (match, key) => {
             const trimmedKey = key.trim();
             const value = data[trimmedKey];
             return value !== null && value !== undefined ? String(value) : match;
@@ -1039,7 +1049,7 @@ const App: React.FC = () => {
 
             const templateData = {
                 ...placeholderData,
-                item_name: result.item.name,
+                item_name: stripTagFromName(result.item.name),
                 tag: result.item.tag,
                 status: result.status,
             };
@@ -1307,6 +1317,9 @@ const App: React.FC = () => {
             />
             <Analytics isOpen={isAnalyticsOpen} onClose={() => setIsAnalyticsOpen(false)} />
 
+            {/* Ideas Backlog */}
+            <IdeasBacklog isOpen={isIdeasOpen} onClose={() => setIsIdeasOpen(false)} />
+
             {/* Settings Modal */}
             {isSettingsOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
@@ -1455,6 +1468,33 @@ const App: React.FC = () => {
                     // Reload the current project to get updated data
                 }}
             />
+            {/* Save as Template Popup */}
+            {showSaveTemplatePopup && (
+                <SaveTemplatePopup
+                    isOpen={showSaveTemplatePopup}
+                    onClose={() => setShowSaveTemplatePopup(false)}
+                    currentState={currentProject.state}
+                    workflowName={currentWorkflowContext.workflowName || currentProject.name}
+                    onSave={async (templateData) => {
+                        try {
+                            const res = await fetch('/api/templates', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(templateData)
+                            });
+                            if (res.ok) {
+                                showNotification('Template saved!', 'success');
+                                setShowSaveTemplatePopup(false);
+                            } else {
+                                const err = await res.json();
+                                showNotification(err.error || 'Failed to save template', 'error');
+                            }
+                        } catch (error) {
+                            showNotification('Failed to save template', 'error');
+                        }
+                    }}
+                />
+            )}
             <WorkflowNavigation
                 isOpen={isWorkflowNavOpen}
                 onClose={() => setIsWorkflowNavOpen(false)}
@@ -1619,7 +1659,7 @@ const App: React.FC = () => {
                             <span className="text-[10px] md:text-sm">Templates</span>
                         </button>
                         <button
-                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(true); }}
+                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsIdeasOpen(false); setIsAnalyticsOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Analytics Dashboard"
                         >
@@ -1627,6 +1667,16 @@ const App: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                             </svg>
                             <span className="text-[10px] md:text-sm">Analytics</span>
+                        </button>
+                        <button
+                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(true); }}
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            title="Ideas Backlog"
+                        >
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                            </svg>
+                            <span className="text-[10px] md:text-sm">Ideas</span>
                         </button>
                         <button
                             onClick={() => setIsSettingsOpen(true)}
@@ -1845,16 +1895,16 @@ const App: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Row 2: Filename + Import/Export */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {/* Row 2: Filename + Import/Export/Save Template */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div>
                                     <label className="block text-xs font-medium text-brand-gold mb-1">Filename Template</label>
                                     <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold" />
                                 </div>
-                                {/* Right side: Import/Export */}
-                                <div className="flex flex-col justify-end gap-2">
-                                    <label className="block text-xs font-medium text-brand-gold text-center">Import / Export Workflow</label>
-                                    <div className="flex gap-2">
+                                {/* Import/Export JSON */}
+                                <div className="flex flex-col justify-end gap-1">
+                                    <label className="block text-xs font-medium text-gray-400 text-center">Import / Export JSON</label>
+                                    <div className="flex gap-1">
                                         <button
                                             onClick={() => {
                                                 const exportData = {
@@ -1866,12 +1916,12 @@ const App: React.FC = () => {
                                                 downloadProjectConfig(exportData, filename);
                                                 showNotification('Workflow exported!', 'success');
                                             }}
-                                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold text-xs transition"
+                                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-xs transition"
                                         >
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                                             Export
                                         </button>
-                                        <label className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold text-xs transition cursor-pointer">
+                                        <label className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-xs transition cursor-pointer">
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                                             Import
                                             <input
@@ -1899,6 +1949,17 @@ const App: React.FC = () => {
                                             />
                                         </label>
                                     </div>
+                                </div>
+                                {/* Save as Template */}
+                                <div className="flex flex-col justify-end gap-1">
+                                    <label className="block text-xs font-medium text-gray-400 text-center">Save to Library</label>
+                                    <button
+                                        onClick={() => setShowSaveTemplatePopup(true)}
+                                        className="flex items-center justify-center gap-1 px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-dark rounded text-slate-900 font-medium text-xs transition"
+                                    >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                                        Save as Template
+                                    </button>
                                 </div>
                             </div>
 
@@ -1992,11 +2053,9 @@ const App: React.FC = () => {
                         </div>
                     , true)}
                     
-                    {renderSection('Publishing (Example: WordPress)', 'wordpress', <Icon type="upload" className="h-6 w-6"/>,
-                        <div className="space-y-4 p-4 bg-brand-gold/10 border border-brand-gold/30 rounded-lg">
-                            <p className="text-brand-gold text-sm">
-                                <strong className="font-bold">Security Warning:</strong> This is for testing only. Application Passwords should be handled by a secure backend in a real application, not entered in the browser.
-                            </p>
+                    {renderSection('Publishing to WordPress', 'wordpress', <Icon type="upload" className="h-6 w-6"/>,
+                        <div className="space-y-4 p-4 bg-slate-800/50 border border-brand-cyan/30 rounded-lg">
+                            <p className="text-xs text-gray-400 mb-2">WordPress Admin Credentials</p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
@@ -2035,66 +2094,66 @@ const App: React.FC = () => {
                             <p className="text-xs text-brand-gold/70">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
 
                             {/* Meta SEO Generation Settings */}
-                            <div className="mt-6 pt-6 border-t border-pink-500/30">
-                                <h3 className="text-lg font-semibold text-pink-400 mb-4 flex items-center gap-2">
+                            <div className="mt-6 pt-6 border-t border-brand-gold/30">
+                                <h3 className="text-lg font-semibold text-brand-gold mb-4 flex items-center gap-2">
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                                     Meta SEO Generation
                                 </h3>
-                                <p className="text-xs text-pink-400/70 mb-4">
+                                <p className="text-xs text-brand-gold/70 mb-4">
                                     When a prompt has "Generate Meta SEO" enabled, these settings control how meta titles and descriptions are generated.
                                 </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Title Options</label>
+                                        <label className="block text-sm font-medium text-brand-gold mb-1.5">Meta Title Options</label>
                                         <select
                                             value={currentProject.state.metaTitleCount || 3}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaTitleCount: parseInt(e.target.value)}))}
-                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-pink-500 transition-all"
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
                                         >
                                             <option value="1">1 (Auto-push to SEO)</option>
                                             <option value="2">2 (Draft mode - select one)</option>
                                             <option value="3">3 (Draft mode - select one)</option>
                                             <option value="5">5 (Draft mode - select one)</option>
                                         </select>
-                                        <p className="text-xs text-pink-400/50 mt-1">1 = auto-push, 2+ = choose from options</p>
+                                        <p className="text-xs text-brand-gold/50 mt-1">1 = auto-push, 2+ = choose from options</p>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Description Options</label>
+                                        <label className="block text-sm font-medium text-brand-gold mb-1.5">Meta Description Options</label>
                                         <select
                                             value={currentProject.state.metaDescriptionCount || 3}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaDescriptionCount: parseInt(e.target.value)}))}
-                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-pink-500 transition-all"
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
                                         >
                                             <option value="1">1 (Auto-push to SEO)</option>
                                             <option value="2">2 (Draft mode - select one)</option>
                                             <option value="3">3 (Draft mode - select one)</option>
                                             <option value="5">5 (Draft mode - select one)</option>
                                         </select>
-                                        <p className="text-xs text-pink-400/50 mt-1">1 = auto-push, 2+ = choose from options</p>
+                                        <p className="text-xs text-brand-gold/50 mt-1">1 = auto-push, 2+ = choose from options</p>
                                     </div>
                                 </div>
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Title Generation Prompt</label>
+                                        <label className="block text-sm font-medium text-brand-gold mb-1.5">Meta Title Generation Prompt</label>
                                         <textarea
                                             value={currentProject.state.metaTitlePrompt || ''}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaTitlePrompt: e.target.value}))}
                                             rows={3}
-                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-pink-500 transition-all resize-y"
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
                                             placeholder="Prompt for generating meta titles..."
                                         />
-                                        <p className="text-xs text-pink-400/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
+                                        <p className="text-xs text-brand-gold/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Description Generation Prompt</label>
+                                        <label className="block text-sm font-medium text-brand-gold mb-1.5">Meta Description Generation Prompt</label>
                                         <textarea
                                             value={currentProject.state.metaDescriptionPrompt || ''}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaDescriptionPrompt: e.target.value}))}
                                             rows={3}
-                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-pink-500 transition-all resize-y"
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
                                             placeholder="Prompt for generating meta descriptions..."
                                         />
-                                        <p className="text-xs text-pink-400/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
+                                        <p className="text-xs text-brand-gold/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
                                     </div>
                                 </div>
                             </div>
