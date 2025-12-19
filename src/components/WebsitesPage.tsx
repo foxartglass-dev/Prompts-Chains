@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import StyleLockPanel from './StyleLockPanel';
+import SEOSetupGuide from './SEOSetupGuide';
 
 interface Website {
   id: number;
@@ -90,6 +91,7 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
   } | null>(null);
   const [runningStylelock, setRunningStylelock] = useState(false);
   const [targetDescription, setTargetDescription] = useState('');
+  const [showSEOGuide, setShowSEOGuide] = useState(false);
 
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -520,37 +522,48 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                   <div className="w-px h-10 bg-slate-600"></div>
                   <div className="flex-1">
                     <h4 className="text-sm text-gray-400 mb-1">SEO Plugin</h4>
-                    <select
-                      value={selectedWebsite.seo_plugin || 'aioseo'}
-                      onChange={async (e) => {
-                        const newPlugin = e.target.value;
-                        try {
-                          const res = await fetch(`/api/websites/${selectedWebsite.id}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              name: selectedWebsite.name,
-                              url: selectedWebsite.url,
-                              seoPlugin: newPlugin
-                            })
-                          });
-                          if (res.ok) {
-                            const data = await res.json();
-                            setSelectedWebsite(data.website);
-                            fetchWebsites();
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={selectedWebsite.seo_plugin || 'aioseo'}
+                        onChange={async (e) => {
+                          const newPlugin = e.target.value;
+                          try {
+                            const res = await fetch(`/api/websites/${selectedWebsite.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                name: selectedWebsite.name,
+                                url: selectedWebsite.url,
+                                seoPlugin: newPlugin
+                              })
+                            });
+                            if (res.ok) {
+                              const data = await res.json();
+                              setSelectedWebsite(data.website);
+                              fetchWebsites();
+                            }
+                          } catch (error) {
+                            console.error('Failed to update SEO plugin:', error);
                           }
-                        } catch (error) {
-                          console.error('Failed to update SEO plugin:', error);
-                        }
-                      }}
-                      className="bg-slate-900 border border-brand-cyan/50 rounded px-2 py-1 text-white text-sm w-full"
-                    >
-                      <option value="aioseo">All in One SEO</option>
-                      <option value="yoast">Yoast SEO</option>
-                      <option value="rankmath">Rank Math</option>
-                      <option value="seopress">SEOPress</option>
-                      <option value="none">Direct to WP</option>
-                    </select>
+                        }}
+                        className="bg-slate-900 border border-brand-cyan/50 rounded px-2 py-1 text-white text-sm flex-1"
+                      >
+                        <option value="aioseo">All in One SEO</option>
+                        <option value="yoast">Yoast SEO</option>
+                        <option value="rankmath">Rank Math</option>
+                        <option value="seopress">SEOPress</option>
+                        <option value="none">Direct to WP</option>
+                      </select>
+                      <button
+                        onClick={() => setShowSEOGuide(true)}
+                        className="p-1.5 text-brand-cyan hover:bg-brand-cyan/20 rounded transition-colors"
+                        title="SEO Plugin Setup Guide"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -818,6 +831,13 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
           </div>
         </div>
       )}
+
+      {/* SEO Plugin Setup Guide */}
+      <SEOSetupGuide
+        isOpen={showSEOGuide}
+        onClose={() => setShowSEOGuide(false)}
+        initialPlugin={selectedWebsite?.seo_plugin || 'aioseo'}
+      />
     </div>
   );
 };
