@@ -35,7 +35,9 @@ export async function pushMetaToSeoPlugin({
 
   try {
     // AIOSEO uses a different approach - aioseo_meta_data in the request body
+    // NOTE: This requires AIOSEO Plus/Pro/Elite. Free version ignores this field.
     if (seoPlugin === 'aioseo') {
+      // First try the premium aioseo_meta_data approach
       const aioseoPayload = {
         aioseo_meta_data: {}
       };
@@ -68,10 +70,31 @@ export async function pushMetaToSeoPlugin({
         };
       }
 
+      // Also try to set via post meta as fallback (for free version)
+      // This may help if AIOSEO reads from these fields
+      try {
+        await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader
+          },
+          body: JSON.stringify({
+            meta: {
+              _aioseo_title: metaTitle || '',
+              _aioseo_description: metaDescription || ''
+            }
+          })
+        });
+        console.log('Also attempted post meta fallback for AIOSEO');
+      } catch (metaErr) {
+        console.log('Post meta fallback failed (expected for protected fields):', metaErr.message);
+      }
+
       const result = await response.json();
       return {
         success: true,
-        message: `Meta pushed to AIOSEO successfully`,
+        message: `Meta sent to AIOSEO. Note: If using AIOSEO Free, you may need AIOSEO Plus/Pro for REST API support, or clear any AIOSEO template tags in the page settings.`,
         postId: result.id,
         link: result.link
       };
