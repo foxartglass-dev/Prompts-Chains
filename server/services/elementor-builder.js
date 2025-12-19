@@ -330,8 +330,8 @@ function buildStatsBarPlaceholder(options = {}) {
 function buildElementorPage(chunkedContent, options = {}) {
   const {
     title = '',
-    ctaText = 'Book Now!',
-    ctaUrl = '#',
+    ctaText = '',  // No CTA button by default
+    ctaUrl = '',
     includeStatsBar = false,
     statsBarPosition = 'middle' // 'middle' or 'bottom'
   } = options;

@@ -1037,8 +1037,6 @@ const App: React.FC = () => {
                                             title: title,
                                             content: finalOutput,
                                             status: 'draft',
-                                            ctaText: 'Book Now!',
-                                            ctaUrl: '#',
                                             includeStatsBar: false,
                                         }),
                                     });
@@ -1178,8 +1176,6 @@ const App: React.FC = () => {
                         title: title,
                         content: result.finalOutput,
                         status: 'draft',
-                        ctaText: 'Book Now!',
-                        ctaUrl: '#',
                         includeStatsBar: false,
                     }),
                 });
