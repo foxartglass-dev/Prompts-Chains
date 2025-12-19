@@ -1687,27 +1687,29 @@ const App: React.FC = () => {
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
                     {/* Logo - Centered on mobile */}
                     <div className="flex items-center justify-center md:justify-start">
-                        <div className="flex items-center">
-                            {/* Logo SVG - Digi Branded AI style bars */}
-                            <svg width="40" height="40" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-2 md:mr-3 md:w-12 md:h-12">
-                                <rect x="4" y="28" width="6" height="16" rx="1" fill="#00B4D8"/>
-                                <rect x="12" y="22" width="6" height="22" rx="1" fill="#0096C7"/>
-                                <rect x="20" y="16" width="6" height="28" rx="1" fill="#0077B6"/>
-                                <rect x="28" y="10" width="6" height="34" rx="1" fill="#005F8A"/>
-                                <rect x="36" y="4" width="6" height="40" rx="1" fill="#004A6E"/>
-                                <path d="M6 30L14 24L22 18L30 12L38 6" stroke="#F5A623" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-                                <circle cx="6" cy="30" r="3" fill="#F5A623"/>
-                                <circle cx="14" cy="24" r="3" fill="#F5A623"/>
-                                <circle cx="22" cy="18" r="3" fill="#F5A623"/>
-                                <circle cx="30" cy="12" r="3" fill="#F5A623"/>
-                                <circle cx="38" cy="6" r="3" fill="#F5A623"/>
-                            </svg>
-                            <div>
+                        <div className="flex flex-col items-center md:items-start">
+                            {/* Top row: Graph icon + PromptFlow text */}
+                            <div className="flex items-center">
+                                {/* Logo SVG - Digi Branded AI style bars */}
+                                <svg width="40" height="40" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-2 md:mr-3 md:w-12 md:h-12">
+                                    <rect x="4" y="28" width="6" height="16" rx="1" fill="#00B4D8"/>
+                                    <rect x="12" y="22" width="6" height="22" rx="1" fill="#0096C7"/>
+                                    <rect x="20" y="16" width="6" height="28" rx="1" fill="#0077B6"/>
+                                    <rect x="28" y="10" width="6" height="34" rx="1" fill="#005F8A"/>
+                                    <rect x="36" y="4" width="6" height="40" rx="1" fill="#004A6E"/>
+                                    <path d="M6 30L14 24L22 18L30 12L38 6" stroke="#F5A623" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <circle cx="6" cy="30" r="3" fill="#F5A623"/>
+                                    <circle cx="14" cy="24" r="3" fill="#F5A623"/>
+                                    <circle cx="22" cy="18" r="3" fill="#F5A623"/>
+                                    <circle cx="30" cy="12" r="3" fill="#F5A623"/>
+                                    <circle cx="38" cy="6" r="3" fill="#F5A623"/>
+                                </svg>
                                 <h1 className="text-xl md:text-2xl font-bold flex items-baseline">
                                     <span className="text-brand-cyan">Prompt</span><span className="text-brand-gold">Flo</span><span className="text-brand-gold relative">w<svg className="absolute w-4 h-4 md:w-5 md:h-5 text-brand-gold" style={{left: '0.35em', top: '-0.5em'}} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20L20 4" /><path d="M12 4L20 4L20 12" /></svg></span>
                                 </h1>
-                                <p className="text-[10px] md:text-xs text-slate-400 mt-0.5">Advanced Workflow Automator</p>
                             </div>
+                            {/* Tagline underneath, centered */}
+                            <p className="text-[10px] md:text-xs text-slate-400 mt-1 text-center md:text-left w-full">Advanced Workflow Automator</p>
                         </div>
                     </div>
 
