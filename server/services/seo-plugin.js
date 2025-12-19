@@ -205,8 +205,11 @@ export async function pushMetaToSeoPlugin({
       console.log(`Pushing to Rank Math: ${targetUrl}`);
 
       // First, verify the page exists by doing a GET request
+      // IMPORTANT: Use context=edit for draft pages - they're not visible without it
       try {
-        const verifyResponse = await fetch(targetUrl, {
+        const verifyUrl = `${targetUrl}?context=edit`;
+        console.log(`Verifying page at: ${verifyUrl}`);
+        const verifyResponse = await fetch(verifyUrl, {
           method: 'GET',
           headers: {
             'Authorization': authHeader
@@ -218,7 +221,7 @@ export async function pushMetaToSeoPlugin({
 
           // Try the other post type (posts vs pages)
           const altPostType = postType === 'pages' ? 'posts' : 'pages';
-          const altUrl = `${baseUrl}/wp-json/wp/v2/${altPostType}/${postId}`;
+          const altUrl = `${baseUrl}/wp-json/wp/v2/${altPostType}/${postId}?context=edit`;
           console.log(`Trying alternate post type: ${altUrl}`);
 
           const altResponse = await fetch(altUrl, {
