@@ -94,6 +94,8 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
   const [customMetaDesc, setCustomMetaDesc] = useState('');
   const [pushingSeo, setPushingSeo] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [expandedContent, setExpandedContent] = useState(false);
+  const [localSeoPlugin, setLocalSeoPlugin] = useState<string>('aioseo');
 
   // Helper to strip tag suffix like "(H)" from item names
   const stripTagFromName = (name: string): string => {
@@ -210,6 +212,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
         setSelectedDescIndex(null);
         setCustomMetaDesc('');
       }
+
+      // Set local SEO plugin from article's website
+      setLocalSeoPlugin(article.seo_plugin || 'aioseo');
     } catch (err) {
       setError('Failed to fetch article');
     } finally {
@@ -453,9 +458,6 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       return;
     }
 
-    // Get the SEO plugin from website settings (default to 'aioseo')
-    const seoPlugin = selectedArticle.seo_plugin || 'aioseo';
-
     setPushingSeo(true);
     try {
       // Use direct push endpoint with credentials
@@ -469,7 +471,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
           postId: selectedArticle.wp_post_id,
           metaTitle,
           metaDescription: metaDesc,
-          seoPlugin,
+          seoPlugin: localSeoPlugin,
           postType: wpContentType
         })
       });
@@ -818,10 +820,33 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                   </div>
                 </div>
 
-                {/* Content area */}
-                <div className="flex-1 overflow-auto p-4">
+                {/* Content area - expandable */}
+                <div className={`overflow-auto p-4 transition-all ${expandedContent ? 'flex-1 min-h-[60vh]' : 'h-48 flex-shrink-0'}`}>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs text-gray-500">Article Content</span>
+                    <button
+                      onClick={() => setExpandedContent(!expandedContent)}
+                      className="text-xs text-brand-cyan hover:text-brand-cyan-light flex items-center gap-1"
+                    >
+                      {expandedContent ? (
+                        <>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                          </svg>
+                          Collapse
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                          </svg>
+                          Expand
+                        </>
+                      )}
+                    </button>
+                  </div>
                   {viewMode === 'view' ? (
-                    <div className="prose prose-invert max-w-none">
+                    <div className="prose prose-invert max-w-none h-full overflow-auto">
                       <div
                         className="text-gray-200 whitespace-pre-wrap"
                         dangerouslySetInnerHTML={{
@@ -993,8 +1018,19 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
 
                   {/* Action Buttons */}
                   <div className="mt-4 flex items-center justify-between">
-                    <div className="text-xs text-gray-500">
-                      <span>SEO Plugin: <span className="text-gray-400 capitalize">{selectedArticle.seo_plugin || 'aioseo'}</span></span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">SEO Plugin:</span>
+                      <select
+                        value={localSeoPlugin}
+                        onChange={(e) => setLocalSeoPlugin(e.target.value)}
+                        className="bg-slate-900 border border-brand-cyan/50 rounded px-2 py-1 text-white text-xs"
+                      >
+                        <option value="aioseo">All in One SEO</option>
+                        <option value="yoast">Yoast SEO</option>
+                        <option value="rankmath">Rank Math</option>
+                        <option value="seopress">SEOPress</option>
+                        <option value="none">Direct to WP</option>
+                      </select>
                     </div>
                     <div className="flex gap-3">
                       {/* Show Save Selection when user has made a selection OR meta options exist */}
@@ -1032,7 +1068,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                 </svg>
-                                Push to {(selectedArticle.seo_plugin || 'aioseo').charAt(0).toUpperCase() + (selectedArticle.seo_plugin || 'aioseo').slice(1)}
+                                Push to {localSeoPlugin === 'none' ? 'WordPress' : localSeoPlugin.charAt(0).toUpperCase() + localSeoPlugin.slice(1)}
                               </>
                             )}
                           </button>

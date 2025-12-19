@@ -34,6 +34,52 @@ export async function pushMetaToSeoPlugin({
   const authHeader = 'Basic ' + Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
 
   try {
+    // DIRECT TO WP (no SEO plugin) - Use WordPress excerpt for description
+    // and custom meta fields for direct SEO control
+    if (seoPlugin === 'none') {
+      console.log(`Pushing directly to WordPress: ${baseUrl}/wp-json/wp/v2/${postType}/${postId}`);
+
+      // Build payload with excerpt for description (many themes use this for meta description)
+      const payload = {};
+      if (metaDescription) {
+        payload.excerpt = metaDescription;
+      }
+
+      // Also try to set custom meta fields that some themes read
+      const metaPayload = {};
+      if (metaTitle) metaPayload['_seo_title'] = metaTitle;
+      if (metaDescription) metaPayload['_seo_description'] = metaDescription;
+
+      // Update the post
+      const response = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({
+          ...payload,
+          meta: metaPayload
+        })
+      });
+
+      const responseData = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        return {
+          success: true,
+          message: `Meta saved directly to WordPress. The description is stored in the excerpt field. Note: For proper SEO meta tags, you may need an SEO plugin or theme that reads these values.`,
+          postId: responseData.id,
+          link: responseData.link
+        };
+      }
+
+      return {
+        success: false,
+        error: `WordPress API error: ${response.status} - ${responseData.message || 'Unknown error'}`
+      };
+    }
+
     // AIOSEO uses a different approach - aioseo_meta_data in the request body
     // NOTE: This requires AIOSEO Plus/Pro/Elite. Free version ignores this field.
     if (seoPlugin === 'aioseo') {

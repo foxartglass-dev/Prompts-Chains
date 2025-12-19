@@ -1998,11 +1998,9 @@ const App: React.FC = () => {
                         </div>
                     , true)}
                     
-                    {renderSection('Publishing (Example: WordPress)', 'wordpress', <Icon type="upload" className="h-6 w-6"/>,
-                        <div className="space-y-4 p-4 bg-brand-gold/10 border border-brand-gold/30 rounded-lg">
-                            <p className="text-brand-gold text-sm">
-                                <strong className="font-bold">Security Warning:</strong> This is for testing only. Application Passwords should be handled by a secure backend in a real application, not entered in the browser.
-                            </p>
+                    {renderSection('Publishing to WordPress', 'wordpress', <Icon type="upload" className="h-6 w-6"/>,
+                        <div className="space-y-4 p-4 bg-slate-800/50 border border-brand-cyan/30 rounded-lg">
+                            <p className="text-xs text-gray-400 mb-2">WordPress Admin Credentials</p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
@@ -2041,66 +2039,66 @@ const App: React.FC = () => {
                             <p className="text-xs text-brand-gold/70">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
 
                             {/* Meta SEO Generation Settings */}
-                            <div className="mt-6 pt-6 border-t border-pink-500/30">
-                                <h3 className="text-lg font-semibold text-pink-400 mb-4 flex items-center gap-2">
+                            <div className="mt-6 pt-6 border-t border-brand-gold/30">
+                                <h3 className="text-lg font-semibold text-brand-gold mb-4 flex items-center gap-2">
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                                     Meta SEO Generation
                                 </h3>
-                                <p className="text-xs text-pink-400/70 mb-4">
+                                <p className="text-xs text-brand-gold/70 mb-4">
                                     When a prompt has "Generate Meta SEO" enabled, these settings control how meta titles and descriptions are generated.
                                 </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Title Options</label>
+                                        <label className="block text-sm font-medium text-brand-gold mb-1.5">Meta Title Options</label>
                                         <select
                                             value={currentProject.state.metaTitleCount || 3}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaTitleCount: parseInt(e.target.value)}))}
-                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-pink-500 transition-all"
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
                                         >
                                             <option value="1">1 (Auto-push to SEO)</option>
                                             <option value="2">2 (Draft mode - select one)</option>
                                             <option value="3">3 (Draft mode - select one)</option>
                                             <option value="5">5 (Draft mode - select one)</option>
                                         </select>
-                                        <p className="text-xs text-pink-400/50 mt-1">1 = auto-push, 2+ = choose from options</p>
+                                        <p className="text-xs text-brand-gold/50 mt-1">1 = auto-push, 2+ = choose from options</p>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Description Options</label>
+                                        <label className="block text-sm font-medium text-brand-gold mb-1.5">Meta Description Options</label>
                                         <select
                                             value={currentProject.state.metaDescriptionCount || 3}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaDescriptionCount: parseInt(e.target.value)}))}
-                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-pink-500 transition-all"
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
                                         >
                                             <option value="1">1 (Auto-push to SEO)</option>
                                             <option value="2">2 (Draft mode - select one)</option>
                                             <option value="3">3 (Draft mode - select one)</option>
                                             <option value="5">5 (Draft mode - select one)</option>
                                         </select>
-                                        <p className="text-xs text-pink-400/50 mt-1">1 = auto-push, 2+ = choose from options</p>
+                                        <p className="text-xs text-brand-gold/50 mt-1">1 = auto-push, 2+ = choose from options</p>
                                     </div>
                                 </div>
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Title Generation Prompt</label>
+                                        <label className="block text-sm font-medium text-brand-gold mb-1.5">Meta Title Generation Prompt</label>
                                         <textarea
                                             value={currentProject.state.metaTitlePrompt || ''}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaTitlePrompt: e.target.value}))}
                                             rows={3}
-                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-pink-500 transition-all resize-y"
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
                                             placeholder="Prompt for generating meta titles..."
                                         />
-                                        <p className="text-xs text-pink-400/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
+                                        <p className="text-xs text-brand-gold/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-pink-400 mb-1.5">Meta Description Generation Prompt</label>
+                                        <label className="block text-sm font-medium text-brand-gold mb-1.5">Meta Description Generation Prompt</label>
                                         <textarea
                                             value={currentProject.state.metaDescriptionPrompt || ''}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaDescriptionPrompt: e.target.value}))}
                                             rows={3}
-                                            className="w-full bg-slate-900 border border-pink-500/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-pink-500 transition-all resize-y"
+                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
                                             placeholder="Prompt for generating meta descriptions..."
                                         />
-                                        <p className="text-xs text-pink-400/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
+                                        <p className="text-xs text-brand-gold/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
                                     </div>
                                 </div>
                             </div>

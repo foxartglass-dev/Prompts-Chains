@@ -509,22 +509,17 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                   <h4 className="text-sm text-gray-400 mb-1">Client</h4>
                   <p className="text-white font-semibold">{selectedWebsite.client_name || 'No client'}</p>
                 </div>
-                <div className="bg-slate-800/50 rounded-xl p-5 border border-purple-500/30">
-                  <h4 className="text-sm text-gray-400 mb-1">WordPress Status</h4>
-                  <p className={`font-semibold ${selectedWebsite.wp_user ? 'text-green-400' : 'text-yellow-400'}`}>
-                    {selectedWebsite.wp_user ? 'Connected' : 'Not Configured'}
-                  </p>
-                </div>
-              </div>
-
-              {/* SEO Plugin Selection */}
-              <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-bold text-brand-cyan mb-2">SEO Plugin</h3>
-                    <p className="text-sm text-gray-400">Select which SEO plugin is installed on this WordPress site</p>
+                {/* WordPress Status + SEO Plugin combined */}
+                <div className="bg-slate-800/50 rounded-xl p-5 border border-purple-500/30 flex items-center gap-4">
+                  <div className="flex-shrink-0">
+                    <h4 className="text-sm text-gray-400 mb-1">WordPress</h4>
+                    <p className={`font-semibold text-sm ${selectedWebsite.wp_user ? 'text-green-400' : 'text-yellow-400'}`}>
+                      {selectedWebsite.wp_user ? 'Connected' : 'Not Set'}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="w-px h-10 bg-slate-600"></div>
+                  <div className="flex-1">
+                    <h4 className="text-sm text-gray-400 mb-1">SEO Plugin</h4>
                     <select
                       value={selectedWebsite.seo_plugin || 'aioseo'}
                       onChange={async (e) => {
@@ -542,19 +537,19 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                           if (res.ok) {
                             const data = await res.json();
                             setSelectedWebsite(data.website);
-                            fetchWebsites(); // Refresh list
+                            fetchWebsites();
                           }
                         } catch (error) {
                           console.error('Failed to update SEO plugin:', error);
                         }
                       }}
-                      className="bg-slate-900 border border-brand-cyan/50 rounded-lg px-4 py-2 text-white min-w-[200px]"
+                      className="bg-slate-900 border border-brand-cyan/50 rounded px-2 py-1 text-white text-sm w-full"
                     >
                       <option value="aioseo">All in One SEO</option>
                       <option value="yoast">Yoast SEO</option>
                       <option value="rankmath">Rank Math</option>
                       <option value="seopress">SEOPress</option>
-                      <option value="none">None / Manual</option>
+                      <option value="none">Direct to WP</option>
                     </select>
                   </div>
                 </div>
