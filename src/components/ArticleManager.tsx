@@ -833,13 +833,13 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
 
                 {/* Scrollable content wrapper */}
                 <div className="flex-1 overflow-y-auto">
-                  {/* Content area - expandable */}
-                  <div className={`p-4 transition-all ${expandedContent ? 'min-h-[60vh]' : 'max-h-48'}`}>
+                  {/* Content area - expandable with proper overflow control */}
+                  <div className={`p-4 transition-all border-b border-brand-cyan/30 ${expandedContent ? 'min-h-[60vh]' : 'max-h-48 overflow-hidden'}`}>
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-gray-500">Article Content</span>
                     <button
                       onClick={() => setExpandedContent(!expandedContent)}
-                      className="text-xs text-brand-cyan hover:text-brand-cyan-light flex items-center gap-1"
+                      className="text-xs text-brand-cyan hover:text-brand-cyan-light flex items-center gap-1 bg-slate-800 px-2 py-1 rounded"
                     >
                       {expandedContent ? (
                         <>
