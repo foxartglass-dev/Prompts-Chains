@@ -201,7 +201,61 @@ export async function pushMetaToSeoPlugin({
     // RANK MATH - Use post meta approach (most reliable)
     // Rank Math exposes these fields via REST API when "Headless CMS Support" is enabled
     if (seoPlugin === 'rankmath') {
-      console.log(`Pushing to Rank Math: ${baseUrl}/wp-json/wp/v2/${postType}/${postId}`);
+      const targetUrl = `${baseUrl}/wp-json/wp/v2/${postType}/${postId}`;
+      console.log(`Pushing to Rank Math: ${targetUrl}`);
+
+      // First, verify the page exists by doing a GET request
+      try {
+        const verifyResponse = await fetch(targetUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': authHeader
+          }
+        });
+
+        if (!verifyResponse.ok) {
+          console.log(`Page verification failed: ${verifyResponse.status}`);
+
+          // Try the other post type (posts vs pages)
+          const altPostType = postType === 'pages' ? 'posts' : 'pages';
+          const altUrl = `${baseUrl}/wp-json/wp/v2/${altPostType}/${postId}`;
+          console.log(`Trying alternate post type: ${altUrl}`);
+
+          const altResponse = await fetch(altUrl, {
+            method: 'GET',
+            headers: { 'Authorization': authHeader }
+          });
+
+          if (altResponse.ok) {
+            return {
+              success: false,
+              error: `Page ID ${postId} exists but as a "${altPostType.slice(0, -1)}" not a "${postType.slice(0, -1)}". The content was published as a ${altPostType.slice(0, -1)}. Try changing the post type setting.`
+            };
+          }
+
+          // Neither worked - check if REST API is accessible at all
+          const apiCheck = await fetch(`${baseUrl}/wp-json/wp/v2/`, {
+            headers: { 'Authorization': authHeader }
+          }).catch(() => null);
+
+          if (!apiCheck || !apiCheck.ok) {
+            return {
+              success: false,
+              error: `Cannot reach WordPress REST API at ${baseUrl}. Check that the REST API is not blocked by security plugins (Wordfence, Sucuri, etc.) or .htaccess rules.`
+            };
+          }
+
+          return {
+            success: false,
+            error: `WordPress ${postType.slice(0, -1)} not found (ID: ${postId}). Verified REST API is working. The page may have been deleted or the ID stored incorrectly.`
+          };
+        }
+
+        const pageData = await verifyResponse.json();
+        console.log(`Page verified: "${pageData.title?.rendered}" (status: ${pageData.status})`);
+      } catch (verifyErr) {
+        console.log('Page verification error:', verifyErr.message);
+      }
 
       // Primary approach: Post meta (works when Headless CMS Support is enabled)
       const metaPayload = {};
