@@ -865,7 +865,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                 </div>
 
                 {/* Meta SEO Selection Section */}
-                <div className="border-t border-brand-cyan/30 p-4 bg-gray-800/50">
+                <div className="border-t border-brand-cyan/30 p-4 pb-8 bg-gray-800/50">
                   {/* SEO Status Banner */}
                   {selectedArticle.meta_seo_status && (
                     <div className={`mb-4 p-2 rounded text-sm flex items-center justify-between ${

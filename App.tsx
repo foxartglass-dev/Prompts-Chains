@@ -11,6 +11,7 @@ import PinLock from './src/components/PinLock';
 import AgencyManager from './src/components/AgencyManager';
 import ArticleManager from './src/components/ArticleManager';
 import TemplateLibrary from './src/components/TemplateLibrary';
+import SaveTemplatePopup from './src/components/SaveTemplatePopup';
 import WorkflowNavigation from './src/components/WorkflowNavigation';
 import ClientsPage from './src/components/ClientsPage';
 import WebsitesPage from './src/components/WebsitesPage';
@@ -128,6 +129,7 @@ const App: React.FC = () => {
     const [isAgencyOpen, setIsAgencyOpen] = useState(false);
     const [isArticlesOpen, setIsArticlesOpen] = useState(false);
     const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+    const [showSaveTemplatePopup, setShowSaveTemplatePopup] = useState(false);
     const [isWorkflowNavOpen, setIsWorkflowNavOpen] = useState(false);
     const [isClientsOpen, setIsClientsOpen] = useState(false);
     const [isWebsitesOpen, setIsWebsitesOpen] = useState(false);
@@ -1461,6 +1463,33 @@ const App: React.FC = () => {
                     // Reload the current project to get updated data
                 }}
             />
+            {/* Save as Template Popup */}
+            {showSaveTemplatePopup && (
+                <SaveTemplatePopup
+                    isOpen={showSaveTemplatePopup}
+                    onClose={() => setShowSaveTemplatePopup(false)}
+                    currentState={currentProject.state}
+                    workflowName={currentWorkflowContext.workflowName || currentProject.name}
+                    onSave={async (templateData) => {
+                        try {
+                            const res = await fetch('/api/templates', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(templateData)
+                            });
+                            if (res.ok) {
+                                showNotification('Template saved!', 'success');
+                                setShowSaveTemplatePopup(false);
+                            } else {
+                                const err = await res.json();
+                                showNotification(err.error || 'Failed to save template', 'error');
+                            }
+                        } catch (error) {
+                            showNotification('Failed to save template', 'error');
+                        }
+                    }}
+                />
+            )}
             <WorkflowNavigation
                 isOpen={isWorkflowNavOpen}
                 onClose={() => setIsWorkflowNavOpen(false)}
@@ -1851,16 +1880,16 @@ const App: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Row 2: Filename + Import/Export */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {/* Row 2: Filename + Import/Export/Save Template */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div>
                                     <label className="block text-xs font-medium text-brand-gold mb-1">Filename Template</label>
                                     <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold" />
                                 </div>
-                                {/* Right side: Import/Export */}
-                                <div className="flex flex-col justify-end gap-2">
-                                    <label className="block text-xs font-medium text-brand-gold text-center">Import / Export Workflow</label>
-                                    <div className="flex gap-2">
+                                {/* Import/Export JSON */}
+                                <div className="flex flex-col justify-end gap-1">
+                                    <label className="block text-xs font-medium text-gray-400 text-center">Import / Export JSON</label>
+                                    <div className="flex gap-1">
                                         <button
                                             onClick={() => {
                                                 const exportData = {
@@ -1872,12 +1901,12 @@ const App: React.FC = () => {
                                                 downloadProjectConfig(exportData, filename);
                                                 showNotification('Workflow exported!', 'success');
                                             }}
-                                            className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold text-xs transition"
+                                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-xs transition"
                                         >
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                                             Export
                                         </button>
-                                        <label className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-slate-900 font-semibold text-xs transition cursor-pointer">
+                                        <label className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-xs transition cursor-pointer">
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                                             Import
                                             <input
@@ -1905,6 +1934,17 @@ const App: React.FC = () => {
                                             />
                                         </label>
                                     </div>
+                                </div>
+                                {/* Save as Template */}
+                                <div className="flex flex-col justify-end gap-1">
+                                    <label className="block text-xs font-medium text-gray-400 text-center">Save to Library</label>
+                                    <button
+                                        onClick={() => setShowSaveTemplatePopup(true)}
+                                        className="flex items-center justify-center gap-1 px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-dark rounded text-slate-900 font-medium text-xs transition"
+                                    >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                                        Save as Template
+                                    </button>
                                 </div>
                             </div>
 
