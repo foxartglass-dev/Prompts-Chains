@@ -180,9 +180,10 @@ function buildContainer(elements, options = {}) {
  * @returns {Object} Elementor container
  */
 function buildHeroSection(title, introChunk, options = {}) {
-  const { ctaText = 'Book Now!', ctaUrl = '#' } = options;
+  // CTA button disabled by default - set ctaText and ctaUrl in options to enable
+  const { ctaText = '', ctaUrl = '' } = options;
 
-  // Left side: Title + intro text + CTA button
+  // Left side: Title + intro text (+ optional CTA button)
   const leftElements = [];
 
   if (title) {
