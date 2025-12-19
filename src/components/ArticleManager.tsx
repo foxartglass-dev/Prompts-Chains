@@ -32,6 +32,8 @@ interface Article {
   workflow_state?: {
     wpTitleTemplate?: string;
     placeholders?: Array<{ key: string; value: string; tag?: string }>;
+    metaPublishMode?: 'draft' | 'wordpress';
+    articlePublishMode?: 'draft' | 'wordpress';
     [key: string]: unknown;
   };
   website_name?: string;
@@ -157,6 +159,38 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       fetchArticles();
     }
   }, [isOpen, filterByWebsite, filterByClient, filterByWorkflow, statusFilter]);
+
+  // Auto-select first AI-generated option when article changes (Draft mode pre-selection)
+  useEffect(() => {
+    if (selectedArticle) {
+      // Pre-select first meta title if available and not already selected
+      if (selectedArticle.meta_titles?.length > 0 && selectedTitleIndex === null) {
+        // If user already has a saved selection, use that
+        if (selectedArticle.selected_meta_title) {
+          const savedIndex = selectedArticle.meta_titles.indexOf(selectedArticle.selected_meta_title);
+          setSelectedTitleIndex(savedIndex >= 0 ? savedIndex : 0);
+        } else {
+          setSelectedTitleIndex(0);
+        }
+      }
+      // Pre-select first meta description if available and not already selected
+      if (selectedArticle.meta_descriptions?.length > 0 && selectedDescIndex === null) {
+        // If user already has a saved selection, use that
+        if (selectedArticle.selected_meta_description) {
+          const savedIndex = selectedArticle.meta_descriptions.indexOf(selectedArticle.selected_meta_description);
+          setSelectedDescIndex(savedIndex >= 0 ? savedIndex : 0);
+        } else {
+          setSelectedDescIndex(0);
+        }
+      }
+    } else {
+      // Reset when no article selected
+      setSelectedTitleIndex(null);
+      setSelectedDescIndex(null);
+      setCustomMetaTitle('');
+      setCustomMetaDesc('');
+    }
+  }, [selectedArticle?.id]);
 
   const fetchArticles = async () => {
     setLoading(true);
@@ -940,36 +974,38 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                             <span className="text-sm text-white">{title}</span>
                           </label>
                         ))}
-                        {/* Custom option */}
-                        <label
-                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
-                            selectedTitleIndex === -1
-                              ? 'bg-brand-gold/20 border-brand-gold'
-                              : 'bg-gray-800 border-transparent hover:border-brand-gold/50'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="metaTitle"
-                            checked={selectedTitleIndex === -1}
-                            onChange={() => setSelectedTitleIndex(-1)}
-                            className="mt-1 accent-yellow-500"
-                          />
-                          <div className="flex-1">
-                            <span className="text-sm text-brand-gold/70 block mb-1">Custom:</span>
+                        {/* Custom option - only show in Draft mode */}
+                        {selectedArticle.workflow_state?.metaPublishMode !== 'wordpress' && (
+                          <label
+                            className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
+                              selectedTitleIndex === -1
+                                ? 'bg-brand-gold/20 border-brand-gold'
+                                : 'bg-gray-800 border-transparent hover:border-brand-gold/50'
+                            }`}
+                          >
                             <input
-                              type="text"
-                              value={customMetaTitle}
-                              onChange={(e) => {
-                                setCustomMetaTitle(e.target.value);
-                                setSelectedTitleIndex(-1);
-                              }}
-                              placeholder="Enter custom meta title..."
-                              className="w-full bg-gray-900 border border-brand-gold/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-gold transition"
-                              onClick={() => setSelectedTitleIndex(-1)}
+                              type="radio"
+                              name="metaTitle"
+                              checked={selectedTitleIndex === -1}
+                              onChange={() => setSelectedTitleIndex(-1)}
+                              className="mt-1 accent-yellow-500"
                             />
-                          </div>
-                        </label>
+                            <div className="flex-1">
+                              <span className="text-sm text-brand-gold/70 block mb-1">Custom:</span>
+                              <input
+                                type="text"
+                                value={customMetaTitle}
+                                onChange={(e) => {
+                                  setCustomMetaTitle(e.target.value);
+                                  setSelectedTitleIndex(-1);
+                                }}
+                                placeholder="Enter custom meta title..."
+                                className="w-full bg-gray-900 border border-brand-gold/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-gold transition"
+                                onClick={() => setSelectedTitleIndex(-1)}
+                              />
+                            </div>
+                          </label>
+                        )}
                       </div>
                     </div>
 
@@ -1004,36 +1040,38 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                             <span className="text-sm text-white">{desc}</span>
                           </label>
                         ))}
-                        {/* Custom option */}
-                        <label
-                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
-                            selectedDescIndex === -1
-                              ? 'bg-brand-cyan/20 border-brand-cyan'
-                              : 'bg-gray-800 border-transparent hover:border-brand-cyan/50'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="metaDesc"
-                            checked={selectedDescIndex === -1}
-                            onChange={() => setSelectedDescIndex(-1)}
-                            className="mt-1 accent-cyan-500"
-                          />
-                          <div className="flex-1">
-                            <span className="text-sm text-brand-cyan/70 block mb-1">Custom:</span>
-                            <textarea
-                              value={customMetaDesc}
-                              onChange={(e) => {
-                                setCustomMetaDesc(e.target.value);
-                                setSelectedDescIndex(-1);
-                              }}
-                              placeholder="Enter custom meta description..."
-                              className="w-full bg-gray-900 border border-brand-cyan/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-cyan transition resize-none"
-                              rows={2}
-                              onClick={() => setSelectedDescIndex(-1)}
+                        {/* Custom option - only show in Draft mode */}
+                        {selectedArticle.workflow_state?.metaPublishMode !== 'wordpress' && (
+                          <label
+                            className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
+                              selectedDescIndex === -1
+                                ? 'bg-brand-cyan/20 border-brand-cyan'
+                                : 'bg-gray-800 border-transparent hover:border-brand-cyan/50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="metaDesc"
+                              checked={selectedDescIndex === -1}
+                              onChange={() => setSelectedDescIndex(-1)}
+                              className="mt-1 accent-cyan-500"
                             />
-                          </div>
-                        </label>
+                            <div className="flex-1">
+                              <span className="text-sm text-brand-cyan/70 block mb-1">Custom:</span>
+                              <textarea
+                                value={customMetaDesc}
+                                onChange={(e) => {
+                                  setCustomMetaDesc(e.target.value);
+                                  setSelectedDescIndex(-1);
+                                }}
+                                placeholder="Enter custom meta description..."
+                                className="w-full bg-gray-900 border border-brand-cyan/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-cyan transition resize-none"
+                                rows={2}
+                                onClick={() => setSelectedDescIndex(-1)}
+                              />
+                            </div>
+                          </label>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1064,8 +1102,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                       </button>
                     </div>
                     <div className="flex gap-3">
-                      {/* Show Save Selection when user has made a selection OR meta options exist */}
-                      {(selectedTitleIndex !== null || selectedDescIndex !== null ||
+                      {/* Show Save Selection only in Draft mode when user has made a selection OR meta options exist */}
+                      {selectedArticle.workflow_state?.metaPublishMode !== 'wordpress' &&
+                        (selectedTitleIndex !== null || selectedDescIndex !== null ||
                         (selectedArticle.meta_titles?.length > 0 || selectedArticle.meta_descriptions?.length > 0)) && (
                         <button
                           onClick={saveMetaSelection}
