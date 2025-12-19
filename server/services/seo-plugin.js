@@ -100,7 +100,109 @@ export async function pushMetaToSeoPlugin({
       };
     }
 
-    // For other plugins, use the meta field approach
+    // YOAST SEO - Try multiple approaches
+    // Note: Yoast's official REST API is read-only, so we try post meta directly
+    if (seoPlugin === 'yoast') {
+      console.log(`Pushing to Yoast: ${baseUrl}/wp-json/wp/v2/${postType}/${postId}`);
+
+      // Try setting post meta directly (requires meta fields to be registered)
+      const metaPayload = {};
+      if (metaTitle) metaPayload['_yoast_wpseo_title'] = metaTitle;
+      if (metaDescription) metaPayload['_yoast_wpseo_metadesc'] = metaDescription;
+
+      const response = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({ meta: metaPayload })
+      });
+
+      const responseData = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        return {
+          success: true,
+          message: `Meta sent to Yoast. Note: Yoast may require you to add code to functions.php to register these meta fields for REST API. If meta doesn't appear, check Yoast settings in the post editor.`,
+          postId: responseData.id,
+          link: responseData.link
+        };
+      }
+
+      // If meta approach failed, return helpful error
+      return {
+        success: false,
+        error: `Yoast API error: ${response.status}. Yoast's REST API is read-only by default. You may need to add register_post_meta() calls in functions.php, or use the Yoast SEO API Manager plugin.`
+      };
+    }
+
+    // RANK MATH - Try their internal API endpoint first
+    if (seoPlugin === 'rankmath') {
+      console.log(`Pushing to Rank Math: ${baseUrl}/wp-json/rankmath/v1/updateMeta`);
+
+      // First try Rank Math's internal updateMeta endpoint
+      try {
+        const rmResponse = await fetch(`${baseUrl}/wp-json/rankmath/v1/updateMeta`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader
+          },
+          body: JSON.stringify({
+            objectID: postId,
+            objectType: postType === 'pages' ? 'page' : 'post',
+            meta: {
+              rank_math_title: metaTitle || '',
+              rank_math_description: metaDescription || ''
+            }
+          })
+        });
+
+        if (rmResponse.ok) {
+          const rmData = await rmResponse.json().catch(() => ({}));
+          return {
+            success: true,
+            message: 'Meta pushed to Rank Math successfully via internal API',
+            data: rmData
+          };
+        }
+      } catch (rmErr) {
+        console.log('Rank Math internal API failed, trying post meta fallback:', rmErr.message);
+      }
+
+      // Fallback: Try post meta directly
+      const metaPayload = {};
+      if (metaTitle) metaPayload['rank_math_title'] = metaTitle;
+      if (metaDescription) metaPayload['rank_math_description'] = metaDescription;
+
+      const response = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({ meta: metaPayload })
+      });
+
+      const responseData = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        return {
+          success: true,
+          message: `Meta sent to Rank Math. Note: Make sure "Headless CMS Support" is enabled in Rank Math settings (Global Meta > Advanced). If meta doesn't appear, the fields may need to be registered.`,
+          postId: responseData.id,
+          link: responseData.link
+        };
+      }
+
+      return {
+        success: false,
+        error: `Rank Math API error: ${response.status}. Try enabling "Headless CMS Support" in Rank Math > Global Meta > Advanced settings, or install the Rank Math API Manager plugin.`
+      };
+    }
+
+    // For other plugins (SEOPress, etc.), use the generic meta field approach
     const metaFields = getMetaFieldNames(seoPlugin);
 
     if (!metaFields) {
@@ -132,24 +234,6 @@ export async function pushMetaToSeoPlugin({
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-
-      // Some SEO plugins require their own REST endpoints
-      // Try the plugin-specific endpoint as fallback
-      const fallbackResult = await tryPluginSpecificEndpoint({
-        baseUrl,
-        authHeader,
-        postId,
-        metaTitle,
-        metaDescription,
-        seoPlugin,
-        metaFields,
-        postType
-      });
-
-      if (fallbackResult.success) {
-        return fallbackResult;
-      }
-
       return {
         success: false,
         error: `WordPress API error: ${response.status} - ${errorData.message || 'Unknown error'}`
@@ -204,72 +288,6 @@ function getMetaFieldNames(seoPlugin) {
   };
 
   return pluginFields[seoPlugin] || null;
-}
-
-/**
- * Try plugin-specific REST endpoints as fallback
- * Some plugins expose their own API endpoints
- */
-async function tryPluginSpecificEndpoint({
-  baseUrl,
-  authHeader,
-  postId,
-  metaTitle,
-  metaDescription,
-  seoPlugin,
-  metaFields,
-  postType = 'pages'
-}) {
-  try {
-    // Yoast has a specific meta endpoint in newer versions
-    if (seoPlugin === 'yoast') {
-      // Try updating via post meta directly
-      const metaResponse = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({
-          yoast_head_json: {
-            title: metaTitle,
-            description: metaDescription
-          }
-        })
-      });
-
-      if (metaResponse.ok) {
-        return { success: true, message: 'Meta pushed via Yoast head JSON' };
-      }
-    }
-
-    // Rank Math has its own REST API
-    if (seoPlugin === 'rankmath') {
-      const rmResponse = await fetch(`${baseUrl}/wp-json/rankmath/v1/updateMeta`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({
-          objectID: postId,
-          objectType: 'post',
-          meta: {
-            rank_math_title: metaTitle,
-            rank_math_description: metaDescription
-          }
-        })
-      });
-
-      if (rmResponse.ok) {
-        return { success: true, message: 'Meta pushed via Rank Math API' };
-      }
-    }
-
-    return { success: false };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
 }
 
 /**
