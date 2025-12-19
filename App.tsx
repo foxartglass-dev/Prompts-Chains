@@ -2025,7 +2025,6 @@ const App: React.FC = () => {
                         <div className="space-y-3">
                             {/* Row 1: AI Models - Full Width */}
                             <div className="space-y-2">
-                                <p className="text-[10px] text-brand-gold mb-1">Test multiple models against the same workflow</p>
                                 <div className="grid grid-cols-3 gap-3">
                                     <div>
                                         <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 1</label>
@@ -2058,7 +2057,13 @@ const App: React.FC = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 2</label>
+                                        <label className="flex items-center justify-center gap-1 text-xs font-medium text-brand-gold mb-1">
+                                            AI Model 2
+                                            <span className="relative group cursor-help">
+                                                <svg className="w-3.5 h-3.5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 text-brand-gold text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity border border-brand-gold/50 z-50">Test 2 or 3 models against same workflow</span>
+                                            </span>
+                                        </label>
                                         <select
                                             value={currentProject.state.model2 || 'not-in-use'}
                                             onChange={e => setCurrentProjectState(p => ({...p, model2: e.target.value}))}
@@ -2089,7 +2094,13 @@ const App: React.FC = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 3</label>
+                                        <label className="flex items-center justify-center gap-1 text-xs font-medium text-brand-gold mb-1">
+                                            AI Model 3
+                                            <span className="relative group cursor-help">
+                                                <svg className="w-3.5 h-3.5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 text-brand-gold text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity border border-brand-gold/50 z-50">Test 2 or 3 models against same workflow</span>
+                                            </span>
+                                        </label>
                                         <select
                                             value={currentProject.state.model3 || 'not-in-use'}
                                             onChange={e => setCurrentProjectState(p => ({...p, model3: e.target.value}))}
@@ -2281,23 +2292,26 @@ const App: React.FC = () => {
                     , true)}
                     
                     {renderSection('Publishing to WordPress', 'wordpress', <Icon type="upload" className="h-6 w-6"/>,
-                        <div className="space-y-4 p-4 bg-slate-800/50 border border-brand-cyan/30 rounded-lg">
-                            <p className="text-xs text-gray-400 mb-2">WordPress Admin Credentials</p>
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-semibold text-brand-gold mb-4 flex items-center gap-2">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                                WordPress Admin Credentials
+                            </h3>
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
-                                    <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">Content Type</label>
-                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all">
+                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all">
                                         <option value="pages">Page</option>
                                         <option value="posts">Post</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Article</label>
-                                    <div className="flex rounded-lg overflow-hidden border border-brand-gold/50">
+                                    <div className="flex rounded-lg overflow-hidden border-2 border-brand-gold">
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'draft'}))}
@@ -2324,7 +2338,7 @@ const App: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Meta Options</label>
-                                    <div className="flex rounded-lg overflow-hidden border border-brand-gold/50">
+                                    <div className="flex rounded-lg overflow-hidden border-2 border-brand-gold">
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'draft'}))}
@@ -2356,7 +2370,7 @@ const App: React.FC = () => {
                                     type="text"
                                     value={currentProject.state.wpTitleTemplate}
                                     onChange={e => setCurrentProjectState(p => ({...p, wpTitleTemplate: e.target.value}))}
-                                    className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                    className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                 />
                                 <p className="text-xs text-brand-gold/70 mt-1">
                                     Use variables like {'<item_name>'} or {'{city}'}.
@@ -2365,11 +2379,11 @@ const App: React.FC = () => {
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Username</label>
-                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials.user} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, user: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials.user} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, user: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WP Application Password</label>
-                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials.password} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, password: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials.password} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, password: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                             </div>
                             <p className="text-xs text-brand-gold/70">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
@@ -2447,7 +2461,7 @@ const App: React.FC = () => {
                                 <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-gold transition-all"/>
                                 <button onClick={addTag} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-white font-semibold transition">Add</button>
                             </div>
-                            <div className="flex flex-wrap gap-2">{currentProject.state.tags.map(t => (<div key={t.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-brand-gold"><span>{t.name}</span><button onClick={() => removeTag(t.id)} className="text-brand-gold/60 hover:text-white transition"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>))}</div>
+                            <div className="flex flex-wrap gap-2">{currentProject.state.tags.map(t => (<div key={t.id} className="bg-brand-cyan/20 border border-brand-cyan/50 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-brand-cyan"><span>{t.name}</span><button onClick={() => removeTag(t.id)} className="text-brand-cyan/60 hover:text-white transition"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>))}</div>
                         </div>
                      )}
 
@@ -2686,14 +2700,14 @@ const App: React.FC = () => {
                                     </div>
                                     <div className="flex items-center justify-between text-xs text-brand-gold">
                                         <div className="flex items-center gap-3">
-                                            <label className="flex items-center gap-1.5 cursor-pointer group">
+                                            <label className="flex items-center gap-2 cursor-pointer group">
                                                 <input
                                                     type="checkbox"
                                                     checked={prompt.generateMetaFromOutput || false}
                                                     onChange={e => handleUpdatePrompt(prompt.id, 'generateMetaFromOutput', e.target.checked)}
-                                                    className="w-3.5 h-3.5 rounded border-pink-500/50 text-pink-500 focus:ring-pink-500 bg-slate-900"
+                                                    className="w-4 h-4 rounded border-2 border-brand-gold text-brand-gold focus:ring-brand-gold bg-slate-900 accent-brand-gold"
                                                 />
-                                                <span className="text-pink-400 group-hover:text-pink-300 transition">Generate Meta SEO</span>
+                                                <span className="text-brand-gold font-semibold text-sm group-hover:text-brand-gold-light transition">Generate Meta SEO</span>
                                             </label>
                                         </div>
                                         <div>
