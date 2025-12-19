@@ -1692,8 +1692,12 @@ const App: React.FC = () => {
                                 <circle cx="38" cy="6" r="3" fill="#F5A623"/>
                             </svg>
                             <div>
-                                <h1 className="text-xl md:text-2xl font-bold">
+                                <h1 className="text-xl md:text-2xl font-bold flex items-center">
                                     <span className="text-brand-cyan">Prompt</span><span className="text-brand-gold">Flow</span>
+                                    <svg className="w-5 h-5 md:w-6 md:h-6 ml-1 text-brand-gold" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M7 17L17 7" />
+                                        <path d="M10 7L17 7L17 14" />
+                                    </svg>
                                 </h1>
                                 <p className="text-[10px] md:text-xs text-slate-400">Advanced Workflow Automator</p>
                             </div>
