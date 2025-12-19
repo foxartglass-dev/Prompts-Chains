@@ -1776,61 +1776,55 @@ const App: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Default Workflow Selector - Between logo and nav */}
-                    <div className="hidden md:flex items-center gap-3 relative">
-                        {/* Separator line */}
-                        <div className="h-10 w-px bg-brand-gold/50"></div>
-
-                        {/* Current default display */}
-                        <div className="text-sm">
-                            <span className="text-brand-gold font-medium">Default</span>
-                            <span className="text-slate-500 mx-2">|</span>
-                            {defaultWorkflow ? (
-                                <span className="text-brand-cyan">
-                                    {defaultWorkflow.clientName || 'Personal'} - {defaultWorkflow.websiteName || 'N/A'} - {defaultWorkflow.workflowName}
-                                </span>
-                            ) : (
-                                <span className="text-slate-500 italic">None set</span>
-                            )}
-                        </div>
-
-                        {/* Default button */}
-                        <button
-                            onClick={() => setIsDefaultSelectorOpen(!isDefaultSelectorOpen)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                                defaultWorkflow
-                                    ? 'bg-brand-gold/20 text-brand-gold border border-brand-gold hover:bg-brand-gold/30'
-                                    : 'bg-slate-700 text-slate-300 border border-slate-600 hover:bg-slate-600'
-                            }`}
-                            title="Set default workflow for auto-load on startup"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                            </svg>
-                            Default
-                            <svg className={`w-3 h-3 transition-transform ${isDefaultSelectorOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </button>
-
-                        {/* Dropdown selector */}
-                        <DefaultWorkflowSelector
-                            isOpen={isDefaultSelectorOpen}
-                            onClose={() => setIsDefaultSelectorOpen(false)}
-                            currentDefault={defaultWorkflow}
-                            onSetDefault={(config) => {
-                                setDefaultWorkflow(config);
-                                if (config) {
-                                    showNotification(`Default workflow set: ${config.workflowName}`, 'success');
-                                } else {
-                                    showNotification('Default workflow cleared', 'info');
-                                }
-                            }}
-                        />
-                    </div>
-
                     {/* Navigation Buttons - Grid on mobile (4 columns), flex on desktop */}
                     <div className="grid grid-cols-4 gap-1.5 sm:gap-2 md:flex md:gap-2 md:flex-wrap justify-center md:justify-end">
+                        {/* Default Workflow Button - looks like other nav buttons */}
+                        <div className="relative hidden md:block">
+                            <button
+                                onClick={() => setIsDefaultSelectorOpen(!isDefaultSelectorOpen)}
+                                className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                                title="Set default workflow for auto-load on startup"
+                            >
+                                <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                                </svg>
+                                {defaultWorkflow ? (
+                                    <span className="text-[10px] md:text-sm flex items-center gap-1">
+                                        <span className="text-brand-gold">Default</span>
+                                        <span className="text-slate-500">|</span>
+                                        <span className="text-brand-cyan">{(defaultWorkflow.clientName || 'Personal').slice(0, 20)}{(defaultWorkflow.clientName || '').length > 20 ? '...' : ''}</span>
+                                        <span className="text-slate-500">-</span>
+                                        <span className="text-brand-gold">{(() => {
+                                            const url = defaultWorkflow.websiteName || 'N/A';
+                                            const clean = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+                                            return clean.slice(0, 30) + (clean.length > 30 ? '...' : '');
+                                        })()}</span>
+                                        <span className="text-slate-500">-</span>
+                                        <span className="text-brand-gold">{defaultWorkflow.workflowName.slice(0, 20)}{defaultWorkflow.workflowName.length > 20 ? '...' : ''}</span>
+                                    </span>
+                                ) : (
+                                    <span className="text-[10px] md:text-sm">Default</span>
+                                )}
+                                <svg className={`h-3 w-3 md:h-4 md:w-4 text-brand-cyan ml-1 transition-transform ${isDefaultSelectorOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
+                            {/* Dropdown selector */}
+                            <DefaultWorkflowSelector
+                                isOpen={isDefaultSelectorOpen}
+                                onClose={() => setIsDefaultSelectorOpen(false)}
+                                currentDefault={defaultWorkflow}
+                                onSetDefault={(config) => {
+                                    setDefaultWorkflow(config);
+                                    if (config) {
+                                        showNotification(`Default workflow set: ${config.workflowName}`, 'success');
+                                    } else {
+                                        showNotification('Default workflow cleared', 'info');
+                                    }
+                                }}
+                            />
+                        </div>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsWorkflowNavOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsAgencyOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
