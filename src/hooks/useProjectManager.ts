@@ -138,7 +138,7 @@ const initialProjectState: ProjectState = {
   model3: 'not-in-use',
   fileNameTemplate: '{tag}-{item_name}-output',
   wpCredentials: { url: '', user: '', password: '' },
-  wpContentType: 'posts',
+  wpContentType: 'pages',
   wpTitleTemplate: 'An Introduction to {item_name}',
   tags: initialTags,
   placeholders: initialPlaceholders,
