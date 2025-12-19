@@ -168,56 +168,42 @@ export async function pushMetaToSeoPlugin({
       const responseData = await response.json().catch(() => ({}));
 
       if (response.ok) {
+        // Check if meta was actually saved by looking at the response
+        const metaSaved = responseData.meta &&
+          (responseData.meta._yoast_wpseo_title || responseData.meta._yoast_wpseo_metadesc);
+
+        if (metaSaved) {
+          return {
+            success: true,
+            message: `Meta pushed to Yoast SEO successfully.`,
+            postId: responseData.id,
+            link: responseData.link
+          };
+        }
+
+        // Request succeeded but meta may not have been saved
         return {
           success: true,
-          message: `Meta sent to Yoast. Note: Yoast may require you to add code to functions.php to register these meta fields for REST API. If meta doesn't appear, check Yoast settings in the post editor.`,
+          message: `Request sent to WordPress. Note: Yoast requires registering meta fields in functions.php for REST API access. Add this code:\n\nadd_action('init', function() {\n  register_post_meta('page', '_yoast_wpseo_title', ['show_in_rest' => true, 'single' => true, 'type' => 'string']);\n  register_post_meta('page', '_yoast_wpseo_metadesc', ['show_in_rest' => true, 'single' => true, 'type' => 'string']);\n});`,
           postId: responseData.id,
-          link: responseData.link
+          link: responseData.link,
+          requiresSetup: true
         };
       }
 
       // If meta approach failed, return helpful error
       return {
         success: false,
-        error: `Yoast API error: ${response.status}. Yoast's REST API is read-only by default. You may need to add register_post_meta() calls in functions.php, or use the Yoast SEO API Manager plugin.`
+        error: `Yoast API error: ${response.status}. Yoast's REST API is read-only by default. Add register_post_meta() calls in functions.php to enable writing.`
       };
     }
 
-    // RANK MATH - Try their internal API endpoint first
+    // RANK MATH - Use post meta approach (most reliable)
+    // Rank Math exposes these fields via REST API when "Headless CMS Support" is enabled
     if (seoPlugin === 'rankmath') {
-      console.log(`Pushing to Rank Math: ${baseUrl}/wp-json/rankmath/v1/updateMeta`);
+      console.log(`Pushing to Rank Math: ${baseUrl}/wp-json/wp/v2/${postType}/${postId}`);
 
-      // First try Rank Math's internal updateMeta endpoint
-      try {
-        const rmResponse = await fetch(`${baseUrl}/wp-json/rankmath/v1/updateMeta`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': authHeader
-          },
-          body: JSON.stringify({
-            objectID: postId,
-            objectType: postType === 'pages' ? 'page' : 'post',
-            meta: {
-              rank_math_title: metaTitle || '',
-              rank_math_description: metaDescription || ''
-            }
-          })
-        });
-
-        if (rmResponse.ok) {
-          const rmData = await rmResponse.json().catch(() => ({}));
-          return {
-            success: true,
-            message: 'Meta pushed to Rank Math successfully via internal API',
-            data: rmData
-          };
-        }
-      } catch (rmErr) {
-        console.log('Rank Math internal API failed, trying post meta fallback:', rmErr.message);
-      }
-
-      // Fallback: Try post meta directly
+      // Primary approach: Post meta (works when Headless CMS Support is enabled)
       const metaPayload = {};
       if (metaTitle) metaPayload['rank_math_title'] = metaTitle;
       if (metaDescription) metaPayload['rank_math_description'] = metaDescription;
@@ -234,25 +220,120 @@ export async function pushMetaToSeoPlugin({
       const responseData = await response.json().catch(() => ({}));
 
       if (response.ok) {
+        // Check if meta was actually saved
+        const metaSaved = responseData.meta &&
+          (responseData.meta.rank_math_title || responseData.meta.rank_math_description);
+
+        if (metaSaved) {
+          return {
+            success: true,
+            message: `Meta pushed to Rank Math successfully.`,
+            postId: responseData.id,
+            link: responseData.link
+          };
+        }
+
+        // Request succeeded but meta may not have been saved - try internal API as fallback
+        console.log('Post meta may not have saved, trying Rank Math internal API...');
+        try {
+          const rmResponse = await fetch(`${baseUrl}/wp-json/rankmath/v1/updateMeta`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authHeader
+            },
+            body: JSON.stringify({
+              objectID: parseInt(postId),
+              objectType: postType === 'pages' ? 'page' : 'post',
+              meta: {
+                rank_math_title: metaTitle || '',
+                rank_math_description: metaDescription || ''
+              }
+            })
+          });
+
+          if (rmResponse.ok) {
+            return {
+              success: true,
+              message: 'Meta pushed to Rank Math via internal API.',
+              postId: responseData.id,
+              link: responseData.link
+            };
+          }
+        } catch (rmErr) {
+          console.log('Rank Math internal API also failed:', rmErr.message);
+        }
+
+        // Neither worked - return with setup instructions
         return {
           success: true,
-          message: `Meta sent to Rank Math. Note: Make sure "Headless CMS Support" is enabled in Rank Math settings (Global Meta > Advanced). If meta doesn't appear, the fields may need to be registered.`,
+          message: `Request sent to WordPress. For Rank Math REST API support:\n1. Go to Rank Math > General Settings > Others\n2. Enable "Headless CMS Support"\n3. Save changes and try again.`,
           postId: responseData.id,
-          link: responseData.link
+          link: responseData.link,
+          requiresSetup: true
         };
       }
 
       return {
         success: false,
-        error: `Rank Math API error: ${response.status}. Try enabling "Headless CMS Support" in Rank Math > Global Meta > Advanced settings, or install the Rank Math API Manager plugin.`
+        error: `Rank Math API error: ${response.status}. Enable "Headless CMS Support" in Rank Math > General Settings > Others.`
       };
     }
 
-    // For other plugins (SEOPress, etc.), use the generic meta field approach
+    // SEOPRESS - Uses specific meta fields
+    if (seoPlugin === 'seopress') {
+      console.log(`Pushing to SEOPress: ${baseUrl}/wp-json/wp/v2/${postType}/${postId}`);
+
+      const metaPayload = {};
+      if (metaTitle) metaPayload['_seopress_titles_title'] = metaTitle;
+      if (metaDescription) metaPayload['_seopress_titles_desc'] = metaDescription;
+
+      const response = await fetch(`${baseUrl}/wp-json/wp/v2/${postType}/${postId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({ meta: metaPayload })
+      });
+
+      const responseData = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        // Check if meta was saved
+        const metaSaved = responseData.meta &&
+          (responseData.meta._seopress_titles_title || responseData.meta._seopress_titles_desc);
+
+        if (metaSaved) {
+          return {
+            success: true,
+            message: `Meta pushed to SEOPress successfully.`,
+            postId: responseData.id,
+            link: responseData.link
+          };
+        }
+
+        // Request succeeded but meta may need REST API enabled
+        return {
+          success: true,
+          message: `Request sent to WordPress. If meta doesn't appear in SEOPress:\n1. Go to SEOPress > Advanced\n2. Ensure REST API is enabled\n3. Check that meta fields are exposed to REST API.`,
+          postId: responseData.id,
+          link: responseData.link,
+          requiresSetup: true
+        };
+      }
+
+      return {
+        success: false,
+        error: `SEOPress API error: ${response.status}. Check that SEOPress REST API is enabled in SEOPress > Advanced.`
+      };
+    }
+
+    // For any other/unknown plugins, use the generic meta field approach
     const metaFields = getMetaFieldNames(seoPlugin);
 
     if (!metaFields) {
-      return { success: false, error: `Unsupported SEO plugin: ${seoPlugin}` };
+      return { success: false, error: `Unsupported SEO plugin: ${seoPlugin}. Supported plugins: yoast, rankmath, aioseo, seopress, none` };
     }
 
     // Build the meta update payload
@@ -395,15 +476,40 @@ export async function detectSeoPlugin({ wpUrl, wpUser, wpPassword }) {
 }
 
 /**
- * Get the list of supported SEO plugins
+ * Get the list of supported SEO plugins with setup requirements
  */
 export function getSupportedPlugins() {
   return [
-    { id: 'aioseo', name: 'All in One SEO', description: 'Comprehensive SEO toolkit (default)' },
-    { id: 'yoast', name: 'Yoast SEO', description: 'Most popular WordPress SEO plugin' },
-    { id: 'rankmath', name: 'Rank Math', description: 'Feature-rich SEO plugin' },
-    { id: 'seopress', name: 'SEOPress', description: 'Lightweight SEO plugin' },
-    { id: 'none', name: 'None / Manual', description: 'No automatic SEO pushing' }
+    {
+      id: 'aioseo',
+      name: 'All in One SEO',
+      description: 'Requires Plus/Pro/Elite for REST API',
+      setupNotes: 'AIOSEO REST API requires a paid version (Plus, Pro, or Elite). Free version will not receive API updates.'
+    },
+    {
+      id: 'yoast',
+      name: 'Yoast SEO',
+      description: 'Requires functions.php code',
+      setupNotes: 'Add register_post_meta() calls to functions.php to enable REST API writing for Yoast meta fields.'
+    },
+    {
+      id: 'rankmath',
+      name: 'Rank Math',
+      description: 'Enable "Headless CMS Support"',
+      setupNotes: 'Go to Rank Math > General Settings > Others and enable "Headless CMS Support".'
+    },
+    {
+      id: 'seopress',
+      name: 'SEOPress',
+      description: 'Enable REST API in settings',
+      setupNotes: 'Check SEOPress > Advanced to ensure REST API is enabled.'
+    },
+    {
+      id: 'none',
+      name: 'Direct to WP',
+      description: 'Uses excerpt field for description',
+      setupNotes: 'Saves meta title to custom field and description to WordPress excerpt. Some themes use excerpt as meta description.'
+    }
   ];
 }
 
