@@ -198,12 +198,49 @@ export async function pushMetaToSeoPlugin({
       };
     }
 
-    // RANK MATH - Use post meta approach (most reliable)
-    // Rank Math exposes these fields via REST API when "Headless CMS Support" is enabled
+    // RANK MATH - Use Rank Math API Manager plugin endpoint (most reliable)
+    // Plugin: https://github.com/Devora-AS/rank-math-api-manager
     if (seoPlugin === 'rankmath') {
-      console.log(`Pushing to Rank Math: ${baseUrl}/wp-json/wp/v2/${postType}/${postId}`);
+      console.log('Pushing to Rank Math via API Manager plugin...');
 
-      // Primary approach: Post meta (works when Headless CMS Support is enabled)
+      // PRIMARY: Use Rank Math API Manager plugin endpoint (form-urlencoded)
+      // This plugin properly registers the meta fields and handles the update
+      try {
+        const formData = new URLSearchParams();
+        formData.append('post_id', postId.toString());
+        if (metaTitle) formData.append('rank_math_title', metaTitle);
+        if (metaDescription) formData.append('rank_math_description', metaDescription);
+
+        const apiManagerResponse = await fetch(`${baseUrl}/wp-json/rank-math-api/v1/update-meta`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': authHeader
+          },
+          body: formData.toString()
+        });
+
+        if (apiManagerResponse.ok) {
+          const result = await apiManagerResponse.json().catch(() => ({}));
+          console.log('Rank Math API Manager success:', result);
+          return {
+            success: true,
+            message: 'Meta pushed to Rank Math successfully via API Manager plugin.',
+            postId: postId
+          };
+        }
+
+        // If API Manager endpoint doesn't exist (404), fall back to other methods
+        if (apiManagerResponse.status !== 404) {
+          const errorData = await apiManagerResponse.json().catch(() => ({}));
+          console.log('Rank Math API Manager failed:', apiManagerResponse.status, errorData);
+        }
+      } catch (apiErr) {
+        console.log('Rank Math API Manager not available, trying fallbacks...', apiErr.message);
+      }
+
+      // FALLBACK 1: WordPress REST API with meta fields
+      console.log('Trying WordPress REST API with meta fields...');
       const metaPayload = {};
       if (metaTitle) metaPayload['rank_math_title'] = metaTitle;
       if (metaDescription) metaPayload['rank_math_description'] = metaDescription;
@@ -233,7 +270,7 @@ export async function pushMetaToSeoPlugin({
           };
         }
 
-        // Request succeeded but meta may not have been saved - try internal API as fallback
+        // FALLBACK 2: Rank Math internal API
         console.log('Post meta may not have saved, trying Rank Math internal API...');
         try {
           const rmResponse = await fetch(`${baseUrl}/wp-json/rankmath/v1/updateMeta`, {
@@ -264,19 +301,32 @@ export async function pushMetaToSeoPlugin({
           console.log('Rank Math internal API also failed:', rmErr.message);
         }
 
-        // Neither worked - return with setup instructions
         return {
           success: true,
-          message: `Request sent to WordPress. For Rank Math REST API support:\n1. Go to Rank Math > General Settings > Others\n2. Enable "Headless CMS Support"\n3. Save changes and try again.`,
+          message: `Meta sent to Rank Math. If meta doesn't appear, ensure the Rank Math API Manager plugin is installed and activated.`,
           postId: responseData.id,
-          link: responseData.link,
-          requiresSetup: true
+          link: responseData.link
+        };
+      }
+
+      // Response NOT ok - provide specific error based on status code
+      if (response.status === 404) {
+        return {
+          success: false,
+          error: `WordPress page/post not found (ID: ${postId}). The page may have been deleted or the post type may be wrong. Check that the page exists in WordPress.`
+        };
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return {
+          success: false,
+          error: `Authentication failed (${response.status}). Check your WordPress username and app password.`
         };
       }
 
       return {
         success: false,
-        error: `Rank Math API error: ${response.status}. Enable "Headless CMS Support" in Rank Math > General Settings > Others.`
+        error: `Rank Math API error: ${response.status} - ${responseData.message || 'Unknown error'}. Ensure the Rank Math API Manager plugin is installed.`
       };
     }
 

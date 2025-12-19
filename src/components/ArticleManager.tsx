@@ -32,6 +32,8 @@ interface Article {
   workflow_state?: {
     wpTitleTemplate?: string;
     placeholders?: Array<{ key: string; value: string; tag?: string }>;
+    metaPublishMode?: 'draft' | 'wordpress';
+    articlePublishMode?: 'draft' | 'wordpress';
     [key: string]: unknown;
   };
   website_name?: string;
@@ -96,7 +98,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
   const [pushingSeo, setPushingSeo] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [expandedContent, setExpandedContent] = useState(false);
-  const [localSeoPlugin, setLocalSeoPlugin] = useState<string>('aioseo');
+  const [localSeoPlugin, setLocalSeoPlugin] = useState<string>('rankmath');
   const [showSEOGuide, setShowSEOGuide] = useState(false);
 
   // Helper to strip tag suffix like "(H)" from item names
@@ -104,13 +106,22 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
     return name.replace(/\s*\([^)]+\)\s*$/, '').trim();
   };
 
-  // Fill a simple template with data (supports <angle brackets> syntax)
+  // Fill a simple template with data (supports both <angle brackets> and {curly braces} syntax)
   const fillSimpleTemplate = (template: string, data: Record<string, string | null | undefined>): string => {
-    return template.replace(/<([^<>]+)>/g, (match, key) => {
+    let result = template;
+    // First pass: handle <angle brackets>
+    result = result.replace(/<([^<>]+)>/g, (match, key) => {
       const trimmedKey = key.trim();
       const value = data[trimmedKey];
       return value !== null && value !== undefined ? String(value) : match;
     });
+    // Second pass: handle {curly braces}
+    result = result.replace(/{([^{}]+)}/g, (match, key) => {
+      const trimmedKey = key.trim();
+      const value = data[trimmedKey];
+      return value !== null && value !== undefined ? String(value) : match;
+    });
+    return result;
   };
 
   // Generate the page title from template or fall back to keyword
@@ -148,6 +159,38 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       fetchArticles();
     }
   }, [isOpen, filterByWebsite, filterByClient, filterByWorkflow, statusFilter]);
+
+  // Auto-select first AI-generated option when article changes (Draft mode pre-selection)
+  useEffect(() => {
+    if (selectedArticle) {
+      // Pre-select first meta title if available and not already selected
+      if (selectedArticle.meta_titles?.length > 0 && selectedTitleIndex === null) {
+        // If user already has a saved selection, use that
+        if (selectedArticle.selected_meta_title) {
+          const savedIndex = selectedArticle.meta_titles.indexOf(selectedArticle.selected_meta_title);
+          setSelectedTitleIndex(savedIndex >= 0 ? savedIndex : 0);
+        } else {
+          setSelectedTitleIndex(0);
+        }
+      }
+      // Pre-select first meta description if available and not already selected
+      if (selectedArticle.meta_descriptions?.length > 0 && selectedDescIndex === null) {
+        // If user already has a saved selection, use that
+        if (selectedArticle.selected_meta_description) {
+          const savedIndex = selectedArticle.meta_descriptions.indexOf(selectedArticle.selected_meta_description);
+          setSelectedDescIndex(savedIndex >= 0 ? savedIndex : 0);
+        } else {
+          setSelectedDescIndex(0);
+        }
+      }
+    } else {
+      // Reset when no article selected
+      setSelectedTitleIndex(null);
+      setSelectedDescIndex(null);
+      setCustomMetaTitle('');
+      setCustomMetaDesc('');
+    }
+  }, [selectedArticle?.id]);
 
   const fetchArticles = async () => {
     setLoading(true);
@@ -215,8 +258,11 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
         setCustomMetaDesc('');
       }
 
-      // Set local SEO plugin from article's website
-      setLocalSeoPlugin(article.seo_plugin || 'aioseo');
+      // Set local SEO plugin from article's website (only on initial load, not refresh)
+      // Check if we're loading a different article
+      if (!selectedArticle || selectedArticle.id !== article.id) {
+        setLocalSeoPlugin(article.seo_plugin || 'rankmath');
+      }
     } catch (err) {
       setError('Failed to fetch article');
     } finally {
@@ -474,7 +520,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
           metaTitle,
           metaDescription: metaDesc,
           seoPlugin: localSeoPlugin,
-          postType: wpContentType
+          postType: 'pages' // Elementor always creates pages, not posts
         })
       });
 
@@ -492,9 +538,15 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
           })
         });
 
+        // Save current plugin selection before refresh (closure issue workaround)
+        const currentPlugin = localSeoPlugin;
+
         // Refresh article to show updated status
-        fetchArticle(selectedArticle.id);
+        await fetchArticle(selectedArticle.id);
         fetchArticles();
+
+        // Restore plugin selection after refresh
+        setLocalSeoPlugin(currentPlugin);
       } else {
         setError(data.error || 'Failed to push to SEO plugin');
       }
@@ -824,13 +876,13 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
 
                 {/* Scrollable content wrapper */}
                 <div className="flex-1 overflow-y-auto">
-                  {/* Content area - expandable */}
-                  <div className={`p-4 transition-all ${expandedContent ? 'min-h-[60vh]' : 'max-h-48'}`}>
+                  {/* Content area - expandable with proper overflow control */}
+                  <div className={`p-4 transition-all border-b border-brand-cyan/30 ${expandedContent ? 'min-h-[60vh]' : 'max-h-48 overflow-hidden'}`}>
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-xs text-gray-500">Article Content</span>
                     <button
                       onClick={() => setExpandedContent(!expandedContent)}
-                      className="text-xs text-brand-cyan hover:text-brand-cyan-light flex items-center gap-1"
+                      className="text-xs text-brand-cyan hover:text-brand-cyan-light flex items-center gap-1 bg-slate-800 px-2 py-1 rounded"
                     >
                       {expandedContent ? (
                         <>
@@ -869,7 +921,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                   </div>
 
                   {/* Meta SEO Selection Section */}
-                  <div className="border-t border-brand-cyan/30 p-4 pb-24 bg-gray-800/50">
+                  <div className="border-t-2 border-brand-cyan/50 p-4 pb-24 mt-6 bg-gray-800/50">
                   {/* SEO Status Banner */}
                   {selectedArticle.meta_seo_status && (
                     <div className={`mb-4 p-2 rounded text-sm flex items-center justify-between ${
@@ -922,36 +974,38 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                             <span className="text-sm text-white">{title}</span>
                           </label>
                         ))}
-                        {/* Custom option */}
-                        <label
-                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
-                            selectedTitleIndex === -1
-                              ? 'bg-brand-gold/20 border-brand-gold'
-                              : 'bg-gray-800 border-transparent hover:border-brand-gold/50'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="metaTitle"
-                            checked={selectedTitleIndex === -1}
-                            onChange={() => setSelectedTitleIndex(-1)}
-                            className="mt-1 accent-yellow-500"
-                          />
-                          <div className="flex-1">
-                            <span className="text-sm text-brand-gold/70 block mb-1">Custom:</span>
+                        {/* Custom option - only show in Draft mode */}
+                        {selectedArticle.workflow_state?.metaPublishMode !== 'wordpress' && (
+                          <label
+                            className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
+                              selectedTitleIndex === -1
+                                ? 'bg-brand-gold/20 border-brand-gold'
+                                : 'bg-gray-800 border-transparent hover:border-brand-gold/50'
+                            }`}
+                          >
                             <input
-                              type="text"
-                              value={customMetaTitle}
-                              onChange={(e) => {
-                                setCustomMetaTitle(e.target.value);
-                                setSelectedTitleIndex(-1);
-                              }}
-                              placeholder="Enter custom meta title..."
-                              className="w-full bg-gray-900 border border-brand-gold/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-gold transition"
-                              onClick={() => setSelectedTitleIndex(-1)}
+                              type="radio"
+                              name="metaTitle"
+                              checked={selectedTitleIndex === -1}
+                              onChange={() => setSelectedTitleIndex(-1)}
+                              className="mt-1 accent-yellow-500"
                             />
-                          </div>
-                        </label>
+                            <div className="flex-1">
+                              <span className="text-sm text-brand-gold/70 block mb-1">Custom:</span>
+                              <input
+                                type="text"
+                                value={customMetaTitle}
+                                onChange={(e) => {
+                                  setCustomMetaTitle(e.target.value);
+                                  setSelectedTitleIndex(-1);
+                                }}
+                                placeholder="Enter custom meta title..."
+                                className="w-full bg-gray-900 border border-brand-gold/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-gold transition"
+                                onClick={() => setSelectedTitleIndex(-1)}
+                              />
+                            </div>
+                          </label>
+                        )}
                       </div>
                     </div>
 
@@ -986,42 +1040,44 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                             <span className="text-sm text-white">{desc}</span>
                           </label>
                         ))}
-                        {/* Custom option */}
-                        <label
-                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
-                            selectedDescIndex === -1
-                              ? 'bg-brand-cyan/20 border-brand-cyan'
-                              : 'bg-gray-800 border-transparent hover:border-brand-cyan/50'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="metaDesc"
-                            checked={selectedDescIndex === -1}
-                            onChange={() => setSelectedDescIndex(-1)}
-                            className="mt-1 accent-cyan-500"
-                          />
-                          <div className="flex-1">
-                            <span className="text-sm text-brand-cyan/70 block mb-1">Custom:</span>
-                            <textarea
-                              value={customMetaDesc}
-                              onChange={(e) => {
-                                setCustomMetaDesc(e.target.value);
-                                setSelectedDescIndex(-1);
-                              }}
-                              placeholder="Enter custom meta description..."
-                              className="w-full bg-gray-900 border border-brand-cyan/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-cyan transition resize-none"
-                              rows={2}
-                              onClick={() => setSelectedDescIndex(-1)}
+                        {/* Custom option - only show in Draft mode */}
+                        {selectedArticle.workflow_state?.metaPublishMode !== 'wordpress' && (
+                          <label
+                            className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
+                              selectedDescIndex === -1
+                                ? 'bg-brand-cyan/20 border-brand-cyan'
+                                : 'bg-gray-800 border-transparent hover:border-brand-cyan/50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="metaDesc"
+                              checked={selectedDescIndex === -1}
+                              onChange={() => setSelectedDescIndex(-1)}
+                              className="mt-1 accent-cyan-500"
                             />
-                          </div>
-                        </label>
+                            <div className="flex-1">
+                              <span className="text-sm text-brand-cyan/70 block mb-1">Custom:</span>
+                              <textarea
+                                value={customMetaDesc}
+                                onChange={(e) => {
+                                  setCustomMetaDesc(e.target.value);
+                                  setSelectedDescIndex(-1);
+                                }}
+                                placeholder="Enter custom meta description..."
+                                className="w-full bg-gray-900 border border-brand-cyan/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-cyan transition resize-none"
+                                rows={2}
+                                onClick={() => setSelectedDescIndex(-1)}
+                              />
+                            </div>
+                          </label>
+                        )}
                       </div>
                     </div>
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="mt-4 flex items-center justify-between">
+                  <div className="mt-6 pt-4 border-t border-brand-cyan/20 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-500">SEO Plugin:</span>
                       <select
@@ -1046,8 +1102,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                       </button>
                     </div>
                     <div className="flex gap-3">
-                      {/* Show Save Selection when user has made a selection OR meta options exist */}
-                      {(selectedTitleIndex !== null || selectedDescIndex !== null ||
+                      {/* Show Save Selection only in Draft mode when user has made a selection OR meta options exist */}
+                      {selectedArticle.workflow_state?.metaPublishMode !== 'wordpress' &&
+                        (selectedTitleIndex !== null || selectedDescIndex !== null ||
                         (selectedArticle.meta_titles?.length > 0 || selectedArticle.meta_descriptions?.length > 0)) && (
                         <button
                           onClick={saveMetaSelection}

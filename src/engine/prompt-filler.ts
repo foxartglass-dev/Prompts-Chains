@@ -116,17 +116,26 @@ export function parseFinalOutput(text: string): {
 
 /**
  * Fill a simple template (for filenames, WordPress titles, etc.)
- * Only supports {key} syntax
+ * Supports both {curly braces} and <angle brackets> syntax
  */
 export function fillSimpleTemplate(
   template: string,
   data: Record<string, string | null | undefined>
 ): string {
-  return template.replace(/{([^{}]+)}/g, (match, key) => {
+  let result = template;
+  // First pass: handle <angle brackets>
+  result = result.replace(/<([^<>]+)>/g, (match, key) => {
     const trimmedKey = key.trim();
     const value = data[trimmedKey];
     return value !== null && value !== undefined ? String(value) : match;
   });
+  // Second pass: handle {curly braces}
+  result = result.replace(/{([^{}]+)}/g, (match, key) => {
+    const trimmedKey = key.trim();
+    const value = data[trimmedKey];
+    return value !== null && value !== undefined ? String(value) : match;
+  });
+  return result;
 }
 
 /**

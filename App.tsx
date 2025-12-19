@@ -18,6 +18,7 @@ import WebsitesPage from './src/components/WebsitesPage';
 import Analytics from './src/components/Analytics';
 import PendingMetaNotification from './src/components/PendingMetaNotification';
 import IdeasBacklog from './src/components/IdeasBacklog';
+import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components/DefaultWorkflowSelector';
 
 // Types for workflow
 interface WorkflowItem {
@@ -137,6 +138,12 @@ const App: React.FC = () => {
     const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
     const [isIdeasOpen, setIsIdeasOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
+    const [defaultWorkflow, setDefaultWorkflow] = useState<DefaultWorkflowConfig | null>(() => {
+      // Load from localStorage on init
+      const saved = localStorage.getItem('promptflow_default_workflow');
+      return saved ? JSON.parse(saved) : null;
+    });
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
     const [filterByClientId, setFilterByClientId] = useState<number | undefined>(undefined);
@@ -262,6 +269,63 @@ const App: React.FC = () => {
       };
       checkPinConfig();
     }, []);
+
+    // Save default workflow to localStorage when it changes
+    useEffect(() => {
+      if (defaultWorkflow) {
+        localStorage.setItem('promptflow_default_workflow', JSON.stringify(defaultWorkflow));
+      } else {
+        localStorage.removeItem('promptflow_default_workflow');
+      }
+    }, [defaultWorkflow]);
+
+    // Auto-load default workflow on startup
+    const hasAutoLoadedRef = useRef(false);
+    useEffect(() => {
+      const autoLoadDefaultWorkflow = async () => {
+        // Only auto-load once, and only if unlocked and no workflow currently loaded
+        if (hasAutoLoadedRef.current || !isUnlocked || currentWorkflowId) return;
+
+        const saved = localStorage.getItem('promptflow_default_workflow');
+        if (!saved) return;
+
+        try {
+          const config: DefaultWorkflowConfig = JSON.parse(saved);
+          hasAutoLoadedRef.current = true;
+
+          // Load the workflow from the database
+          const response = await fetch(`/api/workflows/${config.workflowId}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.workflow) {
+              setCurrentWorkflowId(data.workflow.id);
+              setCurrentWebsiteId(data.workflow.website_id || undefined);
+              setCurrentWorkflowContext({
+                workflowName: data.workflow.name,
+                clientName: data.workflow.client_name,
+                websiteName: data.workflow.website_name,
+                isStandalone: !data.workflow.client_id,
+                projectName: data.workflow.project_name
+              });
+
+              if (data.workflow.state && Object.keys(data.workflow.state).length > 0) {
+                setCurrentProjectState(() => data.workflow.state);
+                setHasUnsavedChanges(false);
+              }
+
+              showNotification(`Loaded default workflow: ${data.workflow.name}`, 'info');
+            }
+          } else {
+            // Workflow no longer exists, clear the default
+            setDefaultWorkflow(null);
+          }
+        } catch (error) {
+          console.error('Error auto-loading default workflow:', error);
+        }
+      };
+
+      autoLoadDefaultWorkflow();
+    }, [isUnlocked]);
 
     // Effect to clear notification after a delay
     useEffect(() => {
@@ -736,6 +800,18 @@ const App: React.FC = () => {
                 cleaned = cleaned.replace(/^["']|["']$/g, '').trim();
                 return cleaned;
             })
+            .map(line => {
+                // GUARDRAIL: Remove placeholder patterns like [Company Name], {brand}, etc.
+                // Strip trailing placeholders (e.g., "Title | [Company Name]" → "Title")
+                let cleaned = line.replace(/\s*[\|\-]\s*\[[^\]]+\]\s*$/g, '').trim();
+                cleaned = cleaned.replace(/\s*[\|\-]\s*\{[^}]+\}\s*$/g, '').trim();
+                // Also remove any remaining brackets anywhere in the text
+                cleaned = cleaned.replace(/\[[^\]]*\]/g, '').trim();
+                cleaned = cleaned.replace(/\{[^}]*\}/g, '').trim();
+                // Clean up any leftover separators at the end
+                cleaned = cleaned.replace(/\s*[\|\-]\s*$/g, '').trim();
+                return cleaned;
+            })
             .filter(line => {
                 // Filter out empty lines
                 if (line.length < minLength) return false;
@@ -745,6 +821,9 @@ const App: React.FC = () => {
                 }
                 // Filter out lines that look like they contain character counts
                 if (/\(\d+\s*characters?\)/.test(line)) return false;
+                // GUARDRAIL: Reject any remaining lines with placeholder brackets
+                if (/\[[^\]]+\]/.test(line)) return false;
+                if (/\{[^}]+\}/.test(line)) return false;
                 return true;
             });
     };
@@ -996,6 +1075,99 @@ const App: React.FC = () => {
                             // Don't fail the whole process if saving fails
                             console.error('Failed to save article:', saveError);
                         }
+
+                        // Auto-publish to WordPress if articlePublishMode is 'wordpress'
+                        if (currentProject.state.articlePublishMode === 'wordpress') {
+                            const { url, user, password } = currentProject.state.wpCredentials;
+                            if (url && user && password) {
+                                addLog(`[${itemLabel}] Auto-publishing to WordPress...`, LogStatus.WORKING, item.id);
+                                try {
+                                    // Build title from template
+                                    const placeholderData = currentProject.state.placeholders.reduce((acc, p) => {
+                                        if (!p.tag) acc[p.key] = p.value;
+                                        return acc;
+                                    }, {} as Record<string, string>);
+                                    const templateData = {
+                                        ...placeholderData,
+                                        item_name: item.name.replace(/\s*\([^)]+\)\s*$/, '').trim(),
+                                        tag: item.tag,
+                                        status: status,
+                                    };
+                                    let wpTitle = currentProject.state.wpTitleTemplate;
+                                    // Handle both <angle> and {curly} bracket syntax
+                                    wpTitle = wpTitle.replace(/<([^<>]+)>/g, (match, key) => {
+                                        const val = templateData[key.trim()];
+                                        return val !== null && val !== undefined ? String(val) : match;
+                                    });
+                                    wpTitle = wpTitle.replace(/{([^{}]+)}/g, (match, key) => {
+                                        const val = templateData[key.trim()];
+                                        return val !== null && val !== undefined ? String(val) : match;
+                                    });
+                                    const title = wpTitle.trim() || metaTitles[0] || item.name;
+
+                                    // Publish via Elementor
+                                    const publishResponse = await fetch('/api/elementor/publish', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            wpUrl: url,
+                                            wpUser: user,
+                                            wpPassword: password,
+                                            title: title,
+                                            content: finalOutput,
+                                            status: 'draft',
+                                            includeStatsBar: false,
+                                        }),
+                                    });
+                                    const publishData = await publishResponse.json();
+
+                                    if (publishResponse.ok && publishData.page?.id) {
+                                        addLog(`[${itemLabel}] Published to WordPress!`, LogStatus.SUCCESS, item.id);
+                                        // Update result with WP link
+                                        setResults(prev => prev.map(r =>
+                                            r.item.id === resultItem.id
+                                                ? { ...r, wpStatus: 'published' as WpStatus, wpLink: publishData.page?.link }
+                                                : r
+                                        ));
+
+                                        // Auto-push SEO meta if metaPublishMode is 'wordpress' and we have meta data
+                                        if (currentProject.state.metaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
+                                            addLog(`[${itemLabel}] Auto-pushing SEO meta...`, LogStatus.WORKING, item.id);
+                                            try {
+                                                const seoResponse = await fetch('/api/seo/push-direct', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        wpUrl: url,
+                                                        wpUser: user,
+                                                        wpPassword: password,
+                                                        postId: publishData.page.id,
+                                                        metaTitle: metaTitles[0],
+                                                        metaDescription: metaDescriptions[0],
+                                                        seoPlugin: 'rankmath',
+                                                        postType: 'pages'
+                                                    })
+                                                });
+                                                if (seoResponse.ok) {
+                                                    addLog(`[${itemLabel}] SEO meta pushed successfully!`, LogStatus.SUCCESS, item.id);
+                                                } else {
+                                                    const seoError = await seoResponse.json();
+                                                    addLog(`[${itemLabel}] SEO push warning: ${seoError.error || 'Unknown'}`, LogStatus.ERROR, item.id);
+                                                }
+                                            } catch (seoErr) {
+                                                addLog(`[${itemLabel}] SEO push error: ${seoErr instanceof Error ? seoErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
+                                            }
+                                        }
+                                    } else {
+                                        addLog(`[${itemLabel}] WordPress publish failed: ${publishData.error || 'Unknown error'}`, LogStatus.ERROR, item.id);
+                                    }
+                                } catch (publishErr) {
+                                    addLog(`[${itemLabel}] Auto-publish error: ${publishErr instanceof Error ? publishErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
+                                }
+                            } else {
+                                addLog(`[${itemLabel}] Skipping auto-publish: WordPress credentials not configured.`, LogStatus.ERROR, item.id);
+                            }
+                        }
                     }
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
@@ -1015,12 +1187,21 @@ const App: React.FC = () => {
     };
 
     const fillSimpleTemplate = (template: string, data: Record<string, string | null | undefined>): string => {
-        // Support <angle brackets> syntax as shown in UI hints
-        return template.replace(/<([^<>]+)>/g, (match, key) => {
+        // Support both <angle brackets> and {curly braces} syntax
+        let result = template;
+        // First pass: handle <angle brackets>
+        result = result.replace(/<([^<>]+)>/g, (match, key) => {
             const trimmedKey = key.trim();
             const value = data[trimmedKey];
             return value !== null && value !== undefined ? String(value) : match;
         });
+        // Second pass: handle {curly braces}
+        result = result.replace(/{([^{}]+)}/g, (match, key) => {
+            const trimmedKey = key.trim();
+            const value = data[trimmedKey];
+            return value !== null && value !== undefined ? String(value) : match;
+        });
+        return result;
     };
 
     const handlePublishToWordPress = async (result: Result, useElementor: boolean = true) => {
@@ -1074,8 +1255,6 @@ const App: React.FC = () => {
                         title: title,
                         content: result.finalOutput,
                         status: 'draft',
-                        ctaText: 'Book Now!',
-                        ctaUrl: '#',
                         includeStatsBar: false,
                     }),
                 });
@@ -1259,11 +1438,12 @@ const App: React.FC = () => {
         );
     }
     
-    const renderSection = (title: string, id: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen = false) => (
+    const renderSection = (title: string, id: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen = false, rightContent?: React.ReactNode) => (
       <div className="bg-card rounded-xl shadow-glow-cyan card-3d hover:shadow-card-hover border-2 border-brand-cyan">
         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
           {icon}
           <span className="ml-3">{title}</span>
+          {rightContent && <div className="ml-4" onClick={e => e.stopPropagation()}>{rightContent}</div>}
            <svg className={`w-5 h-5 ml-auto transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </h2>
         <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? 'max-h-[5000px]' : 'max-h-0 overflow-hidden'}`}>
@@ -1572,32 +1752,80 @@ const App: React.FC = () => {
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
                     {/* Logo - Centered on mobile */}
                     <div className="flex items-center justify-center md:justify-start">
-                        <div className="flex items-center">
-                            {/* Logo SVG - Digi Branded AI style bars */}
-                            <svg width="40" height="40" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-2 md:mr-3 md:w-12 md:h-12">
-                                <rect x="4" y="28" width="6" height="16" rx="1" fill="#00B4D8"/>
-                                <rect x="12" y="22" width="6" height="22" rx="1" fill="#0096C7"/>
-                                <rect x="20" y="16" width="6" height="28" rx="1" fill="#0077B6"/>
-                                <rect x="28" y="10" width="6" height="34" rx="1" fill="#005F8A"/>
-                                <rect x="36" y="4" width="6" height="40" rx="1" fill="#004A6E"/>
-                                <path d="M6 30L14 24L22 18L30 12L38 6" stroke="#F5A623" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-                                <circle cx="6" cy="30" r="3" fill="#F5A623"/>
-                                <circle cx="14" cy="24" r="3" fill="#F5A623"/>
-                                <circle cx="22" cy="18" r="3" fill="#F5A623"/>
-                                <circle cx="30" cy="12" r="3" fill="#F5A623"/>
-                                <circle cx="38" cy="6" r="3" fill="#F5A623"/>
-                            </svg>
-                            <div>
-                                <h1 className="text-xl md:text-2xl font-bold">
-                                    <span className="text-brand-cyan">Prompt</span><span className="text-brand-gold">Flow</span>
-                                </h1>
-                                <p className="text-[10px] md:text-xs text-slate-400">Advanced Workflow Automator</p>
+                        <div className="flex flex-col items-center md:items-start">
+                            {/* Top row: Graph icon + PromptFlow logo image */}
+                            <div className="flex items-center">
+                                {/* Logo SVG - Digi Branded AI style bars */}
+                                <svg width="40" height="40" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-2 md:mr-3 md:w-12 md:h-12">
+                                    <rect x="4" y="28" width="6" height="16" rx="1" fill="#00B4D8"/>
+                                    <rect x="12" y="22" width="6" height="22" rx="1" fill="#0096C7"/>
+                                    <rect x="20" y="16" width="6" height="28" rx="1" fill="#0077B6"/>
+                                    <rect x="28" y="10" width="6" height="34" rx="1" fill="#005F8A"/>
+                                    <rect x="36" y="4" width="6" height="40" rx="1" fill="#004A6E"/>
+                                    <path d="M6 30L14 24L22 18L30 12L38 6" stroke="#F5A623" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <circle cx="6" cy="30" r="3" fill="#F5A623"/>
+                                    <circle cx="14" cy="24" r="3" fill="#F5A623"/>
+                                    <circle cx="22" cy="18" r="3" fill="#F5A623"/>
+                                    <circle cx="30" cy="12" r="3" fill="#F5A623"/>
+                                    <circle cx="38" cy="6" r="3" fill="#F5A623"/>
+                                </svg>
+                                {/* PromptFlow logo image */}
+                                <img src="/promptflow-logo.png" alt="PromptFlow" className="h-8 md:h-10" />
                             </div>
+                            {/* Tagline underneath, centered */}
+                            <p className="text-[10px] md:text-xs text-slate-400 mt-1 text-center md:text-left w-full">Advanced Workflow Automator</p>
                         </div>
                     </div>
 
                     {/* Navigation Buttons - Grid on mobile (4 columns), flex on desktop */}
                     <div className="grid grid-cols-4 gap-1.5 sm:gap-2 md:flex md:gap-2 md:flex-wrap justify-center md:justify-end">
+                        {/* Default Workflow Button - looks like other nav buttons */}
+                        <div className="relative hidden md:block">
+                            <button
+                                onClick={() => setIsDefaultSelectorOpen(!isDefaultSelectorOpen)}
+                                className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                                title="Set default workflow for auto-load on startup"
+                            >
+                                <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                                </svg>
+                                {defaultWorkflow ? (
+                                    <span className="text-[10px] md:text-sm flex items-center gap-1">
+                                        <span className="text-brand-gold">Default</span>
+                                        <span className="text-slate-500">|</span>
+                                        <span className="text-brand-cyan">{(defaultWorkflow.clientName || 'Personal').slice(0, 20)}{(defaultWorkflow.clientName || '').length > 20 ? '...' : ''}</span>
+                                        <span className="text-slate-500">-</span>
+                                        <span className="text-brand-gold">{(() => {
+                                            const url = defaultWorkflow.websiteName || 'N/A';
+                                            const clean = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+                                            return clean.slice(0, 30) + (clean.length > 30 ? '...' : '');
+                                        })()}</span>
+                                        <span className="text-slate-500">-</span>
+                                        <span className="text-brand-gold">{defaultWorkflow.workflowName.slice(0, 20)}{defaultWorkflow.workflowName.length > 20 ? '...' : ''}</span>
+                                    </span>
+                                ) : (
+                                    <span className="text-[10px] md:text-sm">Default</span>
+                                )}
+                                <svg className={`h-3 w-3 md:h-4 md:w-4 text-brand-cyan ml-1 transition-transform ${isDefaultSelectorOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
+                            {/* Dropdown selector */}
+                            <DefaultWorkflowSelector
+                                isOpen={isDefaultSelectorOpen}
+                                onClose={() => setIsDefaultSelectorOpen(false)}
+                                currentDefault={defaultWorkflow}
+                                onSetDefault={(config) => {
+                                    setDefaultWorkflow(config);
+                                    if (config) {
+                                        showNotification(`Default workflow set: ${config.workflowName}`, 'success');
+                                    } else {
+                                        showNotification('Default workflow cleared', 'info');
+                                    }
+                                }}
+                            />
+                        </div>
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsWorkflowNavOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsAgencyOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
@@ -1689,16 +1917,6 @@ const App: React.FC = () => {
                             </svg>
                             <span className="text-[10px] md:text-sm">Settings</span>
                         </button>
-
-                        {/* Pending Meta Notification Bell */}
-                        <div className="relative hidden md:block">
-                            <PendingMetaNotification
-                                onOpenArticle={(articleId) => {
-                                    setIsArticlesOpen(true);
-                                    // The ArticleManager will handle opening the specific article
-                                }}
-                            />
-                        </div>
                     </div>
                 </div>
 
@@ -1798,7 +2016,6 @@ const App: React.FC = () => {
                         <div className="space-y-3">
                             {/* Row 1: AI Models - Full Width */}
                             <div className="space-y-2">
-                                <p className="text-[10px] text-brand-gold mb-1">Test multiple models against the same workflow</p>
                                 <div className="grid grid-cols-3 gap-3">
                                     <div>
                                         <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 1</label>
@@ -1831,7 +2048,13 @@ const App: React.FC = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 2</label>
+                                        <label className="flex items-center justify-center gap-1 text-xs font-medium text-brand-gold mb-1">
+                                            AI Model 2
+                                            <span className="relative group cursor-help">
+                                                <svg className="w-3.5 h-3.5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 text-brand-gold text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity border border-brand-gold/50 z-50">Test 2 or 3 models against same workflow</span>
+                                            </span>
+                                        </label>
                                         <select
                                             value={currentProject.state.model2 || 'not-in-use'}
                                             onChange={e => setCurrentProjectState(p => ({...p, model2: e.target.value}))}
@@ -1862,7 +2085,13 @@ const App: React.FC = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 3</label>
+                                        <label className="flex items-center justify-center gap-1 text-xs font-medium text-brand-gold mb-1">
+                                            AI Model 3
+                                            <span className="relative group cursor-help">
+                                                <svg className="w-3.5 h-3.5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-900 text-brand-gold text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity border border-brand-gold/50 z-50">Test 2 or 3 models against same workflow</span>
+                                            </span>
+                                        </label>
                                         <select
                                             value={currentProject.state.model3 || 'not-in-use'}
                                             onChange={e => setCurrentProjectState(p => ({...p, model3: e.target.value}))}
@@ -2027,8 +2256,14 @@ const App: React.FC = () => {
                                 {getRunButtonText()}
                             </button>
                         </div>
-                    , true)}
-                    
+                    , true,
+                    <PendingMetaNotification
+                        onOpenArticle={(articleId) => {
+                            setIsArticlesOpen(true);
+                        }}
+                    />
+                    )}
+
                     {items.length > 0 && renderSection('2. Loaded Items', 'loadedItems', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-2">
                             <p className="text-brand-gold">{items.length} item(s) loaded.</p>
@@ -2054,19 +2289,76 @@ const App: React.FC = () => {
                     , true)}
                     
                     {renderSection('Publishing to WordPress', 'wordpress', <Icon type="upload" className="h-6 w-6"/>,
-                        <div className="space-y-4 p-4 bg-slate-800/50 border border-brand-cyan/30 rounded-lg">
-                            <p className="text-xs text-gray-400 mb-2">WordPress Admin Credentials</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-semibold text-brand-gold mb-4 flex items-center gap-2">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                                WordPress Admin Credentials
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
-                                    <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">Content Type</label>
-                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all">
+                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all">
                                         <option value="pages">Page</option>
                                         <option value="posts">Post</option>
                                     </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Article</label>
+                                    <div className="flex rounded-lg overflow-hidden border-2 border-brand-gold">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'draft'}))}
+                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                                (currentProject.state.articlePublishMode || 'draft') === 'draft'
+                                                    ? 'bg-brand-gold text-black'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            Draft
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'wordpress'}))}
+                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                                currentProject.state.articlePublishMode === 'wordpress'
+                                                    ? 'bg-green-600 text-white'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            WordPress
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Meta Options</label>
+                                    <div className="flex rounded-lg overflow-hidden border-2 border-brand-gold">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'draft'}))}
+                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                                (currentProject.state.metaPublishMode || 'draft') === 'draft'
+                                                    ? 'bg-brand-gold text-black'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            Draft
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'wordpress'}))}
+                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                                currentProject.state.metaPublishMode === 'wordpress'
+                                                    ? 'bg-green-600 text-white'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            WordPress
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                              <div>
@@ -2075,7 +2367,7 @@ const App: React.FC = () => {
                                     type="text"
                                     value={currentProject.state.wpTitleTemplate}
                                     onChange={e => setCurrentProjectState(p => ({...p, wpTitleTemplate: e.target.value}))}
-                                    className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                    className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                 />
                                 <p className="text-xs text-brand-gold/70 mt-1">
                                     Use variables like {'<item_name>'} or {'{city}'}.
@@ -2084,11 +2376,11 @@ const App: React.FC = () => {
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Username</label>
-                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials.user} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, user: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials.user} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, user: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WP Application Password</label>
-                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials.password} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, password: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials.password} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, password: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                             </div>
                             <p className="text-xs text-brand-gold/70">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
@@ -2166,7 +2458,7 @@ const App: React.FC = () => {
                                 <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-gold transition-all"/>
                                 <button onClick={addTag} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-white font-semibold transition">Add</button>
                             </div>
-                            <div className="flex flex-wrap gap-2">{currentProject.state.tags.map(t => (<div key={t.id} className="bg-brand-gold/20 border border-brand-gold/50 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-brand-gold"><span>{t.name}</span><button onClick={() => removeTag(t.id)} className="text-brand-gold/60 hover:text-white transition"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>))}</div>
+                            <div className="flex flex-wrap gap-2">{currentProject.state.tags.map(t => (<div key={t.id} className="bg-brand-cyan/20 border border-brand-cyan/50 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-brand-cyan"><span>{t.name}</span><button onClick={() => removeTag(t.id)} className="text-brand-cyan/60 hover:text-white transition"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>))}</div>
                         </div>
                      )}
 
@@ -2405,14 +2697,14 @@ const App: React.FC = () => {
                                     </div>
                                     <div className="flex items-center justify-between text-xs text-brand-gold">
                                         <div className="flex items-center gap-3">
-                                            <label className="flex items-center gap-1.5 cursor-pointer group">
+                                            <label className="flex items-center gap-2 cursor-pointer group">
                                                 <input
                                                     type="checkbox"
                                                     checked={prompt.generateMetaFromOutput || false}
                                                     onChange={e => handleUpdatePrompt(prompt.id, 'generateMetaFromOutput', e.target.checked)}
-                                                    className="w-3.5 h-3.5 rounded border-pink-500/50 text-pink-500 focus:ring-pink-500 bg-slate-900"
+                                                    className="w-4 h-4 rounded border-2 border-brand-gold text-brand-gold focus:ring-brand-gold bg-slate-900 accent-brand-gold"
                                                 />
-                                                <span className="text-pink-400 group-hover:text-pink-300 transition">Generate Meta SEO</span>
+                                                <span className="text-brand-gold font-semibold text-sm group-hover:text-brand-gold-light transition">Generate Meta SEO</span>
                                             </label>
                                         </div>
                                         <div>
