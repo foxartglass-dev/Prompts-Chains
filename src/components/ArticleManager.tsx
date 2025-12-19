@@ -28,6 +28,11 @@ interface Article {
   meta_pushed_at: string | null;
   // Joined fields
   workflow_name?: string;
+  workflow_state?: {
+    wpTitleTemplate?: string;
+    placeholders?: Array<{ key: string; value: string; tag?: string }>;
+    [key: string]: unknown;
+  };
   website_name?: string;
   client_name?: string;
   wp_url?: string;
@@ -89,6 +94,50 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
   const [customMetaDesc, setCustomMetaDesc] = useState('');
   const [pushingSeo, setPushingSeo] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Helper to strip tag suffix like "(H)" from item names
+  const stripTagFromName = (name: string): string => {
+    return name.replace(/\s*\([^)]+\)\s*$/, '').trim();
+  };
+
+  // Fill a simple template with data (supports <angle brackets> syntax)
+  const fillSimpleTemplate = (template: string, data: Record<string, string | null | undefined>): string => {
+    return template.replace(/<([^<>]+)>/g, (match, key) => {
+      const trimmedKey = key.trim();
+      const value = data[trimmedKey];
+      return value !== null && value !== undefined ? String(value) : match;
+    });
+  };
+
+  // Generate the page title from template or fall back to keyword
+  const generatePageTitle = (article: Article): string => {
+    const wpTitleTemplate = article.workflow_state?.wpTitleTemplate;
+
+    if (wpTitleTemplate) {
+      // Build template data from workflow placeholders
+      const placeholderData = (article.workflow_state?.placeholders || []).reduce((acc, p) => {
+        if (!p.tag) {
+          acc[p.key] = p.value;
+        }
+        return acc;
+      }, {} as Record<string, string>);
+
+      const templateData = {
+        ...placeholderData,
+        item_name: stripTagFromName(article.keyword),
+        tag: article.tag || '',
+        status: article.status || '',
+      };
+
+      const generatedTitle = fillSimpleTemplate(wpTitleTemplate, templateData);
+      if (generatedTitle.trim()) {
+        return generatedTitle;
+      }
+    }
+
+    // Fall back to keyword with tag stripped
+    return stripTagFromName(article.keyword);
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -230,6 +279,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       let res;
       let wpData;
 
+      // Generate the page title from template
+      const pageTitle = generatePageTitle(selectedArticle);
+
       if (useElementor) {
         // Use Elementor publishing endpoint
         res = await fetch('/api/elementor/publish', {
@@ -239,7 +291,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
             wpUrl,
             wpUser,
             wpPassword,
-            title: selectedArticle.keyword,
+            title: pageTitle,
             content: editContent || selectedArticle.final_content,
             status: 'draft',
             ctaText: 'Book Now!',
@@ -279,7 +331,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
             wpUser,
             wpPassword,
             contentType: 'pages',
-            title: selectedArticle.keyword,
+            title: pageTitle,
             content: editContent || selectedArticle.final_content,
             status: 'draft'
           })
@@ -401,6 +453,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       return;
     }
 
+    // Get the SEO plugin from website settings (default to 'aioseo')
+    const seoPlugin = selectedArticle.seo_plugin || 'aioseo';
+
     setPushingSeo(true);
     try {
       // Use direct push endpoint with credentials
@@ -414,7 +469,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
           postId: selectedArticle.wp_post_id,
           metaTitle,
           metaDescription: metaDesc,
-          seoPlugin: 'aioseo',
+          seoPlugin,
           postType: wpContentType
         })
       });
@@ -939,7 +994,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                   {/* Action Buttons */}
                   <div className="mt-4 flex items-center justify-between">
                     <div className="text-xs text-gray-500">
-                      <span>SEO Plugin: <span className="text-gray-400">AIOSEO</span></span>
+                      <span>SEO Plugin: <span className="text-gray-400 capitalize">{selectedArticle.seo_plugin || 'aioseo'}</span></span>
                     </div>
                     <div className="flex gap-3">
                       {/* Show Save Selection when user has made a selection OR meta options exist */}
@@ -977,7 +1032,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                 </svg>
-                                Push to AIOSEO
+                                Push to {(selectedArticle.seo_plugin || 'aioseo').charAt(0).toUpperCase() + (selectedArticle.seo_plugin || 'aioseo').slice(1)}
                               </>
                             )}
                           </button>

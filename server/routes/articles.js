@@ -93,7 +93,8 @@ router.get('/:id', requireDb, async (req, res) => {
     const { id } = req.params;
 
     const articles = await sql`
-      SELECT a.*, w.name as workflow_name, ws.name as website_name, c.name as client_name,
+      SELECT a.*, w.name as workflow_name, w.state as workflow_state,
+             ws.name as website_name, c.name as client_name,
              ws.wp_url, ws.wp_user, ws.wp_app_password, ws.seo_plugin
       FROM articles a
       LEFT JOIN workflows w ON a.workflow_id = w.id

@@ -7,8 +7,10 @@ interface Website {
   client_name?: string;
   name: string;
   url: string;
-  wp_username?: string;
+  wp_url?: string;
+  wp_user?: string;
   wp_app_password?: string;
+  seo_plugin?: string;
   image_generation_enabled?: boolean;
   image_style_dna?: any;
   image_reference_urls?: string[];
@@ -468,15 +470,20 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                       {website.client_name && (
                         <p className="text-xs text-gray-400 mt-2">Client: {website.client_name}</p>
                       )}
-                      <div className="mt-3 flex gap-2">
+                      <div className="mt-3 flex gap-2 flex-wrap">
                         {website.image_generation_enabled && (
                           <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded-full">
                             AI Images
                           </span>
                         )}
-                        {website.wp_username && (
+                        {website.wp_user && (
                           <span className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full">
                             WP Connected
+                          </span>
+                        )}
+                        {website.seo_plugin && website.seo_plugin !== 'none' && (
+                          <span className="text-xs px-2 py-1 bg-purple-500/20 text-purple-400 rounded-full capitalize">
+                            {website.seo_plugin}
                           </span>
                         )}
                       </div>
@@ -504,9 +511,52 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                 </div>
                 <div className="bg-slate-800/50 rounded-xl p-5 border border-purple-500/30">
                   <h4 className="text-sm text-gray-400 mb-1">WordPress Status</h4>
-                  <p className={`font-semibold ${selectedWebsite.wp_username ? 'text-green-400' : 'text-yellow-400'}`}>
-                    {selectedWebsite.wp_username ? 'Connected' : 'Not Configured'}
+                  <p className={`font-semibold ${selectedWebsite.wp_user ? 'text-green-400' : 'text-yellow-400'}`}>
+                    {selectedWebsite.wp_user ? 'Connected' : 'Not Configured'}
                   </p>
+                </div>
+              </div>
+
+              {/* SEO Plugin Selection */}
+              <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-brand-cyan mb-2">SEO Plugin</h3>
+                    <p className="text-sm text-gray-400">Select which SEO plugin is installed on this WordPress site</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={selectedWebsite.seo_plugin || 'aioseo'}
+                      onChange={async (e) => {
+                        const newPlugin = e.target.value;
+                        try {
+                          const res = await fetch(`/api/websites/${selectedWebsite.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              name: selectedWebsite.name,
+                              url: selectedWebsite.url,
+                              seoPlugin: newPlugin
+                            })
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            setSelectedWebsite(data.website);
+                            fetchWebsites(); // Refresh list
+                          }
+                        } catch (error) {
+                          console.error('Failed to update SEO plugin:', error);
+                        }
+                      }}
+                      className="bg-slate-900 border border-brand-cyan/50 rounded-lg px-4 py-2 text-white min-w-[200px]"
+                    >
+                      <option value="aioseo">All in One SEO</option>
+                      <option value="yoast">Yoast SEO</option>
+                      <option value="rankmath">Rank Math</option>
+                      <option value="seopress">SEOPress</option>
+                      <option value="none">None / Manual</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
