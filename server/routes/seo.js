@@ -158,18 +158,31 @@ router.patch('/select/:articleId', requireDb, async (req, res) => {
 
     // Use provided status or default to 'selected'
     const status = metaSeoStatus || 'selected';
-    const pushedAt = status === 'pushed' ? sql`CURRENT_TIMESTAMP` : sql`meta_pushed_at`;
 
-    const result = await sql`
-      UPDATE articles
-      SET selected_meta_title = COALESCE(${selectedMetaTitle}, selected_meta_title),
-          selected_meta_description = COALESCE(${selectedMetaDescription}, selected_meta_description),
-          meta_seo_status = ${status},
-          meta_pushed_at = ${pushedAt},
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${articleId}
-      RETURNING *
-    `;
+    // Only update meta_pushed_at when status is 'pushed', otherwise keep existing value
+    let result;
+    if (status === 'pushed') {
+      result = await sql`
+        UPDATE articles
+        SET selected_meta_title = COALESCE(${selectedMetaTitle}, selected_meta_title),
+            selected_meta_description = COALESCE(${selectedMetaDescription}, selected_meta_description),
+            meta_seo_status = ${status},
+            meta_pushed_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${articleId}
+        RETURNING *
+      `;
+    } else {
+      result = await sql`
+        UPDATE articles
+        SET selected_meta_title = COALESCE(${selectedMetaTitle}, selected_meta_title),
+            selected_meta_description = COALESCE(${selectedMetaDescription}, selected_meta_description),
+            meta_seo_status = ${status},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${articleId}
+        RETURNING *
+      `;
+    }
 
     if (result.length === 0) {
       return res.status(404).json({ error: 'Article not found' });

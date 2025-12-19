@@ -942,20 +942,23 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                       <span>SEO Plugin: <span className="text-gray-400">AIOSEO</span></span>
                     </div>
                     <div className="flex gap-3">
-                      {/* Show Save Selection when user has made a selection but not saved yet */}
-                      {(selectedTitleIndex !== null || selectedDescIndex !== null) && (
+                      {/* Show Save Selection when user has made a selection OR meta options exist */}
+                      {(selectedTitleIndex !== null || selectedDescIndex !== null ||
+                        (selectedArticle.meta_titles?.length > 0 || selectedArticle.meta_descriptions?.length > 0)) && (
                         <button
                           onClick={saveMetaSelection}
-                          disabled={saving}
+                          disabled={saving || (selectedTitleIndex === null && selectedDescIndex === null)}
                           className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white transition disabled:opacity-50"
                         >
                           {saving ? 'Saving...' : 'Save Selection'}
                         </button>
                       )}
 
-                      {/* Show Push button when: article is published to WP AND (selection made OR meta already selected) */}
+                      {/* Show Push button when: article is published to WP AND (selection made OR meta already selected OR has meta options) */}
                       {selectedArticle.wp_post_id && (
-                        (selectedTitleIndex !== null || selectedDescIndex !== null || selectedArticle.meta_seo_status === 'selected') && (
+                        (selectedTitleIndex !== null || selectedDescIndex !== null ||
+                         selectedArticle.meta_seo_status === 'selected' || selectedArticle.meta_seo_status === 'pushed' ||
+                         selectedArticle.selected_meta_title || selectedArticle.selected_meta_description) && (
                           <button
                             onClick={pushToSeo}
                             disabled={pushingSeo}
