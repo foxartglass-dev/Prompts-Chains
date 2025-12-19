@@ -96,7 +96,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
   const [pushingSeo, setPushingSeo] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [expandedContent, setExpandedContent] = useState(false);
-  const [localSeoPlugin, setLocalSeoPlugin] = useState<string>('aioseo');
+  const [localSeoPlugin, setLocalSeoPlugin] = useState<string>('rankmath');
   const [showSEOGuide, setShowSEOGuide] = useState(false);
 
   // Helper to strip tag suffix like "(H)" from item names
@@ -218,7 +218,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       // Set local SEO plugin from article's website (only on initial load, not refresh)
       // Check if we're loading a different article
       if (!selectedArticle || selectedArticle.id !== article.id) {
-        setLocalSeoPlugin(article.seo_plugin || 'aioseo');
+        setLocalSeoPlugin(article.seo_plugin || 'rankmath');
       }
     } catch (err) {
       setError('Failed to fetch article');
