@@ -70,6 +70,9 @@ export interface ProjectState {
   metaDescriptionCount: number; // How many meta description options to generate
   metaTitlePrompt: string;     // Prompt template for generating meta titles
   metaDescriptionPrompt: string; // Prompt template for generating meta descriptions
+  // Auto-publish modes
+  articlePublishMode: 'draft' | 'wordpress';  // draft = stop at results, wordpress = auto-publish article
+  metaPublishMode: 'draft' | 'wordpress';     // draft = stop at results, wordpress = auto-push SEO meta
 }
 
 export interface Project {
@@ -152,6 +155,9 @@ const initialProjectState: ProjectState = {
   metaDescriptionCount: 3,
   metaTitlePrompt: 'Based on the following article content, generate {count} compelling SEO meta titles (60-70 characters each) that will attract clicks while accurately representing the content.\n\nArticle:\n{article_content}\n\nFormat as a numbered list:\n1. [title]\n2. [title]\netc.',
   metaDescriptionPrompt: 'Based on the following article content, generate {count} engaging SEO meta descriptions (150-160 characters each) that summarize the content and encourage clicks.\n\nArticle:\n{article_content}\n\nFormat as a numbered list:\n1. [description]\n2. [description]\netc.',
+  // Publish mode defaults (draft = stop at results, wordpress = auto-publish)
+  articlePublishMode: 'draft',
+  metaPublishMode: 'draft',
 };
 
 const createNewProjectObject = (name: string = 'Untitled Project'): Project => ({

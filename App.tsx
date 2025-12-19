@@ -996,6 +996,101 @@ const App: React.FC = () => {
                             // Don't fail the whole process if saving fails
                             console.error('Failed to save article:', saveError);
                         }
+
+                        // Auto-publish to WordPress if articlePublishMode is 'wordpress'
+                        if (currentProject.state.articlePublishMode === 'wordpress') {
+                            const { url, user, password } = currentProject.state.wpCredentials;
+                            if (url && user && password) {
+                                addLog(`[${itemLabel}] Auto-publishing to WordPress...`, LogStatus.WORKING, item.id);
+                                try {
+                                    // Build title from template
+                                    const placeholderData = currentProject.state.placeholders.reduce((acc, p) => {
+                                        if (!p.tag) acc[p.key] = p.value;
+                                        return acc;
+                                    }, {} as Record<string, string>);
+                                    const templateData = {
+                                        ...placeholderData,
+                                        item_name: item.name.replace(/\s*\([^)]+\)\s*$/, '').trim(),
+                                        tag: item.tag,
+                                        status: status,
+                                    };
+                                    let wpTitle = currentProject.state.wpTitleTemplate;
+                                    // Handle both <angle> and {curly} bracket syntax
+                                    wpTitle = wpTitle.replace(/<([^<>]+)>/g, (match, key) => {
+                                        const val = templateData[key.trim()];
+                                        return val !== null && val !== undefined ? String(val) : match;
+                                    });
+                                    wpTitle = wpTitle.replace(/{([^{}]+)}/g, (match, key) => {
+                                        const val = templateData[key.trim()];
+                                        return val !== null && val !== undefined ? String(val) : match;
+                                    });
+                                    const title = wpTitle.trim() || metaTitles[0] || item.name;
+
+                                    // Publish via Elementor
+                                    const publishResponse = await fetch('/api/elementor/publish', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            wpUrl: url,
+                                            wpUser: user,
+                                            wpPassword: password,
+                                            title: title,
+                                            content: finalOutput,
+                                            status: 'draft',
+                                            ctaText: 'Book Now!',
+                                            ctaUrl: '#',
+                                            includeStatsBar: false,
+                                        }),
+                                    });
+                                    const publishData = await publishResponse.json();
+
+                                    if (publishResponse.ok && publishData.page?.id) {
+                                        addLog(`[${itemLabel}] Published to WordPress!`, LogStatus.SUCCESS, item.id);
+                                        // Update result with WP link
+                                        setResults(prev => prev.map(r =>
+                                            r.item.id === resultItem.id
+                                                ? { ...r, wpStatus: 'published' as WpStatus, wpLink: publishData.page?.link }
+                                                : r
+                                        ));
+
+                                        // Auto-push SEO meta if metaPublishMode is 'wordpress' and we have meta data
+                                        if (currentProject.state.metaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
+                                            addLog(`[${itemLabel}] Auto-pushing SEO meta...`, LogStatus.WORKING, item.id);
+                                            try {
+                                                const seoResponse = await fetch('/api/seo/push-direct', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        wpUrl: url,
+                                                        wpUser: user,
+                                                        wpPassword: password,
+                                                        postId: publishData.page.id,
+                                                        metaTitle: metaTitles[0],
+                                                        metaDescription: metaDescriptions[0],
+                                                        seoPlugin: 'rankmath',
+                                                        postType: 'pages'
+                                                    })
+                                                });
+                                                if (seoResponse.ok) {
+                                                    addLog(`[${itemLabel}] SEO meta pushed successfully!`, LogStatus.SUCCESS, item.id);
+                                                } else {
+                                                    const seoError = await seoResponse.json();
+                                                    addLog(`[${itemLabel}] SEO push warning: ${seoError.error || 'Unknown'}`, LogStatus.ERROR, item.id);
+                                                }
+                                            } catch (seoErr) {
+                                                addLog(`[${itemLabel}] SEO push error: ${seoErr instanceof Error ? seoErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
+                                            }
+                                        }
+                                    } else {
+                                        addLog(`[${itemLabel}] WordPress publish failed: ${publishData.error || 'Unknown error'}`, LogStatus.ERROR, item.id);
+                                    }
+                                } catch (publishErr) {
+                                    addLog(`[${itemLabel}] Auto-publish error: ${publishErr instanceof Error ? publishErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
+                                }
+                            } else {
+                                addLog(`[${itemLabel}] Skipping auto-publish: WordPress credentials not configured.`, LogStatus.ERROR, item.id);
+                            }
+                        }
                     }
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
@@ -2065,7 +2160,7 @@ const App: React.FC = () => {
                     {renderSection('Publishing to WordPress', 'wordpress', <Icon type="upload" className="h-6 w-6"/>,
                         <div className="space-y-4 p-4 bg-slate-800/50 border border-brand-cyan/30 rounded-lg">
                             <p className="text-xs text-gray-400 mb-2">WordPress Admin Credentials</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
                                     <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
@@ -2076,6 +2171,60 @@ const App: React.FC = () => {
                                         <option value="pages">Page</option>
                                         <option value="posts">Post</option>
                                     </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Article</label>
+                                    <div className="flex rounded-lg overflow-hidden border border-brand-gold/50">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'draft'}))}
+                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                                (currentProject.state.articlePublishMode || 'draft') === 'draft'
+                                                    ? 'bg-brand-gold text-black'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            Draft
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'wordpress'}))}
+                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                                currentProject.state.articlePublishMode === 'wordpress'
+                                                    ? 'bg-green-600 text-white'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            WordPress
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Meta Options</label>
+                                    <div className="flex rounded-lg overflow-hidden border border-brand-gold/50">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'draft'}))}
+                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                                (currentProject.state.metaPublishMode || 'draft') === 'draft'
+                                                    ? 'bg-brand-gold text-black'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            Draft
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'wordpress'}))}
+                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                                currentProject.state.metaPublishMode === 'wordpress'
+                                                    ? 'bg-green-600 text-white'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            WordPress
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                              <div>

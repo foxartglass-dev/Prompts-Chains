@@ -67,6 +67,8 @@ export interface Result {
 }
 
 // Types for Project State Management
+export type PublishMode = 'draft' | 'wordpress';
+
 export interface ProjectState {
   apiKeys: { zeroGpt: string; claude: string; };
   selectedModel: 'claude-sonnet-4-5';
@@ -74,6 +76,8 @@ export interface ProjectState {
   wpCredentials: { url: string; user: string; password: string; };
   wpContentType: WpContentType;
   wpTitleTemplate: string;
+  articlePublishMode: PublishMode;
+  metaPublishMode: PublishMode;
   tags: Tag[];
   placeholders: Placeholder[];
   taggedSnippets: TaggedSnippet[];
