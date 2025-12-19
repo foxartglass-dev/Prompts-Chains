@@ -1442,15 +1442,21 @@ const App: React.FC = () => {
       <div className="bg-card rounded-xl shadow-glow-cyan card-3d hover:shadow-card-hover border-2 border-brand-cyan">
         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
           {icon}
-          <span className="ml-3">{title}</span>
-          {rightContent && <div className="ml-4" onClick={e => e.stopPropagation()}>{rightContent}</div>}
-           <svg className={`w-5 h-5 ml-auto transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+          <span className="ml-3 shrink-0">{title}</span>
+          {rightContent && <div className="ml-4 flex-1 flex items-center justify-end gap-3" onClick={e => e.stopPropagation()}>{rightContent}</div>}
+           <svg className={`w-5 h-5 ml-3 shrink-0 transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </h2>
         <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? 'max-h-[5000px]' : 'max-h-0 overflow-hidden'}`}>
             <div className="p-5 pt-0 border-t border-brand-cyan/30">{children}</div>
         </div>
       </div>
     );
+
+    // Helper function to format website URL (remove https:// and trailing slashes)
+    const formatWebsiteUrl = (url: string | undefined) => {
+      if (!url) return '';
+      return url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    };
     
     const isApiKeyMissing = currentProject.state.provider === 'anthropic' && !currentProject.state.apiKeys.anthropic;
     const isRunDisabled = isProcessing || !items.length || isApiKeyMissing;
@@ -1920,93 +1926,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Workflow Context Breadcrumb */}
-                {currentWorkflowContext.workflowName && (
-                    <div className="bg-card/50 rounded-lg px-4 py-3 border border-slate-700/50 shadow-card">
-                        <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-2 text-sm">
-                                {currentWorkflowContext.isStandalone ? (
-                                    <>
-                                        <span className="px-3 py-1 bg-purple-600/20 border border-purple-500/50 rounded-full text-purple-300 font-medium">
-                                            Standalone
-                                        </span>
-                                        {currentWorkflowContext.projectName && (
-                                            <>
-                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                                <span className="text-purple-400">{currentWorkflowContext.projectName}</span>
-                                            </>
-                                        )}
-                                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                        <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span className="px-3 py-1 bg-brand-cyan/20 border border-brand-cyan/50 rounded-full text-brand-cyan font-medium">
-                                            Client
-                                        </span>
-                                        {currentWorkflowContext.clientName && (
-                                            <>
-                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                                <span className="text-brand-cyan">{currentWorkflowContext.clientName}</span>
-                                            </>
-                                        )}
-                                        {currentWorkflowContext.websiteName && (
-                                            <>
-                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                                <span className="text-brand-cyan-light">{currentWorkflowContext.websiteName}</span>
-                                            </>
-                                        )}
-                                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                        <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
-                                    </>
-                                )}
-                            </div>
-                            {/* Save Workflow Button */}
-                            <div className="flex items-center gap-3">
-                                {lastSaveTime && (
-                                    <span className="text-xs text-slate-400">
-                                        Last saved: {lastSaveTime.toLocaleTimeString()}
-                                    </span>
-                                )}
-                                <button
-                                    onClick={() => saveWorkflowToDatabase(true)}
-                                    disabled={isSaving || !hasUnsavedChanges}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition ${
-                                        isSaving
-                                            ? 'bg-slate-700 text-slate-400 cursor-wait'
-                                            : hasUnsavedChanges
-                                                ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900'
-                                                : 'bg-brand-cyan text-white'
-                                    }`}
-                                >
-                                    {isSaving ? (
-                                        <>
-                                            <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                            Saving...
-                                        </>
-                                    ) : hasUnsavedChanges ? (
-                                        <>
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
-                                            </svg>
-                                            Save Workflow
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                                            </svg>
-                                            Saved
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </header>
 
             <main className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -2015,10 +1934,10 @@ const App: React.FC = () => {
                     {renderSection('1. Setup & Run', 'setup', <Icon type="settings" className="h-6 w-6"/>,
                         <div className="space-y-3">
                             {/* Row 1: AI Models - Full Width */}
-                            <div className="space-y-2">
+                            <div className="space-y-2 pt-2">
                                 <div className="grid grid-cols-3 gap-3">
                                     <div>
-                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 1</label>
+                                        <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">AI Model 1</label>
                                         <select
                                             value={currentProject.state.model}
                                             onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
@@ -2048,7 +1967,7 @@ const App: React.FC = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="flex items-center justify-center gap-1 text-xs font-medium text-brand-gold mb-1">
+                                        <label className="flex items-center justify-center gap-1 text-sm font-medium text-brand-gold mb-1.5">
                                             AI Model 2
                                             <span className="relative group cursor-help">
                                                 <svg className="w-3.5 h-3.5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -2085,7 +2004,7 @@ const App: React.FC = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="flex items-center justify-center gap-1 text-xs font-medium text-brand-gold mb-1">
+                                        <label className="flex items-center justify-center gap-1 text-sm font-medium text-brand-gold mb-1.5">
                                             AI Model 3
                                             <span className="relative group cursor-help">
                                                 <svg className="w-3.5 h-3.5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -2127,12 +2046,12 @@ const App: React.FC = () => {
                             {/* Row 2: Filename + Import/Export/Save Template */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div>
-                                    <label className="block text-xs font-medium text-brand-gold mb-1">Filename Template</label>
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">Filename Template</label>
                                     <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold" />
                                 </div>
                                 {/* Import/Export JSON */}
                                 <div className="flex flex-col justify-end gap-1">
-                                    <label className="block text-xs font-medium text-gray-400 text-center">Import / Export JSON</label>
+                                    <label className="block text-sm font-medium text-gray-400 text-center">Import / Export JSON</label>
                                     <div className="flex gap-1">
                                         <button
                                             onClick={() => {
@@ -2181,7 +2100,7 @@ const App: React.FC = () => {
                                 </div>
                                 {/* Save as Template */}
                                 <div className="flex flex-col justify-end gap-1">
-                                    <label className="block text-xs font-medium text-gray-400 text-center">Save to Library</label>
+                                    <label className="block text-sm font-medium text-gray-400 text-center">Save to Library</label>
                                     <button
                                         onClick={() => setShowSaveTemplatePopup(true)}
                                         className="flex items-center justify-center gap-1 px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-dark rounded text-slate-900 font-medium text-xs transition"
@@ -2251,17 +2170,91 @@ const App: React.FC = () => {
                                 </div>
                             </div>
 
-                            <button onClick={processWorkflow} disabled={isRunDisabled} className={`w-full flex items-center justify-center font-bold py-4 px-6 rounded-xl transition-all btn-press border-2 ${isRunDisabled ? 'bg-slate-900 border-brand-cyan text-brand-cyan/50 cursor-not-allowed' : 'bg-gradient-to-r from-brand-cyan to-brand-cyan-dark hover:from-brand-cyan-dark hover:to-brand-cyan text-white border-transparent shadow-card hover:shadow-glow-cyan'}`}>
+                            <button onClick={processWorkflow} disabled={isRunDisabled} className={`w-full flex items-center justify-center font-bold py-4 px-6 rounded-xl transition-all btn-press border-2 ${isRunDisabled ? 'bg-slate-900 border-brand-cyan text-brand-cyan/50 cursor-not-allowed' : 'bg-gradient-to-r from-brand-cyan to-brand-cyan-dark hover:from-brand-cyan-dark hover:to-brand-cyan text-slate-900 border-transparent shadow-card hover:shadow-glow-cyan'}`}>
                                 {isProcessing ? <Icon type="working" className="h-5 w-5 animate-spin mr-2" /> : <Icon type="play" className="h-5 w-5 mr-2" />}
                                 {getRunButtonText()}
                             </button>
                         </div>
                     , true,
-                    <PendingMetaNotification
-                        onOpenArticle={(articleId) => {
-                            setIsArticlesOpen(true);
-                        }}
-                    />
+                    <>
+                        {/* Workflow Context - Condensed */}
+                        {currentWorkflowContext.workflowName && (
+                            <div className="flex items-center gap-2 px-2 py-1 bg-slate-800/50 border border-brand-gold rounded-lg">
+                                {currentWorkflowContext.isStandalone ? (
+                                    <>
+                                        <div className="flex flex-col text-[10px] leading-tight">
+                                            <span className="text-purple-400">Standalone</span>
+                                            {currentWorkflowContext.projectName && (
+                                                <span className="text-purple-300 truncate max-w-[80px]">{currentWorkflowContext.projectName}</span>
+                                            )}
+                                        </div>
+                                        <span className="text-brand-gold font-semibold text-xs truncate max-w-[120px]">{currentWorkflowContext.workflowName}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="flex flex-col text-[10px] leading-tight">
+                                            <span className="text-brand-cyan truncate max-w-[80px]">{currentWorkflowContext.clientName || 'Client'}</span>
+                                            <span className="text-brand-cyan-light truncate max-w-[80px]">{formatWebsiteUrl(currentWorkflowContext.websiteName)}</span>
+                                        </div>
+                                        <span className="text-brand-gold font-semibold text-xs truncate max-w-[120px]">{currentWorkflowContext.workflowName}</span>
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Notification Button */}
+                        <PendingMetaNotification
+                            onOpenArticle={(articleId) => {
+                                setIsArticlesOpen(true);
+                            }}
+                        />
+
+                        {/* Save Status */}
+                        {currentWorkflowContext.workflowName && (
+                            <button
+                                onClick={() => saveWorkflowToDatabase(true)}
+                                disabled={isSaving || !hasUnsavedChanges}
+                                className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg font-semibold text-xs transition border ${
+                                    isSaving
+                                        ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait'
+                                        : hasUnsavedChanges
+                                            ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900 border-yellow-400'
+                                            : 'bg-brand-cyan text-slate-900 border-brand-cyan'
+                                }`}
+                            >
+                                <span className="flex items-center gap-1">
+                                    {isSaving ? (
+                                        <>
+                                            <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Saving
+                                        </>
+                                    ) : hasUnsavedChanges ? (
+                                        <>
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                                            </svg>
+                                            Save
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                            </svg>
+                                            Saved
+                                        </>
+                                    )}
+                                </span>
+                                {lastSaveTime && (
+                                    <span className="text-[9px] opacity-75">
+                                        {lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    </span>
+                                )}
+                            </button>
+                        )}
+                    </>
                     )}
 
                     {items.length > 0 && renderSection('2. Loaded Items', 'loadedItems', <Icon type="document" className="h-6 w-6"/>,
@@ -2289,7 +2282,7 @@ const App: React.FC = () => {
                     , true)}
                     
                     {renderSection('Publishing to WordPress', 'wordpress', <Icon type="upload" className="h-6 w-6"/>,
-                        <div className="space-y-4">
+                        <div className="space-y-4 pt-2">
                             <h3 className="text-lg font-semibold text-brand-gold mb-4 flex items-center gap-2">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
                                 WordPress Admin Credentials
@@ -2386,7 +2379,7 @@ const App: React.FC = () => {
                             <p className="text-xs text-brand-gold/70">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
 
                             {/* Meta SEO Generation Settings */}
-                            <div className="mt-6 pt-6 border-t border-brand-gold/30">
+                            <div className="mt-6 pt-6 border-t border-brand-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold mb-4 flex items-center gap-2">
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                                     Meta SEO Generation
@@ -2400,7 +2393,7 @@ const App: React.FC = () => {
                                         <select
                                             value={currentProject.state.metaTitleCount || 3}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaTitleCount: parseInt(e.target.value)}))}
-                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
+                                            className="w-full bg-slate-900 border border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
                                         >
                                             <option value="1">1 (Auto-push to SEO)</option>
                                             <option value="2">2 (Draft mode - select one)</option>
@@ -2414,7 +2407,7 @@ const App: React.FC = () => {
                                         <select
                                             value={currentProject.state.metaDescriptionCount || 3}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaDescriptionCount: parseInt(e.target.value)}))}
-                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
+                                            className="w-full bg-slate-900 border border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
                                         >
                                             <option value="1">1 (Auto-push to SEO)</option>
                                             <option value="2">2 (Draft mode - select one)</option>
@@ -2431,7 +2424,7 @@ const App: React.FC = () => {
                                             value={currentProject.state.metaTitlePrompt || ''}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaTitlePrompt: e.target.value}))}
                                             rows={3}
-                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
+                                            className="w-full bg-slate-900 border border-brand-gold rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
                                             placeholder="Prompt for generating meta titles..."
                                         />
                                         <p className="text-xs text-brand-gold/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
@@ -2442,7 +2435,7 @@ const App: React.FC = () => {
                                             value={currentProject.state.metaDescriptionPrompt || ''}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaDescriptionPrompt: e.target.value}))}
                                             rows={3}
-                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
+                                            className="w-full bg-slate-900 border border-brand-gold rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
                                             placeholder="Prompt for generating meta descriptions..."
                                         />
                                         <p className="text-xs text-brand-gold/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
@@ -2455,7 +2448,7 @@ const App: React.FC = () => {
                      {renderSection('3. Tag Manager', 'tags', <Icon type="settings" className="h-6 w-6"/>,
                         <div className="space-y-3">
                              <div className="flex gap-2">
-                                <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-900 border border-brand-gold rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-gold transition-all"/>
                                 <button onClick={addTag} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-white font-semibold transition">Add</button>
                             </div>
                             <div className="flex flex-wrap gap-2">{currentProject.state.tags.map(t => (<div key={t.id} className="bg-brand-cyan/20 border border-brand-cyan/50 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-brand-cyan"><span>{t.name}</span><button onClick={() => removeTag(t.id)} className="text-brand-cyan/60 hover:text-white transition"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>))}</div>
