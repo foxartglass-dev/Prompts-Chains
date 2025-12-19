@@ -474,7 +474,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
           metaTitle,
           metaDescription: metaDesc,
           seoPlugin: localSeoPlugin,
-          postType: wpContentType
+          postType: 'pages' // Elementor always creates pages, not posts
         })
       });
 
