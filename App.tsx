@@ -17,6 +17,7 @@ import ClientsPage from './src/components/ClientsPage';
 import WebsitesPage from './src/components/WebsitesPage';
 import Analytics from './src/components/Analytics';
 import PendingMetaNotification from './src/components/PendingMetaNotification';
+import IdeasBacklog from './src/components/IdeasBacklog';
 
 // Types for workflow
 interface WorkflowItem {
@@ -134,6 +135,7 @@ const App: React.FC = () => {
     const [isClientsOpen, setIsClientsOpen] = useState(false);
     const [isWebsitesOpen, setIsWebsitesOpen] = useState(false);
     const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+    const [isIdeasOpen, setIsIdeasOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
@@ -1315,6 +1317,9 @@ const App: React.FC = () => {
             />
             <Analytics isOpen={isAnalyticsOpen} onClose={() => setIsAnalyticsOpen(false)} />
 
+            {/* Ideas Backlog */}
+            <IdeasBacklog isOpen={isIdeasOpen} onClose={() => setIsIdeasOpen(false)} />
+
             {/* Settings Modal */}
             {isSettingsOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
@@ -1654,7 +1659,7 @@ const App: React.FC = () => {
                             <span className="text-[10px] md:text-sm">Templates</span>
                         </button>
                         <button
-                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(true); }}
+                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsIdeasOpen(false); setIsAnalyticsOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Analytics Dashboard"
                         >
@@ -1662,6 +1667,16 @@ const App: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                             </svg>
                             <span className="text-[10px] md:text-sm">Analytics</span>
+                        </button>
+                        <button
+                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(true); }}
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            title="Ideas Backlog"
+                        >
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                            </svg>
+                            <span className="text-[10px] md:text-sm">Ideas</span>
                         </button>
                         <button
                             onClick={() => setIsSettingsOpen(true)}
