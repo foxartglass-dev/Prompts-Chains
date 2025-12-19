@@ -18,6 +18,7 @@ import WebsitesPage from './src/components/WebsitesPage';
 import Analytics from './src/components/Analytics';
 import PendingMetaNotification from './src/components/PendingMetaNotification';
 import IdeasBacklog from './src/components/IdeasBacklog';
+import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components/DefaultWorkflowSelector';
 
 // Types for workflow
 interface WorkflowItem {
@@ -137,6 +138,12 @@ const App: React.FC = () => {
     const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
     const [isIdeasOpen, setIsIdeasOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
+    const [defaultWorkflow, setDefaultWorkflow] = useState<DefaultWorkflowConfig | null>(() => {
+      // Load from localStorage on init
+      const saved = localStorage.getItem('promptflow_default_workflow');
+      return saved ? JSON.parse(saved) : null;
+    });
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
     const [filterByClientId, setFilterByClientId] = useState<number | undefined>(undefined);
@@ -262,6 +269,63 @@ const App: React.FC = () => {
       };
       checkPinConfig();
     }, []);
+
+    // Save default workflow to localStorage when it changes
+    useEffect(() => {
+      if (defaultWorkflow) {
+        localStorage.setItem('promptflow_default_workflow', JSON.stringify(defaultWorkflow));
+      } else {
+        localStorage.removeItem('promptflow_default_workflow');
+      }
+    }, [defaultWorkflow]);
+
+    // Auto-load default workflow on startup
+    const hasAutoLoadedRef = useRef(false);
+    useEffect(() => {
+      const autoLoadDefaultWorkflow = async () => {
+        // Only auto-load once, and only if unlocked and no workflow currently loaded
+        if (hasAutoLoadedRef.current || !isUnlocked || currentWorkflowId) return;
+
+        const saved = localStorage.getItem('promptflow_default_workflow');
+        if (!saved) return;
+
+        try {
+          const config: DefaultWorkflowConfig = JSON.parse(saved);
+          hasAutoLoadedRef.current = true;
+
+          // Load the workflow from the database
+          const response = await fetch(`/api/workflows/${config.workflowId}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.workflow) {
+              setCurrentWorkflowId(data.workflow.id);
+              setCurrentWebsiteId(data.workflow.website_id || undefined);
+              setCurrentWorkflowContext({
+                workflowName: data.workflow.name,
+                clientName: data.workflow.client_name,
+                websiteName: data.workflow.website_name,
+                isStandalone: !data.workflow.client_id,
+                projectName: data.workflow.project_name
+              });
+
+              if (data.workflow.state && Object.keys(data.workflow.state).length > 0) {
+                setCurrentProjectState(() => data.workflow.state);
+                setHasUnsavedChanges(false);
+              }
+
+              showNotification(`Loaded default workflow: ${data.workflow.name}`, 'info');
+            }
+          } else {
+            // Workflow no longer exists, clear the default
+            setDefaultWorkflow(null);
+          }
+        } catch (error) {
+          console.error('Error auto-loading default workflow:', error);
+        }
+      };
+
+      autoLoadDefaultWorkflow();
+    }, [isUnlocked]);
 
     // Effect to clear notification after a delay
     useEffect(() => {
@@ -1710,6 +1774,59 @@ const App: React.FC = () => {
                             {/* Tagline underneath, centered */}
                             <p className="text-[10px] md:text-xs text-slate-400 mt-1 text-center md:text-left w-full">Advanced Workflow Automator</p>
                         </div>
+                    </div>
+
+                    {/* Default Workflow Selector - Between logo and nav */}
+                    <div className="hidden md:flex items-center gap-3 relative">
+                        {/* Separator line */}
+                        <div className="h-10 w-px bg-brand-gold/50"></div>
+
+                        {/* Current default display */}
+                        <div className="text-sm">
+                            <span className="text-brand-gold font-medium">Default</span>
+                            <span className="text-slate-500 mx-2">|</span>
+                            {defaultWorkflow ? (
+                                <span className="text-brand-cyan">
+                                    {defaultWorkflow.clientName || 'Personal'} - {defaultWorkflow.websiteName || 'N/A'} - {defaultWorkflow.workflowName}
+                                </span>
+                            ) : (
+                                <span className="text-slate-500 italic">None set</span>
+                            )}
+                        </div>
+
+                        {/* Default button */}
+                        <button
+                            onClick={() => setIsDefaultSelectorOpen(!isDefaultSelectorOpen)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                                defaultWorkflow
+                                    ? 'bg-brand-gold/20 text-brand-gold border border-brand-gold hover:bg-brand-gold/30'
+                                    : 'bg-slate-700 text-slate-300 border border-slate-600 hover:bg-slate-600'
+                            }`}
+                            title="Set default workflow for auto-load on startup"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                            </svg>
+                            Default
+                            <svg className={`w-3 h-3 transition-transform ${isDefaultSelectorOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+
+                        {/* Dropdown selector */}
+                        <DefaultWorkflowSelector
+                            isOpen={isDefaultSelectorOpen}
+                            onClose={() => setIsDefaultSelectorOpen(false)}
+                            currentDefault={defaultWorkflow}
+                            onSetDefault={(config) => {
+                                setDefaultWorkflow(config);
+                                if (config) {
+                                    showNotification(`Default workflow set: ${config.workflowName}`, 'success');
+                                } else {
+                                    showNotification('Default workflow cleared', 'info');
+                                }
+                            }}
+                        />
                     </div>
 
                     {/* Navigation Buttons - Grid on mobile (4 columns), flex on desktop */}
