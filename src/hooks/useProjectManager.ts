@@ -139,7 +139,7 @@ const initialProjectState: ProjectState = {
   fileNameTemplate: '{tag}-{item_name}-output',
   wpCredentials: { url: '', user: '', password: '' },
   wpContentType: 'pages',
-  wpTitleTemplate: 'An Introduction to {item_name}',
+  wpTitleTemplate: 'An Introduction to <item_name>',
   tags: initialTags,
   placeholders: initialPlaceholders,
   taggedSnippets: initialTaggedSnippets,

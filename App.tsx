@@ -1015,12 +1015,21 @@ const App: React.FC = () => {
     };
 
     const fillSimpleTemplate = (template: string, data: Record<string, string | null | undefined>): string => {
-        // Support <angle brackets> syntax as shown in UI hints
-        return template.replace(/<([^<>]+)>/g, (match, key) => {
+        // Support both <angle brackets> and {curly braces} syntax
+        let result = template;
+        // First pass: handle <angle brackets>
+        result = result.replace(/<([^<>]+)>/g, (match, key) => {
             const trimmedKey = key.trim();
             const value = data[trimmedKey];
             return value !== null && value !== undefined ? String(value) : match;
         });
+        // Second pass: handle {curly braces}
+        result = result.replace(/{([^{}]+)}/g, (match, key) => {
+            const trimmedKey = key.trim();
+            const value = data[trimmedKey];
+            return value !== null && value !== undefined ? String(value) : match;
+        });
+        return result;
     };
 
     const handlePublishToWordPress = async (result: Result, useElementor: boolean = true) => {

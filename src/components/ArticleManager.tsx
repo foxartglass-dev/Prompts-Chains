@@ -104,13 +104,22 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
     return name.replace(/\s*\([^)]+\)\s*$/, '').trim();
   };
 
-  // Fill a simple template with data (supports <angle brackets> syntax)
+  // Fill a simple template with data (supports both <angle brackets> and {curly braces} syntax)
   const fillSimpleTemplate = (template: string, data: Record<string, string | null | undefined>): string => {
-    return template.replace(/<([^<>]+)>/g, (match, key) => {
+    let result = template;
+    // First pass: handle <angle brackets>
+    result = result.replace(/<([^<>]+)>/g, (match, key) => {
       const trimmedKey = key.trim();
       const value = data[trimmedKey];
       return value !== null && value !== undefined ? String(value) : match;
     });
+    // Second pass: handle {curly braces}
+    result = result.replace(/{([^{}]+)}/g, (match, key) => {
+      const trimmedKey = key.trim();
+      const value = data[trimmedKey];
+      return value !== null && value !== undefined ? String(value) : match;
+    });
+    return result;
   };
 
   // Generate the page title from template or fall back to keyword
