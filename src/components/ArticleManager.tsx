@@ -495,9 +495,15 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
           })
         });
 
+        // Save current plugin selection before refresh (closure issue workaround)
+        const currentPlugin = localSeoPlugin;
+
         // Refresh article to show updated status
-        fetchArticle(selectedArticle.id);
+        await fetchArticle(selectedArticle.id);
         fetchArticles();
+
+        // Restore plugin selection after refresh
+        setLocalSeoPlugin(currentPlugin);
       } else {
         setError(data.error || 'Failed to push to SEO plugin');
       }
