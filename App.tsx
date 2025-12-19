@@ -736,6 +736,18 @@ const App: React.FC = () => {
                 cleaned = cleaned.replace(/^["']|["']$/g, '').trim();
                 return cleaned;
             })
+            .map(line => {
+                // GUARDRAIL: Remove placeholder patterns like [Company Name], {brand}, etc.
+                // Strip trailing placeholders (e.g., "Title | [Company Name]" → "Title")
+                let cleaned = line.replace(/\s*[\|\-]\s*\[[^\]]+\]\s*$/g, '').trim();
+                cleaned = cleaned.replace(/\s*[\|\-]\s*\{[^}]+\}\s*$/g, '').trim();
+                // Also remove any remaining brackets anywhere in the text
+                cleaned = cleaned.replace(/\[[^\]]*\]/g, '').trim();
+                cleaned = cleaned.replace(/\{[^}]*\}/g, '').trim();
+                // Clean up any leftover separators at the end
+                cleaned = cleaned.replace(/\s*[\|\-]\s*$/g, '').trim();
+                return cleaned;
+            })
             .filter(line => {
                 // Filter out empty lines
                 if (line.length < minLength) return false;
@@ -745,6 +757,9 @@ const App: React.FC = () => {
                 }
                 // Filter out lines that look like they contain character counts
                 if (/\(\d+\s*characters?\)/.test(line)) return false;
+                // GUARDRAIL: Reject any remaining lines with placeholder brackets
+                if (/\[[^\]]+\]/.test(line)) return false;
+                if (/\{[^}]+\}/.test(line)) return false;
                 return true;
             });
     };
