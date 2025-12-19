@@ -1438,11 +1438,12 @@ const App: React.FC = () => {
         );
     }
     
-    const renderSection = (title: string, id: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen = false) => (
+    const renderSection = (title: string, id: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen = false, rightContent?: React.ReactNode) => (
       <div className="bg-card rounded-xl shadow-glow-cyan card-3d hover:shadow-card-hover border-2 border-brand-cyan">
         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
           {icon}
           <span className="ml-3">{title}</span>
+          {rightContent && <div className="ml-4" onClick={e => e.stopPropagation()}>{rightContent}</div>}
            <svg className={`w-5 h-5 ml-auto transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </h2>
         <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? 'max-h-[5000px]' : 'max-h-0 overflow-hidden'}`}>
@@ -1916,16 +1917,6 @@ const App: React.FC = () => {
                             </svg>
                             <span className="text-[10px] md:text-sm">Settings</span>
                         </button>
-
-                        {/* Pending Meta Notification Bell */}
-                        <div className="relative hidden md:block">
-                            <PendingMetaNotification
-                                onOpenArticle={(articleId) => {
-                                    setIsArticlesOpen(true);
-                                    // The ArticleManager will handle opening the specific article
-                                }}
-                            />
-                        </div>
                     </div>
                 </div>
 
@@ -2265,8 +2256,14 @@ const App: React.FC = () => {
                                 {getRunButtonText()}
                             </button>
                         </div>
-                    , true)}
-                    
+                    , true,
+                    <PendingMetaNotification
+                        onOpenArticle={(articleId) => {
+                            setIsArticlesOpen(true);
+                        }}
+                    />
+                    )}
+
                     {items.length > 0 && renderSection('2. Loaded Items', 'loadedItems', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-2">
                             <p className="text-brand-gold">{items.length} item(s) loaded.</p>
