@@ -264,19 +264,34 @@ export async function pushMetaToSeoPlugin({
           console.log('Rank Math internal API also failed:', rmErr.message);
         }
 
-        // Neither worked - return with setup instructions
+        // Neither worked - but the WordPress request succeeded, so return success
+        // The meta fields may have been saved even if not returned in the response
         return {
           success: true,
-          message: `Request sent to WordPress. For Rank Math REST API support:\n1. Go to Rank Math > General Settings > Others\n2. Enable "Headless CMS Support"\n3. Save changes and try again.`,
+          message: `Meta sent to Rank Math. Note: If meta doesn't appear, verify "Headless CMS Support" is enabled in Rank Math > General Settings > Others.`,
           postId: responseData.id,
-          link: responseData.link,
-          requiresSetup: true
+          link: responseData.link
+        };
+      }
+
+      // Response NOT ok - provide specific error based on status code
+      if (response.status === 404) {
+        return {
+          success: false,
+          error: `WordPress page/post not found (ID: ${postId}). The page may have been deleted or the post type may be wrong. Check that the page exists in WordPress.`
+        };
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return {
+          success: false,
+          error: `Authentication failed (${response.status}). Check your WordPress username and app password.`
         };
       }
 
       return {
         success: false,
-        error: `Rank Math API error: ${response.status}. Enable "Headless CMS Support" in Rank Math > General Settings > Others.`
+        error: `Rank Math API error: ${response.status} - ${responseData.message || 'Unknown error'}. If Headless CMS Support is already enabled, try saving the Rank Math settings again.`
       };
     }
 
