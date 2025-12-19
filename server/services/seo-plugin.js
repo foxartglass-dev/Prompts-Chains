@@ -198,11 +198,49 @@ export async function pushMetaToSeoPlugin({
       };
     }
 
-    // RANK MATH - Use post meta approach (most reliable)
-    // Rank Math exposes these fields via REST API when "Headless CMS Support" is enabled
+    // RANK MATH - Use Rank Math API Manager plugin endpoint (most reliable)
+    // Plugin: https://github.com/Devora-AS/rank-math-api-manager
     if (seoPlugin === 'rankmath') {
+      console.log('Pushing to Rank Math via API Manager plugin...');
 
-      // Primary approach: Post meta (works when Headless CMS Support is enabled)
+      // PRIMARY: Use Rank Math API Manager plugin endpoint (form-urlencoded)
+      // This plugin properly registers the meta fields and handles the update
+      try {
+        const formData = new URLSearchParams();
+        formData.append('post_id', postId.toString());
+        if (metaTitle) formData.append('rank_math_title', metaTitle);
+        if (metaDescription) formData.append('rank_math_description', metaDescription);
+
+        const apiManagerResponse = await fetch(`${baseUrl}/wp-json/rank-math-api/v1/update-meta`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': authHeader
+          },
+          body: formData.toString()
+        });
+
+        if (apiManagerResponse.ok) {
+          const result = await apiManagerResponse.json().catch(() => ({}));
+          console.log('Rank Math API Manager success:', result);
+          return {
+            success: true,
+            message: 'Meta pushed to Rank Math successfully via API Manager plugin.',
+            postId: postId
+          };
+        }
+
+        // If API Manager endpoint doesn't exist (404), fall back to other methods
+        if (apiManagerResponse.status !== 404) {
+          const errorData = await apiManagerResponse.json().catch(() => ({}));
+          console.log('Rank Math API Manager failed:', apiManagerResponse.status, errorData);
+        }
+      } catch (apiErr) {
+        console.log('Rank Math API Manager not available, trying fallbacks...', apiErr.message);
+      }
+
+      // FALLBACK 1: WordPress REST API with meta fields
+      console.log('Trying WordPress REST API with meta fields...');
       const metaPayload = {};
       if (metaTitle) metaPayload['rank_math_title'] = metaTitle;
       if (metaDescription) metaPayload['rank_math_description'] = metaDescription;
@@ -232,7 +270,7 @@ export async function pushMetaToSeoPlugin({
           };
         }
 
-        // Request succeeded but meta may not have been saved - try internal API as fallback
+        // FALLBACK 2: Rank Math internal API
         console.log('Post meta may not have saved, trying Rank Math internal API...');
         try {
           const rmResponse = await fetch(`${baseUrl}/wp-json/rankmath/v1/updateMeta`, {
@@ -263,11 +301,9 @@ export async function pushMetaToSeoPlugin({
           console.log('Rank Math internal API also failed:', rmErr.message);
         }
 
-        // Neither worked - but the WordPress request succeeded, so return success
-        // The meta fields may have been saved even if not returned in the response
         return {
           success: true,
-          message: `Meta sent to Rank Math. Note: If meta doesn't appear, verify "Headless CMS Support" is enabled in Rank Math > General Settings > Others.`,
+          message: `Meta sent to Rank Math. If meta doesn't appear, ensure the Rank Math API Manager plugin is installed and activated.`,
           postId: responseData.id,
           link: responseData.link
         };
@@ -290,7 +326,7 @@ export async function pushMetaToSeoPlugin({
 
       return {
         success: false,
-        error: `Rank Math API error: ${response.status} - ${responseData.message || 'Unknown error'}. If Headless CMS Support is already enabled, try saving the Rank Math settings again.`
+        error: `Rank Math API error: ${response.status} - ${responseData.message || 'Unknown error'}. Ensure the Rank Math API Manager plugin is installed.`
       };
     }
 
