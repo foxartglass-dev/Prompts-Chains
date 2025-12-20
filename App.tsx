@@ -19,6 +19,7 @@ import Analytics from './src/components/Analytics';
 import PendingMetaNotification from './src/components/PendingMetaNotification';
 import IdeasBacklog from './src/components/IdeasBacklog';
 import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components/DefaultWorkflowSelector';
+import WordPressSettings from './src/components/WordPressSettings';
 
 // Types for workflow
 interface WorkflowItem {
@@ -137,6 +138,7 @@ const App: React.FC = () => {
     const [isWebsitesOpen, setIsWebsitesOpen] = useState(false);
     const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
     const [isIdeasOpen, setIsIdeasOpen] = useState(false);
+    const [isWordPressOpen, setIsWordPressOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
     const [defaultWorkflow, setDefaultWorkflow] = useState<DefaultWorkflowConfig | null>(() => {
@@ -1505,6 +1507,7 @@ const App: React.FC = () => {
 
             {/* Ideas Backlog */}
             <IdeasBacklog isOpen={isIdeasOpen} onClose={() => setIsIdeasOpen(false)} />
+            <WordPressSettings isOpen={isWordPressOpen} onClose={() => setIsWordPressOpen(false)} />
 
             {/* Settings Modal */}
             {isSettingsOpen && (
@@ -1833,7 +1836,7 @@ const App: React.FC = () => {
                             />
                         </div>
                         <button
-                            onClick={() => { setIsTrackerOpen(false); setIsWorkflowNavOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsAgencyOpen(true); }}
+                            onClick={() => { setIsTrackerOpen(false); setIsWorkflowNavOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWordPressOpen(false); setIsAgencyOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Manage Clients & Locations"
                         >
@@ -1843,7 +1846,7 @@ const App: React.FC = () => {
                             <span className="text-[10px] md:text-sm">Agency</span>
                         </button>
                         <button
-                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsClientsOpen(true); }}
+                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWordPressOpen(false); setIsClientsOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="View All Clients"
                         >
@@ -1853,17 +1856,7 @@ const App: React.FC = () => {
                             <span className="text-[10px] md:text-sm">Clients</span>
                         </button>
                         <button
-                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWorkflowNavOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
-                            title="Browse Workflows"
-                        >
-                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
-                            </svg>
-                            <span className="text-[10px] md:text-sm">Workflows</span>
-                        </button>
-                        <button
-                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsAnalyticsOpen(false); setIsWebsitesOpen(true); }}
+                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsAnalyticsOpen(false); setIsWordPressOpen(false); setIsWebsitesOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="View All Websites"
                         >
@@ -1873,7 +1866,17 @@ const App: React.FC = () => {
                             <span className="text-[10px] md:text-sm">Websites</span>
                         </button>
                         <button
-                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsWorkflowNavOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsArticlesOpen(true); }}
+                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWordPressOpen(false); setIsWorkflowNavOpen(true); }}
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            title="Browse Workflows"
+                        >
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
+                            </svg>
+                            <span className="text-[10px] md:text-sm">Workflows</span>
+                        </button>
+                        <button
+                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsWorkflowNavOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWordPressOpen(false); setIsArticlesOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="View Workflow Results"
                         >
@@ -1911,6 +1914,16 @@ const App: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                             </svg>
                             <span className="text-[10px] md:text-sm">Ideas</span>
+                        </button>
+                        <button
+                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsWordPressOpen(true); }}
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            title="WordPress Settings"
+                        >
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                            </svg>
+                            <span className="text-[10px] md:text-sm">WordPress</span>
                         </button>
                         <button
                             onClick={() => setIsSettingsOpen(true)}
@@ -2177,31 +2190,35 @@ const App: React.FC = () => {
                         </div>
                     , true,
                     <>
-                        {/* Workflow Context - LEFT aligned, wider */}
+                        {/* Workflow Context - Matches Default dropdown style */}
                         {currentWorkflowContext.workflowName && (
-                            <div className="flex flex-col gap-0.5 mr-auto">
-                                <span className="text-[9px] text-gray-400 uppercase tracking-wider text-center">Current Workflow</span>
-                                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 border border-brand-gold rounded-lg">
-                                    {currentWorkflowContext.isStandalone ? (
-                                        <>
-                                            <div className="flex flex-col text-[11px] leading-tight">
-                                                <span className="text-purple-400 font-medium">Standalone</span>
-                                                {currentWorkflowContext.projectName && (
-                                                    <span className="text-purple-300">{currentWorkflowContext.projectName}</span>
-                                                )}
-                                            </div>
-                                            <span className="text-brand-gold font-semibold text-sm">{currentWorkflowContext.workflowName}</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="flex flex-col text-[11px] leading-tight">
-                                                <span className="text-brand-cyan font-medium">{currentWorkflowContext.clientName || 'Client'}</span>
-                                                <span className="text-brand-cyan-light">{formatWebsiteUrl(currentWorkflowContext.websiteName)}</span>
-                                            </div>
-                                            <span className="text-brand-gold font-semibold text-sm">{currentWorkflowContext.workflowName}</span>
-                                        </>
-                                    )}
-                                </div>
+                            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800/80 border border-brand-gold/60 rounded-lg mr-auto">
+                                <svg className="h-4 w-4 text-brand-gold flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                </svg>
+                                <span className="text-brand-cyan text-xs font-medium">Current</span>
+                                <span className="text-slate-500">|</span>
+                                {currentWorkflowContext.isStandalone ? (
+                                    <>
+                                        <span className="text-purple-400 text-xs font-medium truncate max-w-[80px]" title="Standalone">Standalone</span>
+                                        <span className="text-slate-500">-</span>
+                                        <span className="text-brand-gold text-xs font-semibold truncate max-w-[200px]" title={currentWorkflowContext.workflowName}>{currentWorkflowContext.workflowName}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-white text-xs font-medium truncate max-w-[100px]" title={currentWorkflowContext.clientName}>
+                                            {(currentWorkflowContext.clientName || 'Client').length > 20
+                                                ? (currentWorkflowContext.clientName || 'Client').substring(0, 20) + '...'
+                                                : currentWorkflowContext.clientName || 'Client'}
+                                        </span>
+                                        <span className="text-slate-500">-</span>
+                                        <span className="text-brand-cyan-light text-xs truncate max-w-[120px]" title={currentWorkflowContext.websiteName}>
+                                            {formatWebsiteUrl(currentWorkflowContext.websiteName)}
+                                        </span>
+                                        <span className="text-slate-500">-</span>
+                                        <span className="text-brand-gold text-xs font-semibold truncate max-w-[180px]" title={currentWorkflowContext.workflowName}>{currentWorkflowContext.workflowName}</span>
+                                    </>
+                                )}
                             </div>
                         )}
 
@@ -2227,7 +2244,7 @@ const App: React.FC = () => {
                                             : 'bg-brand-cyan text-slate-900 border-brand-cyan'
                                 }`}
                             >
-                                <span className="text-[10px] opacity-75">Workflow</span>
+                                <span className="text-[10px] font-bold opacity-90">Workflow</span>
                                 <span className="flex items-center gap-1 text-xs">
                                     {isSaving ? (
                                         <>

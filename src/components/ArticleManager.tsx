@@ -355,8 +355,6 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
             title: pageTitle,
             content: editContent || selectedArticle.final_content,
             status: 'draft',
-            ctaText: 'Book Now!',
-            ctaUrl: '#',
             includeStatsBar: false,
             articleId: selectedArticle.id,
             isManualPush: true // Track as manual push from ArticleManager
@@ -754,6 +752,8 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                             {(() => {
                               const hasAutoPush = article.article_push_auto_at;
                               const manualCount = article.article_push_manual_count || 0;
+                              // Fallback: if wp_post_id exists but no tracking data, assume A1 (legacy auto-push)
+                              const hasWpPost = article.wp_post_id;
 
                               if (hasAutoPush) {
                                 return (
@@ -773,6 +773,16 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                                     title={tooltipText || `Manual pushes: ${manualCount}`}
                                   >
                                     M{manualCount}
+                                  </span>
+                                );
+                              } else if (hasWpPost) {
+                                // Has WP post but no tracking data - assume legacy auto-push
+                                return (
+                                  <span
+                                    className="px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium cursor-help"
+                                    title={`Published to WordPress (legacy)`}
+                                  >
+                                    A1
                                   </span>
                                 );
                               } else {
@@ -799,6 +809,8 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
 
                               const hasAutoPush = article.meta_push_auto_at;
                               const manualCount = article.meta_push_manual_count || 0;
+                              // Fallback: if meta_seo_status is 'pushed' but no tracking data
+                              const metaWasPushed = article.meta_seo_status === 'pushed';
 
                               if (hasAutoPush) {
                                 return (
@@ -818,6 +830,16 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                                     title={tooltipText || `Manual pushes: ${manualCount}`}
                                   >
                                     M{manualCount}
+                                  </span>
+                                );
+                              } else if (metaWasPushed) {
+                                // Legacy: meta_seo_status is 'pushed' but no tracking data
+                                return (
+                                  <span
+                                    className="px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium cursor-help"
+                                    title={`Meta pushed to SEO (legacy)`}
+                                  >
+                                    A1
                                   </span>
                                 );
                               } else {
@@ -964,12 +986,14 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                         >
                           {publishing ? 'Publishing...' : (
                             <>
-                              Elementor
-                              {(selectedArticle.article_push_auto_at || selectedArticle.article_push_manual_count > 0) && (
-                                <span className="px-1 py-0.5 bg-white/20 rounded text-[10px]">
+                              Push Article to Elementor
+                              {(selectedArticle.article_push_auto_at || selectedArticle.article_push_manual_count > 0 || selectedArticle.wp_post_id) && (
+                                <span className="px-1.5 py-0.5 bg-slate-800 rounded text-yellow-400 text-[11px] font-semibold tracking-wide">
                                   {selectedArticle.article_push_auto_at
                                     ? 'A1'
-                                    : `M${selectedArticle.article_push_manual_count}`}
+                                    : selectedArticle.article_push_manual_count > 0
+                                      ? `M${selectedArticle.article_push_manual_count}`
+                                      : 'A1'}
                                 </span>
                               )}
                             </>
@@ -983,6 +1007,34 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                         >
                           Plain WP
                         </button>
+                        {/* Push to Rankmath - Duplicate button for toolbar */}
+                        {selectedArticle.wp_post_id && (
+                          <button
+                            onClick={pushToSeo}
+                            disabled={pushingSeo}
+                            className="px-3 py-1.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 rounded text-sm text-white font-medium disabled:opacity-50 flex items-center gap-1.5"
+                            title={selectedArticle.meta_push_auto_at
+                              ? `Auto-pushed: ${new Date(selectedArticle.meta_push_auto_at).toLocaleString()}`
+                              : selectedArticle.meta_push_manual_count
+                                ? `Manually pushed ${selectedArticle.meta_push_manual_count} time(s)`
+                                : 'Not yet pushed'}
+                          >
+                            {pushingSeo ? 'Pushing...' : (
+                              <>
+                                Push to {localSeoPlugin === 'none' ? 'WordPress' : localSeoPlugin.charAt(0).toUpperCase() + localSeoPlugin.slice(1)}
+                                {(selectedArticle.meta_push_auto_at || selectedArticle.meta_push_manual_count > 0 || selectedArticle.meta_seo_status === 'pushed') && (
+                                  <span className="px-1.5 py-0.5 bg-slate-800 rounded text-yellow-400 text-[11px] font-semibold tracking-wide">
+                                    {selectedArticle.meta_push_auto_at
+                                      ? 'A1'
+                                      : selectedArticle.meta_push_manual_count > 0
+                                        ? `M${selectedArticle.meta_push_manual_count}`
+                                        : 'A1'}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
 
                       {/* History button */}
@@ -1298,11 +1350,13 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                 </svg>
                                 Push to {localSeoPlugin === 'none' ? 'WordPress' : localSeoPlugin.charAt(0).toUpperCase() + localSeoPlugin.slice(1)}
-                                {(selectedArticle.meta_push_auto_at || selectedArticle.meta_push_manual_count > 0) && (
-                                  <span className="px-1 py-0.5 bg-white/20 rounded text-[10px]">
+                                {(selectedArticle.meta_push_auto_at || selectedArticle.meta_push_manual_count > 0 || selectedArticle.meta_seo_status === 'pushed') && (
+                                  <span className="px-1.5 py-0.5 bg-slate-800 rounded text-yellow-400 text-[11px] font-semibold tracking-wide">
                                     {selectedArticle.meta_push_auto_at
                                       ? 'A1'
-                                      : `M${selectedArticle.meta_push_manual_count}`}
+                                      : selectedArticle.meta_push_manual_count > 0
+                                        ? `M${selectedArticle.meta_push_manual_count}`
+                                        : 'A1'}
                                   </span>
                                 )}
                               </>

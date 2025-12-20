@@ -60,10 +60,10 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
 
   return (
     <div className="relative">
-      {/* Notification Button */}
+      {/* Notification Button - Blue theme to match other nav buttons */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative p-2 rounded-lg bg-brand-gold/20 hover:bg-brand-gold/30 border border-brand-gold transition-all ${!isPulseEnabled ? 'shadow-glow-gold' : ''}`}
+        className={`relative p-2 rounded-lg bg-brand-cyan/20 hover:bg-brand-cyan/30 border border-brand-cyan transition-all ${!isPulseEnabled ? 'shadow-glow-cyan' : ''}`}
         title={`${pendingCount} article(s) need meta selection`}
       >
         {/* Bell Icon */}
@@ -72,11 +72,11 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
         </svg>
 
         {/* Badge with optional Pulse Animation */}
-        <span className="absolute -top-1 -right-1 flex h-4 w-4">
+        <span className="absolute -top-1 -right-1 flex h-5 w-5">
           {isPulseEnabled && (
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-gold opacity-75"></span>
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-cyan opacity-75"></span>
           )}
-          <span className="relative inline-flex rounded-full h-4 w-4 bg-brand-gold text-[10px] text-slate-900 items-center justify-center font-bold">
+          <span className="relative inline-flex rounded-full h-5 w-5 bg-brand-cyan text-[11px] text-slate-900 items-center justify-center font-bold">
             {pendingCount > 9 ? '9+' : pendingCount}
           </span>
         </span>
