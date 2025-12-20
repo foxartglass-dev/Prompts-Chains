@@ -1769,9 +1769,9 @@ const App: React.FC = () => {
                     }
                 }}
             />
-            <header className="mb-4 px-2 sm:px-0">
+            <header className="mb-2 px-2 sm:px-0">
                 {/* Top Bar with Logo and Navigation - Mobile: stacked, Desktop: side by side */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-3 gap-2">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-1.5 gap-1">
                     {/* Logo - Centered on mobile */}
                     <div className="flex items-center justify-center md:justify-start">
                         <div className="flex flex-col items-center md:items-start">
@@ -1815,7 +1815,7 @@ const App: React.FC = () => {
                                     <span className="text-[10px] md:text-sm flex items-center gap-1">
                                         <span className="flex flex-col items-center leading-tight">
                                             <span className="text-brand-gold">Default</span>
-                                            <span className="text-brand-cyan text-[8px] md:text-[10px]">Workflow</span>
+                                            <span className="text-brand-gold text-[8px] md:text-[10px]">Workflow</span>
                                         </span>
                                         <span className="text-slate-500">|</span>
                                         <span className="text-brand-cyan">{(defaultWorkflow.clientName || 'Personal').slice(0, 20)}{(defaultWorkflow.clientName || '').length > 20 ? '...' : ''}</span>
@@ -1831,7 +1831,7 @@ const App: React.FC = () => {
                                 ) : (
                                     <span className="text-[10px] md:text-sm flex flex-col items-center leading-tight">
                                         <span className="text-brand-gold">Default</span>
-                                        <span className="text-brand-cyan text-[8px] md:text-[10px]">Workflow</span>
+                                        <span className="text-brand-gold text-[8px] md:text-[10px]">Workflow</span>
                                     </span>
                                 )}
                                 <svg className={`h-3 w-3 md:h-4 md:w-4 text-brand-cyan ml-1 transition-transform ${isDefaultSelectorOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1936,9 +1936,6 @@ const App: React.FC = () => {
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
                                 </svg>
                                 <span className="text-[10px] md:text-sm">More</span>
-                                <svg className={`h-3 w-3 text-brand-cyan transition-transform ${isMoreDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                                </svg>
                             </button>
                             {isMoreDropdownOpen && (
                                 <div className="absolute top-full right-0 mt-2 bg-slate-800 border border-brand-gold rounded-lg shadow-2xl z-50 min-w-[160px]">
@@ -2234,7 +2231,7 @@ const App: React.FC = () => {
                                 </svg>
                                 <span className="flex flex-col items-center leading-tight">
                                     <span className="text-brand-gold text-sm font-semibold">Current</span>
-                                    <span className="text-brand-cyan text-[10px]">Workflow</span>
+                                    <span className="text-brand-gold text-[10px]">Workflow</span>
                                 </span>
                                 <span className="text-slate-500">|</span>
                                 {currentWorkflowContext.isStandalone ? (
@@ -2275,19 +2272,17 @@ const App: React.FC = () => {
                             <button
                                 onClick={() => saveWorkflowToDatabase(true)}
                                 disabled={isSaving || !hasUnsavedChanges}
-                                className={`flex flex-col items-center px-1.5 py-px rounded font-semibold transition border min-w-[50px] leading-none ${
+                                className={`flex flex-col items-center px-3 py-1.5 rounded-lg font-semibold transition border min-w-[70px] ${
                                     isSaving
-                                        ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait'
-                                        : hasUnsavedChanges
-                                            ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900 border-yellow-400'
-                                            : 'bg-brand-cyan text-slate-900 border-brand-cyan'
+                                        ? 'bg-brand-cyan/70 text-slate-900 border-brand-cyan cursor-wait'
+                                        : 'bg-brand-cyan text-slate-900 border-brand-cyan hover:bg-brand-cyan/90'
                                 }`}
                             >
-                                <span className="text-[8px] font-bold opacity-90">Workflow</span>
-                                <span className="flex items-center gap-0.5 text-[10px]">
+                                <span className="text-[10px] font-bold opacity-90">Workflow</span>
+                                <span className="flex items-center gap-1 text-sm font-bold">
                                     {isSaving ? (
                                         <>
-                                            <svg className="w-2.5 h-2.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                             </svg>
@@ -2296,21 +2291,21 @@ const App: React.FC = () => {
                                     ) : hasUnsavedChanges ? (
                                         <>
                                             Save
-                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
                                             </svg>
                                         </>
                                     ) : (
                                         <>
                                             Saved
-                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
                                             </svg>
                                         </>
                                     )}
                                 </span>
                                 {lastSaveTime && (
-                                    <span className="text-[8px] font-bold">
+                                    <span className="text-[10px] font-bold">
                                         {lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                     </span>
                                 )}
