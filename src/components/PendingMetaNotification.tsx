@@ -82,6 +82,14 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
         </span>
       </button>
 
+      {/* Backdrop overlay when open */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-[99]"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
       {/* Dropdown Panel */}
       {isOpen && (
         <div className="absolute right-0 top-full mt-2 w-96 bg-slate-900 border-4 border-brand-gold rounded-lg shadow-lg shadow-brand-gold/20 z-[100] max-h-[70vh] overflow-hidden flex flex-col">

@@ -1484,7 +1484,7 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-900 text-gray-200 font-sans p-4 sm:p-6 lg:p-8">
+        <div className="min-h-screen bg-slate-900 text-gray-200 font-sans pt-1 pb-4 px-4 sm:pt-2 sm:pb-6 sm:px-6 lg:pt-2 lg:pb-8 lg:px-8">
              {notification && (
                 <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-xl shadow-card-lg text-white transition-all duration-300 border ${notification.type === 'success' ? 'bg-green-600/90 border-green-500' : notification.type === 'info' ? 'bg-brand-cyan/90 border-brand-cyan-light' : 'bg-red-600/90 border-red-500'}`}>
                     {notification.message}
