@@ -2177,44 +2177,49 @@ const App: React.FC = () => {
                         </div>
                     , true,
                     <>
-                        {/* Workflow Context - Condensed */}
+                        {/* Workflow Context - LEFT aligned, wider */}
                         {currentWorkflowContext.workflowName && (
-                            <div className="flex items-center gap-2 px-2 py-1 bg-slate-800/50 border border-brand-gold rounded-lg">
-                                {currentWorkflowContext.isStandalone ? (
-                                    <>
-                                        <div className="flex flex-col text-[10px] leading-tight">
-                                            <span className="text-purple-400">Standalone</span>
-                                            {currentWorkflowContext.projectName && (
-                                                <span className="text-purple-300 truncate max-w-[80px]">{currentWorkflowContext.projectName}</span>
-                                            )}
-                                        </div>
-                                        <span className="text-brand-gold font-semibold text-xs truncate max-w-[120px]">{currentWorkflowContext.workflowName}</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className="flex flex-col text-[10px] leading-tight">
-                                            <span className="text-brand-cyan truncate max-w-[80px]">{currentWorkflowContext.clientName || 'Client'}</span>
-                                            <span className="text-brand-cyan-light truncate max-w-[80px]">{formatWebsiteUrl(currentWorkflowContext.websiteName)}</span>
-                                        </div>
-                                        <span className="text-brand-gold font-semibold text-xs truncate max-w-[120px]">{currentWorkflowContext.workflowName}</span>
-                                    </>
-                                )}
+                            <div className="flex flex-col gap-0.5 mr-auto">
+                                <span className="text-[9px] text-gray-400 uppercase tracking-wider text-center">Current Workflow</span>
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 border border-brand-gold rounded-lg">
+                                    {currentWorkflowContext.isStandalone ? (
+                                        <>
+                                            <div className="flex flex-col text-[11px] leading-tight">
+                                                <span className="text-purple-400 font-medium">Standalone</span>
+                                                {currentWorkflowContext.projectName && (
+                                                    <span className="text-purple-300">{currentWorkflowContext.projectName}</span>
+                                                )}
+                                            </div>
+                                            <span className="text-brand-gold font-semibold text-sm">{currentWorkflowContext.workflowName}</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="flex flex-col text-[11px] leading-tight">
+                                                <span className="text-brand-cyan font-medium">{currentWorkflowContext.clientName || 'Client'}</span>
+                                                <span className="text-brand-cyan-light">{formatWebsiteUrl(currentWorkflowContext.websiteName)}</span>
+                                            </div>
+                                            <span className="text-brand-gold font-semibold text-sm">{currentWorkflowContext.workflowName}</span>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         )}
 
-                        {/* Notification Button */}
-                        <PendingMetaNotification
-                            onOpenArticle={(articleId) => {
-                                setIsArticlesOpen(true);
-                            }}
-                        />
+                        {/* Notification Button - with gap on left */}
+                        <div className="ml-4">
+                            <PendingMetaNotification
+                                onOpenArticle={(articleId) => {
+                                    setIsArticlesOpen(true);
+                                }}
+                            />
+                        </div>
 
-                        {/* Save Status */}
+                        {/* Save Status - 3-line design */}
                         {currentWorkflowContext.workflowName && (
                             <button
                                 onClick={() => saveWorkflowToDatabase(true)}
                                 disabled={isSaving || !hasUnsavedChanges}
-                                className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg font-semibold text-xs transition border ${
+                                className={`flex flex-col items-center px-3 py-1.5 rounded-lg font-semibold transition border min-w-[70px] ${
                                     isSaving
                                         ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait'
                                         : hasUnsavedChanges
@@ -2222,7 +2227,8 @@ const App: React.FC = () => {
                                             : 'bg-brand-cyan text-slate-900 border-brand-cyan'
                                 }`}
                             >
-                                <span className="flex items-center gap-1">
+                                <span className="text-[10px] opacity-75">Workflow</span>
+                                <span className="flex items-center gap-1 text-xs">
                                     {isSaving ? (
                                         <>
                                             <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2233,22 +2239,22 @@ const App: React.FC = () => {
                                         </>
                                     ) : hasUnsavedChanges ? (
                                         <>
+                                            Save
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
                                             </svg>
-                                            Save
                                         </>
                                     ) : (
                                         <>
+                                            Saved
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
                                             </svg>
-                                            Saved
                                         </>
                                     )}
                                 </span>
                                 {lastSaveTime && (
-                                    <span className="text-[9px] opacity-75">
+                                    <span className="text-[10px] font-bold">
                                         {lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                     </span>
                                 )}
@@ -2287,14 +2293,14 @@ const App: React.FC = () => {
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
                                 WordPress Admin Credentials
                             </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-end">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
                                     <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">Content Type</label>
-                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all">
+                                <div className="w-20">
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Type</label>
+                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-2 py-2.5 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all">
                                         <option value="pages">Page</option>
                                         <option value="posts">Post</option>
                                     </select>
@@ -2305,7 +2311,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'draft'}))}
-                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
                                                 (currentProject.state.articlePublishMode || 'draft') === 'draft'
                                                     ? 'bg-brand-gold text-black'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2316,7 +2322,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'wordpress'}))}
-                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
                                                 currentProject.state.articlePublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2332,7 +2338,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'draft'}))}
-                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
                                                 (currentProject.state.metaPublishMode || 'draft') === 'draft'
                                                     ? 'bg-brand-gold text-black'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2343,7 +2349,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'wordpress'}))}
-                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
                                                 currentProject.state.metaPublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2352,6 +2358,19 @@ const App: React.FC = () => {
                                             WordPress
                                         </button>
                                     </div>
+                                </div>
+                                <div className="w-28">
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">SEO Plugin</label>
+                                    <select
+                                        value={currentProject.state.seoPlugin || 'rankmath'}
+                                        onChange={e => setCurrentProjectState(p => ({...p, seoPlugin: e.target.value}))}
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-2 py-2.5 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                    >
+                                        <option value="rankmath">Rank Math</option>
+                                        <option value="yoast">Yoast SEO</option>
+                                        <option value="aioseo">AIOSEO</option>
+                                        <option value="seopress">SEOPress</option>
+                                    </select>
                                 </div>
                             </div>
                              <div>

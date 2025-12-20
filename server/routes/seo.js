@@ -214,7 +214,7 @@ router.get('/pending', requireDb, async (req, res) => {
         LEFT JOIN clients c ON a.client_id = c.id
         WHERE a.website_id = ${websiteId}
           AND a.meta_seo_status IN ('pending', 'selected')
-          AND a.wp_post_id IS NOT NULL
+          AND (a.meta_titles IS NOT NULL AND jsonb_array_length(a.meta_titles) > 0)
         ORDER BY a.created_at DESC
       `;
     } else if (clientId) {
@@ -229,7 +229,7 @@ router.get('/pending', requireDb, async (req, res) => {
         LEFT JOIN clients c ON a.client_id = c.id
         WHERE a.client_id = ${clientId}
           AND a.meta_seo_status IN ('pending', 'selected')
-          AND a.wp_post_id IS NOT NULL
+          AND (a.meta_titles IS NOT NULL AND jsonb_array_length(a.meta_titles) > 0)
         ORDER BY a.created_at DESC
       `;
     } else {
@@ -243,7 +243,7 @@ router.get('/pending', requireDb, async (req, res) => {
         LEFT JOIN websites ws ON a.website_id = ws.id
         LEFT JOIN clients c ON a.client_id = c.id
         WHERE a.meta_seo_status IN ('pending', 'selected')
-          AND a.wp_post_id IS NOT NULL
+          AND (a.meta_titles IS NOT NULL AND jsonb_array_length(a.meta_titles) > 0)
         ORDER BY a.created_at DESC
       `;
     }
