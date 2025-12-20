@@ -60,23 +60,23 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
 
   return (
     <div className="relative">
-      {/* Notification Button - Blue theme to match other nav buttons */}
+      {/* Notification Button - Gold outline, dark interior, blue bell icon */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative p-2 rounded-lg bg-brand-cyan/20 hover:bg-brand-cyan/30 border border-brand-cyan transition-all ${!isPulseEnabled ? 'shadow-glow-cyan' : ''}`}
+        className={`relative p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-brand-gold transition-all hover:shadow-glow-gold`}
         title={`${pendingCount} article(s) need meta selection`}
       >
-        {/* Bell Icon */}
+        {/* Bell Icon - Blue */}
         <svg className="w-5 h-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
 
-        {/* Badge with optional Pulse Animation */}
+        {/* Badge with optional Pulse Animation - Gold themed */}
         <span className="absolute -top-1 -right-1 flex h-5 w-5">
           {isPulseEnabled && (
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-cyan opacity-75"></span>
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-gold opacity-75"></span>
           )}
-          <span className="relative inline-flex rounded-full h-5 w-5 bg-brand-cyan text-[11px] text-slate-900 items-center justify-center font-bold">
+          <span className="relative inline-flex rounded-full h-5 w-5 bg-brand-gold text-[11px] text-slate-900 items-center justify-center font-bold">
             {pendingCount > 9 ? '9+' : pendingCount}
           </span>
         </span>

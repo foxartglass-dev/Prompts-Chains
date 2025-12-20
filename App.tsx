@@ -140,6 +140,7 @@ const App: React.FC = () => {
     const [isIdeasOpen, setIsIdeasOpen] = useState(false);
     const [isWordPressOpen, setIsWordPressOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isMoreDropdownOpen, setIsMoreDropdownOpen] = useState(false);
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
     const [defaultWorkflow, setDefaultWorkflow] = useState<DefaultWorkflowConfig | null>(() => {
       // Load from localStorage on init
@@ -250,6 +251,18 @@ const App: React.FC = () => {
         document.addEventListener('click', handleClickAway);
         return () => document.removeEventListener('click', handleClickAway);
     }, [variableContextMenu]);
+
+    // Click-away detection for More dropdown
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (isMoreDropdownOpen && !target.closest('[data-more-dropdown]')) {
+                setIsMoreDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isMoreDropdownOpen]);
 
     // Check if PIN lock is enabled on mount
     useEffect(() => {
@@ -1885,36 +1898,53 @@ const App: React.FC = () => {
                             </svg>
                             <span className="text-[10px] md:text-sm whitespace-nowrap">Results</span>
                         </button>
-                        <button
-                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsTemplatesOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
-                            title="Template Library"
-                        >
-                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                            <span className="text-[10px] md:text-sm">Templates</span>
-                        </button>
-                        <button
-                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsIdeasOpen(false); setIsAnalyticsOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
-                            title="Analytics Dashboard"
-                        >
-                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                            </svg>
-                            <span className="text-[10px] md:text-sm">Analytics</span>
-                        </button>
-                        <button
-                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
-                            title="Ideas Backlog"
-                        >
-                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                            </svg>
-                            <span className="text-[10px] md:text-sm">Ideas</span>
-                        </button>
+                        {/* More Dropdown */}
+                        <div className="relative" data-more-dropdown>
+                            <button
+                                onClick={() => setIsMoreDropdownOpen(!isMoreDropdownOpen)}
+                                className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                                title="More Options"
+                            >
+                                <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                                </svg>
+                                <span className="text-[10px] md:text-sm">More</span>
+                                <svg className={`h-3 w-3 text-brand-cyan transition-transform ${isMoreDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            {isMoreDropdownOpen && (
+                                <div className="absolute top-full left-0 mt-2 bg-slate-800 border border-brand-gold rounded-lg shadow-2xl z-50 min-w-[160px]">
+                                    <button
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsTemplatesOpen(true); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition rounded-t-lg"
+                                    >
+                                        <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                        <span className="text-sm font-medium">Templates</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsIdeasOpen(false); setIsAnalyticsOpen(true); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition"
+                                    >
+                                        <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                        </svg>
+                                        <span className="text-sm font-medium">Analytics</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(true); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition rounded-b-lg"
+                                    >
+                                        <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                        </svg>
+                                        <span className="text-sm font-medium">Ideas</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                         <button
                             onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsWordPressOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
@@ -2192,38 +2222,38 @@ const App: React.FC = () => {
                     <>
                         {/* Workflow Context - Matches Default dropdown style */}
                         {currentWorkflowContext.workflowName && (
-                            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800/80 border border-brand-gold/60 rounded-lg mr-auto">
-                                <svg className="h-4 w-4 text-brand-gold flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-900 border border-brand-gold rounded-lg">
+                                <svg className="h-4 w-4 text-brand-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <span className="text-brand-cyan text-xs font-medium">Current</span>
+                                <span className="text-brand-gold text-sm font-semibold">Current</span>
                                 <span className="text-slate-500">|</span>
                                 {currentWorkflowContext.isStandalone ? (
                                     <>
-                                        <span className="text-purple-400 text-xs font-medium truncate max-w-[80px]" title="Standalone">Standalone</span>
+                                        <span className="text-purple-400 text-sm font-medium">Standalone</span>
                                         <span className="text-slate-500">-</span>
-                                        <span className="text-brand-gold text-xs font-semibold truncate max-w-[200px]" title={currentWorkflowContext.workflowName}>{currentWorkflowContext.workflowName}</span>
+                                        <span className="text-brand-gold text-sm font-semibold">{currentWorkflowContext.workflowName}</span>
                                     </>
                                 ) : (
                                     <>
-                                        <span className="text-white text-xs font-medium truncate max-w-[100px]" title={currentWorkflowContext.clientName}>
+                                        <span className="text-brand-cyan text-sm font-medium">
                                             {(currentWorkflowContext.clientName || 'Client').length > 20
                                                 ? (currentWorkflowContext.clientName || 'Client').substring(0, 20) + '...'
                                                 : currentWorkflowContext.clientName || 'Client'}
                                         </span>
                                         <span className="text-slate-500">-</span>
-                                        <span className="text-brand-cyan-light text-xs truncate max-w-[120px]" title={currentWorkflowContext.websiteName}>
+                                        <span className="text-brand-gold text-sm font-medium">
                                             {formatWebsiteUrl(currentWorkflowContext.websiteName)}
                                         </span>
                                         <span className="text-slate-500">-</span>
-                                        <span className="text-brand-gold text-xs font-semibold truncate max-w-[180px]" title={currentWorkflowContext.workflowName}>{currentWorkflowContext.workflowName}</span>
+                                        <span className="text-brand-gold text-sm font-semibold">{currentWorkflowContext.workflowName}</span>
                                     </>
                                 )}
                             </div>
                         )}
 
-                        {/* Notification Button - with gap on left */}
-                        <div className="ml-4">
+                        {/* Notification Button */}
+                        <div className="ml-2">
                             <PendingMetaNotification
                                 onOpenArticle={(articleId) => {
                                     setIsArticlesOpen(true);
@@ -2231,12 +2261,12 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Save Status - 3-line design */}
+                        {/* Save Status - Compact design */}
                         {currentWorkflowContext.workflowName && (
                             <button
                                 onClick={() => saveWorkflowToDatabase(true)}
                                 disabled={isSaving || !hasUnsavedChanges}
-                                className={`flex flex-col items-center px-3 py-1.5 rounded-lg font-semibold transition border min-w-[70px] ${
+                                className={`flex flex-col items-center px-2 py-0.5 rounded-lg font-semibold transition border min-w-[60px] ${
                                     isSaving
                                         ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait'
                                         : hasUnsavedChanges
@@ -2244,7 +2274,7 @@ const App: React.FC = () => {
                                             : 'bg-brand-cyan text-slate-900 border-brand-cyan'
                                 }`}
                             >
-                                <span className="text-[10px] font-bold opacity-90">Workflow</span>
+                                <span className="text-[9px] font-bold opacity-90">Workflow</span>
                                 <span className="flex items-center gap-1 text-xs">
                                     {isSaving ? (
                                         <>
