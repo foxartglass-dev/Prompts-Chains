@@ -59,40 +59,42 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
   }
 
   return (
-    <div className="relative">
-      {/* Notification Button - Gold outline, dark interior, blue bell icon */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`relative px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border-2 border-brand-gold transition-all hover:shadow-glow-gold flex items-center justify-center`}
-        title={`${pendingCount} article(s) need meta selection`}
-      >
-        {/* Bell Icon - Blue */}
-        <svg className="w-5 h-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-        </svg>
-
-        {/* Badge with optional Pulse Animation - Gold themed */}
-        <span className="absolute -top-1 -right-1 flex h-5 w-5">
-          {isPulseEnabled && (
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-gold opacity-75"></span>
-          )}
-          <span className="relative inline-flex rounded-full h-5 w-5 bg-brand-gold text-[11px] text-slate-900 items-center justify-center font-bold">
-            {pendingCount > 9 ? '9+' : pendingCount}
-          </span>
-        </span>
-      </button>
-
-      {/* Backdrop overlay when open */}
+    <>
+      {/* Backdrop overlay when open - rendered at root level */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-[99]"
+          className="fixed top-0 left-0 right-0 bottom-0 bg-black/75 z-[9998]"
+          style={{ position: 'fixed', width: '100vw', height: '100vh' }}
           onClick={() => setIsOpen(false)}
         />
       )}
 
-      {/* Dropdown Panel */}
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-slate-900 border-4 border-brand-gold rounded-lg shadow-lg shadow-brand-gold/20 z-[100] max-h-[70vh] overflow-hidden flex flex-col">
+      <div className="relative">
+        {/* Notification Button - Gold outline, dark interior, blue bell icon */}
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className={`relative px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border-2 border-brand-gold transition-all hover:shadow-glow-gold flex items-center justify-center`}
+          title={`${pendingCount} article(s) need meta selection`}
+        >
+          {/* Bell Icon - Blue */}
+          <svg className="w-5 h-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+
+          {/* Badge with optional Pulse Animation - Gold themed */}
+          <span className="absolute -top-1 -right-1 flex h-5 w-5">
+            {isPulseEnabled && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-gold opacity-75"></span>
+            )}
+            <span className="relative inline-flex rounded-full h-5 w-5 bg-brand-gold text-[11px] text-slate-900 items-center justify-center font-bold">
+              {pendingCount > 9 ? '9+' : pendingCount}
+            </span>
+          </span>
+        </button>
+
+        {/* Dropdown Panel */}
+        {isOpen && (
+          <div className="absolute right-0 top-full mt-2 w-96 bg-slate-900 border-4 border-brand-gold rounded-lg shadow-lg shadow-brand-gold/20 z-[9999] max-h-[70vh] overflow-hidden flex flex-col">
           {/* Header */}
           <div className="p-4 border-b border-brand-gold/30 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-brand-gold flex items-center gap-2">
@@ -194,7 +196,8 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

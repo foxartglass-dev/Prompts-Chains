@@ -1799,11 +1799,11 @@ const App: React.FC = () => {
                             <p className="text-[10px] md:text-xs text-slate-400 mt-1 text-center md:text-left w-full">Advanced Workflow Automator</p>
                         </div>
 
-                        {/* Default Workflow Button - positioned next to logo */}
+                        {/* Default Workflow Button - positioned next to logo, wider */}
                         <div className="relative hidden md:block">
                             <button
                                 onClick={() => setIsDefaultSelectorOpen(!isDefaultSelectorOpen)}
-                                className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 bg-slate-900 text-brand-gold font-semibold py-1 px-1 md:py-1.5 md:px-2.5 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                                className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 bg-slate-900 text-brand-gold font-semibold py-1 px-1 md:py-1.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                                 title="Set default workflow for auto-load on startup"
                             >
                                 <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1816,15 +1816,15 @@ const App: React.FC = () => {
                                             <span className="text-brand-gold text-[8px] md:text-[10px]">Workflow</span>
                                         </span>
                                         <span className="text-slate-500">|</span>
-                                        <span className="text-brand-cyan">{(defaultWorkflow.clientName || 'Personal').slice(0, 25)}{(defaultWorkflow.clientName || '').length > 25 ? '...' : ''}</span>
+                                        <span className="text-brand-cyan">{(defaultWorkflow.clientName || 'Personal').slice(0, 30)}{(defaultWorkflow.clientName || '').length > 30 ? '...' : ''}</span>
                                         <span className="text-slate-500">-</span>
                                         <span className="text-brand-gold">{(() => {
                                             const url = defaultWorkflow.websiteName || 'N/A';
                                             const clean = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-                                            return clean.slice(0, 40) + (clean.length > 40 ? '...' : '');
+                                            return clean.slice(0, 50) + (clean.length > 50 ? '...' : '');
                                         })()}</span>
                                         <span className="text-slate-500">-</span>
-                                        <span className="text-brand-gold">{defaultWorkflow.workflowName.slice(0, 35)}{defaultWorkflow.workflowName.length > 35 ? '...' : ''}</span>
+                                        <span className="text-brand-gold">{defaultWorkflow.workflowName.slice(0, 45)}{defaultWorkflow.workflowName.length > 45 ? '...' : ''}</span>
                                     </span>
                                 ) : (
                                     <span className="text-[10px] md:text-sm flex flex-col items-center leading-tight">
