@@ -63,7 +63,7 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
       {/* Notification Button - Gold outline, dark interior, blue bell icon */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-brand-gold transition-all hover:shadow-glow-gold`}
+        className={`relative px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border-2 border-brand-gold transition-all hover:shadow-glow-gold flex items-center justify-center`}
         title={`${pendingCount} article(s) need meta selection`}
       >
         {/* Bell Icon - Blue */}

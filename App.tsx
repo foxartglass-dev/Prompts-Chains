@@ -1453,7 +1453,7 @@ const App: React.FC = () => {
         );
     }
     
-    const renderSection = (title: string, id: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen = false, rightContent?: React.ReactNode) => (
+    const renderSection = (title: React.ReactNode, id: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen = false, rightContent?: React.ReactNode) => (
       <div className="bg-card rounded-xl shadow-glow-cyan card-3d hover:shadow-card-hover border-2 border-brand-cyan">
         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
           {icon}
@@ -1769,11 +1769,12 @@ const App: React.FC = () => {
                     }
                 }}
             />
-            <header className="mb-1 px-2 sm:px-0">
+            <header className="mb-1 px-2 sm:px-0 py-3">
                 {/* Top Bar with Logo and Navigation - Mobile: stacked, Desktop: side by side */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-0.5 gap-0.5">
-                    {/* Logo - Centered on mobile */}
-                    <div className="flex items-center justify-center md:justify-start">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                    {/* Logo + Default Workflow grouped together on left */}
+                    <div className="flex items-center justify-center md:justify-start gap-3">
+                        {/* Logo - Centered on mobile */}
                         <div className="flex flex-col items-center md:items-start">
                             {/* Top row: Graph icon + PromptFlow logo image */}
                             <div className="flex items-center">
@@ -1797,11 +1798,8 @@ const App: React.FC = () => {
                             {/* Tagline underneath, centered */}
                             <p className="text-[10px] md:text-xs text-slate-400 mt-1 text-center md:text-left w-full">Advanced Workflow Automator</p>
                         </div>
-                    </div>
 
-                    {/* Navigation Buttons - Grid on mobile (4 columns), flex on desktop */}
-                    <div className="grid grid-cols-4 gap-1 sm:gap-1.5 md:flex md:gap-1.5 md:flex-wrap justify-center md:justify-end">
-                        {/* Default Workflow Button - looks like other nav buttons */}
+                        {/* Default Workflow Button - positioned next to logo */}
                         <div className="relative hidden md:block">
                             <button
                                 onClick={() => setIsDefaultSelectorOpen(!isDefaultSelectorOpen)}
@@ -1854,6 +1852,10 @@ const App: React.FC = () => {
                                 }}
                             />
                         </div>
+                    </div>
+
+                    {/* Navigation Buttons - Grid on mobile (4 columns), flex on desktop */}
+                    <div className="grid grid-cols-4 gap-1 sm:gap-1.5 md:flex md:gap-1.5 md:flex-wrap justify-center md:justify-end">
                         <button
                             onClick={() => { setIsTrackerOpen(false); setIsWorkflowNavOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWordPressOpen(false); setIsAgencyOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 bg-slate-900 text-brand-gold font-semibold py-1 px-1 md:py-1.5 md:px-2.5 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
@@ -1977,7 +1979,7 @@ const App: React.FC = () => {
             <main className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 {/* Left Column */}
                 <div className="flex flex-col gap-8">
-                    {renderSection('1. Setup & Run', 'setup', <Icon type="settings" className="h-6 w-6"/>,
+                    {renderSection(<span className="flex flex-col leading-tight"><span>1. Setup</span><span>&amp; Run</span></span>, 'setup', <Icon type="settings" className="h-6 w-6"/>,
                         <div className="space-y-3">
                             {/* Row 1: AI Models - Full Width */}
                             <div className="space-y-2 pt-2">
@@ -2225,7 +2227,7 @@ const App: React.FC = () => {
                     <>
                         {/* Workflow Context - Matches Default dropdown style */}
                         {currentWorkflowContext.workflowName && (
-                            <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-900 border border-brand-gold rounded-lg flex-nowrap">
+                            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 border-2 border-brand-gold rounded-lg flex-nowrap">
                                 <svg className="h-4 w-4 text-brand-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
@@ -2267,41 +2269,40 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Save Status - Compact static design */}
+                        {/* Save Status - Wider with two-line layout */}
                         {currentWorkflowContext.workflowName && (
                             <button
                                 onClick={() => saveWorkflowToDatabase(true)}
                                 disabled={isSaving || !hasUnsavedChanges}
-                                className="flex flex-col items-center px-2 py-0.5 rounded font-semibold transition border bg-brand-cyan text-slate-900 border-brand-cyan leading-none"
+                                className="flex flex-col items-center justify-center px-3 py-1.5 rounded-lg font-semibold transition border-2 bg-brand-cyan text-slate-900 border-brand-cyan"
                             >
-                                <span className="text-[8px] font-bold">Workflow</span>
-                                <span className="flex items-center gap-0.5 text-[9px] font-bold">
+                                <span className="flex items-center gap-1 text-sm font-bold whitespace-nowrap">
                                     {isSaving ? (
                                         <>
-                                            <svg className="w-2 h-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                             </svg>
-                                            Saving
+                                            Workflow Saving
                                         </>
                                     ) : hasUnsavedChanges ? (
                                         <>
-                                            Save
-                                            <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            Workflow Save
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
                                             </svg>
                                         </>
                                     ) : (
                                         <>
-                                            Saved
-                                            <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            Workflow Saved
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
                                             </svg>
                                         </>
                                     )}
                                 </span>
                                 {lastSaveTime && (
-                                    <span className="text-[8px] font-bold">
+                                    <span className="text-xs font-bold">
                                         {lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                     </span>
                                 )}
