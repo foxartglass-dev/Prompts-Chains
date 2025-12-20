@@ -84,7 +84,7 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-slate-900 border border-brand-gold/50 rounded-lg shadow-lg shadow-brand-gold/10 z-[100] max-h-[70vh] overflow-hidden flex flex-col">
+        <div className="absolute right-0 top-full mt-2 w-96 bg-slate-900 border-4 border-brand-gold rounded-lg shadow-lg shadow-brand-gold/20 z-[100] max-h-[70vh] overflow-hidden flex flex-col">
           {/* Header */}
           <div className="p-4 border-b border-brand-gold/30 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-brand-gold flex items-center gap-2">

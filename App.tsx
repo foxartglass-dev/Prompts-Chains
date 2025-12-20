@@ -1769,9 +1769,9 @@ const App: React.FC = () => {
                     }
                 }}
             />
-            <header className="mb-2 px-2 sm:px-0">
+            <header className="mb-1 px-2 sm:px-0">
                 {/* Top Bar with Logo and Navigation - Mobile: stacked, Desktop: side by side */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-1.5 gap-1">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-0.5 gap-0.5">
                     {/* Logo - Centered on mobile */}
                     <div className="flex items-center justify-center md:justify-start">
                         <div className="flex flex-col items-center md:items-start">
@@ -1926,10 +1926,10 @@ const App: React.FC = () => {
                             <span className="text-[10px] md:text-sm">Settings</span>
                         </button>
                         {/* More Dropdown */}
-                        <div className="relative" data-more-dropdown>
+                        <div className="relative flex" data-more-dropdown>
                             <button
                                 onClick={() => setIsMoreDropdownOpen(!isMoreDropdownOpen)}
-                                className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 bg-slate-900 text-brand-gold font-semibold py-1 px-1 md:py-1.5 md:px-2.5 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                                className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 bg-slate-900 text-brand-gold font-semibold py-1 px-1 md:py-1.5 md:px-2.5 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2 h-full"
                                 title="More Options"
                             >
                                 <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2267,22 +2267,18 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Save Status - Compact design */}
+                        {/* Save Status - Compact static design */}
                         {currentWorkflowContext.workflowName && (
                             <button
                                 onClick={() => saveWorkflowToDatabase(true)}
                                 disabled={isSaving || !hasUnsavedChanges}
-                                className={`flex flex-col items-center px-3 py-1.5 rounded-lg font-semibold transition border min-w-[70px] ${
-                                    isSaving
-                                        ? 'bg-brand-cyan/70 text-slate-900 border-brand-cyan cursor-wait'
-                                        : 'bg-brand-cyan text-slate-900 border-brand-cyan hover:bg-brand-cyan/90'
-                                }`}
+                                className="flex flex-col items-center px-2 py-0.5 rounded font-semibold transition border bg-brand-cyan text-slate-900 border-brand-cyan leading-none"
                             >
-                                <span className="text-[10px] font-bold opacity-90">Workflow</span>
-                                <span className="flex items-center gap-1 text-sm font-bold">
+                                <span className="text-[8px] font-bold">Workflow</span>
+                                <span className="flex items-center gap-0.5 text-[9px] font-bold">
                                     {isSaving ? (
                                         <>
-                                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-2 h-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                             </svg>
@@ -2291,21 +2287,21 @@ const App: React.FC = () => {
                                     ) : hasUnsavedChanges ? (
                                         <>
                                             Save
-                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
                                             </svg>
                                         </>
                                     ) : (
                                         <>
                                             Saved
-                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
                                             </svg>
                                         </>
                                     )}
                                 </span>
                                 {lastSaveTime && (
-                                    <span className="text-[10px] font-bold">
+                                    <span className="text-[8px] font-bold">
                                         {lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                     </span>
                                 )}
