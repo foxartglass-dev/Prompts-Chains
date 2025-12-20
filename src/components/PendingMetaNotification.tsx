@@ -24,7 +24,10 @@ interface PendingMetaNotificationProps {
 const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpenArticle }) => {
   const [pendingArticles, setPendingArticles] = useState<PendingArticle[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isPulseEnabled, setIsPulseEnabled] = useState(() => {
+    const saved = localStorage.getItem('pendingMetaPulseEnabled');
+    return saved !== null ? saved === 'true' : true;
+  });
 
   const fetchPendingArticles = async () => {
     try {
@@ -45,6 +48,10 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem('pendingMetaPulseEnabled', String(isPulseEnabled));
+  }, [isPulseEnabled]);
+
   const pendingCount = pendingArticles.length;
 
   if (pendingCount === 0) {
@@ -52,22 +59,24 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
   }
 
   return (
-    <>
-      {/* Notification Button */}
+    <div className="relative">
+      {/* Notification Button - Gold outline, dark interior, blue bell icon */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-lg bg-pink-500/20 hover:bg-pink-500/30 border border-pink-500/50 transition-all"
+        className={`relative p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-brand-gold transition-all hover:shadow-glow-gold`}
         title={`${pendingCount} article(s) need meta selection`}
       >
-        {/* Bell Icon */}
-        <svg className="w-5 h-5 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {/* Bell Icon - Blue */}
+        <svg className="w-5 h-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
 
-        {/* Pulse Animation */}
-        <span className="absolute -top-1 -right-1 flex h-4 w-4">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-4 w-4 bg-pink-500 text-[10px] text-white items-center justify-center font-bold">
+        {/* Badge with optional Pulse Animation - Gold themed */}
+        <span className="absolute -top-1 -right-1 flex h-5 w-5">
+          {isPulseEnabled && (
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-gold opacity-75"></span>
+          )}
+          <span className="relative inline-flex rounded-full h-5 w-5 bg-brand-gold text-[11px] text-slate-900 items-center justify-center font-bold">
             {pendingCount > 9 ? '9+' : pendingCount}
           </span>
         </span>
@@ -75,23 +84,41 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-slate-900 border border-pink-500/30 rounded-lg shadow-lg shadow-pink-500/10 z-50 max-h-[70vh] overflow-hidden flex flex-col">
+        <div className="absolute right-0 top-full mt-2 w-96 bg-slate-900 border border-brand-gold/50 rounded-lg shadow-lg shadow-brand-gold/10 z-50 max-h-[70vh] overflow-hidden flex flex-col">
           {/* Header */}
-          <div className="p-4 border-b border-pink-500/30 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-pink-400 flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          <div className="p-4 border-b border-brand-gold/30 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-brand-gold flex items-center gap-2">
+              <svg className="w-5 h-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
-              Pending Meta Selections
+              Pending Meta
             </h3>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-gray-400 hover:text-white"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Pulse Toggle */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPulseEnabled(!isPulseEnabled);
+                }}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all ${
+                  isPulseEnabled
+                    ? 'bg-brand-gold/20 text-brand-gold border border-brand-gold/50'
+                    : 'bg-slate-700 text-gray-400 border border-slate-600'
+                }`}
+                title={isPulseEnabled ? 'Click to disable pulse' : 'Click to enable pulse'}
+              >
+                <span className={`w-2 h-2 rounded-full ${isPulseEnabled ? 'bg-brand-gold animate-pulse' : 'bg-gray-500'}`}></span>
+                Pulse
+              </button>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Article List */}
@@ -99,7 +126,7 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
             {pendingArticles.map(article => (
               <div
                 key={article.id}
-                className="p-3 mb-2 bg-slate-800 rounded-lg border border-pink-500/20 hover:border-pink-500/50 transition-all"
+                className="p-3 mb-2 bg-slate-800 rounded-lg border border-brand-gold/20 hover:border-brand-gold/50 transition-all"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
@@ -116,7 +143,7 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
                     </div>
                     <div className="flex flex-wrap gap-1 mt-2">
                       {!article.selected_meta_title && article.meta_titles?.length > 0 && (
-                        <span className="px-2 py-0.5 bg-pink-500/20 text-pink-400 rounded text-xs">
+                        <span className="px-2 py-0.5 bg-brand-cyan/20 text-brand-cyan rounded text-xs">
                           Title: {article.meta_titles.length} options
                         </span>
                       )}
@@ -126,7 +153,7 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
                         </span>
                       )}
                       {!article.selected_meta_description && article.meta_descriptions?.length > 0 && (
-                        <span className="px-2 py-0.5 bg-pink-500/20 text-pink-400 rounded text-xs">
+                        <span className="px-2 py-0.5 bg-brand-cyan/20 text-brand-cyan rounded text-xs">
                           Desc: {article.meta_descriptions.length} options
                         </span>
                       )}
@@ -142,7 +169,7 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
                       onOpenArticle(article.id);
                       setIsOpen(false);
                     }}
-                    className="px-3 py-1.5 bg-pink-500/20 hover:bg-pink-500/40 border border-pink-500/50 rounded text-pink-400 text-xs font-medium transition whitespace-nowrap"
+                    className="px-3 py-1.5 bg-brand-gold/20 hover:bg-brand-gold/40 border border-brand-gold/50 rounded text-brand-gold text-xs font-medium transition whitespace-nowrap"
                   >
                     Select Meta
                   </button>
@@ -152,14 +179,14 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
           </div>
 
           {/* Footer */}
-          <div className="p-3 border-t border-pink-500/30 text-center">
+          <div className="p-3 border-t border-brand-gold/30 text-center">
             <span className="text-xs text-gray-500">
               {pendingCount} article{pendingCount !== 1 ? 's' : ''} need attention
             </span>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
 

@@ -19,6 +19,7 @@ import Analytics from './src/components/Analytics';
 import PendingMetaNotification from './src/components/PendingMetaNotification';
 import IdeasBacklog from './src/components/IdeasBacklog';
 import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components/DefaultWorkflowSelector';
+import WordPressSettings from './src/components/WordPressSettings';
 
 // Types for workflow
 interface WorkflowItem {
@@ -137,7 +138,9 @@ const App: React.FC = () => {
     const [isWebsitesOpen, setIsWebsitesOpen] = useState(false);
     const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
     const [isIdeasOpen, setIsIdeasOpen] = useState(false);
+    const [isWordPressOpen, setIsWordPressOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isMoreDropdownOpen, setIsMoreDropdownOpen] = useState(false);
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
     const [defaultWorkflow, setDefaultWorkflow] = useState<DefaultWorkflowConfig | null>(() => {
       // Load from localStorage on init
@@ -248,6 +251,18 @@ const App: React.FC = () => {
         document.addEventListener('click', handleClickAway);
         return () => document.removeEventListener('click', handleClickAway);
     }, [variableContextMenu]);
+
+    // Click-away detection for More dropdown
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (isMoreDropdownOpen && !target.closest('[data-more-dropdown]')) {
+                setIsMoreDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isMoreDropdownOpen]);
 
     // Check if PIN lock is enabled on mount
     useEffect(() => {
@@ -1442,15 +1457,21 @@ const App: React.FC = () => {
       <div className="bg-card rounded-xl shadow-glow-cyan card-3d hover:shadow-card-hover border-2 border-brand-cyan">
         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
           {icon}
-          <span className="ml-3">{title}</span>
-          {rightContent && <div className="ml-4" onClick={e => e.stopPropagation()}>{rightContent}</div>}
-           <svg className={`w-5 h-5 ml-auto transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+          <span className="ml-3 shrink-0">{title}</span>
+          {rightContent && <div className="ml-4 flex-1 flex items-center justify-end gap-3" onClick={e => e.stopPropagation()}>{rightContent}</div>}
+           <svg className={`w-5 h-5 ml-3 shrink-0 transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </h2>
         <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? 'max-h-[5000px]' : 'max-h-0 overflow-hidden'}`}>
             <div className="p-5 pt-0 border-t border-brand-cyan/30">{children}</div>
         </div>
       </div>
     );
+
+    // Helper function to format website URL (remove https:// and trailing slashes)
+    const formatWebsiteUrl = (url: string | undefined) => {
+      if (!url) return '';
+      return url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    };
     
     const isApiKeyMissing = currentProject.state.provider === 'anthropic' && !currentProject.state.apiKeys.anthropic;
     const isRunDisabled = isProcessing || !items.length || isApiKeyMissing;
@@ -1499,6 +1520,7 @@ const App: React.FC = () => {
 
             {/* Ideas Backlog */}
             <IdeasBacklog isOpen={isIdeasOpen} onClose={() => setIsIdeasOpen(false)} />
+            <WordPressSettings isOpen={isWordPressOpen} onClose={() => setIsWordPressOpen(false)} />
 
             {/* Settings Modal */}
             {isSettingsOpen && (
@@ -1827,7 +1849,7 @@ const App: React.FC = () => {
                             />
                         </div>
                         <button
-                            onClick={() => { setIsTrackerOpen(false); setIsWorkflowNavOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsAgencyOpen(true); }}
+                            onClick={() => { setIsTrackerOpen(false); setIsWorkflowNavOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWordPressOpen(false); setIsAgencyOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="Manage Clients & Locations"
                         >
@@ -1837,7 +1859,7 @@ const App: React.FC = () => {
                             <span className="text-[10px] md:text-sm">Agency</span>
                         </button>
                         <button
-                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsClientsOpen(true); }}
+                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWordPressOpen(false); setIsClientsOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="View All Clients"
                         >
@@ -1847,17 +1869,7 @@ const App: React.FC = () => {
                             <span className="text-[10px] md:text-sm">Clients</span>
                         </button>
                         <button
-                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWorkflowNavOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
-                            title="Browse Workflows"
-                        >
-                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
-                            </svg>
-                            <span className="text-[10px] md:text-sm">Workflows</span>
-                        </button>
-                        <button
-                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsAnalyticsOpen(false); setIsWebsitesOpen(true); }}
+                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsAnalyticsOpen(false); setIsWordPressOpen(false); setIsWebsitesOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="View All Websites"
                         >
@@ -1867,7 +1879,17 @@ const App: React.FC = () => {
                             <span className="text-[10px] md:text-sm">Websites</span>
                         </button>
                         <button
-                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsWorkflowNavOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsArticlesOpen(true); }}
+                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWordPressOpen(false); setIsWorkflowNavOpen(true); }}
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            title="Browse Workflows"
+                        >
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
+                            </svg>
+                            <span className="text-[10px] md:text-sm">Workflows</span>
+                        </button>
+                        <button
+                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsWorkflowNavOpen(false); setIsTemplatesOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsWordPressOpen(false); setIsArticlesOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="View Workflow Results"
                         >
@@ -1876,35 +1898,62 @@ const App: React.FC = () => {
                             </svg>
                             <span className="text-[10px] md:text-sm whitespace-nowrap">Results</span>
                         </button>
+                        {/* More Dropdown */}
+                        <div className="relative" data-more-dropdown>
+                            <button
+                                onClick={() => setIsMoreDropdownOpen(!isMoreDropdownOpen)}
+                                className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                                title="More Options"
+                            >
+                                <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                                </svg>
+                                <span className="text-[10px] md:text-sm">More</span>
+                                <svg className={`h-3 w-3 text-brand-cyan transition-transform ${isMoreDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            {isMoreDropdownOpen && (
+                                <div className="absolute top-full left-0 mt-2 bg-slate-800 border border-brand-gold rounded-lg shadow-2xl z-50 min-w-[160px]">
+                                    <button
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsTemplatesOpen(true); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition rounded-t-lg"
+                                    >
+                                        <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                        <span className="text-sm font-medium">Templates</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsIdeasOpen(false); setIsAnalyticsOpen(true); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition"
+                                    >
+                                        <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                        </svg>
+                                        <span className="text-sm font-medium">Analytics</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(true); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition rounded-b-lg"
+                                    >
+                                        <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                        </svg>
+                                        <span className="text-sm font-medium">Ideas</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                         <button
-                            onClick={() => { setIsTrackerOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsWorkflowNavOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsTemplatesOpen(true); }}
+                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsWordPressOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
-                            title="Template Library"
+                            title="WordPress Settings"
                         >
                             <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                             </svg>
-                            <span className="text-[10px] md:text-sm">Templates</span>
-                        </button>
-                        <button
-                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsIdeasOpen(false); setIsAnalyticsOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
-                            title="Analytics Dashboard"
-                        >
-                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                            </svg>
-                            <span className="text-[10px] md:text-sm">Analytics</span>
-                        </button>
-                        <button
-                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(true); }}
-                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2 bg-slate-900 text-brand-gold font-semibold py-1.5 px-1.5 md:py-2.5 md:px-4 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
-                            title="Ideas Backlog"
-                        >
-                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                            </svg>
-                            <span className="text-[10px] md:text-sm">Ideas</span>
+                            <span className="text-[10px] md:text-sm">WordPress</span>
                         </button>
                         <button
                             onClick={() => setIsSettingsOpen(true)}
@@ -1920,93 +1969,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Workflow Context Breadcrumb */}
-                {currentWorkflowContext.workflowName && (
-                    <div className="bg-card/50 rounded-lg px-4 py-3 border border-slate-700/50 shadow-card">
-                        <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-2 text-sm">
-                                {currentWorkflowContext.isStandalone ? (
-                                    <>
-                                        <span className="px-3 py-1 bg-purple-600/20 border border-purple-500/50 rounded-full text-purple-300 font-medium">
-                                            Standalone
-                                        </span>
-                                        {currentWorkflowContext.projectName && (
-                                            <>
-                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                                <span className="text-purple-400">{currentWorkflowContext.projectName}</span>
-                                            </>
-                                        )}
-                                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                        <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span className="px-3 py-1 bg-brand-cyan/20 border border-brand-cyan/50 rounded-full text-brand-cyan font-medium">
-                                            Client
-                                        </span>
-                                        {currentWorkflowContext.clientName && (
-                                            <>
-                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                                <span className="text-brand-cyan">{currentWorkflowContext.clientName}</span>
-                                            </>
-                                        )}
-                                        {currentWorkflowContext.websiteName && (
-                                            <>
-                                                <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                                <span className="text-brand-cyan-light">{currentWorkflowContext.websiteName}</span>
-                                            </>
-                                        )}
-                                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
-                                        <span className="text-white font-semibold">{currentWorkflowContext.workflowName}</span>
-                                    </>
-                                )}
-                            </div>
-                            {/* Save Workflow Button */}
-                            <div className="flex items-center gap-3">
-                                {lastSaveTime && (
-                                    <span className="text-xs text-slate-400">
-                                        Last saved: {lastSaveTime.toLocaleTimeString()}
-                                    </span>
-                                )}
-                                <button
-                                    onClick={() => saveWorkflowToDatabase(true)}
-                                    disabled={isSaving || !hasUnsavedChanges}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition ${
-                                        isSaving
-                                            ? 'bg-slate-700 text-slate-400 cursor-wait'
-                                            : hasUnsavedChanges
-                                                ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900'
-                                                : 'bg-brand-cyan text-white'
-                                    }`}
-                                >
-                                    {isSaving ? (
-                                        <>
-                                            <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                            Saving...
-                                        </>
-                                    ) : hasUnsavedChanges ? (
-                                        <>
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
-                                            </svg>
-                                            Save Workflow
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                                            </svg>
-                                            Saved
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </header>
 
             <main className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -2015,10 +1977,10 @@ const App: React.FC = () => {
                     {renderSection('1. Setup & Run', 'setup', <Icon type="settings" className="h-6 w-6"/>,
                         <div className="space-y-3">
                             {/* Row 1: AI Models - Full Width */}
-                            <div className="space-y-2">
+                            <div className="space-y-2 pt-2">
                                 <div className="grid grid-cols-3 gap-3">
                                     <div>
-                                        <label className="block text-xs font-medium text-brand-gold mb-1 text-center">AI Model 1</label>
+                                        <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">AI Model 1</label>
                                         <select
                                             value={currentProject.state.model}
                                             onChange={e => setCurrentProjectState(p => ({...p, model: e.target.value}))}
@@ -2048,7 +2010,7 @@ const App: React.FC = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="flex items-center justify-center gap-1 text-xs font-medium text-brand-gold mb-1">
+                                        <label className="flex items-center justify-center gap-1 text-sm font-medium text-brand-gold mb-1.5">
                                             AI Model 2
                                             <span className="relative group cursor-help">
                                                 <svg className="w-3.5 h-3.5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -2085,7 +2047,7 @@ const App: React.FC = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="flex items-center justify-center gap-1 text-xs font-medium text-brand-gold mb-1">
+                                        <label className="flex items-center justify-center gap-1 text-sm font-medium text-brand-gold mb-1.5">
                                             AI Model 3
                                             <span className="relative group cursor-help">
                                                 <svg className="w-3.5 h-3.5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -2127,12 +2089,12 @@ const App: React.FC = () => {
                             {/* Row 2: Filename + Import/Export/Save Template */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div>
-                                    <label className="block text-xs font-medium text-brand-gold mb-1">Filename Template</label>
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">Filename Template</label>
                                     <input type="text" value={currentProject.state.fileNameTemplate} onChange={e => setCurrentProjectState(p => ({...p, fileNameTemplate: e.target.value}))} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold" />
                                 </div>
                                 {/* Import/Export JSON */}
                                 <div className="flex flex-col justify-end gap-1">
-                                    <label className="block text-xs font-medium text-gray-400 text-center">Import / Export JSON</label>
+                                    <label className="block text-sm font-medium text-gray-400 text-center">Import / Export JSON</label>
                                     <div className="flex gap-1">
                                         <button
                                             onClick={() => {
@@ -2181,7 +2143,7 @@ const App: React.FC = () => {
                                 </div>
                                 {/* Save as Template */}
                                 <div className="flex flex-col justify-end gap-1">
-                                    <label className="block text-xs font-medium text-gray-400 text-center">Save to Library</label>
+                                    <label className="block text-sm font-medium text-gray-400 text-center">Save to Library</label>
                                     <button
                                         onClick={() => setShowSaveTemplatePopup(true)}
                                         className="flex items-center justify-center gap-1 px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-dark rounded text-slate-900 font-medium text-xs transition"
@@ -2251,17 +2213,101 @@ const App: React.FC = () => {
                                 </div>
                             </div>
 
-                            <button onClick={processWorkflow} disabled={isRunDisabled} className={`w-full flex items-center justify-center font-bold py-4 px-6 rounded-xl transition-all btn-press border-2 ${isRunDisabled ? 'bg-slate-900 border-brand-cyan text-brand-cyan/50 cursor-not-allowed' : 'bg-gradient-to-r from-brand-cyan to-brand-cyan-dark hover:from-brand-cyan-dark hover:to-brand-cyan text-white border-transparent shadow-card hover:shadow-glow-cyan'}`}>
+                            <button onClick={processWorkflow} disabled={isRunDisabled} className={`w-full flex items-center justify-center font-bold py-4 px-6 rounded-xl transition-all btn-press border-2 ${isRunDisabled ? 'bg-slate-900 border-brand-cyan text-brand-cyan/50 cursor-not-allowed' : 'bg-gradient-to-r from-brand-cyan to-brand-cyan-dark hover:from-brand-cyan-dark hover:to-brand-cyan text-slate-900 border-transparent shadow-card hover:shadow-glow-cyan'}`}>
                                 {isProcessing ? <Icon type="working" className="h-5 w-5 animate-spin mr-2" /> : <Icon type="play" className="h-5 w-5 mr-2" />}
                                 {getRunButtonText()}
                             </button>
                         </div>
                     , true,
-                    <PendingMetaNotification
-                        onOpenArticle={(articleId) => {
-                            setIsArticlesOpen(true);
-                        }}
-                    />
+                    <>
+                        {/* Workflow Context - Matches Default dropdown style */}
+                        {currentWorkflowContext.workflowName && (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-900 border border-brand-gold rounded-lg">
+                                <svg className="h-4 w-4 text-brand-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span className="text-brand-gold text-sm font-semibold">Current</span>
+                                <span className="text-slate-500">|</span>
+                                {currentWorkflowContext.isStandalone ? (
+                                    <>
+                                        <span className="text-purple-400 text-sm font-medium">Standalone</span>
+                                        <span className="text-slate-500">-</span>
+                                        <span className="text-brand-gold text-sm font-semibold">{currentWorkflowContext.workflowName}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-brand-cyan text-sm font-medium">
+                                            {(currentWorkflowContext.clientName || 'Client').length > 20
+                                                ? (currentWorkflowContext.clientName || 'Client').substring(0, 20) + '...'
+                                                : currentWorkflowContext.clientName || 'Client'}
+                                        </span>
+                                        <span className="text-slate-500">-</span>
+                                        <span className="text-brand-gold text-sm font-medium">
+                                            {formatWebsiteUrl(currentWorkflowContext.websiteName)}
+                                        </span>
+                                        <span className="text-slate-500">-</span>
+                                        <span className="text-brand-gold text-sm font-semibold">{currentWorkflowContext.workflowName}</span>
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Notification Button */}
+                        <div className="ml-2">
+                            <PendingMetaNotification
+                                onOpenArticle={(articleId) => {
+                                    setIsArticlesOpen(true);
+                                }}
+                            />
+                        </div>
+
+                        {/* Save Status - Compact design */}
+                        {currentWorkflowContext.workflowName && (
+                            <button
+                                onClick={() => saveWorkflowToDatabase(true)}
+                                disabled={isSaving || !hasUnsavedChanges}
+                                className={`flex flex-col items-center px-2 py-0.5 rounded-lg font-semibold transition border min-w-[60px] ${
+                                    isSaving
+                                        ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait'
+                                        : hasUnsavedChanges
+                                            ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900 border-yellow-400'
+                                            : 'bg-brand-cyan text-slate-900 border-brand-cyan'
+                                }`}
+                            >
+                                <span className="text-[9px] font-bold opacity-90">Workflow</span>
+                                <span className="flex items-center gap-1 text-xs">
+                                    {isSaving ? (
+                                        <>
+                                            <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Saving
+                                        </>
+                                    ) : hasUnsavedChanges ? (
+                                        <>
+                                            Save
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                                            </svg>
+                                        </>
+                                    ) : (
+                                        <>
+                                            Saved
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                            </svg>
+                                        </>
+                                    )}
+                                </span>
+                                {lastSaveTime && (
+                                    <span className="text-[10px] font-bold">
+                                        {lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    </span>
+                                )}
+                            </button>
+                        )}
+                    </>
                     )}
 
                     {items.length > 0 && renderSection('2. Loaded Items', 'loadedItems', <Icon type="document" className="h-6 w-6"/>,
@@ -2289,19 +2335,19 @@ const App: React.FC = () => {
                     , true)}
                     
                     {renderSection('Publishing to WordPress', 'wordpress', <Icon type="upload" className="h-6 w-6"/>,
-                        <div className="space-y-4">
+                        <div className="space-y-4 pt-2">
                             <h3 className="text-lg font-semibold text-brand-gold mb-4 flex items-center gap-2">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
                                 WordPress Admin Credentials
                             </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-end">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
                                     <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-brand-gold mb-1.5">Content Type</label>
-                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all">
+                                <div className="w-20">
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Type</label>
+                                    <select value={currentProject.state.wpContentType} onChange={e => setCurrentProjectState(p => ({...p, wpContentType: e.target.value as WpContentType}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-2 py-2.5 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all">
                                         <option value="pages">Page</option>
                                         <option value="posts">Post</option>
                                     </select>
@@ -2312,7 +2358,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'draft'}))}
-                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
                                                 (currentProject.state.articlePublishMode || 'draft') === 'draft'
                                                     ? 'bg-brand-gold text-black'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2323,7 +2369,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'wordpress'}))}
-                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
                                                 currentProject.state.articlePublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2339,7 +2385,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'draft'}))}
-                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
                                                 (currentProject.state.metaPublishMode || 'draft') === 'draft'
                                                     ? 'bg-brand-gold text-black'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2350,7 +2396,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'wordpress'}))}
-                                            className={`flex-1 px-2 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
                                                 currentProject.state.metaPublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2359,6 +2405,19 @@ const App: React.FC = () => {
                                             WordPress
                                         </button>
                                     </div>
+                                </div>
+                                <div className="w-28">
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">SEO Plugin</label>
+                                    <select
+                                        value={currentProject.state.seoPlugin || 'rankmath'}
+                                        onChange={e => setCurrentProjectState(p => ({...p, seoPlugin: e.target.value}))}
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-2 py-2.5 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                    >
+                                        <option value="rankmath">Rank Math</option>
+                                        <option value="yoast">Yoast SEO</option>
+                                        <option value="aioseo">AIOSEO</option>
+                                        <option value="seopress">SEOPress</option>
+                                    </select>
                                 </div>
                             </div>
                              <div>
@@ -2386,7 +2445,7 @@ const App: React.FC = () => {
                             <p className="text-xs text-brand-gold/70">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
 
                             {/* Meta SEO Generation Settings */}
-                            <div className="mt-6 pt-6 border-t border-brand-gold/30">
+                            <div className="mt-6 pt-6 border-t border-brand-gold">
                                 <h3 className="text-lg font-semibold text-brand-gold mb-4 flex items-center gap-2">
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                                     Meta SEO Generation
@@ -2400,7 +2459,7 @@ const App: React.FC = () => {
                                         <select
                                             value={currentProject.state.metaTitleCount || 3}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaTitleCount: parseInt(e.target.value)}))}
-                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
+                                            className="w-full bg-slate-900 border border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
                                         >
                                             <option value="1">1 (Auto-push to SEO)</option>
                                             <option value="2">2 (Draft mode - select one)</option>
@@ -2414,7 +2473,7 @@ const App: React.FC = () => {
                                         <select
                                             value={currentProject.state.metaDescriptionCount || 3}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaDescriptionCount: parseInt(e.target.value)}))}
-                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
+                                            className="w-full bg-slate-900 border border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all"
                                         >
                                             <option value="1">1 (Auto-push to SEO)</option>
                                             <option value="2">2 (Draft mode - select one)</option>
@@ -2431,7 +2490,7 @@ const App: React.FC = () => {
                                             value={currentProject.state.metaTitlePrompt || ''}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaTitlePrompt: e.target.value}))}
                                             rows={3}
-                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
+                                            className="w-full bg-slate-900 border border-brand-gold rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
                                             placeholder="Prompt for generating meta titles..."
                                         />
                                         <p className="text-xs text-brand-gold/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
@@ -2442,7 +2501,7 @@ const App: React.FC = () => {
                                             value={currentProject.state.metaDescriptionPrompt || ''}
                                             onChange={e => setCurrentProjectState(p => ({...p, metaDescriptionPrompt: e.target.value}))}
                                             rows={3}
-                                            className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
+                                            className="w-full bg-slate-900 border border-brand-gold rounded-lg px-3 py-2.5 text-white font-mono text-xs focus:ring-2 focus:ring-brand-gold transition-all resize-y"
                                             placeholder="Prompt for generating meta descriptions..."
                                         />
                                         <p className="text-xs text-brand-gold/50 mt-1">Use {'{count}'} and {'{article_content}'} placeholders</p>
@@ -2455,7 +2514,7 @@ const App: React.FC = () => {
                      {renderSection('3. Tag Manager', 'tags', <Icon type="settings" className="h-6 w-6"/>,
                         <div className="space-y-3">
                              <div className="flex gap-2">
-                                <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-900 border border-brand-gold/50 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-gold transition-all"/>
+                                <input type="text" placeholder="New Tag Name (e.g. H)" value={newTagName} onChange={e => setNewTagName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} className="w-full bg-slate-900 border border-brand-gold rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-brand-gold transition-all"/>
                                 <button onClick={addTag} className="px-4 bg-brand-cyan hover:bg-brand-cyan-dark rounded-lg text-white font-semibold transition">Add</button>
                             </div>
                             <div className="flex flex-wrap gap-2">{currentProject.state.tags.map(t => (<div key={t.id} className="bg-brand-cyan/20 border border-brand-cyan/50 rounded-full px-3 py-1 flex items-center gap-2 text-sm text-brand-cyan"><span>{t.name}</span><button onClick={() => removeTag(t.id)} className="text-brand-cyan/60 hover:text-white transition"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>))}</div>

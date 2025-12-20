@@ -154,6 +154,8 @@ router.post('/publish', async (req, res) => {
       publishDate,
       // Database tracking
       articleId,
+      // Push tracking (manual vs auto)
+      isManualPush = false,
       // Image generation options (NEW)
       generateImages = false,
       styleDNA = null,
@@ -228,15 +230,32 @@ router.post('/publish', async (req, res) => {
     // Step 6: Update article in database if articleId provided
     if (articleId && isDatabaseEnabled()) {
       try {
-        await sql`
-          UPDATE articles
-          SET wp_post_id = ${pageResult.id},
-              wp_post_url = ${pageResult.link},
-              wp_published_at = CURRENT_TIMESTAMP,
-              status = ${status === 'publish' ? 'published' : 'draft'},
-              updated_at = CURRENT_TIMESTAMP
-          WHERE id = ${articleId}
-        `;
+        if (isManualPush) {
+          // Manual push: increment count and append date
+          await sql`
+            UPDATE articles
+            SET wp_post_id = ${pageResult.id},
+                wp_post_url = ${pageResult.link},
+                wp_published_at = CURRENT_TIMESTAMP,
+                status = ${status === 'publish' ? 'published' : 'draft'},
+                article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
+                article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${articleId}
+          `;
+        } else {
+          // Auto push: set auto_at timestamp (only if not already set)
+          await sql`
+            UPDATE articles
+            SET wp_post_id = ${pageResult.id},
+                wp_post_url = ${pageResult.link},
+                wp_published_at = CURRENT_TIMESTAMP,
+                status = ${status === 'publish' ? 'published' : 'draft'},
+                article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${articleId}
+          `;
+        }
       } catch (dbError) {
         console.error('Failed to update article:', dbError);
         // Don't fail the request, page was created successfully
