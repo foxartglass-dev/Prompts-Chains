@@ -117,7 +117,7 @@ router.post('/push/:articleId', requireDb, async (req, res) => {
 // POST direct push meta to SEO plugin (without needing an article in database)
 router.post('/push-direct', async (req, res) => {
   try {
-    const { wpUrl, wpUser, wpPassword, postId, metaTitle, metaDescription, seoPlugin, postType } = req.body;
+    const { wpUrl, wpUser, wpPassword, postId, metaTitle, metaDescription, seoPlugin, postType, articleId, isManualPush = true } = req.body;
 
     if (!wpUrl || !wpUser || !wpPassword || !postId) {
       return res.status(400).json({ error: 'WordPress credentials and post ID are required' });
@@ -136,6 +136,32 @@ router.post('/push-direct', async (req, res) => {
 
     if (!pushResult.success) {
       return res.status(500).json({ error: pushResult.error });
+    }
+
+    // Track meta push if articleId provided and database enabled
+    if (articleId && isDatabaseEnabled()) {
+      try {
+        if (isManualPush) {
+          // Manual push: increment count and append date
+          await sql`
+            UPDATE articles
+            SET meta_push_manual_count = COALESCE(meta_push_manual_count, 0) + 1,
+                meta_push_manual_dates = COALESCE(meta_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${articleId}
+          `;
+        } else {
+          // Auto push: set auto_at timestamp (only if not already set)
+          await sql`
+            UPDATE articles
+            SET meta_push_auto_at = COALESCE(meta_push_auto_at, CURRENT_TIMESTAMP),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${articleId}
+          `;
+        }
+      } catch (dbError) {
+        console.error('Failed to update article meta push tracking:', dbError);
+      }
     }
 
     res.json({

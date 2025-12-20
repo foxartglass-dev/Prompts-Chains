@@ -27,6 +27,14 @@ interface Article {
   selected_meta_description: string | null;
   meta_seo_status: 'pending' | 'selected' | 'pushed' | null;
   meta_pushed_at: string | null;
+  // Push tracking fields
+  article_title: string | null;
+  article_push_auto_at: string | null;
+  article_push_manual_count: number;
+  article_push_manual_dates: string[];
+  meta_push_auto_at: string | null;
+  meta_push_manual_count: number;
+  meta_push_manual_dates: string[];
   // Joined fields
   workflow_name?: string;
   workflow_state?: {
@@ -350,7 +358,8 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
             ctaText: 'Book Now!',
             ctaUrl: '#',
             includeStatsBar: false,
-            articleId: selectedArticle.id
+            articleId: selectedArticle.id,
+            isManualPush: true // Track as manual push from ArticleManager
           })
         });
 
@@ -520,7 +529,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
           metaTitle,
           metaDescription: metaDesc,
           seoPlugin: localSeoPlugin,
-          postType: 'pages' // Elementor always creates pages, not posts
+          postType: 'pages', // Elementor always creates pages, not posts
+          articleId: selectedArticle.id,
+          isManualPush: true // Track as manual push from ArticleManager
         })
       });
 
@@ -631,9 +642,12 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
             {viewMode !== 'list' && (
               <button
                 onClick={backToList}
-                className="text-gray-400 hover:text-white text-sm flex items-center gap-1"
+                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-brand-cyan/30 rounded text-sm text-gray-300 hover:text-white flex items-center gap-1.5 transition"
               >
-                <span>&larr;</span> Back to List
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to List
               </button>
             )}
           </div>
@@ -710,6 +724,8 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                     <thead className="sticky top-0 bg-gray-800">
                       <tr className="text-left text-gray-400">
                         <th className="p-2">Keyword</th>
+                        <th className="p-2 text-center" title="Article Push Status: A1=Auto, M1/M2/M3=Manual, D=Draft">Article</th>
+                        <th className="p-2 text-center" title="Meta Push Status: A1=Auto, M1/M2/M3=Manual, D=Draft">Meta</th>
                         <th className="p-2">Tag</th>
                         <th className="p-2">Status</th>
                         <th className="p-2">Client</th>
@@ -732,6 +748,89 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                             {article.version > 1 && (
                               <span className="ml-2 text-xs text-gray-500">v{article.version}</span>
                             )}
+                          </td>
+                          {/* Article Push Status */}
+                          <td className="p-2 text-center">
+                            {(() => {
+                              const hasAutoPush = article.article_push_auto_at;
+                              const manualCount = article.article_push_manual_count || 0;
+
+                              if (hasAutoPush) {
+                                return (
+                                  <span
+                                    className="px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium cursor-help"
+                                    title={`Auto-pushed: ${new Date(article.article_push_auto_at!).toLocaleString()}`}
+                                  >
+                                    A1
+                                  </span>
+                                );
+                              } else if (manualCount > 0) {
+                                const dates = article.article_push_manual_dates || [];
+                                const tooltipText = dates.map((d, i) => `M${i + 1}: ${new Date(d).toLocaleString()}`).join('\n');
+                                return (
+                                  <span
+                                    className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium cursor-help"
+                                    title={tooltipText || `Manual pushes: ${manualCount}`}
+                                  >
+                                    M{manualCount}
+                                  </span>
+                                );
+                              } else {
+                                return (
+                                  <span
+                                    className="px-1.5 py-0.5 bg-brand-gold/30 text-brand-gold rounded text-xs font-bold animate-pulse cursor-help"
+                                    title="Draft - Not yet pushed to WordPress"
+                                  >
+                                    D
+                                  </span>
+                                );
+                              }
+                            })()}
+                          </td>
+                          {/* Meta Push Status */}
+                          <td className="p-2 text-center">
+                            {(() => {
+                              const hasMetaTitles = article.meta_titles?.length > 0;
+                              const hasMetaDescs = article.meta_descriptions?.length > 0;
+
+                              if (!hasMetaTitles && !hasMetaDescs) {
+                                return <span className="text-gray-500 text-xs">—</span>;
+                              }
+
+                              const hasAutoPush = article.meta_push_auto_at;
+                              const manualCount = article.meta_push_manual_count || 0;
+
+                              if (hasAutoPush) {
+                                return (
+                                  <span
+                                    className="px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded text-xs font-medium cursor-help"
+                                    title={`Auto-pushed: ${new Date(article.meta_push_auto_at!).toLocaleString()}`}
+                                  >
+                                    A1
+                                  </span>
+                                );
+                              } else if (manualCount > 0) {
+                                const dates = article.meta_push_manual_dates || [];
+                                const tooltipText = dates.map((d, i) => `M${i + 1}: ${new Date(d).toLocaleString()}`).join('\n');
+                                return (
+                                  <span
+                                    className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs font-medium cursor-help"
+                                    title={tooltipText || `Manual pushes: ${manualCount}`}
+                                  >
+                                    M{manualCount}
+                                  </span>
+                                );
+                              } else {
+                                return (
+                                  <span
+                                    className="px-1.5 py-0.5 bg-brand-gold/30 text-brand-gold rounded text-xs font-bold animate-pulse cursor-help"
+                                    title="Draft - Meta not yet pushed to SEO plugin"
+                                  >
+                                    D
+                                  </span>
+                                );
+                              }
+                            })()}
                           </td>
                           <td className="p-2">
                             {article.tag && (
@@ -758,30 +857,32 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                           <td className="p-2 text-gray-400 text-xs">
                             {new Date(article.created_at).toLocaleDateString()}
                           </td>
-                          <td className="p-2 flex items-center gap-2">
-                            <button
-                              onClick={() => viewArticle(article)}
-                              className="text-brand-cyan hover:text-brand-cyan-light text-xs"
-                            >
-                              View
-                            </button>
-                            {article.wp_post_url && (
-                              <a
-                                href={article.wp_post_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-green-400 hover:text-green-300 text-xs"
+                          <td className="p-2">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => viewArticle(article)}
+                                className="px-2 py-1 bg-brand-gold/20 hover:bg-brand-gold/40 border border-brand-gold/50 rounded text-brand-gold text-xs font-medium transition"
                               >
-                                WP Link
-                              </a>
-                            )}
-                            <button
-                              onClick={() => deleteArticle(article.id)}
-                              className="text-red-400 hover:text-red-300 text-xs"
-                              title="Delete article"
-                            >
-                              Delete
-                            </button>
+                                View
+                              </button>
+                              {article.wp_post_url && (
+                                <a
+                                  href={article.wp_post_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-1 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 rounded text-blue-400 text-xs font-medium transition"
+                                >
+                                  WP Link
+                                </a>
+                              )}
+                              <button
+                                onClick={() => deleteArticle(article.id)}
+                                className="px-2 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded text-red-400 hover:text-red-300 text-xs transition"
+                                title="Delete article"
+                              >
+                                ✕
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -801,6 +902,10 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-lg font-semibold text-white">{selectedArticle.keyword}</h3>
+                      {/* Article Title (generated from template) */}
+                      <div className="text-sm text-brand-cyan mt-0.5">
+                        {generatePageTitle(selectedArticle)}
+                      </div>
                       <div className="flex items-center gap-3 mt-1 text-sm text-gray-400">
                         {selectedArticle.tag && (
                           <span className="px-2 py-0.5 bg-brand-gold rounded text-xs text-slate-900 font-medium">
@@ -813,24 +918,19 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                         <span>AI: {selectedArticle.ai_score ?? '-'}%</span>
                         <span>{selectedArticle.word_count ?? '-'} words</span>
                         <span>v{selectedArticle.version}</span>
+                        <span className="text-gray-500">•</span>
+                        <span className="text-gray-500">{new Date(selectedArticle.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap items-center">
+                      {/* Edit / View toggle */}
                       {viewMode === 'view' ? (
-                        <>
-                          <button
-                            onClick={editArticle}
-                            className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => fetchVersionHistory(selectedArticle.id)}
-                            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white"
-                          >
-                            History
-                          </button>
-                        </>
+                        <button
+                          onClick={editArticle}
+                          className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
+                        >
+                          Edit
+                        </button>
                       ) : (
                         <>
                           <button
@@ -847,28 +947,72 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                           >
                             Save as New Version
                           </button>
-                          <button
-                            onClick={() => publishToWordPress(true)}
-                            disabled={publishing}
-                            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm text-white font-medium disabled:opacity-50"
-                          >
-                            {publishing ? 'Publishing...' : 'Publish Elementor Page'}
-                          </button>
-                          <button
-                            onClick={() => publishToWordPress(false)}
-                            disabled={publishing}
-                            className="px-2 py-1 text-xs text-gray-400 hover:text-gray-200"
-                            title="Publish as plain HTML (no Elementor formatting)"
-                          >
-                            Plain WP
-                          </button>
-                          <button
-                            onClick={() => setViewMode('view')}
-                            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white"
-                          >
-                            Cancel
-                          </button>
                         </>
+                      )}
+
+                      {/* Publish buttons - always visible */}
+                      <div className="flex items-center gap-2 border-l border-gray-600 pl-2 ml-1">
+                        <button
+                          onClick={() => publishToWordPress(true)}
+                          disabled={publishing}
+                          className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm text-white font-medium disabled:opacity-50 flex items-center gap-1.5"
+                          title={selectedArticle.article_push_auto_at
+                            ? `Auto-pushed: ${new Date(selectedArticle.article_push_auto_at).toLocaleString()}`
+                            : selectedArticle.article_push_manual_count
+                              ? `Manually pushed ${selectedArticle.article_push_manual_count} time(s)`
+                              : 'Not yet pushed'}
+                        >
+                          {publishing ? 'Publishing...' : (
+                            <>
+                              Elementor
+                              {(selectedArticle.article_push_auto_at || selectedArticle.article_push_manual_count > 0) && (
+                                <span className="px-1 py-0.5 bg-white/20 rounded text-[10px]">
+                                  {selectedArticle.article_push_auto_at
+                                    ? 'A1'
+                                    : `M${selectedArticle.article_push_manual_count}`}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => publishToWordPress(false)}
+                          disabled={publishing}
+                          className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 border border-blue-500/50 rounded text-sm text-blue-300 font-medium disabled:opacity-50"
+                          title="Publish as plain HTML (no Elementor formatting)"
+                        >
+                          Plain WP
+                        </button>
+                      </div>
+
+                      {/* History button */}
+                      <button
+                        onClick={() => fetchVersionHistory(selectedArticle.id)}
+                        className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white"
+                      >
+                        History
+                      </button>
+
+                      {/* WP Link if published */}
+                      {selectedArticle.wp_post_url && (
+                        <a
+                          href={selectedArticle.wp_post_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 rounded text-sm text-blue-400 font-medium"
+                        >
+                          WP Link
+                        </a>
+                      )}
+
+                      {/* Cancel button in edit mode */}
+                      {viewMode === 'edit' && (
+                        <button
+                          onClick={() => setViewMode('view')}
+                          className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white"
+                        >
+                          Cancel
+                        </button>
                       )}
                     </div>
                   </div>
@@ -923,24 +1067,34 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                   {/* Meta SEO Selection Section */}
                   <div className="border-t-2 border-brand-cyan/50 p-4 pb-24 mt-6 bg-gray-800/50">
                   {/* SEO Status Banner */}
-                  {selectedArticle.meta_seo_status && (
-                    <div className={`mb-4 p-2 rounded text-sm flex items-center justify-between ${
-                      selectedArticle.meta_seo_status === 'pushed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                      selectedArticle.meta_seo_status === 'selected' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
-                      'bg-pink-500/20 text-pink-400 border border-pink-500/30'
-                    }`}>
-                      <span>
-                        {selectedArticle.meta_seo_status === 'pushed' && '✓ Meta pushed to SEO plugin'}
-                        {selectedArticle.meta_seo_status === 'selected' && '⏳ Meta selected - ready to push'}
-                        {selectedArticle.meta_seo_status === 'pending' && '⚠ Meta selection pending'}
-                      </span>
-                      {selectedArticle.meta_pushed_at && (
-                        <span className="text-xs opacity-70">
-                          Pushed: {new Date(selectedArticle.meta_pushed_at).toLocaleString()}
+                  {selectedArticle.meta_seo_status && (() => {
+                    // In WordPress mode with single options, don't show pending warning (auto-push handles it)
+                    const isWordPressAutoMode = selectedArticle.workflow_state?.metaPublishMode === 'wordpress';
+                    const hasSingleOptions = (selectedArticle.meta_titles?.length === 1) && (selectedArticle.meta_descriptions?.length === 1);
+                    const hasMetaPush = selectedArticle.meta_push_auto_at || selectedArticle.meta_push_manual_count > 0;
+                    const skipPendingWarning = selectedArticle.meta_seo_status === 'pending' && isWordPressAutoMode && (hasSingleOptions || hasMetaPush);
+
+                    if (skipPendingWarning) return null;
+
+                    return (
+                      <div className={`mb-4 p-2 rounded text-sm flex items-center justify-between ${
+                        selectedArticle.meta_seo_status === 'pushed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                        selectedArticle.meta_seo_status === 'selected' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
+                        'bg-pink-500/20 text-pink-400 border border-pink-500/30'
+                      }`}>
+                        <span>
+                          {selectedArticle.meta_seo_status === 'pushed' && '✓ Meta pushed to SEO plugin'}
+                          {selectedArticle.meta_seo_status === 'selected' && '⏳ Meta selected - ready to push'}
+                          {selectedArticle.meta_seo_status === 'pending' && '⚠ Meta selection pending'}
                         </span>
-                      )}
-                    </div>
-                  )}
+                        {selectedArticle.meta_pushed_at && (
+                          <span className="text-xs opacity-70">
+                            Pushed: {new Date(selectedArticle.meta_pushed_at).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div className="grid grid-cols-2 gap-6">
                     {/* Meta Titles Selection */}
@@ -1124,6 +1278,11 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                             onClick={pushToSeo}
                             disabled={pushingSeo}
                             className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 rounded-lg text-sm text-white font-medium transition disabled:opacity-50 flex items-center gap-2"
+                            title={selectedArticle.meta_push_auto_at
+                              ? `Auto-pushed: ${new Date(selectedArticle.meta_push_auto_at).toLocaleString()}`
+                              : selectedArticle.meta_push_manual_count
+                                ? `Manually pushed ${selectedArticle.meta_push_manual_count} time(s)`
+                                : 'Not yet pushed'}
                           >
                             {pushingSeo ? (
                               <>
@@ -1139,6 +1298,13 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                 </svg>
                                 Push to {localSeoPlugin === 'none' ? 'WordPress' : localSeoPlugin.charAt(0).toUpperCase() + localSeoPlugin.slice(1)}
+                                {(selectedArticle.meta_push_auto_at || selectedArticle.meta_push_manual_count > 0) && (
+                                  <span className="px-1 py-0.5 bg-white/20 rounded text-[10px]">
+                                    {selectedArticle.meta_push_auto_at
+                                      ? 'A1'
+                                      : `M${selectedArticle.meta_push_manual_count}`}
+                                  </span>
+                                )}
                               </>
                             )}
                           </button>
