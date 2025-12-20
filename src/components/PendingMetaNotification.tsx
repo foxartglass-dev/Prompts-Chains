@@ -84,7 +84,7 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-slate-900 border border-brand-gold/50 rounded-lg shadow-lg shadow-brand-gold/10 z-50 max-h-[70vh] overflow-hidden flex flex-col">
+        <div className="absolute right-0 top-full mt-2 w-96 bg-slate-900 border-4 border-brand-gold rounded-lg shadow-lg shadow-brand-gold/20 z-[100] max-h-[70vh] overflow-hidden flex flex-col">
           {/* Header */}
           <div className="p-4 border-b border-brand-gold/30 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-brand-gold flex items-center gap-2">
@@ -102,12 +102,12 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
                 }}
                 className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all ${
                   isPulseEnabled
-                    ? 'bg-brand-gold/20 text-brand-gold border border-brand-gold/50'
-                    : 'bg-slate-700 text-gray-400 border border-slate-600'
+                    ? 'bg-slate-900 text-brand-cyan border border-brand-gold animate-pulse shadow-glow-gold'
+                    : 'bg-slate-900 text-brand-cyan border border-brand-gold'
                 }`}
                 title={isPulseEnabled ? 'Click to disable pulse' : 'Click to enable pulse'}
               >
-                <span className={`w-2 h-2 rounded-full ${isPulseEnabled ? 'bg-brand-gold animate-pulse' : 'bg-gray-500'}`}></span>
+                <span className={`w-2 h-2 rounded-full ${isPulseEnabled ? 'bg-brand-cyan animate-pulse' : 'bg-brand-cyan'}`}></span>
                 Pulse
               </button>
               <button
@@ -126,7 +126,7 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
             {pendingArticles.map(article => (
               <div
                 key={article.id}
-                className="p-3 mb-2 bg-slate-800 rounded-lg border border-brand-gold/20 hover:border-brand-gold/50 transition-all"
+                className="p-3 mb-2 bg-slate-900 rounded-lg border border-brand-gold/20 hover:border-brand-gold/50 transition-all"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
@@ -143,22 +143,22 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
                     </div>
                     <div className="flex flex-wrap gap-1 mt-2">
                       {!article.selected_meta_title && article.meta_titles?.length > 0 && (
-                        <span className="px-2 py-0.5 bg-brand-cyan/20 text-brand-cyan rounded text-xs">
+                        <span className="px-2 py-0.5 bg-brand-cyan/20 text-brand-cyan rounded text-xs border border-brand-cyan">
                           Title: {article.meta_titles.length} options
                         </span>
                       )}
                       {article.selected_meta_title && article.meta_seo_status !== 'pushed' && (
-                        <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs">
+                        <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs border border-yellow-400">
                           Title: Selected
                         </span>
                       )}
                       {!article.selected_meta_description && article.meta_descriptions?.length > 0 && (
-                        <span className="px-2 py-0.5 bg-brand-cyan/20 text-brand-cyan rounded text-xs">
+                        <span className="px-2 py-0.5 bg-brand-cyan/20 text-brand-cyan rounded text-xs border border-brand-cyan">
                           Desc: {article.meta_descriptions.length} options
                         </span>
                       )}
                       {article.selected_meta_description && article.meta_seo_status !== 'pushed' && (
-                        <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs">
+                        <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs border border-yellow-400">
                           Desc: Selected
                         </span>
                       )}
@@ -169,7 +169,7 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
                       onOpenArticle(article.id);
                       setIsOpen(false);
                     }}
-                    className="px-3 py-1.5 bg-brand-gold/20 hover:bg-brand-gold/40 border border-brand-gold/50 rounded text-brand-gold text-xs font-medium transition whitespace-nowrap"
+                    className="px-3 py-1.5 bg-slate-900 hover:shadow-glow-gold border border-brand-gold rounded text-brand-gold text-xs font-medium transition-all whitespace-nowrap"
                   >
                     Select Meta
                   </button>
