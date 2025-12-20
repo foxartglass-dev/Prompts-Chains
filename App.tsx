@@ -1455,7 +1455,7 @@ const App: React.FC = () => {
     
     const renderSection = (title: React.ReactNode, id: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen = false, rightContent?: React.ReactNode) => (
       <div className="bg-card rounded-xl shadow-glow-cyan card-3d hover:shadow-card-hover border-2 border-brand-cyan">
-        <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
+        <h2 className={`text-xl font-bold flex items-center text-brand-cyan py-2 px-4 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
           {icon}
           <span className="ml-3 shrink-0">{title}</span>
           {rightContent && <div className="ml-4 flex-1 flex items-center justify-end gap-3" onClick={e => e.stopPropagation()}>{rightContent}</div>}
@@ -1769,7 +1769,7 @@ const App: React.FC = () => {
                     }
                 }}
             />
-            <header className="mb-1 px-2 sm:px-0 py-3">
+            <header className="mb-1 px-2 sm:px-0">
                 {/* Top Bar with Logo and Navigation - Mobile: stacked, Desktop: side by side */}
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     {/* Logo + Default Workflow grouped together on left */}
@@ -1816,15 +1816,15 @@ const App: React.FC = () => {
                                             <span className="text-brand-gold text-[8px] md:text-[10px]">Workflow</span>
                                         </span>
                                         <span className="text-slate-500">|</span>
-                                        <span className="text-brand-cyan">{(defaultWorkflow.clientName || 'Personal').slice(0, 20)}{(defaultWorkflow.clientName || '').length > 20 ? '...' : ''}</span>
+                                        <span className="text-brand-cyan">{(defaultWorkflow.clientName || 'Personal').slice(0, 25)}{(defaultWorkflow.clientName || '').length > 25 ? '...' : ''}</span>
                                         <span className="text-slate-500">-</span>
                                         <span className="text-brand-gold">{(() => {
                                             const url = defaultWorkflow.websiteName || 'N/A';
                                             const clean = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-                                            return clean.slice(0, 30) + (clean.length > 30 ? '...' : '');
+                                            return clean.slice(0, 40) + (clean.length > 40 ? '...' : '');
                                         })()}</span>
                                         <span className="text-slate-500">-</span>
-                                        <span className="text-brand-gold">{defaultWorkflow.workflowName.slice(0, 20)}{defaultWorkflow.workflowName.length > 20 ? '...' : ''}</span>
+                                        <span className="text-brand-gold">{defaultWorkflow.workflowName.slice(0, 35)}{defaultWorkflow.workflowName.length > 35 ? '...' : ''}</span>
                                     </span>
                                 ) : (
                                     <span className="text-[10px] md:text-sm flex flex-col items-center leading-tight">
@@ -2269,42 +2269,38 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Save Status - Wider with two-line layout */}
+                        {/* Save Status - Compact single line */}
                         {currentWorkflowContext.workflowName && (
                             <button
                                 onClick={() => saveWorkflowToDatabase(true)}
                                 disabled={isSaving || !hasUnsavedChanges}
-                                className="flex flex-col items-center justify-center px-3 py-1.5 rounded-lg font-semibold transition border-2 bg-brand-cyan text-slate-900 border-brand-cyan"
+                                className="flex items-center gap-1 px-1.5 py-1 rounded-lg font-semibold transition border-2 bg-brand-cyan text-slate-900 border-brand-cyan text-xs"
                             >
-                                <span className="flex items-center gap-1 text-sm font-bold whitespace-nowrap">
-                                    {isSaving ? (
-                                        <>
-                                            <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                            Workflow Saving
-                                        </>
-                                    ) : hasUnsavedChanges ? (
-                                        <>
-                                            Workflow Save
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
-                                            </svg>
-                                        </>
-                                    ) : (
-                                        <>
-                                            Workflow Saved
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                                            </svg>
-                                        </>
-                                    )}
-                                </span>
-                                {lastSaveTime && (
-                                    <span className="text-xs font-bold">
-                                        {lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                    </span>
+                                {isSaving ? (
+                                    <>
+                                        <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span className="font-bold">Saving</span>
+                                    </>
+                                ) : hasUnsavedChanges ? (
+                                    <>
+                                        <span className="font-bold">Save</span>
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                                        </svg>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="font-bold">Saved</span>
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                        </svg>
+                                        {lastSaveTime && (
+                                            <span className="font-bold">{lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                        )}
+                                    </>
                                 )}
                             </button>
                         )}
