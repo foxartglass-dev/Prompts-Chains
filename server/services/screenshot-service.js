@@ -288,19 +288,22 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
 
     // Navigate to target page with fresh page object
     console.log('Navigating to target page:', pageUrl);
-    await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    try {
+      await page.goto(pageUrl, { waitUntil: 'load', timeout: 30000 });
+    } catch (navError) {
+      // Frame detachment can happen during WP preview redirects - continue anyway
+      if (navError.message.includes('detached')) {
+        console.log('Frame detached during navigation, continuing...');
+        await new Promise(r => setTimeout(r, 3000));
+      } else {
+        throw navError;
+      }
+    }
 
     // Wait for content to render (Elementor, etc.)
-    const waitTime = options.waitFor || 3000;
+    const waitTime = options.waitFor || 4000;
     console.log(`Waiting ${waitTime}ms for page to render...`);
     await new Promise(r => setTimeout(r, waitTime));
-
-    // Additional wait for lazy-loaded content
-    try {
-      await page.waitForNetworkIdle({ timeout: 5000 });
-    } catch (e) {
-      console.log('Network idle timeout, continuing...');
-    }
 
     console.log('Taking screenshot...');
     const screenshot = await page.screenshot({
