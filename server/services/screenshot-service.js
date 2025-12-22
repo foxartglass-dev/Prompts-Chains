@@ -277,6 +277,10 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
       if (currentUrl.includes('wp-login.php') && !currentUrl.includes('redirect_to')) {
         throw new Error('Login appears to have failed - still on login page');
       }
+
+      // Wait a moment for cookies to be fully established
+      await new Promise(r => setTimeout(r, 2000));
+      console.log('Login confirmed, cookies should be set');
     }
 
     // Navigate to target page - use Promise.race to handle frame detachment
