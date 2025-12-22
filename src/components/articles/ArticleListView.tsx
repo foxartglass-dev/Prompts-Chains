@@ -348,6 +348,15 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       >
                         View
                       </button>
+                      {onEditVisual && article.wp_post_url && (
+                        <button
+                          onClick={() => onEditVisual(article)}
+                          className="px-2 py-1 bg-brand-gold/20 hover:bg-brand-gold/30 border border-brand-gold/50 rounded text-brand-gold text-xs font-medium transition"
+                          title="Visual Editor"
+                        >
+                          Visual
+                        </button>
+                      )}
                       {article.wp_post_url && (
                         <a
                           href={article.wp_post_url}
