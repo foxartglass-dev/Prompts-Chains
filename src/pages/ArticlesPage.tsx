@@ -51,17 +51,20 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose }) => {
   const [textEditWidget, setTextEditWidget] = useState<{ widgetId: string; element: ElementPosition } | null>(null);
 
   useEffect(() => {
-    fetchWebsites();
-  }, []);
+    if (isOpen) {
+      fetchWebsites();
+    }
+  }, [isOpen]);
 
   const fetchWebsites = async () => {
     try {
       const res = await fetch('/api/websites');
       if (res.ok) {
         const data = await res.json();
-        setWebsites(data);
-        if (data.length > 0) {
-          setSelectedWebsite(data[0]);
+        const websitesList = data.websites || [];
+        setWebsites(websitesList);
+        if (websitesList.length > 0) {
+          setSelectedWebsite(websitesList[0]);
         }
       }
     } catch (err) {
