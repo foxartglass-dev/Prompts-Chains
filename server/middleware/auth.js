@@ -73,13 +73,13 @@ export function hybridAuth(req, res, next) {
   // Check if Auth0 is configured
   const validator = getJwtValidator();
   if (!validator) {
-    // Auth0 not configured - allow access but log warning
-    console.warn('Auth0 not configured - allowing unauthenticated access');
-    req.auth = {
-      type: 'none',
-      payload: { sub: 'anonymous' }
-    };
-    return next();
+    // Auth0 not configured - BLOCK access (security first)
+    console.error('Auth0 not configured - blocking unauthenticated access. Set AUTH0_DOMAIN and AUTH0_AUDIENCE env vars.');
+    return res.status(401).json({
+      error: 'unauthorized',
+      message: 'Authentication system not configured',
+      code: 'AUTH_NOT_CONFIGURED'
+    });
   }
 
   // Validate JWT token
