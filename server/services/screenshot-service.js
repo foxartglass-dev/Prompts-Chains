@@ -283,29 +283,45 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
       console.log('Login confirmed, cookies should be set');
     }
 
-    // Navigate to target page - use Promise.race to handle frame detachment
+    // IMPORTANT: WordPress preview pages cause frame detachment issues
+    // Solution: Create a NEW page (cookies persist in browser context) and navigate there
+    console.log('Creating fresh page for preview navigation...');
+
+    // Close the login page - we have the cookies now
+    await page.close();
+
+    // Create a new page - it will have access to the same cookies
+    const previewPage = await browser.newPage();
+    await previewPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+    await previewPage.setViewport({ width: options.width || 1280, height: options.height || 800 });
+
     console.log('Navigating to target page:', pageUrl);
 
-    // Start navigation - use domcontentloaded (commit is not valid in this puppeteer version)
-    const navigationPromise = page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
-      .catch(err => console.log('Navigation event error (continuing):', err.message));
+    try {
+      // Navigate with a longer timeout and simpler wait condition
+      await previewPage.goto(pageUrl, {
+        waitUntil: 'load',  // 'load' is more reliable than 'networkidle2' for WP
+        timeout: 60000
+      });
+    } catch (navError) {
+      // Even if navigation "fails", the page might have loaded
+      console.log('Navigation event completed with:', navError.message);
+    }
 
-    // Wait for navigation to at least start, then wait for content
-    await Promise.race([
-      navigationPromise,
-      new Promise(r => setTimeout(r, 10000)) // Max 10s for initial nav
-    ]);
-
-    // Wait for Elementor content to render
+    // Wait for Elementor content to fully render
     console.log('Waiting for content to render...');
     await new Promise(r => setTimeout(r, 8000));
 
-    // Log what URL we actually ended up at
-    const finalUrl = page.url();
-    console.log('Final URL after navigation:', finalUrl);
+    // Check current URL
+    try {
+      const finalUrl = previewPage.url();
+      console.log('Final URL after navigation:', finalUrl);
+    } catch (urlError) {
+      console.log('Could not get URL (continuing anyway):', urlError.message);
+    }
 
     console.log('Taking screenshot...');
-    const screenshot = await page.screenshot({
+    const screenshot = await previewPage.screenshot({
       type: 'png',
       fullPage: options.fullPage !== false
     });
