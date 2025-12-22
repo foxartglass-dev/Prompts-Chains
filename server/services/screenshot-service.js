@@ -2,9 +2,74 @@
  * Screenshot Service
  * Captures WordPress page screenshots using Puppeteer
  * Supports both public pages and authenticated draft pages
+ *
+ * Railway/Nixpacks: Uses system Chromium via PUPPETEER_EXECUTABLE_PATH
  */
 
 import puppeteer from 'puppeteer';
+import { existsSync } from 'fs';
+
+/**
+ * Find Chromium executable path
+ * Checks environment variable first, then common system locations
+ */
+function getChromiumPath() {
+  // First check environment variable
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+
+  // Common Chromium paths on different systems
+  const possiblePaths = [
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    // Nixpacks/Railway paths
+    '/nix/var/nix/profiles/default/bin/chromium',
+    // Mac paths
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium'
+  ];
+
+  for (const path of possiblePaths) {
+    if (existsSync(path)) {
+      return path;
+    }
+  }
+
+  // Return null to let Puppeteer use its bundled Chromium
+  return null;
+}
+
+/**
+ * Get Puppeteer launch options
+ */
+function getLaunchOptions() {
+  const executablePath = getChromiumPath();
+
+  const options = {
+    headless: 'new',
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-gpu',
+      '--disable-extensions'
+    ]
+  };
+
+  if (executablePath) {
+    options.executablePath = executablePath;
+    console.log(`Using Chromium at: ${executablePath}`);
+  }
+
+  return options;
+}
 
 /**
  * Capture a public page screenshot
@@ -20,10 +85,7 @@ async function captureScreenshot(pageUrl, options = {}) {
     waitFor = 2000  // Wait for page to render
   } = options;
 
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-  });
+  const browser = await puppeteer.launch(getLaunchOptions());
 
   try {
     const page = await browser.newPage();
@@ -54,10 +116,7 @@ async function captureScreenshot(pageUrl, options = {}) {
 async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
   const { url: wpUrl, user, password } = wpCredentials;
 
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-  });
+  const browser = await puppeteer.launch(getLaunchOptions());
 
   try {
     const page = await browser.newPage();
@@ -98,10 +157,7 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
  * @returns {Promise<Array>} Array of element positions with Elementor IDs
  */
 async function getElementPositions(pageUrl, wpCredentials = null) {
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
+  const browser = await puppeteer.launch(getLaunchOptions());
 
   try {
     const page = await browser.newPage();
@@ -164,10 +220,7 @@ async function getElementPositions(pageUrl, wpCredentials = null) {
  */
 async function checkPuppeteerHealth() {
   try {
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+    const browser = await puppeteer.launch(getLaunchOptions());
     await browser.close();
     return true;
   } catch (error) {
