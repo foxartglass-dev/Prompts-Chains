@@ -33,6 +33,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
   onImageEdit,
   onTextEdit
 }) => {
+  // Default to preview mode since it works reliably
   const [mode, setMode] = useState<'preview' | 'screenshot'>('preview');
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [screenshotError, setScreenshotError] = useState(false);
@@ -246,30 +247,11 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold text-white">Visual Editor</h2>
 
-          {/* Mode toggle */}
+          {/* Mode indicator - Live Preview is the primary mode */}
           <div className="flex items-center bg-slate-800 rounded-lg p-1">
-            <button
-              onClick={() => setMode('preview')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition ${
-                mode === 'preview'
-                  ? 'bg-brand-cyan text-slate-900'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
+            <span className="px-3 py-1.5 bg-brand-cyan text-slate-900 rounded text-sm font-medium">
               Live Preview
-            </button>
-            <button
-              onClick={() => setMode('screenshot')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition ${
-                mode === 'screenshot'
-                  ? 'bg-brand-cyan text-slate-900'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-              title={screenshotError ? 'Screenshot mode requires Puppeteer' : 'Screenshot with overlays'}
-            >
-              Screenshot Mode
-              {screenshotError && <span className="ml-1 text-red-400">*</span>}
-            </button>
+            </span>
           </div>
         </div>
 
@@ -307,229 +289,93 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
       </header>
 
       {/* Draft Page Notice */}
-      {wpPostId && mode === 'preview' && (
+      {wpPostId && (
         <div className="mx-6 mt-4 p-3 bg-blue-500/20 border border-blue-500/50 rounded-lg text-blue-400 flex items-center gap-3">
           <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <div>
-            <p className="font-medium">Draft Preview Mode</p>
+            <p className="font-medium">Draft Preview</p>
             <p className="text-sm text-blue-400/70">
-              Iframe preview requires WordPress login. If you see a login page, use <strong>Screenshot Mode</strong> instead - it authenticates automatically.
+              You may need to log into WordPress in this browser first. Click <strong>Edit in Elementor</strong> to edit images and content directly.
             </p>
           </div>
         </div>
       )}
 
-      {/* Screenshot Error Banner */}
-      {screenshotError && mode === 'screenshot' && (
-        <div className="mx-6 mt-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-lg text-yellow-400 flex items-center gap-3">
-          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <div>
-            <p className="font-medium">Screenshot mode failed</p>
-            <p className="text-sm text-yellow-400/70">
-              Server-side screenshot capture timed out or failed. Puppeteer/Chromium may not be properly configured on the server.
-            </p>
-            <button
-              onClick={() => setMode('preview')}
-              className="mt-2 px-3 py-1 bg-yellow-500/30 hover:bg-yellow-500/40 text-yellow-300 rounded text-sm"
-            >
-              Use Live Preview Instead
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Main content */}
+      {/* Main content - Live Preview */}
       <div className="flex-1 overflow-hidden flex flex-col">
-        {mode === 'preview' ? (
-          /* Live Preview Mode - iframe */
-          <>
-            {/* URL bar */}
-            <div className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border-b border-slate-700">
-              <button
-                onClick={() => iframeRef.current?.contentWindow?.location.reload()}
-                className="p-1.5 hover:bg-slate-700 rounded transition"
-                title="Refresh"
-              >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-              <button
-                onClick={() => navigateIframe(effectiveUrl)}
-                className="p-1.5 hover:bg-slate-700 rounded transition"
-                title="Home"
-              >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-              </button>
-              <input
-                type="text"
-                value={iframeUrl}
-                onChange={(e) => setIframeUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    navigateIframe(iframeUrl);
-                  }
-                }}
-                className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm"
-              />
-              <button
-                onClick={() => navigateIframe(iframeUrl)}
-                className="px-3 py-1.5 bg-brand-cyan text-slate-900 rounded text-sm font-medium"
-              >
-                Go
-              </button>
-            </div>
-
-            {/* iframe */}
-            <div className="flex-1 bg-white">
-              <iframe
-                ref={iframeRef}
-                src={iframeUrl}
-                className="w-full h-full border-0"
-                title="Page Preview"
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-              />
-            </div>
-
-            {/* Bottom action bar */}
-            <div className="bg-slate-900 border-t border-slate-700 px-4 py-3 flex items-center justify-between">
-              <div className="text-sm text-gray-400">
-                Viewing: <span className="text-white">{iframeUrl}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <a
-                  href={getElementorEditUrl()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded transition flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                  </svg>
-                  Edit in Elementor
-                </a>
-              </div>
-            </div>
-          </>
-        ) : (
-          /* Screenshot Mode */
-          <div
-            ref={containerRef}
-            className="flex-1 overflow-auto p-6"
+        {/* URL bar */}
+        <div className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border-b border-slate-700">
+          <button
+            onClick={() => iframeRef.current?.contentWindow?.location.reload()}
+            className="p-1.5 hover:bg-slate-700 rounded transition"
+            title="Refresh"
           >
-            {(loading || imageLoading) ? (
-              <div className="flex flex-col items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-brand-cyan border-t-transparent mb-4" />
-                <p className="text-white">Loading screenshot...</p>
-                <p className="text-gray-500 text-sm mt-2">This may take up to 45 seconds (server is capturing the page)</p>
-                <button
-                  onClick={() => {
-                    setLoading(false);
-                    setImageLoading(false);
-                    setMode('preview');
-                  }}
-                  className="mt-4 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm"
-                >
-                  Cancel and use Live Preview
-                </button>
-              </div>
-            ) : screenshotUrl && !screenshotError ? (
-              <div className="relative inline-block">
-                {/* Screenshot */}
-                <img
-                  ref={imageRef}
-                  src={screenshotUrl}
-                  alt="Page screenshot"
-                  className="max-w-full"
-                  onLoad={handleImageLoad}
-                  onError={handleImageError}
-                />
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          <button
+            onClick={() => navigateIframe(effectiveUrl)}
+            className="p-1.5 hover:bg-slate-700 rounded transition"
+            title="Home"
+          >
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+          </button>
+          <input
+            type="text"
+            value={iframeUrl}
+            onChange={(e) => setIframeUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                navigateIframe(iframeUrl);
+              }
+            }}
+            className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm"
+          />
+          <button
+            onClick={() => navigateIframe(iframeUrl)}
+            className="px-3 py-1.5 bg-brand-cyan text-slate-900 rounded text-sm font-medium"
+          >
+            Go
+          </button>
+        </div>
 
-                {/* Element overlays */}
-                {elements
-                  .filter(el => el.isImage || el.isText || el.hasBackground)
-                  .map((element) => (
-                    <div
-                      key={element.id}
-                      className={getElementOverlayClass(element)}
-                      style={getElementStyle(element)}
-                      onMouseEnter={() => setHoveredElement(element.id)}
-                      onMouseLeave={() => setHoveredElement(null)}
-                      onClick={() => handleElementClick(element)}
-                      title={`${element.type} - Click to edit`}
-                    >
-                      {hoveredElement === element.id && (
-                        <div className="absolute -top-6 left-0 px-2 py-0.5 bg-slate-900/90 text-xs text-white rounded whitespace-nowrap">
-                          {element.isImage ? 'Image' : element.isText ? 'Text' : 'Element'} ({element.id})
-                        </div>
-                      )}
-                    </div>
-                  ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                <svg className="w-16 h-16 opacity-50 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <p>Could not load screenshot</p>
-                <button
-                  onClick={() => setMode('preview')}
-                  className="mt-4 px-4 py-2 bg-brand-cyan text-slate-900 rounded font-medium"
-                >
-                  Switch to Live Preview
-                </button>
-              </div>
-            )}
+        {/* iframe */}
+        <div className="flex-1 bg-white">
+          <iframe
+            ref={iframeRef}
+            src={iframeUrl}
+            className="w-full h-full border-0"
+            title="Page Preview"
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+          />
+        </div>
+
+        {/* Bottom action bar */}
+        <div className="bg-slate-900 border-t border-slate-700 px-4 py-3 flex items-center justify-between">
+          <div className="text-sm text-gray-400">
+            Viewing: <span className="text-white">{iframeUrl}</span>
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            <a
+              href={getElementorEditUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded transition flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+              Edit in Elementor
+            </a>
+          </div>
+        </div>
       </div>
 
-      {/* Selected element panel (screenshot mode only) */}
-      {mode === 'screenshot' && selectedElement && (
-        <div className="bg-slate-900 border-t border-brand-cyan/30 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <span className="text-white font-medium">
-                Selected: {selectedElement.isImage ? 'Image' : 'Text'} Element
-              </span>
-              <span className="text-gray-500 text-sm font-mono">
-                ID: {selectedElement.id}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {selectedElement.isImage && (
-                <button
-                  onClick={() => onImageEdit && onImageEdit(selectedElement.id, selectedElement)}
-                  className="px-4 py-2 bg-brand-gold hover:bg-brand-gold/80 text-slate-900 font-medium rounded transition"
-                >
-                  Replace Image
-                </button>
-              )}
-              {selectedElement.isText && (
-                <button
-                  onClick={() => onTextEdit && onTextEdit(selectedElement.id, selectedElement)}
-                  className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded transition"
-                >
-                  Edit Text
-                </button>
-              )}
-              <button
-                onClick={() => setSelectedElement(null)}
-                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
