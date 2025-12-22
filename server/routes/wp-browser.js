@@ -27,10 +27,13 @@ const requireDb = (req, res, next) => {
 
 /**
  * GET /api/wp-browser/health
- * Check if screenshot service is working
+ * Check if screenshot service is working (with debug info for Railway)
  */
 router.get('/health', async (req, res) => {
   try {
+    const fs = await import('fs');
+    const { execSync } = await import('child_process');
+
     let puppeteerOk = false;
     let chromiumPath = null;
     let errorMsg = null;
@@ -47,6 +50,38 @@ router.get('/health', async (req, res) => {
       chromiumPath = screenshotService.getChromiumInfo();
     }
 
+    // Debug: Check which paths actually exist
+    const pathsToCheck = [
+      '/root/.nix-profile/bin/chromium',
+      '/nix/var/nix/profiles/default/bin/chromium',
+      '/home/nixuser/.nix-profile/bin/chromium',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/google-chrome',
+      process.env.PUPPETEER_EXECUTABLE_PATH
+    ].filter(Boolean);
+
+    const pathStatus = {};
+    for (const p of pathsToCheck) {
+      try {
+        pathStatus[p] = fs.existsSync(p) ? 'EXISTS' : 'not found';
+      } catch {
+        pathStatus[p] = 'error';
+      }
+    }
+
+    // Try which command
+    let whichResult = 'not found';
+    try {
+      whichResult = execSync('which chromium chromium-browser google-chrome 2>/dev/null || echo "none found"', { encoding: 'utf8' }).trim();
+    } catch { }
+
+    // Check /nix/store for chromium
+    let nixStoreChromium = null;
+    try {
+      nixStoreChromium = execSync('find /nix/store -maxdepth 2 -name "chromium" -type d 2>/dev/null | head -3', { encoding: 'utf8' }).trim() || 'none found';
+    } catch { }
+
     res.json({
       status: puppeteerOk ? 'ok' : 'degraded',
       puppeteer: puppeteerOk,
@@ -57,6 +92,11 @@ router.get('/health', async (req, res) => {
       env: {
         PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH || null,
         PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD || null
+      },
+      debug: {
+        pathStatus,
+        whichResult,
+        nixStoreChromium
       }
     });
   } catch (error) {
