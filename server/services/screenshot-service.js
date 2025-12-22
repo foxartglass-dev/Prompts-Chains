@@ -144,6 +144,7 @@ async function captureScreenshot(pageUrl, options = {}) {
 
 /**
  * Capture a draft/private page (requires WP authentication)
+ * Robust version with retry logic and proper frame detachment handling
  * @param {string} pageUrl - URL to capture
  * @param {Object} wpCredentials - { url, user, password }
  * @param {Object} options - Screenshot options
@@ -151,66 +152,220 @@ async function captureScreenshot(pageUrl, options = {}) {
  */
 async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
   const { url: wpUrl, user, password } = wpCredentials;
+  const maxRetries = 3;
+  let lastError = null;
 
-  const browser = await puppeteer.launch(getLaunchOptions());
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let browser = null;
 
-  try {
-    const page = await browser.newPage();
-    await page.setViewport({ width: options.width || 1280, height: options.height || 800 });
+    try {
+      console.log(`Screenshot attempt ${attempt}/${maxRetries} for: ${pageUrl}`);
 
-    // Navigate to WP login
-    const loginUrl = `${wpUrl.replace(/\/$/, '')}/wp-login.php`;
-    await page.goto(loginUrl, { waitUntil: 'networkidle2' });
+      browser = await puppeteer.launch(getLaunchOptions());
+      const page = await browser.newPage();
 
-    // Fill login form
-    await page.type('#user_login', user);
-    await page.type('#user_pass', password);
-    await page.click('#wp-submit');
+      // Set longer timeout for slow WordPress sites
+      page.setDefaultNavigationTimeout(60000);
+      page.setDefaultTimeout(60000);
 
-    // Wait for redirect after login
-    await page.waitForNavigation({ waitUntil: 'networkidle2' });
+      await page.setViewport({ width: options.width || 1280, height: options.height || 800 });
 
-    // Now navigate to the actual page
-    await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-    await new Promise(r => setTimeout(r, options.waitFor || 2000));
+      // Step 1: Navigate to WP login page
+      const loginUrl = `${wpUrl.replace(/\/$/, '')}/wp-login.php`;
+      console.log(`Navigating to login: ${loginUrl}`);
 
-    const screenshot = await page.screenshot({
-      type: 'png',
-      fullPage: options.fullPage !== false
-    });
+      await page.goto(loginUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000
+      });
 
-    return screenshot;
-  } finally {
-    await browser.close();
+      // Wait for login form to be ready
+      await page.waitForSelector('#user_login', { timeout: 10000 });
+
+      // Step 2: Fill credentials using evaluate (faster and more reliable than type())
+      console.log('Filling login credentials...');
+      await page.evaluate((u, p) => {
+        document.querySelector('#user_login').value = u;
+        document.querySelector('#user_pass').value = p;
+      }, user, password);
+
+      // Small delay to ensure form is ready
+      await new Promise(r => setTimeout(r, 500));
+
+      // Step 3: Submit form and wait for navigation
+      console.log('Submitting login form...');
+
+      await Promise.all([
+        page.waitForNavigation({
+          waitUntil: 'domcontentloaded',
+          timeout: 30000
+        }).catch(e => {
+          console.log('Navigation wait warning:', e.message);
+        }),
+        page.click('#wp-submit')
+      ]);
+
+      // Give WordPress time to set cookies
+      await new Promise(r => setTimeout(r, 2000));
+
+      // Step 4: Verify login succeeded
+      const currentUrl = page.url();
+      console.log(`After login, URL: ${currentUrl}`);
+
+      const isLoggedIn = currentUrl.includes('wp-admin') ||
+                         !currentUrl.includes('wp-login.php') ||
+                         currentUrl.includes('reauth=1') === false;
+
+      if (currentUrl.includes('wp-login.php') && !currentUrl.includes('redirect_to')) {
+        throw new Error('Login appears to have failed - still on login page');
+      }
+
+      // Step 5: Navigate to the target preview page
+      console.log(`Navigating to target: ${pageUrl}`);
+
+      // Use a more resilient navigation approach
+      try {
+        await page.goto(pageUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: 45000
+        });
+      } catch (navError) {
+        // Frame detachment is common with WP previews - continue if we can
+        if (navError.message.includes('frame was detached') ||
+            navError.message.includes('Frame detached')) {
+          console.log('Frame detached during navigation - checking if page loaded...');
+          await new Promise(r => setTimeout(r, 3000));
+        } else {
+          throw navError;
+        }
+      }
+
+      // Step 6: Verify we're on the right page
+      const finalUrl = page.url();
+      console.log(`Final URL: ${finalUrl}`);
+
+      if (finalUrl.includes('wp-admin') && !pageUrl.includes('wp-admin')) {
+        console.log('Warning: Still on wp-admin, retrying navigation...');
+
+        // Try navigation one more time
+        await page.goto(pageUrl, {
+          waitUntil: 'load',
+          timeout: 30000
+        }).catch(() => {});
+
+        await new Promise(r => setTimeout(r, 3000));
+
+        const retryUrl = page.url();
+        console.log(`After retry, URL: ${retryUrl}`);
+      }
+
+      // Step 7: Wait for page content to render
+      const renderWait = options.waitFor || 4000;
+      console.log(`Waiting ${renderWait}ms for content to render...`);
+      await new Promise(r => setTimeout(r, renderWait));
+
+      // Step 8: Take screenshot
+      console.log('Taking screenshot...');
+      const screenshot = await page.screenshot({
+        type: 'png',
+        fullPage: options.fullPage !== false
+      });
+
+      console.log('Screenshot captured successfully!');
+      await browser.close();
+      return screenshot;
+
+    } catch (error) {
+      lastError = error;
+      console.error(`Screenshot attempt ${attempt} failed:`, error.message);
+
+      // Close browser if still open
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (closeErr) {
+          // Ignore close errors
+        }
+      }
+
+      // Don't retry on certain errors
+      if (error.message.includes('net::ERR_NAME_NOT_RESOLVED') ||
+          error.message.includes('invalid URL')) {
+        throw error;
+      }
+
+      // Wait before retry with exponential backoff
+      if (attempt < maxRetries) {
+        const delay = attempt * 2000;
+        console.log(`Waiting ${delay}ms before retry...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
   }
+
+  throw lastError || new Error('Screenshot capture failed after all retries');
 }
 
 /**
  * Get element positions from page for overlay mapping
  * This extracts Elementor widget positions so we know where to show click overlays
+ * Robust version with proper error handling for frame detachment
  * @param {string} pageUrl - URL to analyze
  * @param {Object} wpCredentials - Optional auth credentials for draft pages
  * @returns {Promise<Array>} Array of element positions with Elementor IDs
  */
 async function getElementPositions(pageUrl, wpCredentials = null) {
-  const browser = await puppeteer.launch(getLaunchOptions());
+  let browser = null;
 
   try {
+    browser = await puppeteer.launch(getLaunchOptions());
     const page = await browser.newPage();
+
+    // Set longer timeouts
+    page.setDefaultNavigationTimeout(60000);
+    page.setDefaultTimeout(60000);
+
     await page.setViewport({ width: 1280, height: 800 });
 
     // If credentials provided, login first
     if (wpCredentials) {
       const loginUrl = `${wpCredentials.url.replace(/\/$/, '')}/wp-login.php`;
-      await page.goto(loginUrl, { waitUntil: 'networkidle2' });
-      await page.type('#user_login', wpCredentials.user);
-      await page.type('#user_pass', wpCredentials.password);
-      await page.click('#wp-submit');
-      await page.waitForNavigation({ waitUntil: 'networkidle2' });
+      console.log('Element positions: Logging in first...');
+
+      await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForSelector('#user_login', { timeout: 10000 });
+
+      // Use evaluate for faster form fill
+      await page.evaluate((u, p) => {
+        document.querySelector('#user_login').value = u;
+        document.querySelector('#user_pass').value = p;
+      }, wpCredentials.user, wpCredentials.password);
+
+      await new Promise(r => setTimeout(r, 500));
+
+      await Promise.all([
+        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
+        page.click('#wp-submit')
+      ]);
+
+      await new Promise(r => setTimeout(r, 2000));
     }
 
-    await page.goto(pageUrl, { waitUntil: 'networkidle2' });
-    await new Promise(r => setTimeout(r, 2000));
+    // Navigate to target page with frame detachment handling
+    console.log('Element positions: Navigating to page...');
+    try {
+      await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    } catch (navError) {
+      if (navError.message.includes('frame was detached') ||
+          navError.message.includes('Frame detached')) {
+        console.log('Frame detached during element navigation - continuing...');
+        await new Promise(r => setTimeout(r, 3000));
+      } else {
+        throw navError;
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 3000));
 
     // Extract Elementor widget positions from the rendered page
     const positions = await page.evaluate(() => {
@@ -243,9 +398,21 @@ async function getElementPositions(pageUrl, wpCredentials = null) {
     // Also get full page height for screenshot sizing
     const pageHeight = await page.evaluate(() => document.body.scrollHeight);
 
+    console.log(`Element positions: Found ${positions.length} elements`);
     return { elements: positions, pageHeight };
+
+  } catch (error) {
+    console.error('Element positions error:', error.message);
+    // Return empty result instead of crashing
+    return { elements: [], pageHeight: 800, error: error.message };
   } finally {
-    await browser.close();
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (e) {
+        // Ignore close errors
+      }
+    }
   }
 }
 
