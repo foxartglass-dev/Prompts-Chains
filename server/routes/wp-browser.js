@@ -195,17 +195,20 @@ router.get('/screenshot', async (req, res) => {
     let screenshot;
 
     if (authenticated === 'true' && websiteId) {
-      // Get credentials for authenticated capture
+      // Get website URL from database
       const websites = await sql`
-        SELECT wp_url, wp_user, wp_app_password
-        FROM websites WHERE id = ${websiteId}
+        SELECT wp_url FROM websites WHERE id = ${websiteId}
       `;
 
-      if (websites.length > 0 && websites[0].wp_user) {
+      // Use WP_LOGIN_* env vars for browser authentication (separate from REST API app passwords)
+      const loginUser = process.env.WP_LOGIN_USER;
+      const loginPassword = process.env.WP_LOGIN_PASSWORD;
+
+      if (websites.length > 0 && loginUser && loginPassword) {
         screenshot = await screenshotService.captureAuthenticatedPage(url, {
           url: websites[0].wp_url,
-          user: websites[0].wp_user,
-          password: websites[0].wp_app_password
+          user: loginUser,
+          password: loginPassword
         }, options);
       } else {
         // Fall back to public capture
@@ -245,15 +248,18 @@ router.get('/elements', async (req, res) => {
 
     if (websiteId) {
       const websites = await sql`
-        SELECT wp_url, wp_user, wp_app_password
-        FROM websites WHERE id = ${websiteId}
+        SELECT wp_url FROM websites WHERE id = ${websiteId}
       `;
 
-      if (websites.length > 0 && websites[0].wp_user) {
+      // Use WP_LOGIN_* env vars for browser authentication
+      const loginUser = process.env.WP_LOGIN_USER;
+      const loginPassword = process.env.WP_LOGIN_PASSWORD;
+
+      if (websites.length > 0 && loginUser && loginPassword) {
         credentials = {
           url: websites[0].wp_url,
-          user: websites[0].wp_user,
-          password: websites[0].wp_app_password
+          user: loginUser,
+          password: loginPassword
         };
       }
     }
