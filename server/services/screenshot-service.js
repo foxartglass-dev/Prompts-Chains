@@ -286,45 +286,22 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
     await page.setViewport({ width: options.width || 1280, height: options.height || 800 });
     await page.setCookie(...cookies);
 
-    // Navigate to target page with fresh page object
+    // Navigate to target page using window.location to avoid Puppeteer frame issues
     console.log('Navigating to target page:', pageUrl);
-    let navigationSucceeded = false;
 
-    try {
-      await page.goto(pageUrl, { waitUntil: 'load', timeout: 30000 });
-      navigationSucceeded = true;
-    } catch (navError) {
-      // Frame detachment can happen during WP preview redirects
-      if (navError.message.includes('detached') || navError.message.includes('closed')) {
-        console.log('Frame detached, creating new page and retrying...');
+    // First go to a simple page on the site to establish context
+    const baseUrl = wpUrl.replace(/\/$/, '');
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
 
-        // Create yet another new page and retry
-        try {
-          await page.close();
-        } catch (e) { /* ignore */ }
+    // Now use JavaScript to navigate to the preview URL (avoids Puppeteer nav tracking issues)
+    console.log('Using window.location to navigate to preview...');
+    await page.evaluate((url) => {
+      window.location.href = url;
+    }, pageUrl);
 
-        page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
-        await page.setViewport({ width: options.width || 1280, height: options.height || 800 });
-        await page.setCookie(...cookies);
-
-        // Try navigation again with minimal wait
-        try {
-          await page.goto(pageUrl, { waitUntil: 'commit', timeout: 30000 });
-          navigationSucceeded = true;
-        } catch (retryError) {
-          console.log('Retry navigation also had issues:', retryError.message);
-          // Continue anyway - page might have loaded
-        }
-      } else {
-        throw navError;
-      }
-    }
-
-    // Wait for content to render (Elementor, etc.)
-    const waitTime = options.waitFor || 5000;
-    console.log(`Waiting ${waitTime}ms for page to render...`);
-    await new Promise(r => setTimeout(r, waitTime));
+    // Wait for page to load
+    console.log('Waiting for preview page to load...');
+    await new Promise(r => setTimeout(r, 8000));
 
     console.log('Taking screenshot...');
     const screenshot = await page.screenshot({
