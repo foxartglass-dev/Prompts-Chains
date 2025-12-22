@@ -32,14 +32,32 @@ const requireDb = (req, res, next) => {
 router.get('/health', async (req, res) => {
   try {
     let puppeteerOk = false;
+    let chromiumPath = null;
+    let errorMsg = null;
+
     if (screenshotService?.checkPuppeteerHealth) {
-      puppeteerOk = await screenshotService.checkPuppeteerHealth();
+      try {
+        puppeteerOk = await screenshotService.checkPuppeteerHealth();
+      } catch (e) {
+        errorMsg = e.message;
+      }
     }
+
+    if (screenshotService?.getChromiumInfo) {
+      chromiumPath = screenshotService.getChromiumInfo();
+    }
+
     res.json({
       status: puppeteerOk ? 'ok' : 'degraded',
       puppeteer: puppeteerOk,
       puppeteerAvailable: !!screenshotService,
-      database: isDatabaseEnabled()
+      chromiumPath: chromiumPath,
+      error: errorMsg,
+      database: isDatabaseEnabled(),
+      env: {
+        PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+        PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD || null
+      }
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

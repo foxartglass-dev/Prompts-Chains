@@ -7,26 +7,41 @@
  */
 
 import puppeteer from 'puppeteer';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
+import { execSync } from 'child_process';
 
 /**
  * Find Chromium executable path
- * Checks environment variable first, then common system locations
+ * Checks environment variable first, then tries to find it dynamically
  */
 function getChromiumPath() {
   // First check environment variable
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH && existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+    console.log('Using PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH);
     return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+
+  // Try to find chromium using 'which' command
+  try {
+    const whichResult = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null || which google-chrome 2>/dev/null', { encoding: 'utf8' }).trim();
+    if (whichResult && existsSync(whichResult)) {
+      console.log('Found Chromium via which:', whichResult);
+      return whichResult;
+    }
+  } catch (e) {
+    // which command failed, continue to manual search
   }
 
   // Common Chromium paths on different systems
   const possiblePaths = [
+    // Nixpacks/Railway paths
+    '/nix/var/nix/profiles/default/bin/chromium',
+    '/root/.nix-profile/bin/chromium',
+    // Standard Linux paths
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
     '/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable',
-    // Nixpacks/Railway paths
-    '/nix/var/nix/profiles/default/bin/chromium',
     // Mac paths
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Chromium.app/Contents/MacOS/Chromium'
@@ -34,10 +49,31 @@ function getChromiumPath() {
 
   for (const path of possiblePaths) {
     if (existsSync(path)) {
+      console.log('Found Chromium at:', path);
       return path;
     }
   }
 
+  // Try to find in Nix store (Railway/Nixpacks)
+  try {
+    const nixStorePath = '/nix/store';
+    if (existsSync(nixStorePath)) {
+      const dirs = readdirSync(nixStorePath);
+      for (const dir of dirs) {
+        if (dir.includes('chromium')) {
+          const chromiumPath = `${nixStorePath}/${dir}/bin/chromium`;
+          if (existsSync(chromiumPath)) {
+            console.log('Found Chromium in Nix store:', chromiumPath);
+            return chromiumPath;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Error searching Nix store:', e.message);
+  }
+
+  console.warn('Chromium not found - Puppeteer will try to use bundled version');
   // Return null to let Puppeteer use its bundled Chromium
   return null;
 }
@@ -229,16 +265,25 @@ async function checkPuppeteerHealth() {
   }
 }
 
+/**
+ * Get Chromium path info for diagnostics
+ */
+function getChromiumInfo() {
+  return getChromiumPath();
+}
+
 export {
   captureScreenshot,
   captureAuthenticatedPage,
   getElementPositions,
-  checkPuppeteerHealth
+  checkPuppeteerHealth,
+  getChromiumInfo
 };
 
 export default {
   captureScreenshot,
   captureAuthenticatedPage,
   getElementPositions,
-  checkPuppeteerHealth
+  checkPuppeteerHealth,
+  getChromiumInfo
 };

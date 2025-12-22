@@ -7,6 +7,23 @@ nixPkgs = [
   "chromium"
 ]
 
+# Install apt packages for Chromium dependencies
+aptPkgs = [
+  "chromium",
+  "chromium-sandbox",
+  "libnss3",
+  "libatk1.0-0",
+  "libatk-bridge2.0-0",
+  "libcups2",
+  "libdrm2",
+  "libxkbcommon0",
+  "libxcomposite1",
+  "libxdamage1",
+  "libxrandr2",
+  "libgbm1",
+  "libasound2"
+]
+
 [phases.install]
 cmds = ["npm ci || npm install"]
 
@@ -18,4 +35,3 @@ cmd = "npm start"
 
 [variables]
 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
-PUPPETEER_EXECUTABLE_PATH = "/nix/var/nix/profiles/default/bin/chromium"
