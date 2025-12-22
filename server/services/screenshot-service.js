@@ -274,30 +274,11 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
       }
     }
 
-    // Get cookies from logged-in session
-    console.log('Extracting auth cookies...');
-    const cookies = await page.cookies();
-    console.log(`Got ${cookies.length} cookies`);
-
-    // Close old page and create fresh one with cookies
-    await page.close();
-    page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
-    await page.setViewport({ width: options.width || 1280, height: options.height || 800 });
-    await page.setCookie(...cookies);
-
-    // Navigate directly to target page
+    // Navigate to target page using the same logged-in page (no page switching)
     console.log('Navigating to target page:', pageUrl);
+    await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    try {
-      // Try direct navigation first
-      await page.goto(pageUrl, { waitUntil: 'networkidle0', timeout: 45000 });
-    } catch (navError) {
-      console.log('Navigation issue:', navError.message);
-      // If it fails, still try to continue - page may have loaded
-    }
-
-    // Extra wait for Elementor content
+    // Wait for Elementor content to render
     console.log('Waiting for content to render...');
     await new Promise(r => setTimeout(r, 5000));
 
