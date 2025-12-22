@@ -286,8 +286,8 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
     // Navigate to target page - use Promise.race to handle frame detachment
     console.log('Navigating to target page:', pageUrl);
 
-    // Start navigation but don't wait for it to complete (to avoid frame detachment errors)
-    const navigationPromise = page.goto(pageUrl, { waitUntil: 'commit', timeout: 60000 })
+    // Start navigation - use domcontentloaded (commit is not valid in this puppeteer version)
+    const navigationPromise = page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
       .catch(err => console.log('Navigation event error (continuing):', err.message));
 
     // Wait for navigation to at least start, then wait for content
