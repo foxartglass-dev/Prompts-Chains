@@ -27,10 +27,13 @@ const requireDb = (req, res, next) => {
 
 /**
  * GET /api/wp-browser/health
- * Check if screenshot service is working
+ * Check if screenshot service is working (with debug info for Railway)
  */
 router.get('/health', async (req, res) => {
   try {
+    const fs = await import('fs');
+    const { execSync } = await import('child_process');
+
     let puppeteerOk = false;
     let chromiumPath = null;
     let errorMsg = null;
@@ -47,6 +50,38 @@ router.get('/health', async (req, res) => {
       chromiumPath = screenshotService.getChromiumInfo();
     }
 
+    // Debug: Check which paths actually exist
+    const pathsToCheck = [
+      '/root/.nix-profile/bin/chromium',
+      '/nix/var/nix/profiles/default/bin/chromium',
+      '/home/nixuser/.nix-profile/bin/chromium',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/google-chrome',
+      process.env.PUPPETEER_EXECUTABLE_PATH
+    ].filter(Boolean);
+
+    const pathStatus = {};
+    for (const p of pathsToCheck) {
+      try {
+        pathStatus[p] = fs.existsSync(p) ? 'EXISTS' : 'not found';
+      } catch {
+        pathStatus[p] = 'error';
+      }
+    }
+
+    // Try which command
+    let whichResult = 'not found';
+    try {
+      whichResult = execSync('which chromium chromium-browser google-chrome 2>/dev/null || echo "none found"', { encoding: 'utf8' }).trim();
+    } catch { }
+
+    // Check /nix/store for chromium
+    let nixStoreChromium = null;
+    try {
+      nixStoreChromium = execSync('find /nix/store -maxdepth 2 -name "chromium" -type d 2>/dev/null | head -3', { encoding: 'utf8' }).trim() || 'none found';
+    } catch { }
+
     res.json({
       status: puppeteerOk ? 'ok' : 'degraded',
       puppeteer: puppeteerOk,
@@ -57,6 +92,11 @@ router.get('/health', async (req, res) => {
       env: {
         PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH || null,
         PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD || null
+      },
+      debug: {
+        pathStatus,
+        whichResult,
+        nixStoreChromium
       }
     });
   } catch (error) {
@@ -155,17 +195,20 @@ router.get('/screenshot', async (req, res) => {
     let screenshot;
 
     if (authenticated === 'true' && websiteId) {
-      // Get credentials for authenticated capture
+      // Get website URL from database
       const websites = await sql`
-        SELECT wp_url, wp_user, wp_app_password
-        FROM websites WHERE id = ${websiteId}
+        SELECT wp_url FROM websites WHERE id = ${websiteId}
       `;
 
-      if (websites.length > 0 && websites[0].wp_user) {
+      // Use WP_LOGIN_* env vars for browser authentication (separate from REST API app passwords)
+      const loginUser = process.env.WP_LOGIN_USER;
+      const loginPassword = process.env.WP_LOGIN_PASSWORD;
+
+      if (websites.length > 0 && loginUser && loginPassword) {
         screenshot = await screenshotService.captureAuthenticatedPage(url, {
           url: websites[0].wp_url,
-          user: websites[0].wp_user,
-          password: websites[0].wp_app_password
+          user: loginUser,
+          password: loginPassword
         }, options);
       } else {
         // Fall back to public capture
@@ -205,15 +248,18 @@ router.get('/elements', async (req, res) => {
 
     if (websiteId) {
       const websites = await sql`
-        SELECT wp_url, wp_user, wp_app_password
-        FROM websites WHERE id = ${websiteId}
+        SELECT wp_url FROM websites WHERE id = ${websiteId}
       `;
 
-      if (websites.length > 0 && websites[0].wp_user) {
+      // Use WP_LOGIN_* env vars for browser authentication
+      const loginUser = process.env.WP_LOGIN_USER;
+      const loginPassword = process.env.WP_LOGIN_PASSWORD;
+
+      if (websites.length > 0 && loginUser && loginPassword) {
         credentials = {
           url: websites[0].wp_url,
-          user: websites[0].wp_user,
-          password: websites[0].wp_app_password
+          user: loginUser,
+          password: loginPassword
         };
       }
     }
