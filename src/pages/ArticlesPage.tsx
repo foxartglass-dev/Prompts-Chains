@@ -3,12 +3,33 @@ import ArticleListView from '../components/articles/ArticleListView';
 import SiteBrowserView from '../components/articles/SiteBrowserView';
 import HierarchyView from '../components/articles/HierarchyView';
 import MediaLibraryView from '../components/articles/MediaLibraryView';
+import VisualEditor from '../components/articles/VisualEditor';
+import ImageReplacementModal from '../components/articles/ImageReplacementModal';
+import TextEditModal from '../components/articles/TextEditModal';
 
 interface Website {
   id: number;
   name: string;
   wp_url: string;
   client_name?: string;
+}
+
+interface Article {
+  id: number;
+  keyword: string;
+  wp_post_url: string | null;
+  website_id: number | null;
+}
+
+interface ElementPosition {
+  id: string;
+  type: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  isImage: boolean;
+  isText: boolean;
 }
 
 type ViewTab = 'list' | 'browser' | 'hierarchy' | 'media';
@@ -22,6 +43,11 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ onClose }) => {
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('list');
   const [loading, setLoading] = useState(true);
+
+  // Visual editor state
+  const [visualEditorArticle, setVisualEditorArticle] = useState<Article | null>(null);
+  const [imageEditWidget, setImageEditWidget] = useState<{ widgetId: string; element: ElementPosition } | null>(null);
+  const [textEditWidget, setTextEditWidget] = useState<{ widgetId: string; element: ElementPosition } | null>(null);
 
   useEffect(() => {
     fetchWebsites();
@@ -41,6 +67,58 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ onClose }) => {
       console.error('Failed to fetch websites:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEditVisual = (article: Article) => {
+    if (article.wp_post_url) {
+      setVisualEditorArticle(article);
+    }
+  };
+
+  const handleImageEdit = (widgetId: string, element: ElementPosition) => {
+    setImageEditWidget({ widgetId, element });
+  };
+
+  const handleTextEdit = (widgetId: string, element: ElementPosition) => {
+    setTextEditWidget({ widgetId, element });
+  };
+
+  const handleImageReplaced = async (newImageUrl: string, source: 'upload' | 'ai_generated' | 'url', prompt?: string) => {
+    if (!imageEditWidget || !visualEditorArticle) return;
+
+    try {
+      // Save to image versions
+      await fetch('/api/image-versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleId: visualEditorArticle.id,
+          elementorWidgetId: imageEditWidget.widgetId,
+          imageUrl: newImageUrl,
+          source,
+          imagePrompt: prompt
+        })
+      });
+
+      // TODO: Push to WordPress Elementor data
+
+      setImageEditWidget(null);
+    } catch (err) {
+      console.error('Failed to save image replacement:', err);
+    }
+  };
+
+  const handleTextSaved = async (newContent: string) => {
+    if (!textEditWidget || !visualEditorArticle) return;
+
+    try {
+      // TODO: Push to WordPress Elementor data
+      console.log('Saving text for widget:', textEditWidget.widgetId, newContent);
+
+      setTextEditWidget(null);
+    } catch (err) {
+      console.error('Failed to save text:', err);
     }
   };
 
@@ -177,7 +255,10 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ onClose }) => {
       {/* Content */}
       <main className="flex-1 overflow-hidden">
         {activeTab === 'list' && (
-          <ArticleListView websiteId={selectedWebsite?.id} />
+          <ArticleListView
+            websiteId={selectedWebsite?.id}
+            onEditVisual={handleEditVisual}
+          />
         )}
         {activeTab === 'browser' && selectedWebsite && (
           <SiteBrowserView website={selectedWebsite} />
@@ -199,6 +280,40 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ onClose }) => {
           </div>
         )}
       </main>
+
+      {/* Visual Editor Overlay */}
+      {visualEditorArticle && visualEditorArticle.wp_post_url && selectedWebsite && (
+        <VisualEditor
+          pageUrl={visualEditorArticle.wp_post_url}
+          websiteId={selectedWebsite.id}
+          articleId={visualEditorArticle.id}
+          onClose={() => setVisualEditorArticle(null)}
+          onImageEdit={handleImageEdit}
+          onTextEdit={handleTextEdit}
+        />
+      )}
+
+      {/* Image Replacement Modal */}
+      {imageEditWidget && visualEditorArticle && selectedWebsite && (
+        <ImageReplacementModal
+          widgetId={imageEditWidget.widgetId}
+          articleId={visualEditorArticle.id}
+          websiteId={selectedWebsite.id}
+          onClose={() => setImageEditWidget(null)}
+          onReplace={handleImageReplaced}
+        />
+      )}
+
+      {/* Text Edit Modal */}
+      {textEditWidget && visualEditorArticle && selectedWebsite && (
+        <TextEditModal
+          widgetId={textEditWidget.widgetId}
+          articleId={visualEditorArticle.id}
+          websiteId={selectedWebsite.id}
+          onClose={() => setTextEditWidget(null)}
+          onSave={handleTextSaved}
+        />
+      )}
     </div>
   );
 };

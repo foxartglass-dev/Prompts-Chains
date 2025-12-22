@@ -23,6 +23,9 @@ const MediaLibraryView: React.FC<MediaLibraryViewProps> = ({ websiteId }) => {
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState<ImageVersion | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [versionHistory, setVersionHistory] = useState<ImageVersion[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   useEffect(() => {
     if (websiteId) {
@@ -47,6 +50,48 @@ const MediaLibraryView: React.FC<MediaLibraryViewProps> = ({ websiteId }) => {
       console.error('Failed to fetch images:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchVersionHistory = async (articleId: number, widgetId: string) => {
+    try {
+      const res = await fetch(`/api/image-versions/${articleId}/widget/${widgetId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setVersionHistory(data.versions || []);
+        setShowHistory(true);
+      }
+    } catch (err) {
+      console.error('Failed to fetch version history:', err);
+    }
+  };
+
+  const restoreVersion = async (version: ImageVersion) => {
+    if (!confirm(`Restore to version ${version.version}? This will create a new version with this image.`)) return;
+
+    setRestoring(true);
+    try {
+      // Create a new version with the old image
+      await fetch('/api/image-versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleId: version.article_id,
+          elementorWidgetId: version.elementor_widget_id,
+          imageUrl: version.image_url,
+          source: 'url' // Restored from history
+        })
+      });
+
+      // Refresh
+      fetchImages();
+      if (selectedImage) {
+        fetchVersionHistory(selectedImage.article_id, selectedImage.elementor_widget_id);
+      }
+    } catch (err) {
+      console.error('Failed to restore version:', err);
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -252,7 +297,68 @@ const MediaLibraryView: React.FC<MediaLibraryViewProps> = ({ websiteId }) => {
                 View Page
               </a>
             )}
+
+            {/* Version History Button */}
+            <button
+              onClick={() => fetchVersionHistory(selectedImage.article_id, selectedImage.elementor_widget_id)}
+              className="w-full mt-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium text-center rounded-lg transition"
+            >
+              View History
+            </button>
           </div>
+
+          {/* Version History Panel */}
+          {showHistory && versionHistory.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-brand-cyan/20">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-gray-400">Version History</h4>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="text-gray-500 hover:text-white text-sm"
+                >
+                  Hide
+                </button>
+              </div>
+              <div className="space-y-2 max-h-64 overflow-auto">
+                {versionHistory.map((ver) => (
+                  <div
+                    key={ver.id}
+                    className={`flex items-center gap-2 p-2 rounded-lg transition ${
+                      ver.id === selectedImage.id
+                        ? 'bg-brand-cyan/20 border border-brand-cyan'
+                        : 'bg-slate-800 hover:bg-slate-700'
+                    }`}
+                  >
+                    <img
+                      src={ver.image_url}
+                      alt={`v${ver.version}`}
+                      className="w-10 h-10 object-cover rounded"
+                    />
+                    <div className="flex-1">
+                      <p className="text-white text-xs font-medium">v{ver.version}</p>
+                      <p className="text-gray-500 text-xs">
+                        {new Date(ver.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    {ver.id !== selectedImage.id && (
+                      <button
+                        onClick={() => restoreVersion(ver)}
+                        disabled={restoring}
+                        className="px-2 py-1 bg-brand-gold/20 hover:bg-brand-gold/30 text-brand-gold text-xs rounded transition disabled:opacity-50"
+                      >
+                        {restoring ? '...' : 'Restore'}
+                      </button>
+                    )}
+                    {ver.id === selectedImage.id && (
+                      <span className="px-2 py-1 bg-brand-cyan/20 text-brand-cyan text-xs rounded">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

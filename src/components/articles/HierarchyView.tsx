@@ -10,9 +10,11 @@ interface PageNode {
 
 interface HierarchyViewProps {
   websiteId: number;
+  wpBaseUrl?: string;
+  onViewPage?: (pageUrl: string) => void;
 }
 
-const HierarchyView: React.FC<HierarchyViewProps> = ({ websiteId }) => {
+const HierarchyView: React.FC<HierarchyViewProps> = ({ websiteId, wpBaseUrl, onViewPage }) => {
   const [hierarchy, setHierarchy] = useState<{ root: PageNode[]; total: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -110,18 +112,34 @@ const HierarchyView: React.FC<HierarchyViewProps> = ({ websiteId }) => {
 
           {/* Hover actions */}
           <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition">
-            <button
-              className="p-1 hover:bg-slate-700 rounded"
-              title="Edit page"
-              onClick={(e) => {
-                e.stopPropagation();
-                // TODO: Open in visual editor
-              }}
-            >
-              <svg className="w-3 h-3 text-brand-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-            </button>
+            {wpBaseUrl && (
+              <a
+                href={`${wpBaseUrl.replace(/\/$/, '')}/${node.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1 hover:bg-slate-700 rounded"
+                title="View page"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <svg className="w-3 h-3 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            )}
+            {onViewPage && wpBaseUrl && (
+              <button
+                className="p-1 hover:bg-slate-700 rounded"
+                title="View in browser"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onViewPage(`${wpBaseUrl.replace(/\/$/, '')}/${node.slug}`);
+                }}
+              >
+                <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
 
