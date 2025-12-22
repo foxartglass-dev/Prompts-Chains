@@ -221,13 +221,27 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
     } else {
       console.log('On login page, filling credentials...');
 
-      // Clear any existing values first
-      await page.$eval('#user_login', el => el.value = '');
-      await page.$eval('#user_pass', el => el.value = '');
+      // Fill login form using direct value setting (page.type with delays gets interrupted by WP's JS)
+      await page.evaluate((username, pass) => {
+        const userInput = document.querySelector('#user_login');
+        const passInput = document.querySelector('#user_pass');
 
-      // Fill login form
-      await page.type('#user_login', user, { delay: 50 });
-      await page.type('#user_pass', password, { delay: 50 });
+        if (userInput) {
+          userInput.value = '';
+          userInput.value = username;
+          userInput.dispatchEvent(new Event('input', { bubbles: true }));
+          userInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (passInput) {
+          passInput.value = '';
+          passInput.value = pass;
+          passInput.dispatchEvent(new Event('input', { bubbles: true }));
+          passInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, user, password);
+
+      console.log('Credentials filled via evaluate()');
 
       // Check the "Remember Me" box if it exists
       const rememberMe = await page.$('#rememberme');
@@ -304,8 +318,25 @@ async function getElementPositions(pageUrl, wpCredentials = null) {
     if (wpCredentials) {
       const loginUrl = `${wpCredentials.url.replace(/\/$/, '')}/wp-login.php`;
       await page.goto(loginUrl, { waitUntil: 'networkidle2' });
-      await page.type('#user_login', wpCredentials.user);
-      await page.type('#user_pass', wpCredentials.password);
+
+      // Use direct value setting (page.type gets interrupted by WP's JS)
+      await page.evaluate((username, pass) => {
+        const userInput = document.querySelector('#user_login');
+        const passInput = document.querySelector('#user_pass');
+
+        if (userInput) {
+          userInput.value = username;
+          userInput.dispatchEvent(new Event('input', { bubbles: true }));
+          userInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (passInput) {
+          passInput.value = pass;
+          passInput.dispatchEvent(new Event('input', { bubbles: true }));
+          passInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, wpCredentials.user, wpCredentials.password);
+
       await page.click('#wp-submit');
       await page.waitForNavigation({ waitUntil: 'networkidle2' });
     }
