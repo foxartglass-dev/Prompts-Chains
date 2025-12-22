@@ -296,6 +296,10 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
     console.log('Waiting for content to render...');
     await new Promise(r => setTimeout(r, 8000));
 
+    // Log what URL we actually ended up at
+    const finalUrl = page.url();
+    console.log('Final URL after navigation:', finalUrl);
+
     console.log('Taking screenshot...');
     const screenshot = await page.screenshot({
       type: 'png',
