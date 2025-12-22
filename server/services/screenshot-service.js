@@ -192,7 +192,7 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
   const browser = await puppeteer.launch(getLaunchOptions());
 
   try {
-    const page = await browser.newPage();
+    let page = await browser.newPage();
 
     // Set a realistic user agent to avoid bot detection
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
@@ -213,15 +213,14 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
       console.log('Current URL:', currentUrl);
 
       // If redirected to wp-admin, we're already logged in
-      if (currentUrl.includes('wp-admin')) {
-        console.log('Already logged in, proceeding to target page');
-      } else {
+      if (!currentUrl.includes('wp-admin')) {
         throw new Error(`Unexpected page state. Current URL: ${currentUrl}`);
       }
+      console.log('Already logged in, proceeding to target page');
     } else {
       console.log('On login page, filling credentials...');
 
-      // Fill login form using direct value setting (page.type with delays gets interrupted by WP's JS)
+      // Fill login form using direct value setting
       await page.evaluate((username, pass) => {
         const userInput = document.querySelector('#user_login');
         const passInput = document.querySelector('#user_pass');
@@ -266,7 +265,7 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
         throw new Error(`WordPress login failed: ${errorText.trim()}`);
       }
 
-      // Verify we're logged in by checking for wp-admin elements or dashboard
+      // Verify we're logged in
       const currentUrl = page.url();
       console.log('After login, current URL:', currentUrl);
 
@@ -275,33 +274,32 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
       }
     }
 
-    // Now navigate to the actual page
-    console.log('Navigating to target page:', pageUrl);
+    // Get cookies from logged-in session
+    console.log('Extracting auth cookies...');
+    const cookies = await page.cookies();
+    console.log(`Got ${cookies.length} cookies`);
 
-    // Use domcontentloaded first (more reliable), then wait for network to settle
-    try {
-      await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    } catch (navError) {
-      // Handle "frame was detached" errors - page may have redirected
-      if (navError.message.includes('frame was detached') || navError.message.includes('detached')) {
-        console.log('Frame detached during navigation, waiting for page to stabilize...');
-        await new Promise(r => setTimeout(r, 2000));
-      } else {
-        throw navError;
-      }
-    }
+    // Close old page and create fresh one with cookies
+    await page.close();
+    page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+    await page.setViewport({ width: options.width || 1280, height: options.height || 800 });
+    await page.setCookie(...cookies);
+
+    // Navigate to target page with fresh page object
+    console.log('Navigating to target page:', pageUrl);
+    await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     // Wait for content to render (Elementor, etc.)
     const waitTime = options.waitFor || 3000;
     console.log(`Waiting ${waitTime}ms for page to render...`);
     await new Promise(r => setTimeout(r, waitTime));
 
-    // Additional wait for any lazy-loaded content
+    // Additional wait for lazy-loaded content
     try {
       await page.waitForNetworkIdle({ timeout: 5000 });
     } catch (e) {
-      // Network idle timeout is fine, continue anyway
-      console.log('Network idle timeout, continuing with screenshot...');
+      console.log('Network idle timeout, continuing...');
     }
 
     console.log('Taking screenshot...');
