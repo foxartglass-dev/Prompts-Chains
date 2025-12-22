@@ -286,22 +286,20 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
     await page.setViewport({ width: options.width || 1280, height: options.height || 800 });
     await page.setCookie(...cookies);
 
-    // Navigate to target page using window.location to avoid Puppeteer frame issues
+    // Navigate directly to target page
     console.log('Navigating to target page:', pageUrl);
 
-    // First go to a simple page on the site to establish context
-    const baseUrl = wpUrl.replace(/\/$/, '');
-    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    try {
+      // Try direct navigation first
+      await page.goto(pageUrl, { waitUntil: 'networkidle0', timeout: 45000 });
+    } catch (navError) {
+      console.log('Navigation issue:', navError.message);
+      // If it fails, still try to continue - page may have loaded
+    }
 
-    // Now use JavaScript to navigate to the preview URL (avoids Puppeteer nav tracking issues)
-    console.log('Using window.location to navigate to preview...');
-    await page.evaluate((url) => {
-      window.location.href = url;
-    }, pageUrl);
-
-    // Wait for page to load
-    console.log('Waiting for preview page to load...');
-    await new Promise(r => setTimeout(r, 8000));
+    // Extra wait for Elementor content
+    console.log('Waiting for content to render...');
+    await new Promise(r => setTimeout(r, 5000));
 
     console.log('Taking screenshot...');
     const screenshot = await page.screenshot({
