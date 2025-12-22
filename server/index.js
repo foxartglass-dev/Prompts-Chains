@@ -19,6 +19,8 @@ import stylelockRouter from './routes/stylelock.js';
 import knowledgeRouter from './routes/knowledge.js';
 import seoRouter from './routes/seo.js';
 import ideasRouter from './routes/ideas.js';
+import wpBrowserRouter from './routes/wp-browser.js';
+import imageVersionsRouter from './routes/image-versions.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
 dotenv.config();
@@ -176,6 +178,8 @@ app.use('/api/stylelock', stylelockRouter);
 app.use('/api/knowledge', knowledgeRouter);
 app.use('/api/seo', seoRouter);
 app.use('/api/ideas', ideasRouter);
+app.use('/api/wp-browser', wpBrowserRouter);
+app.use('/api/image-versions', imageVersionsRouter);
 
 // Database status endpoint
 app.get('/api/db/status', async (req, res) => {
