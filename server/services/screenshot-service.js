@@ -277,12 +277,32 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
 
     // Now navigate to the actual page
     console.log('Navigating to target page:', pageUrl);
-    await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+
+    // Use domcontentloaded first (more reliable), then wait for network to settle
+    try {
+      await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    } catch (navError) {
+      // Handle "frame was detached" errors - page may have redirected
+      if (navError.message.includes('frame was detached') || navError.message.includes('detached')) {
+        console.log('Frame detached during navigation, waiting for page to stabilize...');
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        throw navError;
+      }
+    }
 
     // Wait for content to render (Elementor, etc.)
     const waitTime = options.waitFor || 3000;
     console.log(`Waiting ${waitTime}ms for page to render...`);
     await new Promise(r => setTimeout(r, waitTime));
+
+    // Additional wait for any lazy-loaded content
+    try {
+      await page.waitForNetworkIdle({ timeout: 5000 });
+    } catch (e) {
+      // Network idle timeout is fine, continue anyway
+      console.log('Network idle timeout, continuing with screenshot...');
+    }
 
     console.log('Taking screenshot...');
     const screenshot = await page.screenshot({
