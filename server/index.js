@@ -19,6 +19,8 @@ import stylelockRouter from './routes/stylelock.js';
 import knowledgeRouter from './routes/knowledge.js';
 import seoRouter from './routes/seo.js';
 import ideasRouter from './routes/ideas.js';
+import authRouter from './routes/auth.js';
+import { hybridAuth, getClientIp, isIpWhitelisted } from './middleware/auth.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
 dotenv.config();
@@ -79,43 +81,10 @@ app.get('/api/my-ip', async (req, res) => {
   }
 });
 
-// Helper: Get client IP address
-function getClientIp(req) {
-  // Check various headers for the real IP (behind proxies like Railway)
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.connection?.remoteAddress || req.socket?.remoteAddress || req.ip;
-}
-
-// Helper: Check if IP is whitelisted
-function isIpWhitelisted(ip) {
-  const whitelist = process.env.IP_WHITELIST || '';
-  if (!whitelist) return false;
-
-  // Split by comma and trim each IP
-  const whitelistedIps = whitelist.split(',').map(ip => ip.trim());
-
-  // Check if client IP matches any whitelisted IP
-  // Also handle IPv6 localhost variants
-  const normalizedIp = ip?.replace('::ffff:', '') || '';
-  return whitelistedIps.some(wip =>
-    wip === ip || wip === normalizedIp || normalizedIp.endsWith(wip)
-  );
-}
-
 // Config endpoint - returns default values from environment variables
 // These pre-fill the UI fields so you don't have to enter them every time
-app.get('/api/config', (req, res) => {
-  const clientIp = getClientIp(req);
-  const ipWhitelisted = isIpWhitelisted(clientIp);
-
-  // PIN is required only if:
-  // 1. APP_PIN is set AND
-  // 2. Client IP is NOT in the whitelist
-  const pinRequired = !!process.env.APP_PIN && !ipWhitelisted;
-
+// Protected by hybridAuth - requires IP whitelist or valid token
+app.get('/api/config', hybridAuth, (req, res) => {
   res.json({
     defaults: {
       anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -127,58 +96,34 @@ app.get('/api/config', (req, res) => {
       wpUser: process.env.WP_USER || '',
       wpPassword: process.env.WP_APP_PASSWORD || '',
     },
-    // Tell frontend if PIN lock is required for this IP
-    pinEnabled: pinRequired,
-    // Debug info (can remove in production)
-    clientIp: clientIp,
-    ipWhitelisted: ipWhitelisted,
   });
 });
 
-// PIN Lock authentication
-app.post('/api/auth/verify-pin', (req, res) => {
-  const { pin } = req.body;
-  const correctPin = process.env.APP_PIN;
+// Auth routes (config, ip-status, me, logout, check)
+app.use('/api/auth', authRouter);
 
-  // If no PIN is set, always allow access
-  if (!correctPin) {
-    return res.json({ success: true, message: 'PIN not configured - access granted' });
-  }
+// LLM routing - handles all providers (protected)
+app.use('/api/llm', hybridAuth, llmRouter);
 
-  if (!pin) {
-    return res.status(400).json({ success: false, error: 'PIN is required' });
-  }
+// Database routes - all protected by hybridAuth
+app.use('/api/clients', hybridAuth, clientsRouter);
+app.use('/api/projects', hybridAuth, projectsRouter);
+app.use('/api/personal-projects', hybridAuth, personalProjectsRouter);
+app.use('/api/locations', hybridAuth, locationsRouter);
+app.use('/api/websites', hybridAuth, websitesRouter);
+app.use('/api/templates', hybridAuth, templatesRouter);
+app.use('/api/workflows', hybridAuth, workflowsRouter);
+app.use('/api/articles', hybridAuth, articlesRouter);
+app.use('/api/gbp', hybridAuth, gbpRouter);
+app.use('/api/elementor', hybridAuth, elementorRouter);
+app.use('/api/images', hybridAuth, imagesRouter);
+app.use('/api/stylelock', hybridAuth, stylelockRouter);
+app.use('/api/knowledge', hybridAuth, knowledgeRouter);
+app.use('/api/seo', hybridAuth, seoRouter);
+app.use('/api/ideas', hybridAuth, ideasRouter);
 
-  // Simple PIN comparison (in production, you'd want to hash this)
-  if (pin === correctPin) {
-    res.json({ success: true, message: 'PIN verified' });
-  } else {
-    res.status(401).json({ success: false, error: 'Invalid PIN' });
-  }
-});
-
-// LLM routing - handles all providers
-app.use('/api/llm', llmRouter);
-
-// Database routes (clients, projects, locations, websites, templates, workflows, articles)
-app.use('/api/clients', clientsRouter);
-app.use('/api/projects', projectsRouter);
-app.use('/api/personal-projects', personalProjectsRouter);
-app.use('/api/locations', locationsRouter);
-app.use('/api/websites', websitesRouter);
-app.use('/api/templates', templatesRouter);
-app.use('/api/workflows', workflowsRouter);
-app.use('/api/articles', articlesRouter);
-app.use('/api/gbp', gbpRouter);
-app.use('/api/elementor', elementorRouter);
-app.use('/api/images', imagesRouter);
-app.use('/api/stylelock', stylelockRouter);
-app.use('/api/knowledge', knowledgeRouter);
-app.use('/api/seo', seoRouter);
-app.use('/api/ideas', ideasRouter);
-
-// Database status endpoint
-app.get('/api/db/status', async (req, res) => {
+// Database status endpoint (protected)
+app.get('/api/db/status', hybridAuth, async (req, res) => {
   const status = await testConnection();
   res.json({
     enabled: isDatabaseEnabled(),
@@ -186,8 +131,8 @@ app.get('/api/db/status', async (req, res) => {
   });
 });
 
-// ZeroGPT AI detection proxy (avoids CORS issues)
-app.post('/api/zerogpt/detect', async (req, res) => {
+// ZeroGPT AI detection proxy (protected)
+app.post('/api/zerogpt/detect', hybridAuth, async (req, res) => {
   const { text, apiKey } = req.body;
 
   // API key can come from request body or environment variable
@@ -260,8 +205,8 @@ app.post('/api/zerogpt/detect', async (req, res) => {
   }
 });
 
-// WordPress publishing proxy (avoids CORS issues)
-app.post('/api/wordpress/publish', async (req, res) => {
+// WordPress publishing proxy (protected)
+app.post('/api/wordpress/publish', hybridAuth, async (req, res) => {
   const { wpUrl, wpUser, wpPassword, contentType, title, content, status } = req.body;
 
   // Credentials can come from request body or environment variables

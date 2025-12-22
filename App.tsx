@@ -7,7 +7,7 @@ import { checkAiScore } from './src/services/zerogpt-service';
 import { parseCsv, downloadFile, downloadProjectConfig, loadProjectConfigFromFile } from './src/services/file-utils';
 import Icon from './src/components/Icon';
 import ProjectTracker from './src/components/ProjectTracker';
-import PinLock from './src/components/PinLock';
+import { ProtectedRoute, UserMenu } from './src/components/auth';
 import AgencyManager from './src/components/AgencyManager';
 import ArticleManager from './src/components/ArticleManager';
 import TemplateLibrary from './src/components/TemplateLibrary';
@@ -86,13 +86,6 @@ declare const JSZip: any;
 
 const App: React.FC = () => {
     // ========== ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS ==========
-
-    // PIN Lock State
-    const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
-      // Check if already unlocked in this session
-      return sessionStorage.getItem('pinUnlocked') === 'true';
-    });
-    const [pinEnabled, setPinEnabled] = useState<boolean | null>(null);
 
     // UI State for notifications
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -264,27 +257,6 @@ const App: React.FC = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isMoreDropdownOpen]);
 
-    // Check if PIN lock is enabled on mount
-    useEffect(() => {
-      const checkPinConfig = async () => {
-        try {
-          const response = await fetch('/api/config');
-          const data = await response.json();
-          setPinEnabled(data.pinEnabled || false);
-
-          // If PIN not enabled, auto-unlock
-          if (!data.pinEnabled) {
-            setIsUnlocked(true);
-          }
-        } catch (error) {
-          // If can't fetch config, assume no PIN
-          setPinEnabled(false);
-          setIsUnlocked(true);
-        }
-      };
-      checkPinConfig();
-    }, []);
-
     // Save default workflow to localStorage when it changes
     useEffect(() => {
       if (defaultWorkflow) {
@@ -298,8 +270,8 @@ const App: React.FC = () => {
     const hasAutoLoadedRef = useRef(false);
     useEffect(() => {
       const autoLoadDefaultWorkflow = async () => {
-        // Only auto-load once, and only if unlocked and no workflow currently loaded
-        if (hasAutoLoadedRef.current || !isUnlocked || currentWorkflowId) return;
+        // Only auto-load once, and only if no workflow currently loaded
+        if (hasAutoLoadedRef.current || currentWorkflowId) return;
 
         const saved = localStorage.getItem('promptflow_default_workflow');
         if (!saved) return;
@@ -340,7 +312,7 @@ const App: React.FC = () => {
       };
 
       autoLoadDefaultWorkflow();
-    }, [isUnlocked]);
+    }, []);
 
     // Effect to clear notification after a delay
     useEffect(() => {
@@ -383,23 +355,7 @@ const App: React.FC = () => {
         };
     }, [currentProject?.state, currentWorkflowId]); // Only trigger on state changes, not on currentProject change
 
-    // ========== CONDITIONAL RETURNS (after all hooks) ==========
-
-    // Show loading state while checking PIN config
-    if (pinEnabled === null) {
-      return (
-        <div className="fixed inset-0 bg-gray-900 flex items-center justify-center">
-          <div className="text-cyan-400 text-xl">Loading...</div>
-        </div>
-      );
-    }
-
-    // Show PIN lock screen if enabled and not unlocked
-    if (pinEnabled && !isUnlocked) {
-      return <PinLock onUnlock={() => setIsUnlocked(true)} />;
-    }
-
-    // ========== HELPER FUNCTIONS (after conditional returns is OK) ==========
+    // ========== HELPER FUNCTIONS ==========
 
     // Helper function to update the current project's state
     const setCurrentProjectState = (updater: (prevState: Project['state']) => Project['state']) => {
@@ -1484,6 +1440,7 @@ const App: React.FC = () => {
     };
 
     return (
+        <ProtectedRoute>
         <div className="min-h-screen bg-slate-900 text-gray-200 font-sans p-4 sm:p-6 lg:p-8">
              {notification && (
                 <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-xl shadow-card-lg text-white transition-all duration-300 border ${notification.type === 'success' ? 'bg-green-600/90 border-green-500' : notification.type === 'info' ? 'bg-brand-cyan/90 border-brand-cyan-light' : 'bg-red-600/90 border-red-500'}`}>
@@ -1969,6 +1926,8 @@ const App: React.FC = () => {
                                 </div>
                             )}
                         </div>
+                        {/* User Menu - Auth0 */}
+                        <UserMenu className="ml-2" />
                     </div>
                 </div>
 
@@ -2982,6 +2941,7 @@ const App: React.FC = () => {
                 </div>
             )}
         </div>
+        </ProtectedRoute>
     );
 };
 
