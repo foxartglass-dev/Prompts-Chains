@@ -279,13 +279,22 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
       }
     }
 
-    // Navigate to target page using the same logged-in page (no page switching)
+    // Navigate to target page - use Promise.race to handle frame detachment
     console.log('Navigating to target page:', pageUrl);
-    await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+    // Start navigation but don't wait for it to complete (to avoid frame detachment errors)
+    const navigationPromise = page.goto(pageUrl, { waitUntil: 'commit', timeout: 60000 })
+      .catch(err => console.log('Navigation event error (continuing):', err.message));
+
+    // Wait for navigation to at least start, then wait for content
+    await Promise.race([
+      navigationPromise,
+      new Promise(r => setTimeout(r, 10000)) // Max 10s for initial nav
+    ]);
 
     // Wait for Elementor content to render
     console.log('Waiting for content to render...');
-    await new Promise(r => setTimeout(r, 5000));
+    await new Promise(r => setTimeout(r, 8000));
 
     console.log('Taking screenshot...');
     const screenshot = await page.screenshot({
