@@ -17,8 +17,10 @@ interface Website {
 interface Article {
   id: number;
   keyword: string;
+  wp_post_id: number | null;
   wp_post_url: string | null;
   website_id: number | null;
+  wp_url?: string;
 }
 
 interface ElementPosition {
@@ -75,7 +77,8 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose }) => {
   };
 
   const handleEditVisual = (article: Article) => {
-    if (article.wp_post_url) {
+    // Allow visual editing for any article with a WordPress post ID (drafts work too)
+    if (article.wp_post_id) {
       setVisualEditorArticle(article);
     }
   };
@@ -289,9 +292,11 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose }) => {
       </main>
 
       {/* Visual Editor Overlay */}
-      {visualEditorArticle && visualEditorArticle.wp_post_url && selectedWebsite && (
+      {visualEditorArticle && visualEditorArticle.wp_post_id && selectedWebsite && (
         <VisualEditor
-          pageUrl={visualEditorArticle.wp_post_url}
+          pageUrl={visualEditorArticle.wp_post_url || ''}
+          wpPostId={visualEditorArticle.wp_post_id}
+          wpUrl={visualEditorArticle.wp_url || selectedWebsite.wp_url}
           websiteId={selectedWebsite.id}
           articleId={visualEditorArticle.id}
           onClose={() => setVisualEditorArticle(null)}

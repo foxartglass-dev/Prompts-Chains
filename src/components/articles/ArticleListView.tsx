@@ -348,11 +348,11 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       >
                         View
                       </button>
-                      {onEditVisual && article.wp_post_url && (
+                      {onEditVisual && article.wp_post_id && (
                         <button
                           onClick={() => onEditVisual(article)}
                           className="px-2 py-1 bg-brand-gold/20 hover:bg-brand-gold/30 border border-brand-gold/50 rounded text-brand-gold text-xs font-medium transition"
-                          title="Visual Editor"
+                          title="Visual Editor (Draft Preview)"
                         >
                           Visual
                         </button>
@@ -418,7 +418,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     >
                       Edit
                     </button>
-                    {onEditVisual && selectedArticle.wp_post_url && (
+                    {onEditVisual && selectedArticle.wp_post_id && (
                       <button
                         onClick={() => {
                           closeModal();

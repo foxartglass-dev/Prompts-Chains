@@ -14,6 +14,8 @@ interface ElementPosition {
 
 interface VisualEditorProps {
   pageUrl: string;
+  wpPostId?: number;
+  wpUrl?: string;
   websiteId: number;
   articleId?: number;
   onClose: () => void;
@@ -23,6 +25,8 @@ interface VisualEditorProps {
 
 const VisualEditor: React.FC<VisualEditorProps> = ({
   pageUrl,
+  wpPostId,
+  wpUrl,
   websiteId,
   articleId,
   onClose,
@@ -37,7 +41,20 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
   const [hoveredElement, setHoveredElement] = useState<string | null>(null);
   const [selectedElement, setSelectedElement] = useState<ElementPosition | null>(null);
   const [scale, setScale] = useState(1);
-  const [iframeUrl, setIframeUrl] = useState(pageUrl);
+
+  // Construct the proper URL for drafts or published pages
+  // For drafts: use WordPress preview URL format: ?p=POST_ID&preview=true
+  // For published: use the public URL if available
+  const getDraftPreviewUrl = () => {
+    if (wpPostId && wpUrl) {
+      const baseUrl = wpUrl.replace(/\/$/, '');
+      return `${baseUrl}/?p=${wpPostId}&preview=true`;
+    }
+    return pageUrl;
+  };
+
+  const effectiveUrl = getDraftPreviewUrl();
+  const [iframeUrl, setIframeUrl] = useState(effectiveUrl);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -48,18 +65,21 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
     if (mode === 'screenshot') {
       loadScreenshotAndElements();
     }
-  }, [mode, pageUrl, websiteId]);
+  }, [mode, effectiveUrl, websiteId]);
 
   const loadScreenshotAndElements = async () => {
     setLoading(true);
     setScreenshotError(false);
 
     try {
-      // Try to load screenshot
+      // Use the effective URL (draft preview URL for drafts)
+      const targetUrl = effectiveUrl;
+
+      // Try to load screenshot with authentication for draft pages
       const screenshotParams = new URLSearchParams({
-        url: pageUrl,
+        url: targetUrl,
         websiteId: websiteId.toString(),
-        authenticated: 'true'
+        authenticated: 'true'  // Always use auth for draft preview
       });
 
       // Check if screenshot service is available
@@ -74,9 +94,9 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
 
       setScreenshotUrl(`/api/wp-browser/screenshot?${screenshotParams}`);
 
-      // Load element positions
+      // Load element positions (also uses authenticated access)
       const elementsParams = new URLSearchParams({
-        url: pageUrl,
+        url: targetUrl,
         websiteId: websiteId.toString()
       });
       const elementsRes = await fetch(`/api/wp-browser/elements?${elementsParams}`);
@@ -163,13 +183,16 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
 
   // Get Elementor edit URL for this page
   const getElementorEditUrl = () => {
+    if (wpPostId && wpUrl) {
+      const baseUrl = wpUrl.replace(/\/$/, '');
+      return `${baseUrl}/wp-admin/post.php?post=${wpPostId}&action=elementor`;
+    }
+    // Fallback to pageUrl origin if available
     try {
-      const url = new URL(pageUrl);
-      // Extract post ID from URL if it's a WordPress page
-      // Default to wp-admin for editing
-      return `${url.origin}/wp-admin/post.php?post=${articleId || 0}&action=elementor`;
+      const url = new URL(pageUrl || effectiveUrl);
+      return `${url.origin}/wp-admin/post.php?post=${wpPostId || articleId || 0}&action=elementor`;
     } catch {
-      return pageUrl;
+      return effectiveUrl;
     }
   };
 
@@ -226,10 +249,11 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
           </a>
 
           <a
-            href={pageUrl}
+            href={effectiveUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded transition text-sm"
+            title={wpPostId ? "Open draft preview (requires login)" : "Open page"}
           >
             Open in New Tab
           </a>
@@ -242,6 +266,21 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
           </button>
         </div>
       </header>
+
+      {/* Draft Page Notice */}
+      {wpPostId && mode === 'preview' && (
+        <div className="mx-6 mt-4 p-3 bg-blue-500/20 border border-blue-500/50 rounded-lg text-blue-400 flex items-center gap-3">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <p className="font-medium">Draft Preview Mode</p>
+            <p className="text-sm text-blue-400/70">
+              Iframe preview requires WordPress login. If you see a login page, use <strong>Screenshot Mode</strong> instead - it authenticates automatically.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Screenshot Error Banner */}
       {screenshotError && mode === 'screenshot' && (
@@ -273,7 +312,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
                 </svg>
               </button>
               <button
-                onClick={() => navigateIframe(pageUrl)}
+                onClick={() => navigateIframe(effectiveUrl)}
                 className="p-1.5 hover:bg-slate-700 rounded transition"
                 title="Home"
               >
