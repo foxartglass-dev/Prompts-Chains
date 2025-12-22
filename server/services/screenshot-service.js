@@ -288,20 +288,41 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
 
     // Navigate to target page with fresh page object
     console.log('Navigating to target page:', pageUrl);
+    let navigationSucceeded = false;
+
     try {
       await page.goto(pageUrl, { waitUntil: 'load', timeout: 30000 });
+      navigationSucceeded = true;
     } catch (navError) {
-      // Frame detachment can happen during WP preview redirects - continue anyway
-      if (navError.message.includes('detached')) {
-        console.log('Frame detached during navigation, continuing...');
-        await new Promise(r => setTimeout(r, 3000));
+      // Frame detachment can happen during WP preview redirects
+      if (navError.message.includes('detached') || navError.message.includes('closed')) {
+        console.log('Frame detached, creating new page and retrying...');
+
+        // Create yet another new page and retry
+        try {
+          await page.close();
+        } catch (e) { /* ignore */ }
+
+        page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+        await page.setViewport({ width: options.width || 1280, height: options.height || 800 });
+        await page.setCookie(...cookies);
+
+        // Try navigation again with minimal wait
+        try {
+          await page.goto(pageUrl, { waitUntil: 'commit', timeout: 30000 });
+          navigationSucceeded = true;
+        } catch (retryError) {
+          console.log('Retry navigation also had issues:', retryError.message);
+          // Continue anyway - page might have loaded
+        }
       } else {
         throw navError;
       }
     }
 
     // Wait for content to render (Elementor, etc.)
-    const waitTime = options.waitFor || 4000;
+    const waitTime = options.waitFor || 5000;
     console.log(`Waiting ${waitTime}ms for page to render...`);
     await new Promise(r => setTimeout(r, waitTime));
 
