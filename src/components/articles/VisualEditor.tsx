@@ -86,12 +86,15 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
       const healthRes = await fetch('/api/wp-browser/health');
       const healthData = await healthRes.json();
 
-      if (!healthData.puppeteerAvailable) {
+      if (!healthData.puppeteer) {
+        console.warn('Puppeteer not available:', healthData);
         setScreenshotError(true);
-        setMode('preview');
+        setLoading(false);
         return;
       }
 
+      // Set screenshot URL - the img tag will load it
+      setImageLoading(true);
       setScreenshotUrl(`/api/wp-browser/screenshot?${screenshotParams}`);
 
       // Load element positions (also uses authenticated access)
@@ -99,11 +102,24 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
         url: targetUrl,
         websiteId: websiteId.toString()
       });
-      const elementsRes = await fetch(`/api/wp-browser/elements?${elementsParams}`);
 
-      if (elementsRes.ok) {
-        const data = await elementsRes.json();
-        setElements(data.elements || []);
+      // Add timeout for elements fetch
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      try {
+        const elementsRes = await fetch(`/api/wp-browser/elements?${elementsParams}`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (elementsRes.ok) {
+          const data = await elementsRes.json();
+          setElements(data.elements || []);
+        }
+      } catch (fetchErr) {
+        console.warn('Elements fetch failed or timed out:', fetchErr);
+        // Continue anyway - screenshot might still work
       }
     } catch (err) {
       console.error('Error loading visual editor:', err);
@@ -114,7 +130,11 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
     }
   };
 
+  const [imageLoading, setImageLoading] = useState(false);
+
   const handleImageLoad = () => {
+    setImageLoading(false);
+    setLoading(false);
     if (imageRef.current && containerRef.current) {
       const containerWidth = containerRef.current.clientWidth;
       const imageWidth = imageRef.current.naturalWidth;
@@ -124,6 +144,25 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
       }
     }
   };
+
+  const handleImageError = () => {
+    setImageLoading(false);
+    setLoading(false);
+    setScreenshotError(true);
+  };
+
+  // Set timeout for screenshot loading
+  useEffect(() => {
+    if (imageLoading) {
+      const timeout = setTimeout(() => {
+        console.warn('Screenshot loading timed out after 45 seconds');
+        setImageLoading(false);
+        setLoading(false);
+        setScreenshotError(true);
+      }, 45000);
+      return () => clearTimeout(timeout);
+    }
+  }, [imageLoading]);
 
   const handleElementClick = (element: ElementPosition) => {
     setSelectedElement(element);
@@ -289,8 +328,16 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <div>
-            <p className="font-medium">Screenshot mode unavailable</p>
-            <p className="text-sm text-yellow-400/70">Puppeteer is not installed. Using Live Preview mode instead.</p>
+            <p className="font-medium">Screenshot mode failed</p>
+            <p className="text-sm text-yellow-400/70">
+              Server-side screenshot capture timed out or failed. Puppeteer/Chromium may not be properly configured on the server.
+            </p>
+            <button
+              onClick={() => setMode('preview')}
+              className="mt-2 px-3 py-1 bg-yellow-500/30 hover:bg-yellow-500/40 text-yellow-300 rounded text-sm"
+            >
+              Use Live Preview Instead
+            </button>
           </div>
         </div>
       )}
@@ -376,12 +423,23 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
             ref={containerRef}
             className="flex-1 overflow-auto p-6"
           >
-            {loading ? (
+            {(loading || imageLoading) ? (
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-12 w-12 border-4 border-brand-cyan border-t-transparent mb-4" />
                 <p className="text-white">Loading screenshot...</p>
+                <p className="text-gray-500 text-sm mt-2">This may take up to 45 seconds (server is capturing the page)</p>
+                <button
+                  onClick={() => {
+                    setLoading(false);
+                    setImageLoading(false);
+                    setMode('preview');
+                  }}
+                  className="mt-4 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm"
+                >
+                  Cancel and use Live Preview
+                </button>
               </div>
-            ) : screenshotUrl ? (
+            ) : screenshotUrl && !screenshotError ? (
               <div className="relative inline-block">
                 {/* Screenshot */}
                 <img
@@ -390,10 +448,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
                   alt="Page screenshot"
                   className="max-w-full"
                   onLoad={handleImageLoad}
-                  onError={() => {
-                    setScreenshotError(true);
-                    setMode('preview');
-                  }}
+                  onError={handleImageError}
                 />
 
                 {/* Element overlays */}
