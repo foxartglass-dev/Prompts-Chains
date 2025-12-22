@@ -35,10 +35,11 @@ interface ElementPosition {
 type ViewTab = 'list' | 'browser' | 'hierarchy' | 'media';
 
 interface ArticlesPageProps {
-  onClose?: () => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-const ArticlesPage: React.FC<ArticlesPageProps> = ({ onClose }) => {
+const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose }) => {
   const [websites, setWebsites] = useState<Website[]>([]);
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('list');
@@ -161,20 +162,23 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ onClose }) => {
     }
   ];
 
+  if (!isOpen) return null;
+
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center bg-slate-950">
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
         <div className="text-brand-cyan animate-pulse">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-slate-950">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-brand-cyan/30 bg-slate-900">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold text-brand-gold">Articles</h1>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-slate-900 rounded-2xl w-full max-w-7xl h-[90vh] overflow-hidden border-2 border-brand-cyan shadow-glow-cyan flex flex-col">
+        {/* Header */}
+        <header className="flex items-center justify-between px-6 py-3 border-b border-brand-cyan/30 bg-slate-800/50 flex-shrink-0">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-bold text-brand-gold">Articles</h1>
 
           {/* Website Selector */}
           <select
@@ -314,6 +318,7 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ onClose }) => {
           onSave={handleTextSaved}
         />
       )}
+      </div>
     </div>
   );
 };

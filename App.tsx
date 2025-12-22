@@ -20,6 +20,7 @@ import PendingMetaNotification from './src/components/PendingMetaNotification';
 import IdeasBacklog from './src/components/IdeasBacklog';
 import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components/DefaultWorkflowSelector';
 import WordPressSettings from './src/components/WordPressSettings';
+import ArticlesPage from './src/pages/ArticlesPage';
 
 // Types for workflow
 interface WorkflowItem {
@@ -139,6 +140,7 @@ const App: React.FC = () => {
     const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
     const [isIdeasOpen, setIsIdeasOpen] = useState(false);
     const [isWordPressOpen, setIsWordPressOpen] = useState(false);
+    const [isArticlesPageOpen, setIsArticlesPageOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isMoreDropdownOpen, setIsMoreDropdownOpen] = useState(false);
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
@@ -1521,6 +1523,7 @@ const App: React.FC = () => {
             {/* Ideas Backlog */}
             <IdeasBacklog isOpen={isIdeasOpen} onClose={() => setIsIdeasOpen(false)} />
             <WordPressSettings isOpen={isWordPressOpen} onClose={() => setIsWordPressOpen(false)} />
+            <ArticlesPage isOpen={isArticlesPageOpen} onClose={() => setIsArticlesPageOpen(false)} />
 
             {/* Settings Modal */}
             {isSettingsOpen && (
@@ -1915,6 +1918,16 @@ const App: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                             </svg>
                             <span className="text-[10px] md:text-sm">WordPress</span>
+                        </button>
+                        <button
+                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsWordPressOpen(false); setIsArticlesPageOpen(true); }}
+                            className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 bg-slate-900 text-brand-gold font-semibold py-1 px-1 md:py-1.5 md:px-2.5 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
+                            title="WordPress Articles Management"
+                        >
+                            <svg className="h-4 w-4 md:h-5 md:w-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+                            </svg>
+                            <span className="text-[10px] md:text-sm">Articles</span>
                         </button>
                         <button
                             onClick={() => setIsSettingsOpen(true)}
