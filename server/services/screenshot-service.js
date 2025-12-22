@@ -127,7 +127,12 @@ function getLaunchOptions() {
       '--no-zygote',
       '--single-process',
       '--disable-gpu',
-      '--disable-extensions'
+      '--disable-extensions',
+      // Additional stability flags for WordPress preview
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--disable-site-isolation-trials',
+      '--disable-web-security',
+      '--disable-features=BlockInsecurePrivateNetworkRequests'
     ]
   };
 
