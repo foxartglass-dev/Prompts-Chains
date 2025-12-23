@@ -283,25 +283,24 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
       console.log('Login confirmed, cookies should be set');
     }
 
-    // Navigate to target page - use Promise.race to handle frame detachment
+    // Navigate to target page using evaluate to avoid frame detachment
     console.log('Navigating to target page:', pageUrl);
 
-    // Start navigation - use domcontentloaded (commit is not valid in this puppeteer version)
-    const navigationPromise = page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
-      .catch(err => console.log('Navigation event error (continuing):', err.message));
+    // Use window.location instead of page.goto to avoid frame detachment
+    await page.evaluate((url) => {
+      window.location.href = url;
+    }, pageUrl);
 
-    // Wait for navigation to at least start, then wait for content
-    await Promise.race([
-      navigationPromise,
-      new Promise(r => setTimeout(r, 10000)) // Max 10s for initial nav
-    ]);
-
-    // Wait for Elementor content to render
-    console.log('Waiting for content to render...');
-    await new Promise(r => setTimeout(r, 8000));
+    // Wait for page to load
+    await new Promise(r => setTimeout(r, 10000));
 
     // Log what URL we actually ended up at
-    const finalUrl = page.url();
+    let finalUrl = 'unknown';
+    try {
+      finalUrl = page.url();
+    } catch (e) {
+      console.log('Could not get URL:', e.message);
+    }
     console.log('Final URL after navigation:', finalUrl);
 
     console.log('Taking screenshot...');
