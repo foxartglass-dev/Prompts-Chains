@@ -283,61 +283,46 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
       console.log('Login confirmed, cookies should be set');
     }
 
-    // IMPORTANT: WordPress preview pages cause frame detachment issues
-    // Solution: Use CDP to navigate without waiting for events that can fail
-    console.log('Creating fresh page for preview navigation...');
+    // Extract cookies from the login session
+    const cookies = await page.cookies();
+    console.log(`Got ${cookies.length} cookies`);
 
-    // Close the login page - we have the cookies now
+    // Close login page and create fresh page for preview
+    // This avoids frame detachment issues when navigating on the same page
     await page.close();
 
-    // Create a new page - it will have access to the same cookies
     const previewPage = await browser.newPage();
     await previewPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
     await previewPage.setViewport({ width: options.width || 1280, height: options.height || 800 });
 
+    // Set the cookies on the new page
+    await previewPage.setCookie(...cookies);
+
+    // Navigate to target page
     console.log('Navigating to target page:', pageUrl);
 
-    // Use CDP to navigate - this doesn't wait for load events that can fail
-    const client = await previewPage.target().createCDPSession();
-    await client.send('Page.enable');
-
-    // Navigate using CDP - doesn't throw on frame detachment
-    await client.send('Page.navigate', { url: pageUrl });
-
-    // Wait for page to load and render (WordPress + Elementor need time)
-    console.log('Waiting 12 seconds for page to fully load and render...');
-    await new Promise(r => setTimeout(r, 12000));
-
-    // Check if we can access the page
-    let finalUrl = 'unknown';
     try {
-      finalUrl = previewPage.url();
-      console.log('Final URL after navigation:', finalUrl);
-    } catch (urlError) {
-      console.log('Could not get URL (page may have issues):', urlError.message);
+      await previewPage.goto(pageUrl, { waitUntil: 'networkidle0', timeout: 60000 });
+    } catch (err) {
+      console.log('Navigation event error (continuing):', err.message);
     }
 
-    // Try to take screenshot
+    // Wait for Elementor content to render
+    console.log('Waiting for content to render...');
+    await new Promise(r => setTimeout(r, 6000));
+
+    // Log what URL we actually ended up at
+    const finalUrl = previewPage.url();
+    console.log('Final URL after navigation:', finalUrl);
+
     console.log('Taking screenshot...');
-    try {
-      const screenshot = await previewPage.screenshot({
-        type: 'png',
-        fullPage: options.fullPage !== false
-      });
-      console.log('Screenshot captured successfully!');
-      return screenshot;
-    } catch (screenshotError) {
-      console.error('Screenshot failed:', screenshotError.message);
+    const screenshot = await previewPage.screenshot({
+      type: 'png',
+      fullPage: options.fullPage !== false
+    });
 
-      // Last resort: try to get whatever is visible
-      console.log('Trying viewport-only screenshot...');
-      const screenshot = await previewPage.screenshot({
-        type: 'png',
-        fullPage: false
-      });
-      console.log('Viewport screenshot captured!');
-      return screenshot;
-    }
+    console.log('Screenshot captured successfully!');
+    return screenshot;
   } catch (error) {
     console.error('Authenticated screenshot error:', error.message);
     throw error;
