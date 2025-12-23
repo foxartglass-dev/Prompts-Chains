@@ -197,29 +197,35 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
   const browser = await puppeteer.launch(getLaunchOptions());
 
   try {
-    const page = await browser.newPage();
+    let page = await browser.newPage();
 
     // Set a realistic user agent to avoid bot detection
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
     await page.setViewport({ width: options.width || 1280, height: options.height || 800 });
 
-    // Go directly to the preview URL - WordPress will redirect to login with redirect_to param
-    console.log('Navigating directly to preview (will redirect to login):', pageUrl);
+    // Navigate to WP login
+    const loginUrl = `${wpUrl.replace(/\/$/, '')}/wp-login.php`;
+    console.log('Navigating to login page:', loginUrl);
 
-    try {
-      await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-    } catch (e) {
-      console.log('Initial navigation:', e.message);
-    }
+    await page.goto(loginUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-    // Check if we landed on login page
-    const currentUrl = page.url();
-    console.log('Current URL:', currentUrl);
+    // Check if we're on the login page
+    const isLoginPage = await page.$('#user_login');
+    if (!isLoginPage) {
+      // Maybe already logged in, or redirected
+      console.log('Not on login page, checking current URL...');
+      const currentUrl = page.url();
+      console.log('Current URL:', currentUrl);
 
-    if (currentUrl.includes('wp-login.php')) {
+      // If redirected to wp-admin, we're already logged in
+      if (!currentUrl.includes('wp-admin')) {
+        throw new Error(`Unexpected page state. Current URL: ${currentUrl}`);
+      }
+      console.log('Already logged in, proceeding to target page');
+    } else {
       console.log('On login page, filling credentials...');
 
-      // Fill login form
+      // Fill login form using direct value setting
       await page.evaluate((username, pass) => {
         const userInput = document.querySelector('#user_login');
         const passInput = document.querySelector('#user_pass');
@@ -239,37 +245,64 @@ async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
         }
       }, user, password);
 
-      console.log('Credentials filled, submitting...');
+      console.log('Credentials filled via evaluate()');
+
+      // Check the "Remember Me" box if it exists
+      const rememberMe = await page.$('#rememberme');
+      if (rememberMe) {
+        await rememberMe.click();
+      }
+
+      console.log('Submitting login form...');
       await page.click('#wp-submit');
 
-      // Wait for redirect to preview page
+      // Wait for navigation after login
       try {
-        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
-      } catch (e) {
-        console.log('Post-login navigation:', e.message);
+        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
+      } catch (navError) {
+        console.log('Navigation timeout, checking page state...');
       }
 
-      // Check where we ended up
-      const afterLoginUrl = page.url();
-      console.log('After login URL:', afterLoginUrl);
-
-      // If we're on wp-admin, we need to navigate to preview
-      if (afterLoginUrl.includes('wp-admin') && !pageUrl.includes('wp-admin')) {
-        console.log('On wp-admin, navigating to preview...');
-        try {
-          await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-        } catch (e) {
-          console.log('Preview navigation:', e.message);
-        }
+      // Check for login errors
+      const loginError = await page.$('#login_error');
+      if (loginError) {
+        const errorText = await page.$eval('#login_error', el => el.textContent);
+        throw new Error(`WordPress login failed: ${errorText.trim()}`);
       }
+
+      // Verify we're logged in
+      const currentUrl = page.url();
+      console.log('After login, current URL:', currentUrl);
+
+      if (currentUrl.includes('wp-login.php') && !currentUrl.includes('redirect_to')) {
+        throw new Error('Login appears to have failed - still on login page');
+      }
+
+      // Wait a moment for cookies to be fully established
+      await new Promise(r => setTimeout(r, 2000));
+      console.log('Login confirmed, cookies should be set');
     }
 
-    // Wait for content to render
-    console.log('Waiting 5 seconds for content...');
-    await new Promise(r => setTimeout(r, 5000));
+    // Navigate to target page - use Promise.race to handle frame detachment
+    console.log('Navigating to target page:', pageUrl);
 
+    // Start navigation - use domcontentloaded (commit is not valid in this puppeteer version)
+    const navigationPromise = page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
+      .catch(err => console.log('Navigation event error (continuing):', err.message));
+
+    // Wait for navigation to at least start, then wait for content
+    await Promise.race([
+      navigationPromise,
+      new Promise(r => setTimeout(r, 10000)) // Max 10s for initial nav
+    ]);
+
+    // Wait for Elementor content to render
+    console.log('Waiting for content to render...');
+    await new Promise(r => setTimeout(r, 8000));
+
+    // Log what URL we actually ended up at
     const finalUrl = page.url();
-    console.log('Final URL:', finalUrl);
+    console.log('Final URL after navigation:', finalUrl);
 
     console.log('Taking screenshot...');
     const screenshot = await page.screenshot({
