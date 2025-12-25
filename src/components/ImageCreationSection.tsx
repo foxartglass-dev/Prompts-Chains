@@ -98,8 +98,78 @@ interface ChatMessage {
   timestamp: string;
 }
 
-// Models that support vision/images
+// Models that support vision/images (for chat assistants)
 const IMAGE_CAPABLE_MODELS = ['gpt-4o', 'gpt-5.2-2025-12-11', 'claude-sonnet-4-5-20250929', 'claude-3-5-sonnet-20241022', 'gemini-2.5-pro'];
+
+// Image generation models (for actually creating images)
+const IMAGE_GENERATION_MODELS = [
+  { id: 'gpt-image-1.5', name: 'GPT-Image-1.5 (Latest)', provider: 'openai', description: 'Best quality, 20% cheaper, better text rendering' },
+  { id: 'gpt-image-1', name: 'GPT-Image-1', provider: 'openai', description: 'Previous generation' },
+  { id: 'gpt-image-1-mini', name: 'GPT-Image-1 Mini', provider: 'openai', description: 'Faster, lower cost' },
+  { id: 'dall-e-3', name: 'DALL-E 3', provider: 'openai', description: 'Legacy model' },
+  { id: 'flux-1.1-pro', name: 'FLUX 1.1 Pro', provider: 'replicate', description: 'Via Replicate API' },
+];
+
+// GPT-Image-1.5 Prompt Guide Knowledge Base
+const GPT_IMAGE_PROMPT_GUIDE = {
+  title: 'GPT-Image-1.5 Prompting Guide',
+  lastUpdated: 'December 2025',
+  sections: [
+    {
+      title: 'Text Rendering',
+      tips: [
+        'Use quotes or CAPS for exact text: \'"Welcome to 2025" in bold sans-serif font\'',
+        'Specify text details: "Centered at bottom, white text on black background, 72pt size"',
+        'Works great for dense and small text - be specific about placement and style',
+      ]
+    },
+    {
+      title: 'Photorealism',
+      tips: [
+        'Use photo language: lens type (85mm portrait lens), lighting quality (soft diffused daylight), framing',
+        'Be specific: "add soft coastal daylight" instead of "make it better"',
+        'Describe camera angle: "shot from slightly below", "eye-level perspective"',
+        'Mention film stocks or processing: "Kodak Portra 400 film look", "clean digital processing"',
+      ]
+    },
+    {
+      title: 'Consistency & Editing',
+      tips: [
+        'Model preserves faces and logos better during edits',
+        'For outfit changes: "same person, change red shirt to blue sweater"',
+        'For lighting: "adjust lighting to golden hour without changing composition"',
+        'Be explicit about what to keep vs change',
+      ]
+    },
+    {
+      title: 'UI/Mockups',
+      tips: [
+        'Describe the product as if it already exists',
+        'Focus on: layout, hierarchy, spacing, real interface elements',
+        'Avoid concept art language - be practical and specific',
+        'Example: "Mobile app screen showing dashboard with 3 metric cards at top, navigation bar at bottom"',
+      ]
+    },
+    {
+      title: 'World Knowledge',
+      tips: [
+        'Model has built-in reasoning and world knowledge',
+        'Example: "Bethel, New York, August 1969" → infers Woodstock',
+        'Can reference cultural events, historical periods, famous locations',
+        'Use contextual cues for accurate scene setting',
+      ]
+    },
+    {
+      title: 'Image Sizes',
+      tips: [
+        '1024x1024 - Square (default)',
+        '1536x1024 - Landscape (wide)',
+        '1024x1536 - Portrait/Vertical (tall) - BEST for hero images',
+        'Use "auto" to let model decide based on content',
+      ]
+    }
+  ]
+};
 
 // Chat types for the dual chat system
 type ChatType = 'consultant' | 'worker';
@@ -112,6 +182,8 @@ interface Tag {
 interface ImageCreationSettings {
   enabled: boolean;
   prompt_assistant_model: string;
+  // Image generation model (gpt-image-1.5, dall-e-3, flux, etc.)
+  image_generation_model: string;
   reference_images: ReferenceImage[];
   logo_images: LogoImage[];
   audience_avatars: AudienceAvatar[];
@@ -152,6 +224,7 @@ interface Props {
 const DEFAULT_SETTINGS: ImageCreationSettings = {
   enabled: false,
   prompt_assistant_model: 'gpt-4o',
+  image_generation_model: 'gpt-image-1.5', // Latest and best image generation model
   reference_images: [],
   logo_images: [],
   audience_avatars: [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
@@ -254,6 +327,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Upload processing
   const [uploadingToBank, setUploadingToBank] = useState(false);
   const [autoTagging, setAutoTagging] = useState(false);
+  const [showPromptGuide, setShowPromptGuide] = useState(false);
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -815,6 +889,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     parts.push('You are an expert image consultant helping design consistent, high-quality images for a client\'s content marketing.');
     parts.push('');
 
+    // Add GPT-Image model info and prompting knowledge
+    const selectedModel = settings.image_generation_model || 'gpt-image-1.5';
+    parts.push(`🎨 ACTIVE IMAGE MODEL: ${selectedModel}`);
+
+    if (selectedModel.startsWith('gpt-image')) {
+      parts.push('');
+      parts.push('📚 GPT-IMAGE PROMPTING KNOWLEDGE (use this to craft better prompts):');
+      GPT_IMAGE_PROMPT_GUIDE.sections.forEach(section => {
+        parts.push(`  ${section.title}:`);
+        section.tips.forEach(tip => {
+          parts.push(`    • ${tip}`);
+        });
+      });
+      parts.push('');
+      parts.push('IMPORTANT: Apply this prompting knowledge when helping craft or improve prompts.');
+    }
+    parts.push('');
+
     // Current avatar info
     if (activeAvatar) {
       parts.push(`📌 ACTIVE AVATAR: ${activeAvatar.name}${activeAvatar.tag ? ` (Tag: ${activeAvatar.tag})` : ''}`);
@@ -1171,6 +1263,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: fullPrompt,
+          model: settings.image_generation_model || 'gpt-image-1.5',
           referenceImageUrls: settings.reference_images.map(i => i.url).filter(url => !url.startsWith('data:')),
           size
         })
@@ -1668,8 +1761,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   return (
     <div className="space-y-4">
-      {/* Enable Toggle + Model Selector */}
-      <div className="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-brand-gold/50">
+      {/* Enable Toggle + Model Selectors */}
+      <div className="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-brand-gold/50 flex-wrap gap-3">
         <label className="flex items-center gap-3 cursor-pointer">
           <input
             type="checkbox"
@@ -1679,19 +1772,111 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           />
           <span className="text-brand-gold font-semibold">Enable Image Creation</span>
         </label>
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-brand-gold/70">Prompt Assistant:</label>
-          <select
-            value={settings.prompt_assistant_model}
-            onChange={(e) => updateSettings({ prompt_assistant_model: e.target.value })}
-            className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm"
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Image Generation Model - The model that creates images */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-brand-gold/70">Image Model:</label>
+            <select
+              value={settings.image_generation_model || 'gpt-image-1.5'}
+              onChange={(e) => updateSettings({ image_generation_model: e.target.value })}
+              className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm"
+            >
+              {IMAGE_GENERATION_MODELS.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+          {/* Prompt Assistant Model - The chat model that helps craft prompts */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-brand-gold/70">Prompt Assistant:</label>
+            <select
+              value={settings.prompt_assistant_model}
+              onChange={(e) => updateSettings({ prompt_assistant_model: e.target.value })}
+              className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm"
+            >
+              {AVAILABLE_MODELS.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+          {/* Prompt Guide Button */}
+          <button
+            onClick={() => setShowPromptGuide(true)}
+            className="flex items-center gap-1 px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm font-medium transition"
+            title="View GPT-Image-1.5 Prompting Guide"
           >
-            {AVAILABLE_MODELS.map(m => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            Prompt Guide
+          </button>
         </div>
       </div>
+
+      {/* Prompt Guide Modal */}
+      {showPromptGuide && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-xl border border-brand-gold/50 w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-brand-gold/30">
+              <div>
+                <h2 className="text-xl font-bold text-brand-gold">{GPT_IMAGE_PROMPT_GUIDE.title}</h2>
+                <p className="text-sm text-brand-gold/60">Last updated: {GPT_IMAGE_PROMPT_GUIDE.lastUpdated}</p>
+              </div>
+              <button
+                onClick={() => setShowPromptGuide(false)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4 space-y-4">
+              {GPT_IMAGE_PROMPT_GUIDE.sections.map((section, idx) => (
+                <div key={idx} className="bg-slate-800 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-brand-cyan mb-3">{section.title}</h3>
+                  <ul className="space-y-2">
+                    {section.tips.map((tip, tipIdx) => (
+                      <li key={tipIdx} className="flex items-start gap-2 text-sm text-gray-300">
+                        <span className="text-brand-gold mt-1">•</span>
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              <div className="bg-slate-800 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-brand-cyan mb-3">Official Documentation</h3>
+                <ul className="space-y-2 text-sm">
+                  <li>
+                    <a href="https://platform.openai.com/docs/guides/image-generation" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
+                      OpenAI Image Generation Guide →
+                    </a>
+                  </li>
+                  <li>
+                    <a href="https://cookbook.openai.com/examples/multimodal/image-gen-1.5-prompting_guide" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
+                      GPT-Image-1.5 Prompting Guide (Cookbook) →
+                    </a>
+                  </li>
+                  <li>
+                    <a href="https://platform.openai.com/docs/api-reference/images" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
+                      Images API Reference →
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div className="p-4 border-t border-brand-gold/30 flex justify-end">
+              <button
+                onClick={() => setShowPromptGuide(false)}
+                className="px-4 py-2 bg-brand-gold text-slate-900 rounded font-medium hover:bg-brand-gold/80 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Generation Progress */}
       {generating && generationProgress && (

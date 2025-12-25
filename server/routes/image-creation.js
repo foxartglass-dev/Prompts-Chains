@@ -37,8 +37,9 @@ router.post('/generate', async (req, res) => {
   try {
     const {
       prompt,
+      model = 'gpt-image-1.5', // gpt-image-1.5, gpt-image-1, dall-e-3, etc.
       referenceImages = [], // Array of image URLs or base64 strings
-      size = '1024x1024', // 1024x1024, 1024x1792, 1792x1024
+      size = '1024x1024', // 1024x1024, 1024x1536, 1536x1024
       quality = 'high', // 'low', 'medium', 'high'
       style = 'vivid', // 'vivid' or 'natural'
       openaiApiKey
@@ -56,27 +57,47 @@ router.post('/generate', async (req, res) => {
 
     const openai = new OpenAI({ apiKey });
 
-    // Build the request - gpt-image-1 supports reference images in the prompt
+    // Build the request
     let fullPrompt = prompt;
 
-    // If reference images provided, we'll use the edit endpoint or include them in context
+    // If reference images provided, add style guidance
     if (referenceImages.length > 0) {
-      // For gpt-image-1, reference images can be passed via the images API
-      // We'll use the generations endpoint with style guidance in prompt
       fullPrompt = `Create an image in the exact same style as the reference images provided. Style consistency is critical. ${prompt}`;
     }
 
-    // Use DALL-E 3 for now (gpt-image-1 endpoint may have different name)
-    // Update this when OpenAI releases gpt-image-1 officially
-    const response = await openai.images.generate({
-      model: 'gpt-image-1', // or 'dall-e-3' as fallback
+    // Determine the actual model to use and build params accordingly
+    const selectedModel = model || 'gpt-image-1.5';
+    console.log(`[Image Generation] Using model: ${selectedModel}`);
+
+    // GPT-Image-1.5 and GPT-Image-1 specific sizes (1024x1024, 1536x1024, 1024x1536)
+    // Convert old DALL-E sizes if needed
+    let adjustedSize = size;
+    if (selectedModel.startsWith('gpt-image')) {
+      const sizeMap = {
+        '1792x1024': '1536x1024', // Landscape
+        '1024x1792': '1024x1536', // Portrait
+      };
+      adjustedSize = sizeMap[size] || size;
+    }
+
+    // Build generation params - different models have different capabilities
+    const generateParams = {
+      model: selectedModel,
       prompt: fullPrompt,
       n: 1,
-      size: size,
-      quality: quality === 'high' ? 'hd' : 'standard',
-      style: style,
-      response_format: 'url'
-    });
+      size: adjustedSize,
+    };
+
+    // Add quality/style params based on model capabilities
+    if (selectedModel === 'dall-e-3') {
+      generateParams.quality = quality === 'high' ? 'hd' : 'standard';
+      generateParams.style = style;
+    } else if (selectedModel.startsWith('gpt-image')) {
+      // GPT-Image models use quality differently
+      generateParams.quality = quality;
+    }
+
+    const response = await openai.images.generate(generateParams);
 
     const imageUrl = response.data[0].url;
     const revisedPrompt = response.data[0].revised_prompt;
@@ -87,7 +108,8 @@ router.post('/generate', async (req, res) => {
         url: imageUrl,
         prompt: fullPrompt,
         revisedPrompt,
-        size,
+        model: selectedModel,
+        size: adjustedSize,
         quality,
         style
       }
@@ -140,6 +162,7 @@ router.post('/generate-with-reference', async (req, res) => {
   try {
     const {
       prompt,
+      model = 'gpt-image-1.5', // Default to latest model
       referenceImageUrls = [],
       size = '1024x1024',
       openaiApiKey
@@ -153,6 +176,19 @@ router.post('/generate-with-reference', async (req, res) => {
 
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
+    }
+
+    const selectedModel = model || 'gpt-image-1.5';
+    console.log(`[Image Generation with Reference] Using model: ${selectedModel}`);
+
+    // GPT-Image models use different sizes
+    let adjustedSize = size;
+    if (selectedModel.startsWith('gpt-image')) {
+      const sizeMap = {
+        '1792x1024': '1536x1024', // Landscape
+        '1024x1792': '1024x1536', // Portrait
+      };
+      adjustedSize = sizeMap[size] || size;
     }
 
     // For reference-based generation, we build a comprehensive prompt
@@ -209,13 +245,22 @@ Generate an image that matches the described style exactly while depicting the c
     // Generate the image
     const openai = new OpenAI({ apiKey });
 
-    const response = await openai.images.generate({
-      model: 'gpt-image-1',
+    // Build generation params based on model
+    const generateParams = {
+      model: selectedModel,
       prompt: stylePrompt,
       n: 1,
-      size: size,
-      quality: 'hd'
-    });
+      size: adjustedSize,
+    };
+
+    // Add quality param based on model
+    if (selectedModel === 'dall-e-3') {
+      generateParams.quality = 'hd';
+    } else if (selectedModel.startsWith('gpt-image')) {
+      generateParams.quality = 'high';
+    }
+
+    const response = await openai.images.generate(generateParams);
 
     res.json({
       success: true,
@@ -223,7 +268,8 @@ Generate an image that matches the described style exactly while depicting the c
         url: response.data[0].url,
         prompt: stylePrompt,
         revisedPrompt: response.data[0].revised_prompt,
-        size
+        model: selectedModel,
+        size: adjustedSize
       }
     });
 
@@ -636,6 +682,7 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         settings: {
           enabled: false,
           prompt_assistant_model: 'gpt-4o',
+          image_generation_model: 'gpt-image-1.5',
           reference_images: [],
           logo_images: [],
           audience_avatars: [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
@@ -665,6 +712,7 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         id: results[0].id,
         enabled: results[0].enabled,
         prompt_assistant_model: results[0].prompt_assistant_model,
+        image_generation_model: results[0].image_generation_model || 'gpt-image-1.5',
         reference_images: results[0].reference_images || [],
         logo_images: results[0].logo_images || [],
         audience_avatars: results[0].audience_avatars || [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
@@ -704,6 +752,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
     const {
       enabled,
       prompt_assistant_model,
+      image_generation_model,
       reference_images,
       logo_images,
       audience_avatars,
@@ -739,6 +788,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           workflow_id,
           enabled,
           prompt_assistant_model,
+          image_generation_model,
           reference_images,
           logo_images,
           audience_avatars,
@@ -759,6 +809,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           ${workflowId},
           ${enabled ?? false},
           ${prompt_assistant_model ?? 'gpt-4o'},
+          ${image_generation_model ?? 'gpt-image-1.5'},
           ${JSON.stringify(reference_images ?? [])},
           ${JSON.stringify(logo_images ?? [])},
           ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
@@ -790,6 +841,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       SET
         enabled = COALESCE(${enabled}, enabled),
         prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
+        image_generation_model = COALESCE(${image_generation_model}, image_generation_model),
         reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
         logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
         audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),

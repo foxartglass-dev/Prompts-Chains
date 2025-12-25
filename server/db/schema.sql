@@ -221,8 +221,9 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE UNIQUE,
   -- Enable/disable image creation for this workflow
   enabled BOOLEAN DEFAULT false,
-  -- LLM Models (legacy)
+  -- LLM Models
   prompt_assistant_model VARCHAR(100) DEFAULT 'gpt-4o', -- Model for helping craft prompts (chat)
+  image_generation_model VARCHAR(100) DEFAULT 'gpt-image-1.5', -- Model for generating images (gpt-image-1.5, dall-e-3, etc.)
   -- Reference images for style consistency
   reference_images JSONB DEFAULT '[]', -- Array of {url, filename, tags}
   -- Logo images (logo itself and action shots showing logo in use)
