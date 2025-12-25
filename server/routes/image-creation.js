@@ -619,13 +619,17 @@ Respond in JSON format only:
 router.get('/settings/:workflowId', requireDb, async (req, res) => {
   try {
     const { workflowId } = req.params;
+    console.log('[Image Creation API] GET settings for workflow:', workflowId);
 
     const results = await sql`
       SELECT * FROM image_creation_settings
       WHERE workflow_id = ${workflowId}
     `;
 
+    console.log('[Image Creation API] Found records:', results.length);
+
     if (results.length === 0) {
+      console.log('[Image Creation API] No settings found, returning defaults');
       // Return default settings
       return res.json({
         success: true,
@@ -695,6 +699,8 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
 router.put('/settings/:workflowId', requireDb, async (req, res) => {
   try {
     const { workflowId } = req.params;
+    console.log('[Image Creation API] PUT settings for workflow:', workflowId);
+    console.log('[Image Creation API] Received avatars:', req.body.audience_avatars?.length || 0);
     const {
       enabled,
       prompt_assistant_model,
@@ -723,8 +729,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       SELECT id FROM image_creation_settings WHERE workflow_id = ${workflowId}
     `;
 
+    console.log('[Image Creation API] Existing record:', existing.length > 0 ? existing[0].id : 'none');
+
     if (existing.length === 0) {
       // Insert new settings
+      console.log('[Image Creation API] Creating new settings record...');
       const result = await sql`
         INSERT INTO image_creation_settings (
           workflow_id,
@@ -770,10 +779,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
         RETURNING id
       `;
 
+      console.log('[Image Creation API] Created new record with id:', result[0].id);
       return res.json({ success: true, id: result[0].id, created: true });
     }
 
     // Update existing settings
+    console.log('[Image Creation API] Updating existing record...');
     await sql`
       UPDATE image_creation_settings
       SET
@@ -799,10 +810,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       WHERE workflow_id = ${workflowId}
     `;
 
+    console.log('[Image Creation API] Update complete for workflow:', workflowId);
     res.json({ success: true, updated: true });
 
   } catch (error) {
-    console.error('Save settings error:', error);
+    console.error('[Image Creation API] Save settings error:', error);
     res.status(500).json({ error: error.message });
   }
 });
