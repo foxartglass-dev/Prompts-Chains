@@ -229,18 +229,50 @@ router.post('/publish', async (req, res) => {
             availableImages = availableImages.sort(() => Math.random() - 0.5);
           }
 
-          // Assign images to chunks
-          const chunksNeedingImages = [chunked.intro, ...chunked.chunks].filter(c => c);
-          const imagesToUse = availableImages.slice(0, Math.min(maxImages, chunksNeedingImages.length));
+          // === IMAGE SELECTION LOGIC ===
+          // Rule 1: First image (hero) MUST be vertical for side-by-side layout
+          // Rule 2: Remaining images can be either orientation (word wrap in content)
 
+          // Separate vertical and non-vertical images
+          const verticalImages = availableImages.filter(img => img.orientation === 'vertical');
+          const otherImages = availableImages.filter(img => img.orientation !== 'vertical');
+
+          // Select hero image (must be vertical)
+          const heroImage = verticalImages.length > 0 ? verticalImages[0] : null;
+
+          // Select remaining images (can be any orientation, prefer landscape for word wrap)
+          const remainingVertical = heroImage ? verticalImages.slice(1) : verticalImages;
+          const remainingImages = [...otherImages, ...remainingVertical]; // Landscape first, then remaining vertical
+
+          // Build final image list: hero first, then remaining
+          const imagesToUse = [];
+          if (heroImage) {
+            imagesToUse.push(heroImage);
+          }
+
+          // Add remaining images up to maxImages
+          const chunksNeedingImages = [chunked.intro, ...chunked.chunks].filter(c => c);
+          const maxNeeded = Math.min(maxImages, chunksNeedingImages.length);
+          const remainingNeeded = maxNeeded - imagesToUse.length;
+          imagesToUse.push(...remainingImages.slice(0, remainingNeeded));
+
+          // Assign images to chunks
           imagesToUse.forEach((img, idx) => {
             const isHero = idx === 0;
+
+            // Hero image: vertical (tall) for side-by-side with intro text
+            // Body images: dimensions based on orientation for word wrap
             const imageData = {
               url: img.url,
               alt: img.variation || 'Article image',
-              width: img.orientation === 'landscape' ? 800 : 400,
-              height: img.orientation === 'landscape' ? 450 : 600,
-              side: isHero ? 'right' : (idx % 2 === 0 ? 'left' : 'right')
+              width: isHero
+                ? (img.orientation === 'vertical' ? 400 : 500)  // Hero: narrower for side-by-side
+                : (img.orientation === 'landscape' ? 450 : 300), // Body: sized for word wrap
+              height: isHero
+                ? (img.orientation === 'vertical' ? 600 : 400)  // Hero: taller
+                : (img.orientation === 'landscape' ? 300 : 400), // Body: for word wrap
+              side: isHero ? 'right' : (idx % 2 === 0 ? 'left' : 'right'),
+              orientation: img.orientation // Pass through for debugging
             };
 
             if (isHero && chunked.intro) {
