@@ -48,14 +48,59 @@ function cleanContent(content) {
 }
 
 /**
- * Calculate number of images needed based on word count
- * Rule: 1 image per 200-300 words, at H2 breaks
+ * Determine which chunks should receive images based on natural breaks
+ * Rule: Place image at the LAST paragraph/section break UNDER 300 words since previous image
+ *
+ * @param {Object} chunked - Chunked content with intro and chunks
+ * @param {number} maxWordsPerImage - Max words between images (default 300)
+ * @returns {Array<number>} Array of chunk indices that should receive images (0 = intro/hero)
  */
-function calculateImagesNeeded(wordCount, chunkCount) {
-  // Minimum 1 (hero), then 1 per ~250 words after that
-  const baseImages = Math.ceil(wordCount / 250);
-  // But can't exceed number of chunks (each chunk can have max 1 image)
-  return Math.min(baseImages, chunkCount);
+function getImagePlacementIndices(chunked, maxWordsPerImage = 300) {
+  const indices = [];
+
+  // Hero image always goes on intro (index 0)
+  if (chunked.intro) {
+    indices.push(0);
+  }
+
+  // Track words since last image
+  let wordsSinceLastImage = 0;
+  let lastValidBreakIndex = -1;
+  let lastValidBreakWords = 0;
+
+  // Process each chunk (body sections)
+  const chunks = chunked.chunks || [];
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const chunkWords = chunk.wordCount || 0;
+
+    // Check if adding this chunk would exceed the limit
+    if (wordsSinceLastImage + chunkWords >= maxWordsPerImage) {
+      // Place image at the LAST valid break (before we exceeded)
+      if (lastValidBreakIndex >= 0 && !indices.includes(lastValidBreakIndex + 1)) {
+        // +1 because indices[0] is intro, chunks start at index 1
+        indices.push(lastValidBreakIndex + 1);
+        // Recalculate words since that break
+        wordsSinceLastImage = 0;
+        for (let j = lastValidBreakIndex + 1; j <= i; j++) {
+          wordsSinceLastImage += chunks[j]?.wordCount || 0;
+        }
+        lastValidBreakIndex = -1;
+      } else {
+        // No valid break found, place on current chunk
+        indices.push(i + 1); // +1 for intro offset
+        wordsSinceLastImage = 0;
+        lastValidBreakIndex = -1;
+      }
+    } else {
+      // This is a valid break point (under 300 words)
+      wordsSinceLastImage += chunkWords;
+      lastValidBreakIndex = i;
+      lastValidBreakWords = wordsSinceLastImage;
+    }
+  }
+
+  return indices;
 }
 
 /**
@@ -239,8 +284,9 @@ router.post('/publish', async (req, res) => {
     let imagesFromBank = 0;
     let estimatedCost = null;
 
-    // Calculate dynamic image count based on word count (no arbitrary cap)
-    const dynamicMaxImages = calculateImagesNeeded(chunked.totalWords, chunked.chunkCount);
+    // Determine which chunks should receive images (based on natural breaks under 300 words)
+    const imagePlacementIndices = getImagePlacementIndices(chunked, 300);
+    const dynamicMaxImages = imagePlacementIndices.length;
 
     // Determine hero image side (alternates per article based on keyword/title)
     const heroImageSide = getHeroImageSide(keyword || title || `${Date.now()}`);
@@ -312,20 +358,19 @@ router.post('/publish', async (req, res) => {
             imagesToUse.push(heroImage);
           }
 
-          // Add remaining images based on DYNAMIC word count (no arbitrary cap)
-          const chunksNeedingImages = [chunked.intro, ...chunked.chunks].filter(c => c);
-          const maxNeeded = Math.min(dynamicMaxImages, chunksNeedingImages.length);
-          const remainingNeeded = maxNeeded - imagesToUse.length;
+          // Add remaining images based on placement indices (natural breaks under 300 words)
+          const remainingNeeded = imagePlacementIndices.length - imagesToUse.length;
           imagesToUse.push(...remainingImages.slice(0, remainingNeeded));
 
-          // Assign images to chunks
-          imagesToUse.forEach((img, idx) => {
-            const isHero = idx === 0;
+          // Assign images to chunks based on imagePlacementIndices (NOT sequential)
+          imagesToUse.forEach((img, imgIdx) => {
+            // Get the actual chunk index from placement indices
+            const placementIndex = imagePlacementIndices[imgIdx];
+            const isHero = placementIndex === 0;
 
             // Body image side alternation: starts opposite of hero, then alternates
-            // bodyStartSide is opposite of heroImageSide
-            const bodyImageIndex = idx - 1; // 0-indexed for body images
-            const bodySide = bodyImageIndex % 2 === 0 ? bodyStartSide : (bodyStartSide === 'left' ? 'right' : 'left');
+            const bodyImageCount = imagePlacementIndices.filter((idx, i) => i < imgIdx && idx > 0).length;
+            const bodySide = bodyImageCount % 2 === 0 ? bodyStartSide : (bodyStartSide === 'left' ? 'right' : 'left');
 
             // Hero image: vertical (tall) for side-by-side with intro text
             // Body images: dimensions based on orientation for word wrap
@@ -344,8 +389,12 @@ router.post('/publish', async (req, res) => {
 
             if (isHero && chunked.intro) {
               chunked.intro.imageData = imageData;
-            } else if (chunked.chunks[idx - (chunked.intro ? 1 : 0)]) {
-              chunked.chunks[idx - (chunked.intro ? 1 : 0)].imageData = imageData;
+            } else {
+              // placementIndex is 1-based for chunks (0 = intro), so subtract 1
+              const chunkIdx = placementIndex - 1;
+              if (chunked.chunks[chunkIdx]) {
+                chunked.chunks[chunkIdx].imageData = imageData;
+              }
             }
           });
 
