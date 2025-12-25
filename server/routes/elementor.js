@@ -315,15 +315,36 @@ router.post('/publish', async (req, res) => {
           // Find matching avatar by tag
           let targetAvatar = articleTag ? avatars.find(a => a.tag === articleTag) : avatars[0];
 
+          // Debug logging
+          console.log('[Image Bank] Keyword:', keyword);
+          console.log('[Image Bank] Article tag:', articleTag);
+          console.log('[Image Bank] Bank size:', imageBank.length);
+          console.log('[Image Bank] Avatars:', avatars.map(a => ({ name: a.name, tag: a.tag })));
+          console.log('[Image Bank] Target avatar:', targetAvatar?.name, targetAvatar?.tag);
+
           // Get available images from bank matching the tag
           let availableImages = imageBank.filter(img => {
-            if (img.used) return false;
-            if (articleTag && img.avatarTag) return img.avatarTag === articleTag;
-            if (targetAvatar?.variations?.length > 0) {
-              return targetAvatar.variations.some(v => v.id === img.variationId);
+            if (img.used) {
+              console.log('[Image Bank] Skipping used image:', img.id);
+              return false;
             }
+            // If article has a tag and image has a tag, they must match
+            if (articleTag && img.avatarTag) {
+              const matches = img.avatarTag === articleTag;
+              if (!matches) console.log('[Image Bank] Tag mismatch:', img.avatarTag, '!=', articleTag);
+              return matches;
+            }
+            // If no tags, check variation match
+            if (targetAvatar?.variations?.length > 0) {
+              const matches = targetAvatar.variations.some(v => v.id === img.variationId);
+              if (!matches) console.log('[Image Bank] Variation mismatch for image:', img.id);
+              return matches;
+            }
+            // No tag requirements - include all unused images
             return true;
           });
+
+          console.log('[Image Bank] Available images after filter:', availableImages.length);
 
           // Sort by variation order
           if (variationOrderMode === 'manual' && manualOrder.length > 0) {
@@ -337,7 +358,7 @@ router.post('/publish', async (req, res) => {
           }
 
           // === IMAGE SELECTION LOGIC ===
-          // Rule 1: First image (hero) MUST be vertical for side-by-side layout
+          // Rule 1: First image (hero) SHOULD be vertical, but use any if none available
           // Rule 2: Remaining images can be either orientation (word wrap in content)
           // Rule 3: Body images start on OPPOSITE side of hero, then alternate
 
@@ -345,12 +366,23 @@ router.post('/publish', async (req, res) => {
           const verticalImages = availableImages.filter(img => img.orientation === 'vertical');
           const otherImages = availableImages.filter(img => img.orientation !== 'vertical');
 
-          // Select hero image (must be vertical)
-          const heroImage = verticalImages.length > 0 ? verticalImages[0] : null;
+          // Select hero image (prefer vertical, but fallback to any)
+          let heroImage = verticalImages.length > 0 ? verticalImages[0] : null;
+
+          // FALLBACK: If no vertical images, use first available image for hero
+          if (!heroImage && availableImages.length > 0) {
+            heroImage = availableImages[0];
+            console.log('[Image Bank] No vertical images found, using first available for hero');
+          }
 
           // Select remaining images (can be any orientation, prefer landscape for word wrap)
-          const remainingVertical = heroImage ? verticalImages.slice(1) : verticalImages;
-          const remainingImages = [...otherImages, ...remainingVertical]; // Landscape first, then remaining vertical
+          const remainingVertical = heroImage && verticalImages.includes(heroImage)
+            ? verticalImages.slice(1)
+            : verticalImages;
+          const remainingOther = heroImage && !verticalImages.includes(heroImage)
+            ? otherImages.filter(img => img !== heroImage)
+            : otherImages;
+          const remainingImages = [...remainingOther, ...remainingVertical];
 
           // Build final image list: hero first, then remaining
           const imagesToUse = [];
