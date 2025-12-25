@@ -61,11 +61,17 @@ interface BankImage {
 }
 
 interface ChatMessage {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   images?: string[];
   timestamp: string;
 }
+
+// Models that support vision/images
+const IMAGE_CAPABLE_MODELS = ['gpt-4o', 'gpt-5.2-2025-12-11', 'claude-sonnet-4-5-20250929', 'claude-3-5-sonnet-20241022', 'gemini-2.5-pro'];
+
+// Chat types for the dual chat system
+type ChatType = 'consultant' | 'worker';
 
 interface Tag {
   id: number;
@@ -79,7 +85,13 @@ interface ImageCreationSettings {
   logo_images: LogoImage[];
   audience_avatars: AudienceAvatar[];
   image_bank: BankImage[];
+  // Legacy single chat history (for migration)
   chat_history: ChatMessage[];
+  // Dual chat system
+  consultant_chat_history: ChatMessage[];
+  consultant_model: string;
+  worker_chat_history: ChatMessage[];
+  worker_model: string;
   integration_mode: 'live' | 'bank';
   fallback_to_live: boolean;
   image_order: string[];
@@ -110,6 +122,11 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   audience_avatars: [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
   image_bank: [],
   chat_history: [],
+  // Dual chat defaults
+  consultant_chat_history: [],
+  consultant_model: 'gpt-4o', // Default to vision model for consultant
+  worker_chat_history: [],
+  worker_model: 'gpt-4o-mini', // Default to cheaper model for worker
   integration_mode: 'bank',
   fallback_to_live: true,
   image_order: [],
@@ -140,6 +157,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [isReferenceOpen, setIsReferenceOpen] = useState(false);
   const [isLogoOpen, setIsLogoOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isConsultantChatOpen, setIsConsultantChatOpen] = useState(false);
+  const [isWorkerChatOpen, setIsWorkerChatOpen] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(true);
   const [isUsedOpen, setIsUsedOpen] = useState(false);
@@ -155,11 +174,25 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [activeAvatarId, setActiveAvatarId] = useState<number>(1);
   const [activeVariationId, setActiveVariationId] = useState<string | null>(null);
 
-  // Chat
+  // Legacy Chat (keeping for backwards compatibility)
   const [chatInput, setChatInput] = useState('');
   const [chatImages, setChatImages] = useState<string[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Consultant Chat - Strategic partner with vision
+  const [consultantInput, setConsultantInput] = useState('');
+  const [consultantImages, setConsultantImages] = useState<string[]>([]);
+  const [consultantLoading, setConsultantLoading] = useState(false);
+  const consultantChatRef = useRef<HTMLDivElement>(null);
+  const consultantFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Worker Chat - Operational helper
+  const [workerInput, setWorkerInput] = useState('');
+  const [workerImages, setWorkerImages] = useState<string[]>([]);
+  const [workerLoading, setWorkerLoading] = useState(false);
+  const workerChatRef = useRef<HTMLDivElement>(null);
+  const workerFileInputRef = useRef<HTMLInputElement>(null);
 
   // Image generation
   const [generating, setGenerating] = useState(false);
@@ -241,6 +274,20 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
   }, [settings.chat_history]);
 
+  // Scroll consultant chat to bottom on new messages
+  useEffect(() => {
+    if (consultantChatRef.current) {
+      consultantChatRef.current.scrollTop = consultantChatRef.current.scrollHeight;
+    }
+  }, [settings.consultant_chat_history]);
+
+  // Scroll worker chat to bottom on new messages
+  useEffect(() => {
+    if (workerChatRef.current) {
+      workerChatRef.current.scrollTop = workerChatRef.current.scrollHeight;
+    }
+  }, [settings.worker_chat_history]);
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -258,6 +305,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const res = await fetch(`/api/image-creation/settings/${workflowId}`);
       const data = await res.json();
       if (data.success) {
+        // Handle migration: if old chat_history exists but new ones don't, migrate
+        const migratedConsultantHistory = data.settings.consultant_chat_history?.length > 0
+          ? data.settings.consultant_chat_history
+          : (data.settings.chat_history?.length > 0 ? data.settings.chat_history : []);
+
         const loadedSettings = {
           ...DEFAULT_SETTINGS,
           ...data.settings,
@@ -269,6 +321,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             : [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
           image_bank: data.settings.image_bank || [],
           chat_history: data.settings.chat_history || [],
+          // Dual chat system
+          consultant_chat_history: migratedConsultantHistory,
+          consultant_model: data.settings.consultant_model || 'gpt-4o',
+          worker_chat_history: data.settings.worker_chat_history || [],
+          worker_model: data.settings.worker_model || 'gpt-4o-mini',
           image_order: data.settings.image_order || [],
           manual_variation_order: data.settings.manual_variation_order || []
         };
@@ -678,6 +735,355 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       newImages.push(dataUrl);
     }
     setChatImages([...chatImages, ...newImages].slice(0, 4));
+  };
+
+  // ========== DUAL CHAT SYSTEM ==========
+
+  /**
+   * Build context summary for the consultant chat
+   * Includes: current avatar setup, prompts, variations, reference images, logo, action shots
+   */
+  const buildConsultantContext = (): string => {
+    const parts: string[] = [];
+
+    parts.push('=== IMAGE CREATION CONSULTANT CONTEXT ===');
+    parts.push('You are an expert image consultant helping design consistent, high-quality images for a client\'s content marketing.');
+    parts.push('');
+
+    // Current avatar info
+    if (activeAvatar) {
+      parts.push(`📌 ACTIVE AVATAR: ${activeAvatar.name}${activeAvatar.tag ? ` (Tag: ${activeAvatar.tag})` : ''}`);
+      if (activeAvatar.mainPrompt) {
+        parts.push(`📝 Main Prompt Template: "${activeAvatar.mainPrompt}"`);
+      }
+      if (activeAvatar.variations.length > 0) {
+        parts.push(`🎨 Variations (${activeAvatar.variations.length}):`);
+        activeAvatar.variations.forEach(v => {
+          parts.push(`  - ${v.name} (${v.orientation}): "${v.prompt.substring(0, 80)}${v.prompt.length > 80 ? '...' : ''}"`);
+        });
+      }
+    }
+    parts.push('');
+
+    // All avatars summary
+    if (settings.audience_avatars.length > 1) {
+      parts.push(`👥 ALL AVATARS (${settings.audience_avatars.length}):`);
+      settings.audience_avatars.forEach(a => {
+        parts.push(`  - ${a.name}${a.tag ? ` [${a.tag}]` : ''}: ${a.variations.length} variations`);
+      });
+      parts.push('');
+    }
+
+    // Reference images count
+    if (settings.reference_images.length > 0) {
+      parts.push(`📷 REFERENCE IMAGES: ${settings.reference_images.length} images uploaded for style reference`);
+    }
+
+    // Logo info
+    const logos = settings.logo_images.filter(i => i.type === 'logo');
+    const actions = settings.logo_images.filter(i => i.type === 'action');
+    if (logos.length > 0 || actions.length > 0) {
+      parts.push(`🏷️ BRANDING: ${logos.length} logo(s), ${actions.length} action shot(s)`);
+    }
+
+    // Image bank stats
+    const availableCount = settings.image_bank.filter(i => !i.used).length;
+    const usedCount = settings.image_bank.filter(i => i.used).length;
+    if (settings.image_bank.length > 0) {
+      parts.push(`🏦 IMAGE BANK: ${availableCount} available, ${usedCount} used`);
+    }
+
+    parts.push('');
+    parts.push('Help the user dial in their image style, suggest improvements to prompts, and discuss image strategy for their content.');
+
+    return parts.join('\n');
+  };
+
+  /**
+   * Build context summary for the worker chat
+   * Includes: consultant conversation summary, setup state, instructions for operational work
+   */
+  const buildWorkerContext = (): string => {
+    const parts: string[] = [];
+
+    parts.push('=== IMAGE CREATION WORKER CONTEXT ===');
+    parts.push('You are an operational assistant helping organize and distribute image prompts based on a strategic plan.');
+    parts.push('');
+
+    // Include consultant conversation summary if exists
+    if (settings.consultant_chat_history.length > 0) {
+      parts.push('📋 CONSULTANT CONVERSATION SUMMARY:');
+      parts.push('The consultant and user have discussed the following:');
+
+      // Get last 10 messages or all if less
+      const recentConsultant = settings.consultant_chat_history.slice(-10);
+      recentConsultant.forEach((msg, idx) => {
+        const prefix = msg.role === 'user' ? '👤 User' : '🤖 Consultant';
+        const content = msg.content.substring(0, 200);
+        parts.push(`  ${prefix}: ${content}${msg.content.length > 200 ? '...' : ''}`);
+      });
+      parts.push('');
+    }
+
+    // Current setup
+    if (activeAvatar) {
+      parts.push(`📌 CURRENT SETUP:`);
+      parts.push(`  Avatar: ${activeAvatar.name}${activeAvatar.tag ? ` (${activeAvatar.tag})` : ''}`);
+      parts.push(`  Main Prompt: "${activeAvatar.mainPrompt.substring(0, 100)}${activeAvatar.mainPrompt.length > 100 ? '...' : ''}"`);
+      parts.push(`  Variations: ${activeAvatar.variations.length}`);
+      activeAvatar.variations.forEach(v => {
+        parts.push(`    - ${v.name} (${v.orientation})`);
+      });
+    }
+    parts.push('');
+
+    // Available images by variation
+    const availableImages = settings.image_bank.filter(i => !i.used);
+    if (availableImages.length > 0) {
+      const byVariation: Record<string, number> = {};
+      availableImages.forEach(img => {
+        byVariation[img.variation] = (byVariation[img.variation] || 0) + 1;
+      });
+      parts.push('🏦 AVAILABLE IMAGES BY VARIATION:');
+      Object.entries(byVariation).forEach(([v, count]) => {
+        parts.push(`  - ${v}: ${count} images`);
+      });
+    }
+    parts.push('');
+
+    parts.push('Help the user organize prompts, create variation schedules, and manage the operational side of image creation.');
+
+    return parts.join('\n');
+  };
+
+  /**
+   * Get images to include in context based on chat type
+   */
+  const getContextImages = (chatType: ChatType): string[] => {
+    const images: string[] = [];
+
+    if (chatType === 'consultant') {
+      // Include reference images (non-data URLs only work for URLs, data URLs for uploaded)
+      settings.reference_images.slice(0, 4).forEach(img => {
+        images.push(img.url);
+      });
+
+      // Include logo
+      const logos = settings.logo_images.filter(i => i.type === 'logo');
+      logos.slice(0, 2).forEach(img => {
+        images.push(img.url);
+      });
+
+      // Include some action shots
+      const actions = settings.logo_images.filter(i => i.type === 'action');
+      actions.slice(0, 2).forEach(img => {
+        images.push(img.url);
+      });
+
+      // Include some bank images for context
+      const bankSample = settings.image_bank.filter(i => !i.used).slice(0, 3);
+      bankSample.forEach(img => {
+        images.push(img.url);
+      });
+    }
+
+    return images.slice(0, 8); // Max 8 images for context
+  };
+
+  /**
+   * Handle sending message to consultant chat
+   */
+  const handleSendConsultantChat = async () => {
+    if (!consultantInput.trim() && consultantImages.length === 0) return;
+
+    const newMessage: ChatMessage = {
+      role: 'user',
+      content: consultantInput,
+      images: consultantImages.length > 0 ? consultantImages : undefined,
+      timestamp: new Date().toISOString()
+    };
+
+    // Build history with context
+    const isFirstMessage = settings.consultant_chat_history.length === 0;
+    let historyToSend = [...settings.consultant_chat_history, newMessage];
+
+    // Add system context for first message
+    if (isFirstMessage) {
+      const contextMessage: ChatMessage = {
+        role: 'system',
+        content: buildConsultantContext(),
+        timestamp: new Date().toISOString()
+      };
+      historyToSend = [contextMessage, ...historyToSend];
+    }
+
+    // Update local state
+    const newHistory = [...settings.consultant_chat_history, newMessage];
+    updateSettings({ consultant_chat_history: newHistory });
+    setConsultantInput('');
+    setConsultantImages([]);
+    setConsultantLoading(true);
+
+    try {
+      // Get context images to include
+      const contextImages = getContextImages('consultant');
+      const allImages = [...(newMessage.images || []), ...contextImages];
+
+      const res = await fetch('/api/image-creation/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: historyToSend.map(m => ({
+            role: m.role,
+            content: m.content,
+            images: m.images
+          })),
+          model: settings.consultant_model,
+          contextImages: isFirstMessage ? contextImages : undefined
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: data.message.content,
+          timestamp: new Date().toISOString()
+        };
+        updateSettings({ consultant_chat_history: [...newHistory, assistantMessage] });
+      } else {
+        showNotification(data.error || 'Consultant chat failed', 'error');
+      }
+    } catch (error) {
+      console.error('Consultant chat error:', error);
+      showNotification('Failed to send message', 'error');
+    }
+
+    setConsultantLoading(false);
+  };
+
+  /**
+   * Handle sending message to worker chat
+   */
+  const handleSendWorkerChat = async () => {
+    if (!workerInput.trim() && workerImages.length === 0) return;
+
+    const newMessage: ChatMessage = {
+      role: 'user',
+      content: workerInput,
+      images: workerImages.length > 0 ? workerImages : undefined,
+      timestamp: new Date().toISOString()
+    };
+
+    // Build history with context (include consultant context always for worker)
+    const isFirstMessage = settings.worker_chat_history.length === 0;
+    let historyToSend = [...settings.worker_chat_history, newMessage];
+
+    // Add system context for first message or refresh context periodically
+    if (isFirstMessage || settings.worker_chat_history.length % 10 === 0) {
+      const contextMessage: ChatMessage = {
+        role: 'system',
+        content: buildWorkerContext(),
+        timestamp: new Date().toISOString()
+      };
+      historyToSend = [contextMessage, ...historyToSend];
+    }
+
+    // Update local state
+    const newHistory = [...settings.worker_chat_history, newMessage];
+    updateSettings({ worker_chat_history: newHistory });
+    setWorkerInput('');
+    setWorkerImages([]);
+    setWorkerLoading(true);
+
+    try {
+      const res = await fetch('/api/image-creation/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: historyToSend.map(m => ({
+            role: m.role,
+            content: m.content,
+            images: m.images
+          })),
+          model: settings.worker_model
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: data.message.content,
+          timestamp: new Date().toISOString()
+        };
+        updateSettings({ worker_chat_history: [...newHistory, assistantMessage] });
+      } else {
+        showNotification(data.error || 'Worker chat failed', 'error');
+      }
+    } catch (error) {
+      console.error('Worker chat error:', error);
+      showNotification('Failed to send message', 'error');
+    }
+
+    setWorkerLoading(false);
+  };
+
+  /**
+   * Handle image upload for consultant/worker chats
+   */
+  const handleDualChatImageUpload = async (files: FileList | null, chatType: ChatType) => {
+    if (!files) return;
+    const newImages: string[] = [];
+    for (const file of Array.from(files).slice(0, 4)) {
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      newImages.push(dataUrl);
+    }
+
+    if (chatType === 'consultant') {
+      setConsultantImages([...consultantImages, ...newImages].slice(0, 4));
+    } else {
+      setWorkerImages([...workerImages, ...newImages].slice(0, 4));
+    }
+  };
+
+  /**
+   * Clear chat history for a specific chat
+   */
+  const handleClearChatHistory = (chatType: ChatType) => {
+    if (chatType === 'consultant') {
+      updateSettings({ consultant_chat_history: [] });
+      showNotification('Consultant chat cleared', 'info');
+    } else {
+      updateSettings({ worker_chat_history: [] });
+      showNotification('Worker chat cleared', 'info');
+    }
+  };
+
+  /**
+   * Inject context from consultant to worker (sync knowledge)
+   */
+  const handleSyncConsultantToWorker = () => {
+    if (settings.consultant_chat_history.length === 0) {
+      showNotification('No consultant conversation to sync', 'error');
+      return;
+    }
+
+    // Add a system message to worker chat summarizing consultant decisions
+    const syncMessage: ChatMessage = {
+      role: 'system',
+      content: buildWorkerContext(),
+      timestamp: new Date().toISOString()
+    };
+
+    updateSettings({
+      worker_chat_history: [syncMessage, ...settings.worker_chat_history]
+    });
+    showNotification('Consultant context synced to worker', 'success');
   };
 
   // Image Generation - Single
@@ -1323,6 +1729,283 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                   <input ref={chatFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
                   <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()} placeholder="Ask about image prompts..." className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm" />
                   <button onClick={handleSendChat} disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 font-medium text-sm transition">Send</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ========== DUAL CHAT SYSTEM ========== */}
+
+          {/* Consultant Chat - Strategic Partner with Vision */}
+          <div className="bg-slate-900 rounded-lg border-2 border-indigo-500/70 overflow-hidden">
+            <button
+              onClick={() => setIsConsultantChatOpen(!isConsultantChatOpen)}
+              className="w-full flex items-center justify-between p-3 text-indigo-400 hover:bg-slate-800/50 transition"
+            >
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                Consultant Chat (Vision AI)
+                {IMAGE_CAPABLE_MODELS.includes(settings.consultant_model) && (
+                  <span className="bg-indigo-600/40 text-indigo-300 text-[10px] px-1.5 py-0.5 rounded">CAN SEE IMAGES</span>
+                )}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-indigo-300/70">{settings.consultant_chat_history.length} msgs</span>
+                <svg className={`w-5 h-5 transition-transform ${isConsultantChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {isConsultantChatOpen && (
+              <div className="border-t border-indigo-500/30">
+                {/* Model selector and controls */}
+                <div className="p-3 bg-indigo-900/20 border-b border-indigo-500/30 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-indigo-300">Model:</label>
+                    <select
+                      value={settings.consultant_model}
+                      onChange={(e) => updateSettings({ consultant_model: e.target.value })}
+                      className="bg-slate-800 border border-indigo-500/50 rounded px-2 py-1 text-white text-xs"
+                    >
+                      {AVAILABLE_MODELS.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} {IMAGE_CAPABLE_MODELS.includes(m.id) ? '👁️' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleSyncConsultantToWorker()}
+                      className="px-2 py-1 bg-emerald-600/50 hover:bg-emerald-600 rounded text-white text-xs transition flex items-center gap-1"
+                      title="Sync consultant decisions to worker chat"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                      </svg>
+                      Sync to Worker
+                    </button>
+                    <button
+                      onClick={() => handleClearChatHistory('consultant')}
+                      className="px-2 py-1 bg-red-600/50 hover:bg-red-600 rounded text-white text-xs transition"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {/* Context info panel */}
+                <div className="px-3 py-2 bg-indigo-900/10 border-b border-indigo-500/20 text-xs text-indigo-300/70">
+                  <strong>Context:</strong> {settings.reference_images.length} ref images, {logoImages.length} logo, {actionShots.length} action shots, {availableImages.length} bank images •
+                  This AI can see your images and help dial in your style.
+                </div>
+
+                {/* Chat messages */}
+                <div ref={consultantChatRef} className="h-72 overflow-y-auto p-4 space-y-3">
+                  {settings.consultant_chat_history.length === 0 ? (
+                    <div className="text-center text-indigo-300/50 py-8 space-y-2">
+                      <p className="text-lg">🎨 Image Style Consultant</p>
+                      <p className="text-sm">Discuss your brand, show reference images, and dial in the perfect style.</p>
+                      <p className="text-xs text-indigo-400/50">This chat automatically sees your uploaded images for context.</p>
+                    </div>
+                  ) : (
+                    settings.consultant_chat_history.filter(m => m.role !== 'system').map((msg, idx) => (
+                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-indigo-600/30 border border-indigo-500/50' : 'bg-slate-800 border border-indigo-400/30'}`}>
+                          {msg.images && msg.images.length > 0 && (
+                            <div className="flex gap-2 mb-2 flex-wrap">
+                              {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
+                            </div>
+                          )}
+                          <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {consultantLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-slate-800 border border-indigo-400/30 rounded-lg p-3">
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Attached images preview */}
+                {consultantImages.length > 0 && (
+                  <div className="px-4 py-2 border-t border-indigo-500/30 flex gap-2 flex-wrap">
+                    {consultantImages.map((img, idx) => (
+                      <div key={idx} className="relative">
+                        <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
+                        <button onClick={() => setConsultantImages(consultantImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input area */}
+                <div className="p-4 border-t border-indigo-500/30 flex gap-2">
+                  <button onClick={() => consultantFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-indigo-400 transition" title="Attach Image">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                  </button>
+                  <input ref={consultantFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'consultant')} className="hidden" />
+                  <input
+                    type="text"
+                    value={consultantInput}
+                    onChange={(e) => setConsultantInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendConsultantChat()}
+                    placeholder="Discuss image style, branding, composition..."
+                    className="flex-1 bg-slate-900 border border-indigo-500/50 rounded px-3 py-2 text-white text-sm"
+                  />
+                  <button
+                    onClick={handleSendConsultantChat}
+                    disabled={consultantLoading || (!consultantInput.trim() && consultantImages.length === 0)}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-600 rounded text-white font-medium text-sm transition"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Worker Chat - Operational Helper */}
+          <div className="bg-slate-900 rounded-lg border-2 border-emerald-500/70 overflow-hidden">
+            <button
+              onClick={() => setIsWorkerChatOpen(!isWorkerChatOpen)}
+              className="w-full flex items-center justify-between p-3 text-emerald-400 hover:bg-slate-800/50 transition"
+            >
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Worker Chat (Operations)
+                {settings.consultant_chat_history.length > 0 && (
+                  <span className="bg-emerald-600/40 text-emerald-300 text-[10px] px-1.5 py-0.5 rounded">SEES CONSULTANT</span>
+                )}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-emerald-300/70">{settings.worker_chat_history.length} msgs</span>
+                <svg className={`w-5 h-5 transition-transform ${isWorkerChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {isWorkerChatOpen && (
+              <div className="border-t border-emerald-500/30">
+                {/* Model selector and controls */}
+                <div className="p-3 bg-emerald-900/20 border-b border-emerald-500/30 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-emerald-300">Model:</label>
+                    <select
+                      value={settings.worker_model}
+                      onChange={(e) => updateSettings({ worker_model: e.target.value })}
+                      className="bg-slate-800 border border-emerald-500/50 rounded px-2 py-1 text-white text-xs"
+                    >
+                      {AVAILABLE_MODELS.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} {IMAGE_CAPABLE_MODELS.includes(m.id) ? '👁️' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {settings.consultant_chat_history.length > 0 && (
+                      <span className="text-xs text-emerald-400/60">
+                        (has {settings.consultant_chat_history.length} consultant messages for context)
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleClearChatHistory('worker')}
+                    className="px-2 py-1 bg-red-600/50 hover:bg-red-600 rounded text-white text-xs transition"
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                {/* Context info panel */}
+                <div className="px-3 py-2 bg-emerald-900/10 border-b border-emerald-500/20 text-xs text-emerald-300/70">
+                  <strong>Setup:</strong> {activeAvatar?.name || 'No avatar'} with {activeAvatar?.variations.length || 0} variations •
+                  {availableImages.length} images in bank •
+                  This AI helps organize and distribute prompts.
+                </div>
+
+                {/* Chat messages */}
+                <div ref={workerChatRef} className="h-72 overflow-y-auto p-4 space-y-3">
+                  {settings.worker_chat_history.length === 0 ? (
+                    <div className="text-center text-emerald-300/50 py-8 space-y-2">
+                      <p className="text-lg">⚙️ Operations Worker</p>
+                      <p className="text-sm">Organize prompts, schedule variations, and manage the workflow.</p>
+                      <p className="text-xs text-emerald-400/50">This chat has access to your consultant's decisions and full setup.</p>
+                    </div>
+                  ) : (
+                    settings.worker_chat_history.filter(m => m.role !== 'system').map((msg, idx) => (
+                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-emerald-600/30 border border-emerald-500/50' : 'bg-slate-800 border border-emerald-400/30'}`}>
+                          {msg.images && msg.images.length > 0 && (
+                            <div className="flex gap-2 mb-2 flex-wrap">
+                              {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
+                            </div>
+                          )}
+                          <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {workerLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-slate-800 border border-emerald-400/30 rounded-lg p-3">
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Attached images preview */}
+                {workerImages.length > 0 && (
+                  <div className="px-4 py-2 border-t border-emerald-500/30 flex gap-2 flex-wrap">
+                    {workerImages.map((img, idx) => (
+                      <div key={idx} className="relative">
+                        <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
+                        <button onClick={() => setWorkerImages(workerImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input area */}
+                <div className="p-4 border-t border-emerald-500/30 flex gap-2">
+                  <button onClick={() => workerFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-emerald-400 transition" title="Attach Image">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                  </button>
+                  <input ref={workerFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'worker')} className="hidden" />
+                  <input
+                    type="text"
+                    value={workerInput}
+                    onChange={(e) => setWorkerInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendWorkerChat()}
+                    placeholder="Organize prompts, plan variations, manage workflow..."
+                    className="flex-1 bg-slate-900 border border-emerald-500/50 rounded px-3 py-2 text-white text-sm"
+                  />
+                  <button
+                    onClick={handleSendWorkerChat}
+                    disabled={workerLoading || (!workerInput.trim() && workerImages.length === 0)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 rounded text-white font-medium text-sm transition"
+                  >
+                    Send
+                  </button>
                 </div>
               </div>
             )}

@@ -221,7 +221,7 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE UNIQUE,
   -- Enable/disable image creation for this workflow
   enabled BOOLEAN DEFAULT false,
-  -- LLM Models
+  -- LLM Models (legacy)
   prompt_assistant_model VARCHAR(100) DEFAULT 'gpt-4o', -- Model for helping craft prompts (chat)
   -- Reference images for style consistency
   reference_images JSONB DEFAULT '[]', -- Array of {url, filename, tags}
@@ -231,8 +231,15 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   audience_avatars JSONB DEFAULT '[{"id": 1, "name": "Default", "mainPrompt": "", "variations": []}]',
   -- Pre-made image bank
   image_bank JSONB DEFAULT '[]', -- Array of {id, url, variation, avatarTag, orientation, prompt, createdAt}
-  -- Chat history with image model
+  -- Legacy chat history (for backwards compatibility)
   chat_history JSONB DEFAULT '[]', -- Array of {role, content, images?, timestamp}
+  -- DUAL CHAT SYSTEM
+  -- Consultant Chat: Strategic partner with vision for dialing in image style
+  consultant_chat_history JSONB DEFAULT '[]', -- Array of {role, content, images?, timestamp}
+  consultant_model VARCHAR(100) DEFAULT 'gpt-4o', -- Vision-capable model for consultant
+  -- Worker Chat: Operational helper that sees consultant context + setup
+  worker_chat_history JSONB DEFAULT '[]', -- Array of {role, content, images?, timestamp}
+  worker_model VARCHAR(100) DEFAULT 'gpt-4o-mini', -- Can use cheaper model for operations
   -- Page integration settings
   integration_mode VARCHAR(20) DEFAULT 'bank', -- 'live' or 'bank'
   fallback_to_live BOOLEAN DEFAULT true, -- Make from scratch if bank empty

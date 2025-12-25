@@ -513,12 +513,20 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           enabled: false,
           prompt_assistant_model: 'gpt-4o',
           reference_images: [],
+          logo_images: [],
           audience_avatars: [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
           image_bank: [],
           chat_history: [],
+          // Dual chat system defaults
+          consultant_chat_history: [],
+          consultant_model: 'gpt-4o',
+          worker_chat_history: [],
+          worker_model: 'gpt-4o-mini',
           integration_mode: 'bank',
           fallback_to_live: true,
-          image_order: []
+          image_order: [],
+          variation_order_mode: 'sequential',
+          manual_variation_order: []
         },
         isNew: true
       });
@@ -531,12 +539,20 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         enabled: results[0].enabled,
         prompt_assistant_model: results[0].prompt_assistant_model,
         reference_images: results[0].reference_images || [],
+        logo_images: results[0].logo_images || [],
         audience_avatars: results[0].audience_avatars || [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
         image_bank: results[0].image_bank || [],
         chat_history: results[0].chat_history || [],
+        // Dual chat system
+        consultant_chat_history: results[0].consultant_chat_history || [],
+        consultant_model: results[0].consultant_model || 'gpt-4o',
+        worker_chat_history: results[0].worker_chat_history || [],
+        worker_model: results[0].worker_model || 'gpt-4o-mini',
         integration_mode: results[0].integration_mode,
         fallback_to_live: results[0].fallback_to_live,
-        image_order: results[0].image_order || []
+        image_order: results[0].image_order || [],
+        variation_order_mode: results[0].variation_order_mode || 'sequential',
+        manual_variation_order: results[0].manual_variation_order || []
       }
     });
 
@@ -557,12 +573,20 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       enabled,
       prompt_assistant_model,
       reference_images,
+      logo_images,
       audience_avatars,
       image_bank,
       chat_history,
+      // Dual chat system
+      consultant_chat_history,
+      consultant_model,
+      worker_chat_history,
+      worker_model,
       integration_mode,
       fallback_to_live,
-      image_order
+      image_order,
+      variation_order_mode,
+      manual_variation_order
     } = req.body;
 
     // Check if settings exist
@@ -578,23 +602,37 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           enabled,
           prompt_assistant_model,
           reference_images,
+          logo_images,
           audience_avatars,
           image_bank,
           chat_history,
+          consultant_chat_history,
+          consultant_model,
+          worker_chat_history,
+          worker_model,
           integration_mode,
           fallback_to_live,
-          image_order
+          image_order,
+          variation_order_mode,
+          manual_variation_order
         ) VALUES (
           ${workflowId},
           ${enabled ?? false},
           ${prompt_assistant_model ?? 'gpt-4o'},
           ${JSON.stringify(reference_images ?? [])},
+          ${JSON.stringify(logo_images ?? [])},
           ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
           ${JSON.stringify(image_bank ?? [])},
           ${JSON.stringify(chat_history ?? [])},
+          ${JSON.stringify(consultant_chat_history ?? [])},
+          ${consultant_model ?? 'gpt-4o'},
+          ${JSON.stringify(worker_chat_history ?? [])},
+          ${worker_model ?? 'gpt-4o-mini'},
           ${integration_mode ?? 'bank'},
           ${fallback_to_live ?? true},
-          ${JSON.stringify(image_order ?? [])}
+          ${JSON.stringify(image_order ?? [])},
+          ${variation_order_mode ?? 'sequential'},
+          ${JSON.stringify(manual_variation_order ?? [])}
         )
         RETURNING id
       `;
@@ -609,12 +647,19 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
         enabled = COALESCE(${enabled}, enabled),
         prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
         reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
+        logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
         audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
         image_bank = COALESCE(${image_bank ? JSON.stringify(image_bank) : null}::jsonb, image_bank),
         chat_history = COALESCE(${chat_history ? JSON.stringify(chat_history) : null}::jsonb, chat_history),
+        consultant_chat_history = COALESCE(${consultant_chat_history ? JSON.stringify(consultant_chat_history) : null}::jsonb, consultant_chat_history),
+        consultant_model = COALESCE(${consultant_model}, consultant_model),
+        worker_chat_history = COALESCE(${worker_chat_history ? JSON.stringify(worker_chat_history) : null}::jsonb, worker_chat_history),
+        worker_model = COALESCE(${worker_model}, worker_model),
         integration_mode = COALESCE(${integration_mode}, integration_mode),
         fallback_to_live = COALESCE(${fallback_to_live}, fallback_to_live),
         image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
+        variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
+        manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
         updated_at = CURRENT_TIMESTAMP
       WHERE workflow_id = ${workflowId}
     `;
