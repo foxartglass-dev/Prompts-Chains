@@ -37,12 +37,41 @@ interface Variation {
   orientation: 'vertical' | 'landscape' | 'both';
 }
 
+// ========== ADVANCED PLACEHOLDER SYSTEM ==========
+
+// A placeholder category (e.g., "Cleaning_Item", "Gender_Age")
+interface PlaceholderCategory {
+  id: string;
+  name: string; // Display name: "Cleaning Item"
+  placeholder: string; // The placeholder text: "{Cleaning_Item}"
+  options: PlaceholderOption[];
+}
+
+// An option within a category
+interface PlaceholderOption {
+  number: number; // 1, 2, 3...
+  text: string; // "cleaning the stove burners"
+}
+
+// Generation mode for advanced placeholder system
+type GenerationMode = 'one_of_each' | 'sequential' | 'random' | 'specific';
+
+// Specific combination entry (e.g., [3, 2] = 3rd cleaning item + 2nd gender/age)
+type PlaceholderCombination = number[];
+
 interface AudienceAvatar {
   id: number;
   name: string;
   tag?: string; // Links to Tag Manager tag (e.g., "H", "J", "C")
   mainPrompt: string;
+  // Simple mode: single {variation} placeholder
   variations: Variation[];
+  // Advanced mode: multi-placeholder system
+  placeholderMode?: 'simple' | 'advanced';
+  placeholderCategories?: PlaceholderCategory[];
+  generationMode?: GenerationMode;
+  specificCombinations?: PlaceholderCombination[];
+  randomCount?: number; // How many random combinations to generate
   referenceImages?: ReferenceImage[];
 }
 
@@ -1493,6 +1522,142 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setSelectedVariations(new Set(activeAvatar.variations.map(v => v.id)));
   };
 
+  // ========== ADVANCED PLACEHOLDER HANDLERS ==========
+
+  const handleAddPlaceholderCategory = () => {
+    if (!activeAvatar) return;
+    const newCategory: PlaceholderCategory = {
+      id: `cat_${Date.now()}`,
+      name: 'New Category',
+      placeholder: '{New_Category}',
+      options: []
+    };
+    const existingCategories = activeAvatar.placeholderCategories || [];
+    handleUpdateAvatar(activeAvatar.id, {
+      placeholderCategories: [...existingCategories, newCategory]
+    });
+  };
+
+  const handleUpdatePlaceholderCategory = (categoryId: string, updates: Partial<PlaceholderCategory>) => {
+    if (!activeAvatar) return;
+    const categories = activeAvatar.placeholderCategories || [];
+    const updatedCategories = categories.map(cat =>
+      cat.id === categoryId ? { ...cat, ...updates } : cat
+    );
+    handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCategories });
+  };
+
+  const handleRemovePlaceholderCategory = (categoryId: string) => {
+    if (!activeAvatar) return;
+    const categories = activeAvatar.placeholderCategories || [];
+    handleUpdateAvatar(activeAvatar.id, {
+      placeholderCategories: categories.filter(cat => cat.id !== categoryId)
+    });
+  };
+
+  const handleAddPlaceholderOption = (categoryId: string) => {
+    if (!activeAvatar) return;
+    const categories = activeAvatar.placeholderCategories || [];
+    const updatedCategories = categories.map(cat => {
+      if (cat.id === categoryId) {
+        const nextNumber = cat.options.length > 0
+          ? Math.max(...cat.options.map(o => o.number)) + 1
+          : 1;
+        return {
+          ...cat,
+          options: [...cat.options, { number: nextNumber, text: '' }]
+        };
+      }
+      return cat;
+    });
+    handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCategories });
+  };
+
+  const handleUpdatePlaceholderOption = (categoryId: string, optionNumber: number, text: string) => {
+    if (!activeAvatar) return;
+    const categories = activeAvatar.placeholderCategories || [];
+    const updatedCategories = categories.map(cat => {
+      if (cat.id === categoryId) {
+        return {
+          ...cat,
+          options: cat.options.map(opt =>
+            opt.number === optionNumber ? { ...opt, text } : opt
+          )
+        };
+      }
+      return cat;
+    });
+    handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCategories });
+  };
+
+  const handleRemovePlaceholderOption = (categoryId: string, optionNumber: number) => {
+    if (!activeAvatar) return;
+    const categories = activeAvatar.placeholderCategories || [];
+    const updatedCategories = categories.map(cat => {
+      if (cat.id === categoryId) {
+        return {
+          ...cat,
+          options: cat.options.filter(opt => opt.number !== optionNumber)
+        };
+      }
+      return cat;
+    });
+    handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCategories });
+  };
+
+  const handleAddSpecificCombination = (combo?: PlaceholderCombination) => {
+    if (!activeAvatar) return;
+    const categories = activeAvatar.placeholderCategories || [];
+    // Default combo: first option of each category
+    const defaultCombo = combo || categories.map(cat =>
+      cat.options.length > 0 ? cat.options[0].number : 1
+    );
+    const existingCombos = activeAvatar.specificCombinations || [];
+    handleUpdateAvatar(activeAvatar.id, {
+      specificCombinations: [...existingCombos, defaultCombo]
+    });
+  };
+
+  const handleRemoveSpecificCombination = (index: number) => {
+    if (!activeAvatar) return;
+    const combos = activeAvatar.specificCombinations || [];
+    handleUpdateAvatar(activeAvatar.id, {
+      specificCombinations: combos.filter((_, i) => i !== index)
+    });
+  };
+
+  const getAdvancedCombinationsPreview = (): string => {
+    if (!activeAvatar) return '';
+    const categories = activeAvatar.placeholderCategories || [];
+    const mode = activeAvatar.generationMode || 'one_of_each';
+
+    if (categories.length === 0) return 'Add categories to preview combinations.';
+
+    // Calculate total possible combinations
+    const totalCombinations = categories.reduce((acc, cat) =>
+      acc * (cat.options.length || 1), 1
+    );
+
+    switch (mode) {
+      case 'one_of_each':
+        return `Will generate 1 image using first option from each category (${categories.length} placeholders)`;
+      case 'sequential':
+        return `Will generate ${totalCombinations} images (all combinations: ${categories.map(c => c.options.length || 0).join(' × ')})`;
+      case 'random': {
+        const count = activeAvatar.randomCount || 5;
+        return `Will generate ${Math.min(count, totalCombinations)} random combinations from ${totalCombinations} possible`;
+      }
+      case 'specific': {
+        const combos = activeAvatar.specificCombinations || [];
+        return combos.length > 0
+          ? `Will generate ${combos.length} specific combinations`
+          : 'Add specific combinations to generate';
+      }
+      default:
+        return '';
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -1752,31 +1917,55 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
             {activeAvatar && (
               <div className="space-y-3">
-                <div>
-                  <label className="block text-xs text-brand-gold/70 mb-1">Avatar Name</label>
-                  <input
-                    type="text"
-                    value={activeAvatar.name}
-                    onChange={(e) => handleUpdateAvatar(activeAvatar.id, { name: e.target.value })}
-                    className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm"
-                  />
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs text-brand-gold/70 mb-1">Avatar Name</label>
+                    <input
+                      type="text"
+                      value={activeAvatar.name}
+                      onChange={(e) => handleUpdateAvatar(activeAvatar.id, { name: e.target.value })}
+                      className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm"
+                    />
+                  </div>
+                  {/* Mode Toggle */}
+                  <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1">
+                    <button
+                      onClick={() => handleUpdateAvatar(activeAvatar.id, { placeholderMode: 'simple' })}
+                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${(activeAvatar.placeholderMode || 'simple') === 'simple' ? 'bg-brand-cyan text-slate-900' : 'text-brand-gold/70 hover:text-brand-gold'}`}
+                    >
+                      Simple
+                    </button>
+                    <button
+                      onClick={() => handleUpdateAvatar(activeAvatar.id, { placeholderMode: 'advanced' })}
+                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${activeAvatar.placeholderMode === 'advanced' ? 'bg-purple-600 text-white' : 'text-brand-gold/70 hover:text-brand-gold'}`}
+                    >
+                      Advanced
+                    </button>
+                  </div>
                 </div>
 
+                {/* Main Prompt - shown in both modes */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs text-brand-gold/70">Main Prompt (use {'{variation}'} to mark where variation text goes)</label>
-                    <button onClick={insertVariationPlaceholder} className="text-xs text-brand-cyan hover:text-brand-cyan-light">+ Insert {'{variation}'}</button>
+                    <label className="block text-xs text-brand-gold/70">
+                      Main Prompt {(activeAvatar.placeholderMode || 'simple') === 'simple' ? `(use {'{variation}'} placeholder)` : '(use placeholder categories below)'}
+                    </label>
+                    {(activeAvatar.placeholderMode || 'simple') === 'simple' && (
+                      <button onClick={insertVariationPlaceholder} className="text-xs text-brand-cyan hover:text-brand-cyan-light">+ Insert {'{variation}'}</button>
+                    )}
                   </div>
                   <textarea
                     ref={mainPromptRef}
                     value={activeAvatar.mainPrompt}
                     onChange={(e) => handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value })}
-                    rows={3}
+                    rows={4}
                     className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y"
-                    placeholder="Professional cleaning photo, {variation}, bright natural lighting..."
+                    placeholder={activeAvatar.placeholderMode === 'advanced'
+                      ? "Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
+                      : "Professional cleaning photo, {variation}, bright natural lighting..."}
                   />
-                  {/* Variation Tags to insert */}
-                  {activeAvatar.variations.length > 0 && (
+                  {/* Insert placeholder tags */}
+                  {(activeAvatar.placeholderMode || 'simple') === 'simple' && activeAvatar.variations.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
                       <span className="text-xs text-brand-gold/50">Click to insert:</span>
                       {activeAvatar.variations.map(v => (
@@ -1790,9 +1979,211 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                       ))}
                     </div>
                   )}
+                  {/* Insert placeholder category tags for advanced mode */}
+                  {activeAvatar.placeholderMode === 'advanced' && (activeAvatar.placeholderCategories || []).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      <span className="text-xs text-brand-gold/50">Click to insert:</span>
+                      {(activeAvatar.placeholderCategories || []).map(cat => (
+                        <button
+                          key={cat.id}
+                          onClick={() => {
+                            if (!mainPromptRef.current) return;
+                            const textarea = mainPromptRef.current;
+                            const start = textarea.selectionStart;
+                            const text = activeAvatar.mainPrompt;
+                            const newText = text.substring(0, start) + cat.placeholder + text.substring(start);
+                            handleUpdateAvatar(activeAvatar.id, { mainPrompt: newText });
+                          }}
+                          className="px-2 py-0.5 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 rounded text-purple-300 text-xs transition"
+                        >
+                          {cat.placeholder}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Variations */}
+                {/* ========== ADVANCED MODE: Placeholder Categories ========== */}
+                {activeAvatar.placeholderMode === 'advanced' && (
+                  <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm text-purple-300 font-medium">Placeholder Categories</label>
+                      <button
+                        onClick={() => handleAddPlaceholderCategory()}
+                        className="px-2 py-1 bg-purple-600/50 hover:bg-purple-600 rounded text-white text-xs transition"
+                      >
+                        + Add Category
+                      </button>
+                    </div>
+
+                    {/* Category List */}
+                    {(activeAvatar.placeholderCategories || []).map((category, catIndex) => (
+                      <div key={category.id} className="bg-slate-800/50 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={category.name}
+                            onChange={(e) => handleUpdatePlaceholderCategory(category.id, { name: e.target.value, placeholder: `{${e.target.value.replace(/\s+/g, '_')}}` })}
+                            className="flex-1 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
+                            placeholder="Category name (e.g., Cleaning_Item)"
+                          />
+                          <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
+                          <button
+                            onClick={() => handleRemovePlaceholderCategory(category.id)}
+                            className="p-1 bg-red-600/50 hover:bg-red-600 rounded text-white transition"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+
+                        {/* Options for this category */}
+                        <div className="pl-4 space-y-1">
+                          {category.options.map((option, optIndex) => (
+                            <div key={option.number} className="flex items-center gap-2">
+                              <span className="w-6 text-center text-xs text-purple-400 font-bold">{option.number}</span>
+                              <input
+                                type="text"
+                                value={option.text}
+                                onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, e.target.value)}
+                                className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-xs"
+                                placeholder={`Option ${option.number} text...`}
+                              />
+                              <button
+                                onClick={() => handleRemovePlaceholderOption(category.id, option.number)}
+                                className="text-red-400 hover:text-red-300 text-xs"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => handleAddPlaceholderOption(category.id)}
+                            className="text-xs text-purple-400 hover:text-purple-300"
+                          >
+                            + Add Option
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {(activeAvatar.placeholderCategories || []).length === 0 && (
+                      <p className="text-xs text-purple-400/50 text-center py-2">No categories yet. Add one to get started.</p>
+                    )}
+
+                    {/* Generation Mode Controls */}
+                    {(activeAvatar.placeholderCategories || []).length > 0 && (
+                      <div className="border-t border-purple-500/30 pt-3 space-y-2">
+                        <label className="text-xs text-purple-300 font-medium">Generation Mode</label>
+                        <div className="flex flex-wrap gap-2">
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={activeAvatar.generationMode === 'one_of_each'}
+                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'one_of_each' })}
+                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
+                            />
+                            <span className="text-xs text-white">1 of Each</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={activeAvatar.generationMode === 'sequential'}
+                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'sequential' })}
+                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
+                            />
+                            <span className="text-xs text-white">Sequential</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={activeAvatar.generationMode === 'random'}
+                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'random' })}
+                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
+                            />
+                            <span className="text-xs text-white">Random</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={activeAvatar.generationMode === 'specific'}
+                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'specific' })}
+                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
+                            />
+                            <span className="text-xs text-white">Specific</span>
+                          </label>
+                        </div>
+
+                        {/* Specific Combinations Table */}
+                        {activeAvatar.generationMode === 'specific' && (
+                          <div className="bg-slate-900/50 rounded p-2 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-purple-400">Specific Combinations</span>
+                              <button
+                                onClick={() => handleAddSpecificCombination()}
+                                className="text-xs text-purple-400 hover:text-purple-300"
+                              >
+                                + Add Combination
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {(activeAvatar.specificCombinations || []).map((combo, idx) => (
+                                <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-600/30 rounded text-xs text-white">
+                                  ({combo.join(', ')})
+                                  <button
+                                    onClick={() => handleRemoveSpecificCombination(idx)}
+                                    className="text-red-400 hover:text-red-300"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                            {/* Quick add input */}
+                            <input
+                              type="text"
+                              placeholder="Add combo (e.g., 3,2) and press Enter"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const input = e.target as HTMLInputElement;
+                                  const combo = input.value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+                                  if (combo.length > 0) {
+                                    handleAddSpecificCombination(combo);
+                                    input.value = '';
+                                  }
+                                }
+                              }}
+                              className="w-full bg-slate-900 border border-purple-500/30 rounded px-2 py-1 text-white text-xs"
+                            />
+                          </div>
+                        )}
+
+                        {/* Random count */}
+                        {activeAvatar.generationMode === 'random' && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-purple-400">Generate count:</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={activeAvatar.randomCount || 5}
+                              onChange={(e) => handleUpdateAvatar(activeAvatar.id, { randomCount: parseInt(e.target.value) || 5 })}
+                              className="w-16 bg-slate-900 border border-purple-500/30 rounded px-2 py-1 text-white text-xs"
+                            />
+                          </div>
+                        )}
+
+                        {/* Preview of combinations */}
+                        <div className="text-xs text-purple-400/70">
+                          {getAdvancedCombinationsPreview()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ========== SIMPLE MODE: Variations ========== */}
+                {(activeAvatar.placeholderMode || 'simple') === 'simple' && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-xs text-brand-gold/70">Variations</label>
@@ -1862,6 +2253,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                     );
                   })()}
                 </div>
+                )}
               </div>
             )}
           </div>
