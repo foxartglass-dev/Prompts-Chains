@@ -20,6 +20,55 @@ import { processArticleWithImages, previewPrompts } from '../services/image-pipe
 
 const router = express.Router();
 
+/**
+ * Clean content before processing
+ * - Remove markdown # at start of text
+ * - Remove stray dashes (keep keyword dashes like "move-in")
+ * - Ensure proper H2 title separation
+ */
+function cleanContent(content) {
+  if (!content) return content;
+
+  let cleaned = content;
+
+  // Remove markdown # at the very start (but not ## which is H2)
+  cleaned = cleaned.replace(/^#\s+/gm, '');
+
+  // Remove stray dashes at end of sentences/paragraphs (not within words)
+  // Keep dashes in compound words like "move-in", "full-time"
+  cleaned = cleaned.replace(/\s+[-–—]\s*$/gm, ''); // End of line dashes
+  cleaned = cleaned.replace(/\s+[-–—]\s+(?=[A-Z])/g, '. '); // Mid-sentence break dashes before capital
+
+  // Ensure H2 titles are on their own line (not run-on with body text)
+  // If H2 is followed by text without line break, add one
+  cleaned = cleaned.replace(/(<\/h2>)([^\n<])/g, '$1\n$2');
+  cleaned = cleaned.replace(/(##\s+[^\n]+)([^\n#])/g, '$1\n$2');
+
+  return cleaned.trim();
+}
+
+/**
+ * Calculate number of images needed based on word count
+ * Rule: 1 image per 200-300 words, at H2 breaks
+ */
+function calculateImagesNeeded(wordCount, chunkCount) {
+  // Minimum 1 (hero), then 1 per ~250 words after that
+  const baseImages = Math.ceil(wordCount / 250);
+  // But can't exceed number of chunks (each chunk can have max 1 image)
+  return Math.min(baseImages, chunkCount);
+}
+
+/**
+ * Determine hero image side - alternates based on some identifier
+ * @param {string} identifier - Article ID, keyword, or timestamp to determine side
+ */
+function getHeroImageSide(identifier) {
+  // Use simple hash of identifier to alternate
+  if (!identifier) return 'right';
+  const hash = identifier.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return hash % 2 === 0 ? 'right' : 'left';
+}
+
 // Middleware to check database availability
 const requireDb = (req, res, next) => {
   if (!isDatabaseEnabled()) {
@@ -181,11 +230,23 @@ router.post('/publish', async (req, res) => {
 
     const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
 
+    // Step 0: Clean content (remove markdown #, stray dashes, fix H2 titles)
+    const cleanedContent = cleanContent(content);
+
     // Step 1: Chunk the content first
-    let chunked = chunkContent(content, { maxWords });
+    let chunked = chunkContent(cleanedContent, { maxWords });
     let imagesGenerated = 0;
     let imagesFromBank = 0;
     let estimatedCost = null;
+
+    // Calculate dynamic image count based on word count (no arbitrary cap)
+    const dynamicMaxImages = calculateImagesNeeded(chunked.totalWords, chunked.chunkCount);
+
+    // Determine hero image side (alternates per article based on keyword/title)
+    const heroImageSide = getHeroImageSide(keyword || title || `${Date.now()}`);
+
+    // Body images start on OPPOSITE side of hero
+    const bodyStartSide = heroImageSide === 'right' ? 'left' : 'right';
 
     // Step 2: Try to get images from Image Bank if workflowId provided
     if (useImageBank && workflowId && isDatabaseEnabled()) {
@@ -232,6 +293,7 @@ router.post('/publish', async (req, res) => {
           // === IMAGE SELECTION LOGIC ===
           // Rule 1: First image (hero) MUST be vertical for side-by-side layout
           // Rule 2: Remaining images can be either orientation (word wrap in content)
+          // Rule 3: Body images start on OPPOSITE side of hero, then alternate
 
           // Separate vertical and non-vertical images
           const verticalImages = availableImages.filter(img => img.orientation === 'vertical');
@@ -250,15 +312,20 @@ router.post('/publish', async (req, res) => {
             imagesToUse.push(heroImage);
           }
 
-          // Add remaining images up to maxImages
+          // Add remaining images based on DYNAMIC word count (no arbitrary cap)
           const chunksNeedingImages = [chunked.intro, ...chunked.chunks].filter(c => c);
-          const maxNeeded = Math.min(maxImages, chunksNeedingImages.length);
+          const maxNeeded = Math.min(dynamicMaxImages, chunksNeedingImages.length);
           const remainingNeeded = maxNeeded - imagesToUse.length;
           imagesToUse.push(...remainingImages.slice(0, remainingNeeded));
 
           // Assign images to chunks
           imagesToUse.forEach((img, idx) => {
             const isHero = idx === 0;
+
+            // Body image side alternation: starts opposite of hero, then alternates
+            // bodyStartSide is opposite of heroImageSide
+            const bodyImageIndex = idx - 1; // 0-indexed for body images
+            const bodySide = bodyImageIndex % 2 === 0 ? bodyStartSide : (bodyStartSide === 'left' ? 'right' : 'left');
 
             // Hero image: vertical (tall) for side-by-side with intro text
             // Body images: dimensions based on orientation for word wrap
@@ -271,7 +338,7 @@ router.post('/publish', async (req, res) => {
               height: isHero
                 ? (img.orientation === 'vertical' ? 600 : 400)  // Hero: taller
                 : (img.orientation === 'landscape' ? 300 : 400), // Body: for word wrap
-              side: isHero ? 'right' : (idx % 2 === 0 ? 'left' : 'right'),
+              side: isHero ? heroImageSide : bodySide,
               orientation: img.orientation // Pass through for debugging
             };
 
@@ -308,9 +375,9 @@ router.post('/publish', async (req, res) => {
     }
 
     // Step 3: Fall back to live generation if needed
-    if (generateImages && imagesFromBank < maxImages) {
+    if (generateImages && imagesFromBank < dynamicMaxImages) {
       // Use the image pipeline for remaining images
-      const pipelineResult = await processArticleWithImages(content, {
+      const pipelineResult = await processArticleWithImages(cleanedContent, {
         title,
         keyword,
         styleDNA,
@@ -318,7 +385,7 @@ router.post('/publish', async (req, res) => {
         openaiApiKey: openaiApiKey || process.env.OPENAI_API_KEY,
         replicateApiKey: replicateApiKey || process.env.REPLICATE_API_TOKEN,
         wpCredentials,
-        maxImages: maxImages - imagesFromBank,
+        maxImages: dynamicMaxImages - imagesFromBank,
         maxWords
       });
 
@@ -337,15 +404,14 @@ router.post('/publish', async (req, res) => {
     }
 
     // Step 4: Extract or use provided title
-    const pageTitle = title || extractTitle(content) || 'Untitled Page';
+    const pageTitle = title || extractTitle(cleanedContent) || 'Untitled Page';
 
     // Step 5: Build Elementor structure
     const elementorData = buildElementorPage(chunked, {
       title: pageTitle,
-      ctaText,
-      ctaUrl,
       includeStatsBar,
-      statsBarPosition
+      statsBarPosition,
+      heroImageSide // Pass hero side for alternating layout
     });
 
     // Step 6: Get Elementor meta fields
