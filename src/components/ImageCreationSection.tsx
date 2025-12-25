@@ -5,16 +5,16 @@
  * Features:
  * - Reference images for style consistency (collapsible)
  * - Audience avatars with main prompts + variations
+ * - Variation placeholder system (clickable tags to insert into prompt)
  * - Chat interface with GPT-4o for prompt refinement
- * - Main prompt + variation buttons system
  * - Batch Generate section (collapsible)
  * - Image Bank section (separate, with sorting/filtering)
  * - Used/Archive section with page links
- * - Page integration controls (live vs bank)
+ * - Page integration controls with variation order
  * - Processing Log integration
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 // Types
 interface ReferenceImage {
@@ -47,8 +47,8 @@ interface BankImage {
   prompt: string;
   createdAt: string;
   used?: boolean;
-  usedOn?: string; // Page URL where image was used
-  usedAt?: string; // Timestamp when used
+  usedOn?: string;
+  usedAt?: string;
 }
 
 interface ChatMessage {
@@ -68,9 +68,10 @@ interface ImageCreationSettings {
   integration_mode: 'live' | 'bank';
   fallback_to_live: boolean;
   image_order: string[];
+  variation_order_mode: 'sequential' | 'random' | 'manual';
+  manual_variation_order: string[];
 }
 
-// Log status enum matching App.tsx
 enum LogStatus {
   INFO = 'INFO',
   SUCCESS = 'SUCCESS',
@@ -94,7 +95,9 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   chat_history: [],
   integration_mode: 'bank',
   fallback_to_live: true,
-  image_order: []
+  image_order: [],
+  variation_order_mode: 'sequential',
+  manual_variation_order: []
 };
 
 const AVAILABLE_MODELS = [
@@ -106,11 +109,15 @@ const AVAILABLE_MODELS = [
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google' }
 ];
 
+// Variation placeholder tag
+const VARIATION_PLACEHOLDER = '{variation}';
+
 const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, showNotification, addLog }) => {
   // State
   const [settings, setSettings] = useState<ImageCreationSettings>(DEFAULT_SETTINGS);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false); // Prevent saving before load
 
   // Collapsible sections
   const [isReferenceOpen, setIsReferenceOpen] = useState(false);
@@ -118,6 +125,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(true);
   const [isUsedOpen, setIsUsedOpen] = useState(false);
+  const [isOrderOpen, setIsOrderOpen] = useState(false);
 
   // Active avatar
   const [activeAvatarId, setActiveAvatarId] = useState<number>(1);
@@ -136,25 +144,30 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
   const [selectedVariations, setSelectedVariations] = useState<Set<string>>(new Set());
 
   // Bank filtering
-  const [bankFilter, setBankFilter] = useState<string>('all'); // 'all' or variation name
+  const [bankFilter, setBankFilter] = useState<string>('all');
   const [bankSort, setBankSort] = useState<'newest' | 'oldest' | 'variation'>('newest');
 
-  // File input ref
+  // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const mainPromptRef = useRef<HTMLTextAreaElement>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Helper: Log to Processing Log
-  const log = (message: string, status: LogStatus) => {
+  const log = useCallback((message: string, status: LogStatus) => {
     if (addLog) {
       addLog(`[Image Creation] ${message}`, status);
     }
     console.log(`[Image Creation] ${status}: ${message}`);
-  };
+  }, [addLog]);
 
   // Load settings when workflowId changes
   useEffect(() => {
     if (workflowId) {
       loadSettings();
+    } else {
+      setLoading(false);
+      setLoaded(false);
     }
   }, [workflowId]);
 
@@ -165,48 +178,96 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
     }
   }, [settings.chat_history]);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const loadSettings = async () => {
     if (!workflowId) return;
     setLoading(true);
+    setLoaded(false);
     try {
       const res = await fetch(`/api/image-creation/settings/${workflowId}`);
       const data = await res.json();
       if (data.success) {
-        setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
-        if (data.settings.audience_avatars?.length > 0) {
-          setActiveAvatarId(data.settings.audience_avatars[0].id);
+        const loadedSettings = {
+          ...DEFAULT_SETTINGS,
+          ...data.settings,
+          // Ensure arrays are arrays
+          reference_images: data.settings.reference_images || [],
+          audience_avatars: data.settings.audience_avatars?.length > 0
+            ? data.settings.audience_avatars
+            : [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
+          image_bank: data.settings.image_bank || [],
+          chat_history: data.settings.chat_history || [],
+          image_order: data.settings.image_order || [],
+          manual_variation_order: data.settings.manual_variation_order || []
+        };
+        setSettings(loadedSettings);
+        if (loadedSettings.audience_avatars.length > 0) {
+          setActiveAvatarId(loadedSettings.audience_avatars[0].id);
         }
+        console.log('[Image Creation] Loaded settings:', loadedSettings);
       }
     } catch (error) {
       console.error('Failed to load image creation settings:', error);
     }
     setLoading(false);
+    setLoaded(true);
   };
 
-  const saveSettings = async (newSettings: ImageCreationSettings) => {
-    if (!workflowId) return;
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/image-creation/settings/${workflowId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSettings)
-      });
-      const data = await res.json();
-      if (data.success) {
-        onSettingsChange?.(newSettings);
-      }
-    } catch (error) {
-      console.error('Failed to save settings:', error);
+  // Debounced save to prevent rapid overwrites
+  const saveSettings = useCallback(async (newSettings: ImageCreationSettings) => {
+    if (!workflowId || !loaded) {
+      console.log('[Image Creation] Skipping save - not loaded yet');
+      return;
     }
-    setSaving(false);
-  };
 
-  const updateSettings = (updates: Partial<ImageCreationSettings>) => {
-    const newSettings = { ...settings, ...updates };
-    setSettings(newSettings);
-    saveSettings(newSettings);
-  };
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Debounce saves by 500ms
+    saveTimeoutRef.current = setTimeout(async () => {
+      setSaving(true);
+      try {
+        console.log('[Image Creation] Saving settings:', newSettings);
+        const res = await fetch(`/api/image-creation/settings/${workflowId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newSettings)
+        });
+        const data = await res.json();
+        if (data.success) {
+          onSettingsChange?.(newSettings);
+          console.log('[Image Creation] Settings saved successfully');
+        } else {
+          console.error('[Image Creation] Save failed:', data.error);
+        }
+      } catch (error) {
+        console.error('Failed to save settings:', error);
+      }
+      setSaving(false);
+    }, 500);
+  }, [workflowId, loaded, onSettingsChange]);
+
+  const updateSettings = useCallback((updates: Partial<ImageCreationSettings>) => {
+    if (!loaded) {
+      console.log('[Image Creation] Skipping update - not loaded yet');
+      return;
+    }
+    setSettings(current => {
+      const newSettings = { ...current, ...updates };
+      saveSettings(newSettings);
+      return newSettings;
+    });
+  }, [loaded, saveSettings]);
 
   // Get active avatar
   const activeAvatar = settings.audience_avatars.find(a => a.id === activeAvatarId) || settings.audience_avatars[0];
@@ -217,13 +278,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
   // Filter and sort bank images
   const getFilteredBankImages = (includeUsed: boolean) => {
     let images = settings.image_bank.filter(img => includeUsed ? img.used : !img.used);
-
-    // Apply variation filter
     if (bankFilter !== 'all') {
       images = images.filter(img => img.variation === bankFilter);
     }
-
-    // Apply sort
     switch (bankSort) {
       case 'newest':
         images.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -235,17 +292,64 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
         images.sort((a, b) => a.variation.localeCompare(b.variation));
         break;
     }
-
     return images;
   };
 
   const availableImages = getFilteredBankImages(false);
   const usedImages = getFilteredBankImages(true);
 
+  // Insert variation placeholder into main prompt at cursor
+  const insertVariationPlaceholder = () => {
+    if (!mainPromptRef.current || !activeAvatar) return;
+
+    const textarea = mainPromptRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = activeAvatar.mainPrompt;
+
+    const newText = text.substring(0, start) + VARIATION_PLACEHOLDER + text.substring(end);
+    handleUpdateAvatar(activeAvatar.id, { mainPrompt: newText });
+
+    // Restore cursor position after the placeholder
+    setTimeout(() => {
+      textarea.focus();
+      const newPos = start + VARIATION_PLACEHOLDER.length;
+      textarea.setSelectionRange(newPos, newPos);
+    }, 0);
+  };
+
+  // Insert specific variation name at cursor
+  const insertVariationTag = (variationName: string) => {
+    if (!mainPromptRef.current || !activeAvatar) return;
+
+    const tag = `{${variationName}}`;
+    const textarea = mainPromptRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = activeAvatar.mainPrompt;
+
+    const newText = text.substring(0, start) + tag + text.substring(end);
+    handleUpdateAvatar(activeAvatar.id, { mainPrompt: newText });
+
+    setTimeout(() => {
+      textarea.focus();
+      const newPos = start + tag.length;
+      textarea.setSelectionRange(newPos, newPos);
+    }, 0);
+  };
+
+  // Build final prompt by replacing {variation} with actual variation prompt
+  const buildFinalPrompt = (mainPrompt: string, variationPrompt: string): string => {
+    if (mainPrompt.includes(VARIATION_PLACEHOLDER)) {
+      return mainPrompt.replace(VARIATION_PLACEHOLDER, variationPrompt);
+    }
+    // If no placeholder, append variation to end
+    return mainPrompt ? `${mainPrompt}\n\n${variationPrompt}` : variationPrompt;
+  };
+
   // Reference Images Handlers
   const handleUploadReference = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-
     const newImages: ReferenceImage[] = [];
     for (const file of Array.from(files)) {
       const reader = new FileReader();
@@ -255,7 +359,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
       });
       newImages.push({ url: dataUrl, filename: file.name });
     }
-
     updateSettings({
       reference_images: [...settings.reference_images, ...newImages]
     });
@@ -314,13 +417,23 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
     const newVariation: Variation = {
       id: `v${Date.now()}`,
       name: `V${activeAvatar.variations.length + 1}`,
-      prompt: '',
+      prompt: '', // Start empty - user can copy main prompt if desired
       orientation: 'landscape'
     };
     handleUpdateAvatar(activeAvatar.id, {
       variations: [...activeAvatar.variations, newVariation]
     });
     setActiveVariationId(newVariation.id);
+  };
+
+  // Copy main prompt to variation
+  const handleCopyMainToVariation = (variationId: string) => {
+    if (!activeAvatar) return;
+    const newVariations = activeAvatar.variations.map(v =>
+      v.id === variationId ? { ...v, prompt: activeAvatar.mainPrompt } : v
+    );
+    handleUpdateAvatar(activeAvatar.id, { variations: newVariations });
+    showNotification('Main prompt copied to variation', 'info');
   };
 
   const handleUpdateVariation = (variationId: string, updates: Partial<Variation>) => {
@@ -405,21 +518,19 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
   };
 
   // Image Generation - Single
-  const handleGenerateSingle = async (prompt: string, orientation: 'vertical' | 'landscape' | 'both') => {
+  const handleGenerateSingle = async (variation: Variation) => {
     setGenerating(true);
     setGenerationProgress('Starting image generation...');
     log('Starting single image generation...', LogStatus.WORKING);
 
     try {
-      const size = orientation === 'vertical' ? '1024x1792' :
-                   orientation === 'landscape' ? '1792x1024' : '1024x1024';
+      const size = variation.orientation === 'vertical' ? '1024x1792' :
+                   variation.orientation === 'landscape' ? '1792x1024' : '1024x1024';
 
-      const fullPrompt = activeAvatar?.mainPrompt
-        ? `${activeAvatar.mainPrompt}\n\n${prompt}`
-        : prompt;
+      const fullPrompt = buildFinalPrompt(activeAvatar?.mainPrompt || '', variation.prompt);
 
       setGenerationProgress('Generating image with AI...');
-      log(`Generating ${orientation} image...`, LogStatus.WORKING);
+      log(`Generating ${variation.orientation} image for "${variation.name}"...`, LogStatus.WORKING);
 
       const res = await fetch('/api/image-creation/generate-with-reference', {
         method: 'POST',
@@ -434,13 +545,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
       const data = await res.json();
 
       if (data.success && data.image?.url) {
-        // Add to bank
         const newBankImage: BankImage = {
           id: `img-${Date.now()}`,
           url: data.image.url,
-          variation: activeVariationId ? (activeAvatar?.variations.find(v => v.id === activeVariationId)?.name || 'single') : 'single',
-          variationId: activeVariationId || '',
-          orientation,
+          variation: variation.name,
+          variationId: variation.id,
+          orientation: variation.orientation,
           prompt: fullPrompt,
           createdAt: new Date().toISOString(),
           used: false
@@ -451,7 +561,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
         });
 
         setGenerationProgress('');
-        log('Image generated successfully!', LogStatus.SUCCESS);
+        log(`Image generated successfully for "${variation.name}"!`, LogStatus.SUCCESS);
         showNotification('Image generated and added to bank!', 'success');
       } else {
         const errorMsg = data.error || 'Generation failed - no image returned';
@@ -481,20 +591,23 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
     const totalImages = variationsToGenerate.length * batchQuantity;
 
     setGenerationProgress(`Starting batch generation of ${totalImages} images...`);
-    log(`Starting batch generation: ${totalImages} images (${variationsToGenerate.length} variations x ${batchQuantity} each)`, LogStatus.WORKING);
+    log(`Starting batch generation: ${totalImages} images`, LogStatus.WORKING);
 
     try {
+      // Build prompts with main prompt + variation
+      const variationsWithFullPrompt = variationsToGenerate.map(v => ({
+        id: v.id,
+        name: v.name,
+        prompt: buildFinalPrompt(activeAvatar.mainPrompt, v.prompt),
+        orientation: v.orientation
+      }));
+
       const res = await fetch('/api/image-creation/batch-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mainPrompt: activeAvatar.mainPrompt,
-          variations: variationsToGenerate.map(v => ({
-            id: v.id,
-            name: v.name,
-            prompt: v.prompt,
-            orientation: v.orientation
-          })),
+          mainPrompt: '', // Already included in variation prompts
+          variations: variationsWithFullPrompt,
           referenceImageUrls: settings.reference_images.map(i => i.url).filter(url => !url.startsWith('data:')),
           quantity: batchQuantity
         })
@@ -507,7 +620,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
         const failCount = data.errors?.length || 0;
 
         if (successCount > 0) {
-          // Add to bank
           const newBankImages: BankImage[] = data.images.map((img: any) => ({
             id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             url: img.url,
@@ -524,8 +636,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
           });
 
           setGenerationProgress('');
-          log(`Batch complete: ${successCount} generated, ${failCount} failed`, successCount > 0 ? LogStatus.SUCCESS : LogStatus.ERROR);
-          showNotification(`Generated ${successCount} images${failCount > 0 ? ` (${failCount} failed)` : ''}!`, 'success');
+          log(`Batch complete: ${successCount} generated, ${failCount} failed`, LogStatus.SUCCESS);
+          showNotification(`Generated ${successCount} images!`, 'success');
         } else {
           setGenerationProgress('');
           log('Batch generation failed - no images returned', LogStatus.ERROR);
@@ -568,6 +680,28 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
     );
     updateSettings({ image_bank: newBank });
     showNotification('Image restored to available', 'info');
+  };
+
+  // Variation Order Handlers
+  const handleSetVariationOrder = (variationId: string) => {
+    const currentOrder = settings.manual_variation_order || [];
+    if (currentOrder.includes(variationId)) {
+      // Remove from order
+      updateSettings({ manual_variation_order: currentOrder.filter(id => id !== variationId) });
+    } else {
+      // Add to order
+      updateSettings({ manual_variation_order: [...currentOrder, variationId] });
+    }
+  };
+
+  const getVariationOrderNumber = (variationId: string): number | null => {
+    const order = settings.manual_variation_order || [];
+    const index = order.indexOf(variationId);
+    return index >= 0 ? index + 1 : null;
+  };
+
+  const clearVariationOrder = () => {
+    updateSettings({ manual_variation_order: [] });
   };
 
   // Toggle variation selection for batch
@@ -658,7 +792,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                     </svg>
-                    Upload Images
+                    Upload
                   </button>
                   <input
                     ref={fileInputRef}
@@ -680,20 +814,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                     }}
                   />
                 </div>
-
                 {settings.reference_images.length > 0 ? (
                   <div className="grid grid-cols-4 gap-2">
                     {settings.reference_images.map((img, idx) => (
                       <div key={idx} className="relative group">
-                        <img
-                          src={img.url}
-                          alt={img.filename || `Reference ${idx + 1}`}
-                          className="w-full h-24 object-cover rounded border border-brand-gold/30"
-                        />
-                        <button
-                          onClick={() => handleRemoveReference(idx)}
-                          className="absolute top-1 right-1 p-1 bg-red-600/80 rounded opacity-0 group-hover:opacity-100 transition"
-                        >
+                        <img src={img.url} alt={img.filename || `Ref ${idx + 1}`} className="w-full h-24 object-cover rounded border border-brand-gold/30" />
+                        <button onClick={() => handleRemoveReference(idx)} className="absolute top-1 right-1 p-1 bg-red-600/80 rounded opacity-0 group-hover:opacity-100 transition">
                           <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                           </svg>
@@ -702,7 +828,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-brand-gold/50 py-4">No reference images yet. Upload images or add URLs to build your Style DNA.</p>
+                  <p className="text-center text-brand-gold/50 py-4">No reference images yet.</p>
                 )}
               </div>
             )}
@@ -712,40 +838,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
           <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-brand-gold font-semibold">Audience Avatars</h3>
-              <button
-                onClick={handleAddAvatar}
-                className="text-brand-cyan hover:text-brand-cyan-light text-sm font-medium transition"
-              >
-                + Add Avatar
-              </button>
+              <button onClick={handleAddAvatar} className="text-brand-cyan hover:text-brand-cyan-light text-sm font-medium transition">+ Add Avatar</button>
             </div>
 
-            {/* Avatar Tabs */}
             <div className="flex flex-wrap gap-2 mb-4">
               {settings.audience_avatars.map((avatar) => (
                 <button
                   key={avatar.id}
                   onClick={() => setActiveAvatarId(avatar.id)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
-                    activeAvatarId === avatar.id
-                      ? 'bg-brand-gold text-slate-900'
-                      : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${activeAvatarId === avatar.id ? 'bg-brand-gold text-slate-900' : 'bg-slate-800 text-brand-gold hover:bg-slate-700'}`}
                 >
                   <span>{avatar.name}</span>
                   {settings.audience_avatars.length > 1 && (
-                    <span
-                      onClick={(e) => { e.stopPropagation(); handleRemoveAvatar(avatar.id); }}
-                      className="hover:text-red-500 cursor-pointer"
-                    >
-                      &times;
-                    </span>
+                    <span onClick={(e) => { e.stopPropagation(); handleRemoveAvatar(avatar.id); }} className="hover:text-red-500 cursor-pointer">&times;</span>
                   )}
                 </button>
               ))}
             </div>
 
-            {/* Active Avatar Editor */}
             {activeAvatar && (
               <div className="space-y-3">
                 <div>
@@ -755,31 +865,44 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                     value={activeAvatar.name}
                     onChange={(e) => handleUpdateAvatar(activeAvatar.id, { name: e.target.value })}
                     className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm"
-                    placeholder="e.g., House Cleaning, Janitorial, Construction"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-brand-gold/70 mb-1">Main Prompt (base for all variations)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs text-brand-gold/70">Main Prompt (use {'{variation}'} to mark where variation text goes)</label>
+                    <button onClick={insertVariationPlaceholder} className="text-xs text-brand-cyan hover:text-brand-cyan-light">+ Insert {'{variation}'}</button>
+                  </div>
                   <textarea
+                    ref={mainPromptRef}
                     value={activeAvatar.mainPrompt}
                     onChange={(e) => handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value })}
                     rows={3}
                     className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y"
-                    placeholder="Professional cleaning photo, bright natural lighting, modern residential setting..."
+                    placeholder="Professional cleaning photo, {variation}, bright natural lighting..."
                   />
+                  {/* Variation Tags to insert */}
+                  {activeAvatar.variations.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      <span className="text-xs text-brand-gold/50">Click to insert:</span>
+                      {activeAvatar.variations.map(v => (
+                        <button
+                          key={v.id}
+                          onClick={() => insertVariationTag(v.name)}
+                          className="px-2 py-0.5 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 rounded text-purple-300 text-xs transition"
+                        >
+                          {`{${v.name}}`}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Variations */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-xs text-brand-gold/70">Variations</label>
-                    <button
-                      onClick={handleAddVariation}
-                      className="text-brand-cyan hover:text-brand-cyan-light text-xs font-medium transition"
-                    >
-                      + Add Variation
-                    </button>
+                    <button onClick={handleAddVariation} className="text-brand-cyan hover:text-brand-cyan-light text-xs font-medium transition">+ Add Variation</button>
                   </div>
 
                   <div className="flex flex-wrap gap-2 mb-3">
@@ -787,11 +910,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                       <button
                         key={v.id}
                         onClick={() => setActiveVariationId(activeVariationId === v.id ? null : v.id)}
-                        className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-                          activeVariationId === v.id
-                            ? 'bg-brand-cyan text-slate-900'
-                            : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
-                        }`}
+                        className={`px-3 py-1.5 rounded text-xs font-medium transition ${activeVariationId === v.id ? 'bg-brand-cyan text-slate-900' : 'bg-slate-800 text-brand-gold hover:bg-slate-700'}`}
                       >
                         {v.name} ({v.orientation === 'vertical' ? 'V' : v.orientation === 'landscape' ? 'L' : 'B'})
                       </button>
@@ -809,7 +928,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                             value={variation.name}
                             onChange={(e) => handleUpdateVariation(variation.id, { name: e.target.value })}
                             className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-2 py-1.5 text-white text-sm"
-                            placeholder="Variation name (e.g., sink, stove, bathroom)"
                           />
                           <select
                             value={variation.orientation}
@@ -820,10 +938,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                             <option value="vertical">Vertical</option>
                             <option value="both">Both</option>
                           </select>
-                          <button
-                            onClick={() => handleRemoveVariation(variation.id)}
-                            className="p-1.5 bg-red-600/50 hover:bg-red-600 rounded text-white transition"
-                          >
+                          <button onClick={() => handleCopyMainToVariation(variation.id)} className="px-2 py-1.5 bg-purple-600/50 hover:bg-purple-600 rounded text-white text-xs transition" title="Copy main prompt">
+                            Copy Main
+                          </button>
+                          <button onClick={() => handleRemoveVariation(variation.id)} className="p-1.5 bg-red-600/50 hover:bg-red-600 rounded text-white transition">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
@@ -834,10 +952,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                           onChange={(e) => handleUpdateVariation(variation.id, { prompt: e.target.value })}
                           rows={2}
                           className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y"
-                          placeholder="Variation-specific prompt (e.g., person cleaning kitchen sink with microfiber cloth)"
+                          placeholder="Variation-specific text (e.g., person cleaning kitchen sink)"
                         />
+                        <div className="text-xs text-brand-gold/50 bg-slate-900/50 p-2 rounded">
+                          <strong>Preview:</strong> {buildFinalPrompt(activeAvatar.mainPrompt, variation.prompt).substring(0, 100)}...
+                        </div>
                         <button
-                          onClick={() => handleGenerateSingle(variation.prompt, variation.orientation === 'both' ? 'landscape' : variation.orientation)}
+                          onClick={() => handleGenerateSingle(variation)}
                           disabled={generating}
                           className="w-full py-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded text-white text-sm font-medium transition"
                         >
@@ -870,32 +991,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
 
             {isChatOpen && (
               <div className="border-t border-brand-gold/30">
-                <div
-                  ref={chatContainerRef}
-                  className="h-64 overflow-y-auto p-4 space-y-3"
-                >
+                <div ref={chatContainerRef} className="h-64 overflow-y-auto p-4 space-y-3">
                   {settings.chat_history.length === 0 ? (
-                    <p className="text-center text-brand-gold/50 py-8">
-                      Chat with the AI to help craft your image prompts. You can paste images for analysis.
-                    </p>
+                    <p className="text-center text-brand-gold/50 py-8">Chat with AI to help craft prompts.</p>
                   ) : (
                     settings.chat_history.map((msg, idx) => (
-                      <div
-                        key={idx}
-                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div
-                          className={`max-w-[80%] rounded-lg p-3 ${
-                            msg.role === 'user'
-                              ? 'bg-brand-cyan/20 border border-brand-cyan/50'
-                              : 'bg-slate-800 border border-brand-gold/30'
-                          }`}
-                        >
+                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-brand-cyan/20 border border-brand-cyan/50' : 'bg-slate-800 border border-brand-gold/30'}`}>
                           {msg.images && msg.images.length > 0 && (
                             <div className="flex gap-2 mb-2">
-                              {msg.images.map((img, i) => (
-                                <img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />
-                              ))}
+                              {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
                             </div>
                           )}
                           <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
@@ -915,56 +1020,23 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                     </div>
                   )}
                 </div>
-
                 {chatImages.length > 0 && (
                   <div className="px-4 py-2 border-t border-brand-gold/30 flex gap-2">
                     {chatImages.map((img, idx) => (
                       <div key={idx} className="relative">
                         <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
-                        <button
-                          onClick={() => setChatImages(chatImages.filter((_, i) => i !== idx))}
-                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs"
-                        >
-                          &times;
-                        </button>
+                        <button onClick={() => setChatImages(chatImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
                       </div>
                     ))}
                   </div>
                 )}
-
                 <div className="p-4 border-t border-brand-gold/30 flex gap-2">
-                  <button
-                    onClick={() => chatFileInputRef.current?.click()}
-                    className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-brand-gold transition"
-                    title="Attach Image"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                    </svg>
+                  <button onClick={() => chatFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-brand-gold transition" title="Attach Image">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   </button>
-                  <input
-                    ref={chatFileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={(e) => handleChatImageUpload(e.target.files)}
-                    className="hidden"
-                  />
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()}
-                    placeholder="Ask about image prompts, paste images for analysis..."
-                    className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm"
-                  />
-                  <button
-                    onClick={handleSendChat}
-                    disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)}
-                    className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 font-medium text-sm transition"
-                  >
-                    Send
-                  </button>
+                  <input ref={chatFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
+                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()} placeholder="Ask about image prompts..." className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm" />
+                  <button onClick={handleSendChat} disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 font-medium text-sm transition">Send</button>
                 </div>
               </div>
             )}
@@ -972,221 +1044,177 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
 
           {/* Batch Generate (Collapsible) */}
           <div className="bg-slate-900 rounded-lg border border-green-500/50 overflow-hidden">
-            <button
-              onClick={() => setIsBatchOpen(!isBatchOpen)}
-              className="w-full flex items-center justify-between p-3 text-green-400 hover:bg-slate-800/50 transition"
-            >
+            <button onClick={() => setIsBatchOpen(!isBatchOpen)} className="w-full flex items-center justify-between p-3 text-green-400 hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
                 Batch Generate Images
               </span>
-              <svg className={`w-5 h-5 transition-transform ${isBatchOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
+              <svg className={`w-5 h-5 transition-transform ${isBatchOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
             </button>
-
             {isBatchOpen && (
               <div className="p-4 border-t border-green-500/30 space-y-3">
                 <div className="flex items-center gap-3">
                   <label className="text-xs text-brand-gold/70">Quantity per variation:</label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="20"
-                    value={batchQuantity}
-                    onChange={(e) => setBatchQuantity(parseInt(e.target.value))}
-                    className="flex-1 accent-green-500"
-                  />
+                  <input type="range" min="1" max="20" value={batchQuantity} onChange={(e) => setBatchQuantity(parseInt(e.target.value))} className="flex-1 accent-green-500" />
                   <span className="text-green-400 font-bold w-8 text-center">{batchQuantity}</span>
                 </div>
-
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs text-brand-gold/70">Select Variations:</label>
-                    <button
-                      onClick={selectAllVariations}
-                      className="text-xs text-brand-cyan hover:text-brand-cyan-light"
-                    >
-                      Select All
-                    </button>
+                    <button onClick={selectAllVariations} className="text-xs text-brand-cyan hover:text-brand-cyan-light">Select All</button>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {activeAvatar?.variations.map((v) => (
-                      <label
-                        key={v.id}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs cursor-pointer transition ${
-                          selectedVariations.has(v.id)
-                            ? 'bg-green-500 text-slate-900'
-                            : 'bg-slate-800 text-brand-gold border border-brand-gold/50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedVariations.has(v.id)}
-                          onChange={() => toggleVariationSelection(v.id)}
-                          className="hidden"
-                        />
+                      <label key={v.id} className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs cursor-pointer transition ${selectedVariations.has(v.id) ? 'bg-green-500 text-slate-900' : 'bg-slate-800 text-brand-gold border border-brand-gold/50'}`}>
+                        <input type="checkbox" checked={selectedVariations.has(v.id)} onChange={() => toggleVariationSelection(v.id)} className="hidden" />
                         {v.name}
                       </label>
                     ))}
                   </div>
                 </div>
-
-                <button
-                  onClick={handleBatchGenerate}
-                  disabled={generating || selectedVariations.size === 0}
-                  className="w-full py-3 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded text-white font-bold transition"
-                >
+                <button onClick={handleBatchGenerate} disabled={generating || selectedVariations.size === 0} className="w-full py-3 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded text-white font-bold transition">
                   {generating ? 'Generating...' : `Generate ${selectedVariations.size * batchQuantity} Images`}
                 </button>
               </div>
             )}
           </div>
 
-          {/* Image Bank (Collapsible) - SEPARATE from batch generate */}
+          {/* Image Bank (Collapsible) */}
           <div className="bg-slate-900 rounded-lg border border-brand-cyan/50 overflow-hidden">
-            <button
-              onClick={() => setIsBankOpen(!isBankOpen)}
-              className="w-full flex items-center justify-between p-3 text-brand-cyan hover:bg-slate-800/50 transition"
-            >
+            <button onClick={() => setIsBankOpen(!isBankOpen)} className="w-full flex items-center justify-between p-3 text-brand-cyan hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                 Image Bank ({availableImages.length} available)
               </span>
-              <svg className={`w-5 h-5 transition-transform ${isBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
+              <svg className={`w-5 h-5 transition-transform ${isBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
             </button>
-
             {isBankOpen && (
               <div className="p-4 border-t border-brand-cyan/30 space-y-3">
-                {/* Filter & Sort Controls */}
                 <div className="flex gap-3 flex-wrap">
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-brand-gold/70">Filter:</label>
-                    <select
-                      value={bankFilter}
-                      onChange={(e) => setBankFilter(e.target.value)}
-                      className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs"
-                    >
+                    <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
                       <option value="all">All Variations</option>
-                      {uniqueVariations.map(v => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
+                      {uniqueVariations.map(v => (<option key={v} value={v}>{v}</option>))}
                     </select>
                   </div>
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-brand-gold/70">Sort:</label>
-                    <select
-                      value={bankSort}
-                      onChange={(e) => setBankSort(e.target.value as any)}
-                      className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs"
-                    >
-                      <option value="newest">Newest First</option>
-                      <option value="oldest">Oldest First</option>
-                      <option value="variation">By Variation</option>
+                    <select value={bankSort} onChange={(e) => setBankSort(e.target.value as any)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
+                      <option value="newest">Newest</option>
+                      <option value="oldest">Oldest</option>
+                      <option value="variation">Variation</option>
                     </select>
                   </div>
                 </div>
-
-                {/* Available Images Grid */}
                 {availableImages.length > 0 ? (
                   <div className="grid grid-cols-4 gap-3">
                     {availableImages.map((img) => (
                       <div key={img.id} className="relative group">
-                        <img
-                          src={img.url}
-                          alt={img.variation}
-                          className="w-full h-24 object-cover rounded border border-brand-cyan/30"
-                        />
+                        <img src={img.url} alt={img.variation} className="w-full h-24 object-cover rounded border border-brand-cyan/30" />
                         <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
                           <span className="text-[10px] text-white font-semibold">{img.variation}</span>
-                          <span className="text-[9px] text-white/70">{img.orientation}</span>
                           <div className="flex gap-1">
-                            <button
-                              onClick={() => handleMarkAsUsed(img.id, 'manual')}
-                              className="px-2 py-0.5 bg-green-600/80 rounded text-white text-[10px]"
-                              title="Mark as Used"
-                            >
-                              Used
-                            </button>
-                            <button
-                              onClick={() => handleRemoveFromBank(img.id)}
-                              className="px-2 py-0.5 bg-red-600/80 rounded text-white text-[10px]"
-                            >
-                              Delete
-                            </button>
+                            <button onClick={() => handleMarkAsUsed(img.id, 'manual')} className="px-2 py-0.5 bg-green-600/80 rounded text-white text-[10px]">Used</button>
+                            <button onClick={() => handleRemoveFromBank(img.id)} className="px-2 py-0.5 bg-red-600/80 rounded text-white text-[10px]">Delete</button>
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-brand-gold/50 py-4">No available images. Generate some using Batch Generate above.</p>
+                  <p className="text-center text-brand-gold/50 py-4">No available images.</p>
                 )}
               </div>
             )}
           </div>
 
-          {/* Used/Archive Section (Collapsible) */}
+          {/* Used/Archive (Collapsible) */}
           <div className="bg-slate-900 rounded-lg border border-purple-500/50 overflow-hidden">
-            <button
-              onClick={() => setIsUsedOpen(!isUsedOpen)}
-              className="w-full flex items-center justify-between p-3 text-purple-400 hover:bg-slate-800/50 transition"
-            >
+            <button onClick={() => setIsUsedOpen(!isUsedOpen)} className="w-full flex items-center justify-between p-3 text-purple-400 hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                </svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
                 Used/Archive ({usedImages.length})
               </span>
-              <svg className={`w-5 h-5 transition-transform ${isUsedOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
+              <svg className={`w-5 h-5 transition-transform ${isUsedOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
             </button>
-
             {isUsedOpen && (
               <div className="p-4 border-t border-purple-500/30 space-y-3">
                 {usedImages.length > 0 ? (
                   <div className="grid grid-cols-4 gap-3">
                     {usedImages.map((img) => (
                       <div key={img.id} className="relative group">
-                        <img
-                          src={img.url}
-                          alt={img.variation}
-                          className="w-full h-24 object-cover rounded border border-purple-500/30 opacity-70"
-                        />
-                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-purple-600/90 rounded text-[9px] text-white">
-                          USED
-                        </div>
+                        <img src={img.url} alt={img.variation} className="w-full h-24 object-cover rounded border border-purple-500/30 opacity-70" />
+                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-purple-600/90 rounded text-[9px] text-white">USED</div>
                         <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
                           <span className="text-[10px] text-white font-semibold">{img.variation}</span>
-                          {img.usedOn && (
-                            <a
-                              href={img.usedOn}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[9px] text-brand-cyan underline"
-                            >
-                              View Page
-                            </a>
-                          )}
-                          <button
-                            onClick={() => handleRestoreFromUsed(img.id)}
-                            className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium"
-                          >
-                            Restore
-                          </button>
+                          {img.usedOn && <a href={img.usedOn} target="_blank" rel="noopener noreferrer" className="text-[9px] text-brand-cyan underline">View Page</a>}
+                          <button onClick={() => handleRestoreFromUsed(img.id)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Restore</button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-brand-gold/50 py-4">No used images yet. Images will appear here after being used on pages.</p>
+                  <p className="text-center text-brand-gold/50 py-4">No used images.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Variation Order for Page Integration (Collapsible) */}
+          <div className="bg-slate-900 rounded-lg border border-orange-500/50 overflow-hidden">
+            <button onClick={() => setIsOrderOpen(!isOrderOpen)} className="w-full flex items-center justify-between p-3 text-orange-400 hover:bg-slate-800/50 transition">
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                Variation Order ({settings.manual_variation_order?.length || 0} set)
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isOrderOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isOrderOpen && (
+              <div className="p-4 border-t border-orange-500/30 space-y-3">
+                <p className="text-xs text-brand-gold/70">Click variations in the order you want them used on pages. Each page gets unique variations.</p>
+
+                <div className="flex items-center gap-3 mb-2">
+                  <label className="text-xs text-brand-gold/70">Mode:</label>
+                  <select
+                    value={settings.variation_order_mode || 'sequential'}
+                    onChange={(e) => updateSettings({ variation_order_mode: e.target.value as any })}
+                    className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs"
+                  >
+                    <option value="sequential">Sequential (1, 2, 3...)</option>
+                    <option value="random">Random (no duplicates)</option>
+                    <option value="manual">Manual Order Below</option>
+                  </select>
+                  {settings.variation_order_mode === 'manual' && (
+                    <button onClick={clearVariationOrder} className="text-xs text-red-400 hover:text-red-300">Clear Order</button>
+                  )}
+                </div>
+
+                {settings.variation_order_mode === 'manual' && (
+                  <div className="flex flex-wrap gap-2">
+                    {activeAvatar?.variations.map((v) => {
+                      const orderNum = getVariationOrderNumber(v.id);
+                      return (
+                        <button
+                          key={v.id}
+                          onClick={() => handleSetVariationOrder(v.id)}
+                          className={`relative px-3 py-1.5 rounded text-xs font-medium transition ${orderNum ? 'bg-orange-500 text-slate-900' : 'bg-slate-800 text-brand-gold border border-brand-gold/50 hover:bg-slate-700'}`}
+                        >
+                          {orderNum && <span className="absolute -top-2 -left-2 w-5 h-5 bg-orange-700 text-white rounded-full text-[10px] flex items-center justify-center">{orderNum}</span>}
+                          {v.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {settings.manual_variation_order && settings.manual_variation_order.length > 0 && settings.variation_order_mode === 'manual' && (
+                  <div className="text-xs text-orange-300 bg-orange-900/30 p-2 rounded">
+                    Order: {settings.manual_variation_order.map((id, idx) => {
+                      const v = activeAvatar?.variations.find(v => v.id === id);
+                      return v ? `${idx + 1}. ${v.name}` : '';
+                    }).filter(Boolean).join(' → ')}
+                  </div>
                 )}
               </div>
             )}
@@ -1197,32 +1225,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
             <h3 className="text-brand-gold font-semibold mb-3">Page Integration</h3>
             <div className="flex flex-wrap items-center gap-4">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="integration_mode"
-                  checked={settings.integration_mode === 'bank'}
-                  onChange={() => updateSettings({ integration_mode: 'bank' })}
-                  className="accent-brand-gold"
-                />
+                <input type="radio" name="integration_mode" checked={settings.integration_mode === 'bank'} onChange={() => updateSettings({ integration_mode: 'bank' })} className="accent-brand-gold" />
                 <span className="text-sm text-white">Pull from Bank</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="integration_mode"
-                  checked={settings.integration_mode === 'live'}
-                  onChange={() => updateSettings({ integration_mode: 'live' })}
-                  className="accent-brand-gold"
-                />
+                <input type="radio" name="integration_mode" checked={settings.integration_mode === 'live'} onChange={() => updateSettings({ integration_mode: 'live' })} className="accent-brand-gold" />
                 <span className="text-sm text-white">Generate Live</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer ml-4">
-                <input
-                  type="checkbox"
-                  checked={settings.fallback_to_live}
-                  onChange={(e) => updateSettings({ fallback_to_live: e.target.checked })}
-                  className="w-4 h-4 rounded border-brand-gold text-brand-gold focus:ring-brand-gold bg-slate-900"
-                />
+                <input type="checkbox" checked={settings.fallback_to_live} onChange={(e) => updateSettings({ fallback_to_live: e.target.checked })} className="w-4 h-4 rounded border-brand-gold text-brand-gold focus:ring-brand-gold bg-slate-900" />
                 <span className="text-sm text-brand-gold/70">Generate if bank empty</span>
               </label>
             </div>
@@ -1230,7 +1241,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
         </>
       )}
 
-      {/* Saving Indicator */}
       {saving && (
         <div className="fixed bottom-4 right-4 bg-brand-cyan text-slate-900 px-4 py-2 rounded-lg shadow-lg text-sm font-medium">
           Saving...
