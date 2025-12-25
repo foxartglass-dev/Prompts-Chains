@@ -18,6 +18,18 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+        // 5 minute timeout for long-running AI requests
+        timeout: 300000,
+        proxyTimeout: 300000,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            // Extend socket timeout for AI requests
+            proxyReq.socket?.setTimeout(300000);
+          });
+          proxy.on('error', (err, req, res) => {
+            console.error('Proxy error:', err.message);
+          });
+        },
       },
     },
   },
