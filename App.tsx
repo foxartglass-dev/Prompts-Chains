@@ -2802,6 +2802,7 @@ const App: React.FC = () => {
                         <ImageCreationSection
                             workflowId={currentWorkflowId}
                             showNotification={showNotification}
+                            addLog={addLog}
                         />
                     )}
 

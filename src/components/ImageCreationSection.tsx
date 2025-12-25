@@ -7,11 +7,14 @@
  * - Audience avatars with main prompts + variations
  * - Chat interface with GPT-4o for prompt refinement
  * - Main prompt + variation buttons system
- * - Pre-made image bank with batch generation
+ * - Batch Generate section (collapsible)
+ * - Image Bank section (separate, with sorting/filtering)
+ * - Used/Archive section with page links
  * - Page integration controls (live vs bank)
+ * - Processing Log integration
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // Types
 interface ReferenceImage {
@@ -43,6 +46,9 @@ interface BankImage {
   orientation: string;
   prompt: string;
   createdAt: string;
+  used?: boolean;
+  usedOn?: string; // Page URL where image was used
+  usedAt?: string; // Timestamp when used
 }
 
 interface ChatMessage {
@@ -64,10 +70,19 @@ interface ImageCreationSettings {
   image_order: string[];
 }
 
+// Log status enum matching App.tsx
+enum LogStatus {
+  INFO = 'INFO',
+  SUCCESS = 'SUCCESS',
+  ERROR = 'ERROR',
+  WORKING = 'WORKING',
+}
+
 interface Props {
   workflowId?: number;
   onSettingsChange?: (settings: ImageCreationSettings) => void;
   showNotification: (message: string, type: 'success' | 'info' | 'error') => void;
+  addLog?: (message: string, status: LogStatus) => void;
 }
 
 const DEFAULT_SETTINGS: ImageCreationSettings = {
@@ -91,7 +106,7 @@ const AVAILABLE_MODELS = [
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google' }
 ];
 
-const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, showNotification }) => {
+const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, showNotification, addLog }) => {
   // State
   const [settings, setSettings] = useState<ImageCreationSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(false);
@@ -100,7 +115,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
   // Collapsible sections
   const [isReferenceOpen, setIsReferenceOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isBankOpen, setIsBankOpen] = useState(false);
+  const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const [isBankOpen, setIsBankOpen] = useState(true);
+  const [isUsedOpen, setIsUsedOpen] = useState(false);
 
   // Active avatar
   const [activeAvatarId, setActiveAvatarId] = useState<number>(1);
@@ -114,12 +131,25 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
 
   // Image generation
   const [generating, setGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<string>('');
   const [batchQuantity, setBatchQuantity] = useState(1);
   const [selectedVariations, setSelectedVariations] = useState<Set<string>>(new Set());
+
+  // Bank filtering
+  const [bankFilter, setBankFilter] = useState<string>('all'); // 'all' or variation name
+  const [bankSort, setBankSort] = useState<'newest' | 'oldest' | 'variation'>('newest');
 
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Helper: Log to Processing Log
+  const log = (message: string, status: LogStatus) => {
+    if (addLog) {
+      addLog(`[Image Creation] ${message}`, status);
+    }
+    console.log(`[Image Creation] ${status}: ${message}`);
+  };
 
   // Load settings when workflowId changes
   useEffect(() => {
@@ -168,7 +198,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
       }
     } catch (error) {
       console.error('Failed to save settings:', error);
-      showNotification('Failed to save image settings', 'error');
     }
     setSaving(false);
   };
@@ -181,6 +210,37 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
 
   // Get active avatar
   const activeAvatar = settings.audience_avatars.find(a => a.id === activeAvatarId) || settings.audience_avatars[0];
+
+  // Get unique variations for filtering
+  const uniqueVariations = [...new Set(settings.image_bank.map(img => img.variation))];
+
+  // Filter and sort bank images
+  const getFilteredBankImages = (includeUsed: boolean) => {
+    let images = settings.image_bank.filter(img => includeUsed ? img.used : !img.used);
+
+    // Apply variation filter
+    if (bankFilter !== 'all') {
+      images = images.filter(img => img.variation === bankFilter);
+    }
+
+    // Apply sort
+    switch (bankSort) {
+      case 'newest':
+        images.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        break;
+      case 'oldest':
+        images.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        break;
+      case 'variation':
+        images.sort((a, b) => a.variation.localeCompare(b.variation));
+        break;
+    }
+
+    return images;
+  };
+
+  const availableImages = getFilteredBankImages(false);
+  const usedImages = getFilteredBankImages(true);
 
   // Reference Images Handlers
   const handleUploadReference = async (files: FileList | null) => {
@@ -344,9 +404,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
     setChatImages([...chatImages, ...newImages].slice(0, 4));
   };
 
-  // Image Generation
+  // Image Generation - Single
   const handleGenerateSingle = async (prompt: string, orientation: 'vertical' | 'landscape' | 'both') => {
     setGenerating(true);
+    setGenerationProgress('Starting image generation...');
+    log('Starting single image generation...', LogStatus.WORKING);
+
     try {
       const size = orientation === 'vertical' ? '1024x1792' :
                    orientation === 'landscape' ? '1792x1024' : '1024x1024';
@@ -355,42 +418,58 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
         ? `${activeAvatar.mainPrompt}\n\n${prompt}`
         : prompt;
 
+      setGenerationProgress('Generating image with AI...');
+      log(`Generating ${orientation} image...`, LogStatus.WORKING);
+
       const res = await fetch('/api/image-creation/generate-with-reference', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: fullPrompt,
-          referenceImageUrls: settings.reference_images.map(i => i.url),
+          referenceImageUrls: settings.reference_images.map(i => i.url).filter(url => !url.startsWith('data:')),
           size
         })
       });
 
       const data = await res.json();
-      if (data.success) {
-        showNotification('Image generated!', 'success');
+
+      if (data.success && data.image?.url) {
         // Add to bank
         const newBankImage: BankImage = {
           id: `img-${Date.now()}`,
           url: data.image.url,
-          variation: 'single',
-          variationId: '',
+          variation: activeVariationId ? (activeAvatar?.variations.find(v => v.id === activeVariationId)?.name || 'single') : 'single',
+          variationId: activeVariationId || '',
           orientation,
           prompt: fullPrompt,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          used: false
         };
+
         updateSettings({
           image_bank: [...settings.image_bank, newBankImage]
         });
+
+        setGenerationProgress('');
+        log('Image generated successfully!', LogStatus.SUCCESS);
+        showNotification('Image generated and added to bank!', 'success');
       } else {
-        showNotification(data.error || 'Generation failed', 'error');
+        const errorMsg = data.error || 'Generation failed - no image returned';
+        setGenerationProgress('');
+        log(`Generation failed: ${errorMsg}`, LogStatus.ERROR);
+        showNotification(errorMsg, 'error');
       }
-    } catch (error) {
-      console.error('Generation error:', error);
-      showNotification('Failed to generate image', 'error');
+    } catch (error: any) {
+      const errorMsg = error.message || 'Failed to generate image';
+      setGenerationProgress('');
+      log(`Generation error: ${errorMsg}`, LogStatus.ERROR);
+      showNotification(errorMsg, 'error');
     }
+
     setGenerating(false);
   };
 
+  // Image Generation - Batch
   const handleBatchGenerate = async () => {
     if (!activeAvatar || selectedVariations.size === 0) {
       showNotification('Select variations to generate', 'error');
@@ -399,6 +478,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
 
     setGenerating(true);
     const variationsToGenerate = activeAvatar.variations.filter(v => selectedVariations.has(v.id));
+    const totalImages = variationsToGenerate.length * batchQuantity;
+
+    setGenerationProgress(`Starting batch generation of ${totalImages} images...`);
+    log(`Starting batch generation: ${totalImages} images (${variationsToGenerate.length} variations x ${batchQuantity} each)`, LogStatus.WORKING);
 
     try {
       const res = await fetch('/api/image-creation/batch-generate', {
@@ -412,42 +495,79 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
             prompt: v.prompt,
             orientation: v.orientation
           })),
-          referenceImageUrls: settings.reference_images.map(i => i.url),
+          referenceImageUrls: settings.reference_images.map(i => i.url).filter(url => !url.startsWith('data:')),
           quantity: batchQuantity
         })
       });
 
       const data = await res.json();
+
       if (data.success) {
-        // Add to bank
-        const newBankImages: BankImage[] = data.images.map((img: any) => ({
-          id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          url: img.url,
-          variation: img.variation,
-          variationId: img.variationId,
-          orientation: img.orientation,
-          prompt: img.prompt,
-          createdAt: new Date().toISOString()
-        }));
+        const successCount = data.images?.length || 0;
+        const failCount = data.errors?.length || 0;
 
-        updateSettings({
-          image_bank: [...settings.image_bank, ...newBankImages]
-        });
+        if (successCount > 0) {
+          // Add to bank
+          const newBankImages: BankImage[] = data.images.map((img: any) => ({
+            id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            url: img.url,
+            variation: img.variation,
+            variationId: img.variationId,
+            orientation: img.orientation,
+            prompt: img.prompt,
+            createdAt: new Date().toISOString(),
+            used: false
+          }));
 
-        showNotification(`Generated ${data.total} images (${data.failed} failed)`, 'success');
+          updateSettings({
+            image_bank: [...settings.image_bank, ...newBankImages]
+          });
+
+          setGenerationProgress('');
+          log(`Batch complete: ${successCount} generated, ${failCount} failed`, successCount > 0 ? LogStatus.SUCCESS : LogStatus.ERROR);
+          showNotification(`Generated ${successCount} images${failCount > 0 ? ` (${failCount} failed)` : ''}!`, 'success');
+        } else {
+          setGenerationProgress('');
+          log('Batch generation failed - no images returned', LogStatus.ERROR);
+          showNotification('Generation failed - no images returned', 'error');
+        }
       } else {
-        showNotification(data.error || 'Batch generation failed', 'error');
+        const errorMsg = data.error || 'Batch generation failed';
+        setGenerationProgress('');
+        log(`Batch failed: ${errorMsg}`, LogStatus.ERROR);
+        showNotification(errorMsg, 'error');
       }
-    } catch (error) {
-      console.error('Batch generation error:', error);
-      showNotification('Failed to generate batch', 'error');
+    } catch (error: any) {
+      const errorMsg = error.message || 'Failed to generate batch';
+      setGenerationProgress('');
+      log(`Batch error: ${errorMsg}`, LogStatus.ERROR);
+      showNotification(errorMsg, 'error');
     }
+
     setGenerating(false);
   };
 
-  const handleRemoveFromBank = async (imageId: string) => {
+  // Bank Management
+  const handleRemoveFromBank = (imageId: string) => {
     const newBank = settings.image_bank.filter(i => i.id !== imageId);
     updateSettings({ image_bank: newBank });
+    showNotification('Image removed from bank', 'info');
+  };
+
+  const handleMarkAsUsed = (imageId: string, pageUrl: string) => {
+    const newBank = settings.image_bank.map(img =>
+      img.id === imageId ? { ...img, used: true, usedOn: pageUrl, usedAt: new Date().toISOString() } : img
+    );
+    updateSettings({ image_bank: newBank });
+    log(`Image marked as used on: ${pageUrl}`, LogStatus.INFO);
+  };
+
+  const handleRestoreFromUsed = (imageId: string) => {
+    const newBank = settings.image_bank.map(img =>
+      img.id === imageId ? { ...img, used: false, usedOn: undefined, usedAt: undefined } : img
+    );
+    updateSettings({ image_bank: newBank });
+    showNotification('Image restored to available', 'info');
   };
 
   // Toggle variation selection for batch
@@ -501,6 +621,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
         </div>
       </div>
 
+      {/* Generation Progress */}
+      {generating && generationProgress && (
+        <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-3 flex items-center gap-3">
+          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-yellow-500"></div>
+          <span className="text-yellow-400 text-sm">{generationProgress}</span>
+        </div>
+      )}
+
       {settings.enabled && (
         <>
           {/* Reference Images (Collapsible) */}
@@ -522,7 +650,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
 
             {isReferenceOpen && (
               <div className="p-4 border-t border-brand-gold/30 space-y-3">
-                {/* Upload Controls */}
                 <div className="flex gap-2">
                   <button
                     onClick={() => fileInputRef.current?.click()}
@@ -554,7 +681,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                   />
                 </div>
 
-                {/* Image Grid */}
                 {settings.reference_images.length > 0 ? (
                   <div className="grid grid-cols-4 gap-2">
                     {settings.reference_images.map((img, idx) => (
@@ -622,7 +748,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
             {/* Active Avatar Editor */}
             {activeAvatar && (
               <div className="space-y-3">
-                {/* Avatar Name */}
                 <div>
                   <label className="block text-xs text-brand-gold/70 mb-1">Avatar Name</label>
                   <input
@@ -634,7 +759,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                   />
                 </div>
 
-                {/* Main Prompt */}
                 <div>
                   <label className="block text-xs text-brand-gold/70 mb-1">Main Prompt (base for all variations)</label>
                   <textarea
@@ -658,7 +782,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                     </button>
                   </div>
 
-                  {/* Variation Buttons */}
                   <div className="flex flex-wrap gap-2 mb-3">
                     {activeAvatar.variations.map((v) => (
                       <button
@@ -675,7 +798,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                     ))}
                   </div>
 
-                  {/* Active Variation Editor */}
                   {activeVariationId && (() => {
                     const variation = activeAvatar.variations.find(v => v.id === activeVariationId);
                     if (!variation) return null;
@@ -748,7 +870,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
 
             {isChatOpen && (
               <div className="border-t border-brand-gold/30">
-                {/* Chat Messages */}
                 <div
                   ref={chatContainerRef}
                   className="h-64 overflow-y-auto p-4 space-y-3"
@@ -795,7 +916,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                   )}
                 </div>
 
-                {/* Chat Image Preview */}
                 {chatImages.length > 0 && (
                   <div className="px-4 py-2 border-t border-brand-gold/30 flex gap-2">
                     {chatImages.map((img, idx) => (
@@ -812,7 +932,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                   </div>
                 )}
 
-                {/* Chat Input */}
                 <div className="p-4 border-t border-brand-gold/30 flex gap-2">
                   <button
                     onClick={() => chatFileInputRef.current?.click()}
@@ -851,17 +970,92 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
             )}
           </div>
 
-          {/* Pre-made Image Bank (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-brand-gold/50 overflow-hidden">
+          {/* Batch Generate (Collapsible) */}
+          <div className="bg-slate-900 rounded-lg border border-green-500/50 overflow-hidden">
             <button
-              onClick={() => setIsBankOpen(!isBankOpen)}
-              className="w-full flex items-center justify-between p-3 text-brand-gold hover:bg-slate-800/50 transition"
+              onClick={() => setIsBatchOpen(!isBatchOpen)}
+              className="w-full flex items-center justify-between p-3 text-green-400 hover:bg-slate-800/50 transition"
             >
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
-                Pre-made Image Bank ({settings.image_bank.length})
+                Batch Generate Images
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isBatchOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {isBatchOpen && (
+              <div className="p-4 border-t border-green-500/30 space-y-3">
+                <div className="flex items-center gap-3">
+                  <label className="text-xs text-brand-gold/70">Quantity per variation:</label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="20"
+                    value={batchQuantity}
+                    onChange={(e) => setBatchQuantity(parseInt(e.target.value))}
+                    className="flex-1 accent-green-500"
+                  />
+                  <span className="text-green-400 font-bold w-8 text-center">{batchQuantity}</span>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs text-brand-gold/70">Select Variations:</label>
+                    <button
+                      onClick={selectAllVariations}
+                      className="text-xs text-brand-cyan hover:text-brand-cyan-light"
+                    >
+                      Select All
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {activeAvatar?.variations.map((v) => (
+                      <label
+                        key={v.id}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs cursor-pointer transition ${
+                          selectedVariations.has(v.id)
+                            ? 'bg-green-500 text-slate-900'
+                            : 'bg-slate-800 text-brand-gold border border-brand-gold/50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedVariations.has(v.id)}
+                          onChange={() => toggleVariationSelection(v.id)}
+                          className="hidden"
+                        />
+                        {v.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleBatchGenerate}
+                  disabled={generating || selectedVariations.size === 0}
+                  className="w-full py-3 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded text-white font-bold transition"
+                >
+                  {generating ? 'Generating...' : `Generate ${selectedVariations.size * batchQuantity} Images`}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Image Bank (Collapsible) - SEPARATE from batch generate */}
+          <div className="bg-slate-900 rounded-lg border border-brand-cyan/50 overflow-hidden">
+            <button
+              onClick={() => setIsBankOpen(!isBankOpen)}
+              className="w-full flex items-center justify-between p-3 text-brand-cyan hover:bg-slate-800/50 transition"
+            >
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Image Bank ({availableImages.length} available)
               </span>
               <svg className={`w-5 h-5 transition-transform ${isBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -869,93 +1063,130 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
             </button>
 
             {isBankOpen && (
-              <div className="p-4 border-t border-brand-gold/30 space-y-4">
-                {/* Batch Generation Controls */}
-                <div className="bg-slate-800 p-3 rounded-lg space-y-3">
-                  <h4 className="text-sm font-semibold text-brand-gold">Batch Generate</h4>
-
-                  {/* Quantity */}
-                  <div className="flex items-center gap-3">
-                    <label className="text-xs text-brand-gold/70">Quantity per variation:</label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="20"
-                      value={batchQuantity}
-                      onChange={(e) => setBatchQuantity(parseInt(e.target.value))}
-                      className="flex-1 accent-brand-gold"
-                    />
-                    <span className="text-brand-gold font-bold w-8 text-center">{batchQuantity}</span>
-                  </div>
-
-                  {/* Variation Selection */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs text-brand-gold/70">Select Variations:</label>
-                      <button
-                        onClick={selectAllVariations}
-                        className="text-xs text-brand-cyan hover:text-brand-cyan-light"
-                      >
-                        Select All
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {activeAvatar?.variations.map((v) => (
-                        <label
-                          key={v.id}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs cursor-pointer transition ${
-                            selectedVariations.has(v.id)
-                              ? 'bg-brand-gold text-slate-900'
-                              : 'bg-slate-900 text-brand-gold border border-brand-gold/50'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedVariations.has(v.id)}
-                            onChange={() => toggleVariationSelection(v.id)}
-                            className="hidden"
-                          />
-                          {v.name}
-                        </label>
+              <div className="p-4 border-t border-brand-cyan/30 space-y-3">
+                {/* Filter & Sort Controls */}
+                <div className="flex gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-brand-gold/70">Filter:</label>
+                    <select
+                      value={bankFilter}
+                      onChange={(e) => setBankFilter(e.target.value)}
+                      className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs"
+                    >
+                      <option value="all">All Variations</option>
+                      {uniqueVariations.map(v => (
+                        <option key={v} value={v}>{v}</option>
                       ))}
-                    </div>
+                    </select>
                   </div>
-
-                  {/* Generate Button */}
-                  <button
-                    onClick={handleBatchGenerate}
-                    disabled={generating || selectedVariations.size === 0}
-                    className="w-full py-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded text-white font-medium transition"
-                  >
-                    {generating ? 'Generating...' : `Generate ${selectedVariations.size * batchQuantity} Images`}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-brand-gold/70">Sort:</label>
+                    <select
+                      value={bankSort}
+                      onChange={(e) => setBankSort(e.target.value as any)}
+                      className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs"
+                    >
+                      <option value="newest">Newest First</option>
+                      <option value="oldest">Oldest First</option>
+                      <option value="variation">By Variation</option>
+                    </select>
+                  </div>
                 </div>
 
-                {/* Image Bank Grid */}
-                {settings.image_bank.length > 0 ? (
+                {/* Available Images Grid */}
+                {availableImages.length > 0 ? (
                   <div className="grid grid-cols-4 gap-3">
-                    {settings.image_bank.map((img) => (
+                    {availableImages.map((img) => (
                       <div key={img.id} className="relative group">
                         <img
                           src={img.url}
                           alt={img.variation}
-                          className="w-full h-24 object-cover rounded border border-brand-gold/30"
+                          className="w-full h-24 object-cover rounded border border-brand-cyan/30"
                         />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-2">
-                          <span className="text-xs text-white text-center mb-1">{img.variation}</span>
-                          <span className="text-[10px] text-white/70">{img.orientation}</span>
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
+                          <span className="text-[10px] text-white font-semibold">{img.variation}</span>
+                          <span className="text-[9px] text-white/70">{img.orientation}</span>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleMarkAsUsed(img.id, 'manual')}
+                              className="px-2 py-0.5 bg-green-600/80 rounded text-white text-[10px]"
+                              title="Mark as Used"
+                            >
+                              Used
+                            </button>
+                            <button
+                              onClick={() => handleRemoveFromBank(img.id)}
+                              className="px-2 py-0.5 bg-red-600/80 rounded text-white text-[10px]"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-brand-gold/50 py-4">No available images. Generate some using Batch Generate above.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Used/Archive Section (Collapsible) */}
+          <div className="bg-slate-900 rounded-lg border border-purple-500/50 overflow-hidden">
+            <button
+              onClick={() => setIsUsedOpen(!isUsedOpen)}
+              className="w-full flex items-center justify-between p-3 text-purple-400 hover:bg-slate-800/50 transition"
+            >
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                Used/Archive ({usedImages.length})
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isUsedOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {isUsedOpen && (
+              <div className="p-4 border-t border-purple-500/30 space-y-3">
+                {usedImages.length > 0 ? (
+                  <div className="grid grid-cols-4 gap-3">
+                    {usedImages.map((img) => (
+                      <div key={img.id} className="relative group">
+                        <img
+                          src={img.url}
+                          alt={img.variation}
+                          className="w-full h-24 object-cover rounded border border-purple-500/30 opacity-70"
+                        />
+                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-purple-600/90 rounded text-[9px] text-white">
+                          USED
+                        </div>
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
+                          <span className="text-[10px] text-white font-semibold">{img.variation}</span>
+                          {img.usedOn && (
+                            <a
+                              href={img.usedOn}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[9px] text-brand-cyan underline"
+                            >
+                              View Page
+                            </a>
+                          )}
                           <button
-                            onClick={() => handleRemoveFromBank(img.id)}
-                            className="mt-1 p-1 bg-red-600/80 rounded text-white text-xs"
+                            onClick={() => handleRestoreFromUsed(img.id)}
+                            className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium"
                           >
-                            Remove
+                            Restore
                           </button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-brand-gold/50 py-4">No pre-made images yet. Generate some using the controls above.</p>
+                  <p className="text-center text-brand-gold/50 py-4">No used images yet. Images will appear here after being used on pages.</p>
                 )}
               </div>
             )}
