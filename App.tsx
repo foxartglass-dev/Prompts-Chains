@@ -1123,7 +1123,8 @@ const App: React.FC = () => {
                                     });
                                     const title = wpTitle.trim() || metaTitles[0] || item.name;
 
-                                    // Publish via Elementor
+                                    // Publish via Elementor (with Image Bank integration)
+                                    addLog(`[${itemLabel}] Preparing images from Image Bank...`, LogStatus.WORKING, item.id);
                                     const publishResponse = await fetch('/api/elementor/publish', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
@@ -1135,11 +1136,24 @@ const App: React.FC = () => {
                                             content: finalOutput,
                                             status: 'draft',
                                             includeStatsBar: false,
+                                            // Image Bank integration
+                                            workflowId: currentWorkflowId,
+                                            keyword: item.name, // Contains tag like "Standard Cleaning(H)"
+                                            useImageBank: true,
+                                            maxImages: 4,
                                         }),
                                     });
                                     const publishData = await publishResponse.json();
 
                                     if (publishResponse.ok && publishData.page?.id) {
+                                        // Log image results
+                                        if (publishData.imagesFromBank > 0) {
+                                            addLog(`[${itemLabel}] Added ${publishData.imagesFromBank} images from Image Bank`, LogStatus.SUCCESS, item.id);
+                                        } else if (publishData.totalImages > 0) {
+                                            addLog(`[${itemLabel}] Generated ${publishData.totalImages} images`, LogStatus.SUCCESS, item.id);
+                                        } else {
+                                            addLog(`[${itemLabel}] No images added (Image Bank empty or disabled)`, LogStatus.INFO, item.id);
+                                        }
                                         addLog(`[${itemLabel}] Published to WordPress!`, LogStatus.SUCCESS, item.id);
                                         // Update result with WP link
                                         setResults(prev => prev.map(r =>
@@ -1260,7 +1274,8 @@ const App: React.FC = () => {
             let data;
 
             if (useElementor) {
-                // Use Elementor publishing endpoint
+                // Use Elementor publishing endpoint (with Image Bank integration)
+                addLog(`[${result.item.name}] Preparing images from Image Bank...`, LogStatus.WORKING, result.item.id);
                 response = await fetch('/api/elementor/publish', {
                     method: 'POST',
                     headers: {
@@ -1274,6 +1289,12 @@ const App: React.FC = () => {
                         content: result.finalOutput,
                         status: 'draft',
                         includeStatsBar: false,
+                        // Image Bank integration
+                        workflowId: currentWorkflowId,
+                        keyword: result.item.name, // Contains tag like "Standard Cleaning(H)"
+                        useImageBank: true,
+                        maxImages: 4,
+                        isManualPush: true,
                     }),
                 });
 
@@ -1281,6 +1302,13 @@ const App: React.FC = () => {
 
                 if (!response.ok) {
                     throw new Error(data.error || `Elementor API Error: ${response.statusText}`);
+                }
+
+                // Log image results
+                if (data.imagesFromBank > 0) {
+                    addLog(`[${result.item.name}] Added ${data.imagesFromBank} images from Image Bank`, LogStatus.SUCCESS, result.item.id);
+                } else if (data.totalImages > 0) {
+                    addLog(`[${result.item.name}] Generated ${data.totalImages} images`, LogStatus.SUCCESS, result.item.id);
                 }
 
                 updateResultStatus(result.item.id, 'published', data.page?.link);
