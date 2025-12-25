@@ -408,6 +408,7 @@ router.post('/chat', async (req, res) => {
     const {
       messages = [], // Array of {role, content, images?}
       model = 'gpt-4o',
+      contextImages = [], // Additional context images to include
       openaiApiKey
     } = req.body;
 
@@ -444,8 +445,11 @@ router.post('/chat', async (req, res) => {
       };
     });
 
-    // Add system message for image prompt assistance
-    const systemMessage = {
+    // Check if first message is already a system message (custom context injection)
+    const hasCustomSystemMessage = messages.length > 0 && messages[0].role === 'system';
+
+    // Default system message for image prompt assistance
+    const defaultSystemMessage = {
       role: 'system',
       content: `You are an expert image prompt engineer helping create consistent, high-quality image generation prompts for a business marketing context.
 
@@ -467,9 +471,38 @@ When analyzing images, focus on:
 When creating prompts, be specific and technical. Include details about lighting, camera angle, color grading, and mood.`
     };
 
+    // Build final messages array
+    // If custom system message exists, don't add default; otherwise prepend default
+    let finalMessages = hasCustomSystemMessage
+      ? formattedMessages
+      : [defaultSystemMessage, ...formattedMessages];
+
+    // If context images provided, add them to the first user message
+    if (contextImages.length > 0 && !hasCustomSystemMessage) {
+      // Find first user message and add context images
+      const firstUserIdx = finalMessages.findIndex(m => m.role === 'user');
+      if (firstUserIdx >= 0) {
+        const userMsg = finalMessages[firstUserIdx];
+        const existingContent = typeof userMsg.content === 'string'
+          ? [{ type: 'text', text: userMsg.content }]
+          : userMsg.content;
+
+        finalMessages[firstUserIdx] = {
+          role: 'user',
+          content: [
+            ...existingContent,
+            ...contextImages.map(img => ({
+              type: 'image_url',
+              image_url: { url: img, detail: 'low' } // Use 'low' for context images to save tokens
+            }))
+          ]
+        };
+      }
+    }
+
     const response = await openai.chat.completions.create({
       model: model,
-      messages: [systemMessage, ...formattedMessages],
+      messages: finalMessages,
       max_tokens: 2000
     });
 
