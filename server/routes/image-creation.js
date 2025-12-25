@@ -634,7 +634,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 router.post('/settings/:workflowId/add-to-bank', requireDb, async (req, res) => {
   try {
     const { workflowId } = req.params;
-    const { images } = req.body; // Array of {url, variation, orientation, prompt}
+    const { images, avatarTag } = req.body; // Array of {url, variation, orientation, prompt}, avatarTag for tag routing
 
     if (!images || !Array.isArray(images)) {
       return res.status(400).json({ error: 'Images array required' });
@@ -650,12 +650,13 @@ router.post('/settings/:workflowId/add-to-bank', requireDb, async (req, res) => 
       bank = current[0].image_bank;
     }
 
-    // Add new images with IDs
+    // Add new images with IDs and avatarTag for routing
     const newImages = images.map((img, idx) => ({
       id: `img-${Date.now()}-${idx}`,
       url: img.url,
       variation: img.variation,
       variationId: img.variationId,
+      avatarTag: img.avatarTag || avatarTag || null, // Tag for routing (H, J, C)
       orientation: img.orientation,
       prompt: img.prompt,
       createdAt: new Date().toISOString()
@@ -744,6 +745,221 @@ router.get('/available-models', (req, res) => {
       { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google' }
     ]
   });
+});
+
+// ========================================
+// IMAGE BANK INTEGRATION FOR ARTICLES
+// ========================================
+
+/**
+ * POST /api/image-creation/get-images-for-article
+ * Get images from Image Bank for an article based on its tag
+ * This is the key integration point for the Elementor pipeline
+ *
+ * Flow:
+ * 1. Extract tag from keyword (e.g., "Standard Cleaning(H)" -> "H")
+ * 2. Find Audience Avatar matching that tag
+ * 3. Get images from Image Bank with matching avatarTag
+ * 4. Return images in variation order (sequential, random, or manual)
+ * 5. Mark images as used and track which article they went to
+ */
+router.post('/get-images-for-article', requireDb, async (req, res) => {
+  try {
+    const {
+      workflowId,
+      keyword, // e.g., "Standard Cleaning(H)" or "Construction Site Cleaning (C)"
+      articleId, // Optional - to track which article used which images
+      chunksNeeded = 4, // How many images needed (based on article chunks)
+      heroFirst = true // First image should be for hero section
+    } = req.body;
+
+    if (!workflowId) {
+      return res.status(400).json({ error: 'workflowId is required' });
+    }
+
+    // 1. Extract tag from keyword - look for (X) pattern
+    const tagMatch = keyword?.match(/\(([A-Z])\)/i);
+    const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+
+    // 2. Get Image Creation settings
+    const settings = await sql`
+      SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+    `;
+
+    if (settings.length === 0 || !settings[0].enabled) {
+      return res.json({
+        success: true,
+        images: [],
+        message: 'Image Creation not enabled for this workflow',
+        mode: 'none'
+      });
+    }
+
+    const config = settings[0];
+    const integrationMode = config.integration_mode || 'bank';
+    const fallbackToLive = config.fallback_to_live ?? true;
+    const imageBank = config.image_bank || [];
+    const avatars = config.audience_avatars || [];
+    const variationOrderMode = config.variation_order_mode || 'sequential';
+    const manualOrder = config.manual_variation_order || [];
+
+    // 3. Find matching avatar by tag
+    let targetAvatar = null;
+    if (articleTag) {
+      targetAvatar = avatars.find(a => a.tag === articleTag);
+    }
+    if (!targetAvatar && avatars.length > 0) {
+      // Fall back to first avatar if no tag match
+      targetAvatar = avatars[0];
+    }
+
+    // 4. Get available images from bank matching the tag
+    let availableImages = imageBank.filter(img => {
+      // Filter out already used images
+      if (img.used) return false;
+      // If we have a target tag, filter by avatarTag
+      if (articleTag && img.avatarTag) {
+        return img.avatarTag === articleTag;
+      }
+      // If avatar has variations, match by variationId
+      if (targetAvatar && targetAvatar.variations?.length > 0) {
+        return targetAvatar.variations.some(v => v.id === img.variationId);
+      }
+      return true;
+    });
+
+    // 5. Sort images by variation order
+    if (variationOrderMode === 'manual' && manualOrder.length > 0) {
+      // Manual order - sort by position in manualOrder array
+      availableImages = availableImages.sort((a, b) => {
+        const aIdx = manualOrder.indexOf(a.variationId);
+        const bIdx = manualOrder.indexOf(b.variationId);
+        if (aIdx === -1) return 1;
+        if (bIdx === -1) return -1;
+        return aIdx - bIdx;
+      });
+    } else if (variationOrderMode === 'random') {
+      // Random order (shuffle)
+      availableImages = availableImages.sort(() => Math.random() - 0.5);
+    }
+    // 'sequential' keeps original order
+
+    // 6. Select images for the article
+    const selectedImages = [];
+    let imageIndex = 0;
+
+    for (let i = 0; i < chunksNeeded && imageIndex < availableImages.length; i++) {
+      const img = availableImages[imageIndex];
+      const isHero = heroFirst && i === 0;
+
+      selectedImages.push({
+        id: img.id,
+        url: img.url,
+        variation: img.variation,
+        variationId: img.variationId,
+        prompt: img.prompt,
+        orientation: img.orientation,
+        side: isHero ? 'right' : (i % 2 === 0 ? 'left' : 'right'), // Alternate sides
+        isHero,
+        position: i
+      });
+
+      imageIndex++;
+    }
+
+    // 7. Mark selected images as used in the bank
+    if (selectedImages.length > 0) {
+      const selectedIds = new Set(selectedImages.map(i => i.id));
+      const updatedBank = imageBank.map(img => {
+        if (selectedIds.has(img.id)) {
+          return {
+            ...img,
+            used: true,
+            usedOn: keyword || 'Unknown article',
+            usedAt: new Date().toISOString(),
+            usedByArticleId: articleId
+          };
+        }
+        return img;
+      });
+
+      // Save updated bank
+      await sql`
+        UPDATE image_creation_settings
+        SET image_bank = ${JSON.stringify(updatedBank)}::jsonb,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE workflow_id = ${workflowId}
+      `;
+    }
+
+    // 8. Check if we need more images (fallback to live)
+    const needsMore = selectedImages.length < chunksNeeded;
+    const avatarPrompt = targetAvatar?.mainPrompt || '';
+    const variations = targetAvatar?.variations || [];
+
+    res.json({
+      success: true,
+      images: selectedImages,
+      fromBank: selectedImages.length,
+      needed: chunksNeeded,
+      tag: articleTag,
+      avatarName: targetAvatar?.name,
+      mode: integrationMode,
+      needsLiveGeneration: needsMore && fallbackToLive,
+      remainingNeeded: chunksNeeded - selectedImages.length,
+      // Include prompt info for live generation fallback
+      avatarPrompt: needsMore ? avatarPrompt : null,
+      variations: needsMore ? variations.slice(0, chunksNeeded - selectedImages.length) : []
+    });
+
+  } catch (error) {
+    console.error('Get images for article error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/image-creation/release-images
+ * Release used images back to the bank (undo use)
+ */
+router.post('/release-images', requireDb, async (req, res) => {
+  try {
+    const { workflowId, imageIds } = req.body;
+
+    if (!workflowId || !imageIds?.length) {
+      return res.status(400).json({ error: 'workflowId and imageIds required' });
+    }
+
+    const settings = await sql`
+      SELECT image_bank FROM image_creation_settings WHERE workflow_id = ${workflowId}
+    `;
+
+    if (settings.length === 0) {
+      return res.status(404).json({ error: 'Settings not found' });
+    }
+
+    const idsToRelease = new Set(imageIds);
+    const updatedBank = (settings[0].image_bank || []).map(img => {
+      if (idsToRelease.has(img.id)) {
+        const { used, usedOn, usedAt, usedByArticleId, ...rest } = img;
+        return rest;
+      }
+      return img;
+    });
+
+    await sql`
+      UPDATE image_creation_settings
+      SET image_bank = ${JSON.stringify(updatedBank)}::jsonb,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE workflow_id = ${workflowId}
+    `;
+
+    res.json({ success: true, released: imageIds.length });
+
+  } catch (error) {
+    console.error('Release images error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 export default router;

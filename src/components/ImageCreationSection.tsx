@@ -713,6 +713,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           url: data.image.url,
           variation: variation.name,
           variationId: variation.id,
+          avatarTag: activeAvatar?.tag, // Link image to avatar's tag for routing
           orientation: variation.orientation,
           prompt: fullPrompt,
           createdAt: new Date().toISOString(),
@@ -788,6 +789,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             url: img.url,
             variation: img.variation,
             variationId: img.variationId,
+            avatarTag: activeAvatar?.tag, // Link images to avatar's tag for routing
             orientation: img.orientation,
             prompt: img.prompt,
             createdAt: new Date().toISOString(),

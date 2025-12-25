@@ -129,7 +129,10 @@ router.post('/preview', async (req, res) => {
 /**
  * POST /api/elementor/publish
  * Full pipeline: Article → Elementor Page on WordPress
- * Optionally generates AI images with Style DNA
+ * Supports:
+ * 1. Pull from Image Bank (uses pre-made images by tag)
+ * 2. Generate live images with Style DNA
+ * 3. No images (text only)
  */
 router.post('/publish', async (req, res) => {
   try {
@@ -154,10 +157,12 @@ router.post('/publish', async (req, res) => {
       publishDate,
       // Database tracking
       articleId,
+      workflowId, // NEW: For Image Bank integration
       // Push tracking (manual vs auto)
       isManualPush = false,
-      // Image generation options (NEW)
-      generateImages = false,
+      // Image options
+      useImageBank = true, // NEW: Pull from Image Bank by tag
+      generateImages = false, // Fallback to live generation
       styleDNA = null,
       referenceImages = null,
       openaiApiKey = null,
@@ -176,13 +181,103 @@ router.post('/publish', async (req, res) => {
 
     const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
 
-    let chunked;
+    // Step 1: Chunk the content first
+    let chunked = chunkContent(content, { maxWords });
     let imagesGenerated = 0;
+    let imagesFromBank = 0;
     let estimatedCost = null;
 
-    // Step 1: Process content with or without images
-    if (generateImages) {
-      // Use the image pipeline for full processing
+    // Step 2: Try to get images from Image Bank if workflowId provided
+    if (useImageBank && workflowId && isDatabaseEnabled()) {
+      try {
+        const bankImages = await sql`
+          SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+        `;
+
+        if (bankImages.length > 0 && bankImages[0].enabled) {
+          const config = bankImages[0];
+          const imageBank = config.image_bank || [];
+          const avatars = config.audience_avatars || [];
+          const variationOrderMode = config.variation_order_mode || 'sequential';
+          const manualOrder = config.manual_variation_order || [];
+
+          // Extract tag from keyword (e.g., "Standard Cleaning(H)" -> "H")
+          const tagMatch = keyword?.match(/\(([A-Z])\)/i);
+          const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+
+          // Find matching avatar by tag
+          let targetAvatar = articleTag ? avatars.find(a => a.tag === articleTag) : avatars[0];
+
+          // Get available images from bank matching the tag
+          let availableImages = imageBank.filter(img => {
+            if (img.used) return false;
+            if (articleTag && img.avatarTag) return img.avatarTag === articleTag;
+            if (targetAvatar?.variations?.length > 0) {
+              return targetAvatar.variations.some(v => v.id === img.variationId);
+            }
+            return true;
+          });
+
+          // Sort by variation order
+          if (variationOrderMode === 'manual' && manualOrder.length > 0) {
+            availableImages = availableImages.sort((a, b) => {
+              const aIdx = manualOrder.indexOf(a.variationId);
+              const bIdx = manualOrder.indexOf(b.variationId);
+              return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+            });
+          } else if (variationOrderMode === 'random') {
+            availableImages = availableImages.sort(() => Math.random() - 0.5);
+          }
+
+          // Assign images to chunks
+          const chunksNeedingImages = [chunked.intro, ...chunked.chunks].filter(c => c);
+          const imagesToUse = availableImages.slice(0, Math.min(maxImages, chunksNeedingImages.length));
+
+          imagesToUse.forEach((img, idx) => {
+            const isHero = idx === 0;
+            const imageData = {
+              url: img.url,
+              alt: img.variation || 'Article image',
+              width: img.orientation === 'landscape' ? 800 : 400,
+              height: img.orientation === 'landscape' ? 450 : 600,
+              side: isHero ? 'right' : (idx % 2 === 0 ? 'left' : 'right')
+            };
+
+            if (isHero && chunked.intro) {
+              chunked.intro.imageData = imageData;
+            } else if (chunked.chunks[idx - (chunked.intro ? 1 : 0)]) {
+              chunked.chunks[idx - (chunked.intro ? 1 : 0)].imageData = imageData;
+            }
+          });
+
+          imagesFromBank = imagesToUse.length;
+
+          // Mark images as used
+          if (imagesToUse.length > 0) {
+            const usedIds = new Set(imagesToUse.map(i => i.id));
+            const updatedBank = imageBank.map(img => {
+              if (usedIds.has(img.id)) {
+                return { ...img, used: true, usedOn: keyword, usedAt: new Date().toISOString() };
+              }
+              return img;
+            });
+
+            await sql`
+              UPDATE image_creation_settings
+              SET image_bank = ${JSON.stringify(updatedBank)}::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE workflow_id = ${workflowId}
+            `;
+          }
+        }
+      } catch (bankError) {
+        console.error('Image Bank error (continuing without bank):', bankError);
+      }
+    }
+
+    // Step 3: Fall back to live generation if needed
+    if (generateImages && imagesFromBank < maxImages) {
+      // Use the image pipeline for remaining images
       const pipelineResult = await processArticleWithImages(content, {
         title,
         keyword,
@@ -191,22 +286,28 @@ router.post('/publish', async (req, res) => {
         openaiApiKey: openaiApiKey || process.env.OPENAI_API_KEY,
         replicateApiKey: replicateApiKey || process.env.REPLICATE_API_TOKEN,
         wpCredentials,
-        maxImages,
+        maxImages: maxImages - imagesFromBank,
         maxWords
       });
 
-      chunked = pipelineResult.chunks;
+      // Merge pipeline images with bank images
+      if (!chunked.intro?.imageData && pipelineResult.chunks.intro?.imageData) {
+        chunked.intro.imageData = pipelineResult.chunks.intro.imageData;
+      }
+      pipelineResult.chunks.chunks.forEach((pChunk, idx) => {
+        if (pChunk.imageData && chunked.chunks[idx] && !chunked.chunks[idx].imageData) {
+          chunked.chunks[idx].imageData = pChunk.imageData;
+        }
+      });
+
       imagesGenerated = pipelineResult.imagesGenerated || 0;
       estimatedCost = pipelineResult.estimatedCost;
-    } else {
-      // Standard chunking without images
-      chunked = chunkContent(content, { maxWords });
     }
 
-    // Step 2: Extract or use provided title
+    // Step 4: Extract or use provided title
     const pageTitle = title || extractTitle(content) || 'Untitled Page';
 
-    // Step 3: Build Elementor structure
+    // Step 5: Build Elementor structure
     const elementorData = buildElementorPage(chunked, {
       title: pageTitle,
       ctaText,
@@ -215,10 +316,10 @@ router.post('/publish', async (req, res) => {
       statsBarPosition
     });
 
-    // Step 4: Get Elementor meta fields
+    // Step 6: Get Elementor meta fields
     const elementorMeta = getElementorMetaFields(elementorData);
 
-    // Step 5: Create WordPress page
+    // Step 7: Create WordPress page
     const pageResult = await createElementorPage(wpCredentials, {
       title: pageTitle,
       slug,
@@ -227,7 +328,7 @@ router.post('/publish', async (req, res) => {
       publishDate
     });
 
-    // Step 6: Update article in database if articleId provided
+    // Step 8: Update article in database if articleId provided
     if (articleId && isDatabaseEnabled()) {
       try {
         if (isManualPush) {
@@ -267,7 +368,9 @@ router.post('/publish', async (req, res) => {
       page: pageResult,
       chunks: chunked.chunkCount,
       wordCount: chunked.totalWords,
+      imagesFromBank,
       imagesGenerated,
+      totalImages: imagesFromBank + imagesGenerated,
       estimatedCost
     });
   } catch (error) {
