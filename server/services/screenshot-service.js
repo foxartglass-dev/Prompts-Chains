@@ -15,17 +15,24 @@ import { execSync } from 'child_process';
  * Checks environment variable first, then tries to find it dynamically
  */
 function getChromiumPath() {
+  console.log('Searching for Chromium...');
+
   // First check environment variable
-  if (process.env.PUPPETEER_EXECUTABLE_PATH && existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
-    console.log('Using PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH);
-    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    console.log('PUPPETEER_EXECUTABLE_PATH is set to:', process.env.PUPPETEER_EXECUTABLE_PATH);
+    if (existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+      console.log('✓ Using PUPPETEER_EXECUTABLE_PATH:', process.env.PUPPETEER_EXECUTABLE_PATH);
+      return process.env.PUPPETEER_EXECUTABLE_PATH;
+    } else {
+      console.warn('✗ PUPPETEER_EXECUTABLE_PATH set but file does not exist');
+    }
   }
 
   // Try to find chromium using 'which' command
   try {
     const whichResult = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null || which google-chrome 2>/dev/null', { encoding: 'utf8' }).trim();
     if (whichResult && existsSync(whichResult)) {
-      console.log('Found Chromium via which:', whichResult);
+      console.log('✓ Found Chromium via which:', whichResult);
       return whichResult;
     }
   } catch (e) {
@@ -34,37 +41,51 @@ function getChromiumPath() {
 
   // Common Chromium paths on different systems
   const possiblePaths = [
-    // Nixpacks/Railway paths
-    '/nix/var/nix/profiles/default/bin/chromium',
+    // Nixpacks/Railway paths (multiple possible locations)
     '/root/.nix-profile/bin/chromium',
+    '/nix/var/nix/profiles/default/bin/chromium',
+    '/home/nixuser/.nix-profile/bin/chromium',
     // Standard Linux paths
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
     '/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable',
+    // Snap path (Ubuntu)
+    '/snap/bin/chromium',
     // Mac paths
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Chromium.app/Contents/MacOS/Chromium'
   ];
 
+  console.log('Checking common paths...');
   for (const path of possiblePaths) {
     if (existsSync(path)) {
-      console.log('Found Chromium at:', path);
+      console.log('✓ Found Chromium at:', path);
       return path;
     }
   }
 
-  // Try to find in Nix store (Railway/Nixpacks)
+  // Try to find in Nix store (Railway/Nixpacks) - search more thoroughly
   try {
     const nixStorePath = '/nix/store';
     if (existsSync(nixStorePath)) {
+      console.log('Searching Nix store...');
       const dirs = readdirSync(nixStorePath);
-      for (const dir of dirs) {
-        if (dir.includes('chromium')) {
-          const chromiumPath = `${nixStorePath}/${dir}/bin/chromium`;
-          if (existsSync(chromiumPath)) {
-            console.log('Found Chromium in Nix store:', chromiumPath);
-            return chromiumPath;
+      // Look for chromium directories
+      const chromiumDirs = dirs.filter(dir => dir.includes('chromium') && !dir.includes('unwrapped'));
+
+      for (const dir of chromiumDirs) {
+        // Try multiple possible binary locations within the package
+        const binPaths = [
+          `${nixStorePath}/${dir}/bin/chromium`,
+          `${nixStorePath}/${dir}/bin/chromium-browser`,
+          `${nixStorePath}/${dir}/bin/chrome`
+        ];
+
+        for (const binPath of binPaths) {
+          if (existsSync(binPath)) {
+            console.log('✓ Found Chromium in Nix store:', binPath);
+            return binPath;
           }
         }
       }
@@ -73,7 +94,18 @@ function getChromiumPath() {
     console.warn('Error searching Nix store:', e.message);
   }
 
-  console.warn('Chromium not found - Puppeteer will try to use bundled version');
+  // Last resort: try to find any chromium binary
+  try {
+    const findResult = execSync('find /nix -name "chromium" -type f -executable 2>/dev/null | head -1', { encoding: 'utf8' }).trim();
+    if (findResult && existsSync(findResult)) {
+      console.log('✓ Found Chromium via find:', findResult);
+      return findResult;
+    }
+  } catch (e) {
+    // find command failed
+  }
+
+  console.warn('✗ Chromium not found - Puppeteer will try to use bundled version');
   // Return null to let Puppeteer use its bundled Chromium
   return null;
 }
@@ -95,7 +127,12 @@ function getLaunchOptions() {
       '--no-zygote',
       '--single-process',
       '--disable-gpu',
-      '--disable-extensions'
+      '--disable-extensions',
+      // Additional stability flags for WordPress preview
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--disable-site-isolation-trials',
+      '--disable-web-security',
+      '--disable-features=BlockInsecurePrivateNetworkRequests'
     ]
   };
 
@@ -152,34 +189,131 @@ async function captureScreenshot(pageUrl, options = {}) {
 async function captureAuthenticatedPage(pageUrl, wpCredentials, options = {}) {
   const { url: wpUrl, user, password } = wpCredentials;
 
+  console.log('Starting authenticated screenshot capture...');
+  console.log('Target page:', pageUrl);
+  console.log('WP URL:', wpUrl);
+  console.log('WP User:', user);
+
   const browser = await puppeteer.launch(getLaunchOptions());
 
   try {
-    const page = await browser.newPage();
+    let page = await browser.newPage();
+
+    // Set a realistic user agent to avoid bot detection
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
     await page.setViewport({ width: options.width || 1280, height: options.height || 800 });
 
     // Navigate to WP login
     const loginUrl = `${wpUrl.replace(/\/$/, '')}/wp-login.php`;
-    await page.goto(loginUrl, { waitUntil: 'networkidle2' });
+    console.log('Navigating to login page:', loginUrl);
 
-    // Fill login form
-    await page.type('#user_login', user);
-    await page.type('#user_pass', password);
-    await page.click('#wp-submit');
+    await page.goto(loginUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-    // Wait for redirect after login
-    await page.waitForNavigation({ waitUntil: 'networkidle2' });
+    // Check if we're on the login page
+    const isLoginPage = await page.$('#user_login');
+    if (!isLoginPage) {
+      // Maybe already logged in, or redirected
+      console.log('Not on login page, checking current URL...');
+      const currentUrl = page.url();
+      console.log('Current URL:', currentUrl);
 
-    // Now navigate to the actual page
-    await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-    await new Promise(r => setTimeout(r, options.waitFor || 2000));
+      // If redirected to wp-admin, we're already logged in
+      if (!currentUrl.includes('wp-admin')) {
+        throw new Error(`Unexpected page state. Current URL: ${currentUrl}`);
+      }
+      console.log('Already logged in, proceeding to target page');
+    } else {
+      console.log('On login page, filling credentials...');
 
+      // Fill login form using direct value setting
+      await page.evaluate((username, pass) => {
+        const userInput = document.querySelector('#user_login');
+        const passInput = document.querySelector('#user_pass');
+
+        if (userInput) {
+          userInput.value = '';
+          userInput.value = username;
+          userInput.dispatchEvent(new Event('input', { bubbles: true }));
+          userInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (passInput) {
+          passInput.value = '';
+          passInput.value = pass;
+          passInput.dispatchEvent(new Event('input', { bubbles: true }));
+          passInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, user, password);
+
+      console.log('Credentials filled via evaluate()');
+
+      // Check the "Remember Me" box if it exists
+      const rememberMe = await page.$('#rememberme');
+      if (rememberMe) {
+        await rememberMe.click();
+      }
+
+      console.log('Submitting login form...');
+      await page.click('#wp-submit');
+
+      // Wait for navigation after login
+      try {
+        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
+      } catch (navError) {
+        console.log('Navigation timeout, checking page state...');
+      }
+
+      // Check for login errors
+      const loginError = await page.$('#login_error');
+      if (loginError) {
+        const errorText = await page.$eval('#login_error', el => el.textContent);
+        throw new Error(`WordPress login failed: ${errorText.trim()}`);
+      }
+
+      // Verify we're logged in
+      const currentUrl = page.url();
+      console.log('After login, current URL:', currentUrl);
+
+      if (currentUrl.includes('wp-login.php') && !currentUrl.includes('redirect_to')) {
+        throw new Error('Login appears to have failed - still on login page');
+      }
+
+      // Wait a moment for cookies to be fully established
+      await new Promise(r => setTimeout(r, 2000));
+      console.log('Login confirmed, cookies should be set');
+    }
+
+    // Navigate to target page using evaluate to avoid frame detachment
+    console.log('Navigating to target page:', pageUrl);
+
+    // Use window.location instead of page.goto to avoid frame detachment
+    await page.evaluate((url) => {
+      window.location.href = url;
+    }, pageUrl);
+
+    // Wait for page to load
+    await new Promise(r => setTimeout(r, 10000));
+
+    // Log what URL we actually ended up at
+    let finalUrl = 'unknown';
+    try {
+      finalUrl = page.url();
+    } catch (e) {
+      console.log('Could not get URL:', e.message);
+    }
+    console.log('Final URL after navigation:', finalUrl);
+
+    console.log('Taking screenshot...');
     const screenshot = await page.screenshot({
       type: 'png',
       fullPage: options.fullPage !== false
     });
 
+    console.log('Screenshot captured successfully!');
     return screenshot;
+  } catch (error) {
+    console.error('Authenticated screenshot error:', error.message);
+    throw error;
   } finally {
     await browser.close();
   }
@@ -203,8 +337,25 @@ async function getElementPositions(pageUrl, wpCredentials = null) {
     if (wpCredentials) {
       const loginUrl = `${wpCredentials.url.replace(/\/$/, '')}/wp-login.php`;
       await page.goto(loginUrl, { waitUntil: 'networkidle2' });
-      await page.type('#user_login', wpCredentials.user);
-      await page.type('#user_pass', wpCredentials.password);
+
+      // Use direct value setting (page.type gets interrupted by WP's JS)
+      await page.evaluate((username, pass) => {
+        const userInput = document.querySelector('#user_login');
+        const passInput = document.querySelector('#user_pass');
+
+        if (userInput) {
+          userInput.value = username;
+          userInput.dispatchEvent(new Event('input', { bubbles: true }));
+          userInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (passInput) {
+          passInput.value = pass;
+          passInput.dispatchEvent(new Event('input', { bubbles: true }));
+          passInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, wpCredentials.user, wpCredentials.password);
+
       await page.click('#wp-submit');
       await page.waitForNavigation({ waitUntil: 'networkidle2' });
     }

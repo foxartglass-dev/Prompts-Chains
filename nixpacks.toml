@@ -7,9 +7,8 @@ nixPkgs = [
   "chromium"
 ]
 
-# Install apt packages for Chromium dependencies
+# Chromium dependencies (Nix handles most, these are fallbacks)
 aptPkgs = [
-  "chromium-browser",
   "libnss3",
   "libatk1.0-0",
   "libatk-bridge2.0-0",
@@ -30,7 +29,9 @@ cmds = ["npm ci || npm install"]
 cmds = ["npm run build"]
 
 [start]
-cmd = "npm start"
+cmd = "bash start.sh"
 
 [variables]
 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+# Nix installs chromium here - this is the standard Nix profile path
+PUPPETEER_EXECUTABLE_PATH = "/root/.nix-profile/bin/chromium"

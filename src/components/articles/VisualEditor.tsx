@@ -247,11 +247,28 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold text-white">Visual Editor</h2>
 
-          {/* Mode indicator - Live Preview is the primary mode */}
+          {/* Mode toggle - Live Preview and Screenshot Mode */}
           <div className="flex items-center bg-slate-800 rounded-lg p-1">
-            <span className="px-3 py-1.5 bg-brand-cyan text-slate-900 rounded text-sm font-medium">
+            <button
+              onClick={() => setMode('preview')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                mode === 'preview'
+                  ? 'bg-brand-cyan text-slate-900'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
               Live Preview
-            </span>
+            </button>
+            <button
+              onClick={() => setMode('screenshot')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                mode === 'screenshot'
+                  ? 'bg-brand-gold text-slate-900'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Screenshot Mode
+            </button>
           </div>
         </div>
 
@@ -303,78 +320,199 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
         </div>
       )}
 
-      {/* Main content - Live Preview */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        {/* URL bar */}
-        <div className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border-b border-slate-700">
-          <button
-            onClick={() => iframeRef.current?.contentWindow?.location.reload()}
-            className="p-1.5 hover:bg-slate-700 rounded transition"
-            title="Refresh"
-          >
-            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
-          <button
-            onClick={() => navigateIframe(effectiveUrl)}
-            className="p-1.5 hover:bg-slate-700 rounded transition"
-            title="Home"
-          >
-            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-          </button>
-          <input
-            type="text"
-            value={iframeUrl}
-            onChange={(e) => setIframeUrl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                navigateIframe(iframeUrl);
-              }
-            }}
-            className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm"
-          />
-          <button
-            onClick={() => navigateIframe(iframeUrl)}
-            className="px-3 py-1.5 bg-brand-cyan text-slate-900 rounded text-sm font-medium"
-          >
-            Go
-          </button>
-        </div>
-
-        {/* iframe */}
-        <div className="flex-1 bg-white">
-          <iframe
-            ref={iframeRef}
-            src={iframeUrl}
-            className="w-full h-full border-0"
-            title="Page Preview"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-          />
-        </div>
-
-        {/* Bottom action bar */}
-        <div className="bg-slate-900 border-t border-slate-700 px-4 py-3 flex items-center justify-between">
-          <div className="text-sm text-gray-400">
-            Viewing: <span className="text-white">{iframeUrl}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <a
-              href={getElementorEditUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded transition flex items-center gap-2"
+      {/* Main content - conditionally show Live Preview or Screenshot Mode */}
+      {mode === 'preview' ? (
+        /* Live Preview Mode */
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {/* URL bar */}
+          <div className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border-b border-slate-700">
+            <button
+              onClick={() => iframeRef.current?.contentWindow?.location.reload()}
+              className="p-1.5 hover:bg-slate-700 rounded transition"
+              title="Refresh"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              Edit in Elementor
-            </a>
+            </button>
+            <button
+              onClick={() => navigateIframe(effectiveUrl)}
+              className="p-1.5 hover:bg-slate-700 rounded transition"
+              title="Home"
+            >
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+            </button>
+            <input
+              type="text"
+              value={iframeUrl}
+              onChange={(e) => setIframeUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  navigateIframe(iframeUrl);
+                }
+              }}
+              className="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm"
+            />
+            <button
+              onClick={() => navigateIframe(iframeUrl)}
+              className="px-3 py-1.5 bg-brand-cyan text-slate-900 rounded text-sm font-medium"
+            >
+              Go
+            </button>
+          </div>
+
+          {/* iframe */}
+          <div className="flex-1 bg-white">
+            <iframe
+              ref={iframeRef}
+              src={iframeUrl}
+              className="w-full h-full border-0"
+              title="Page Preview"
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+            />
+          </div>
+
+          {/* Bottom action bar */}
+          <div className="bg-slate-900 border-t border-slate-700 px-4 py-3 flex items-center justify-between">
+            <div className="text-sm text-gray-400">
+              Viewing: <span className="text-white">{iframeUrl}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href={getElementorEditUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded transition flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Edit in Elementor
+              </a>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        /* Screenshot Mode */
+        <div className="flex-1 overflow-auto p-6" ref={containerRef}>
+          {loading && (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-center">
+                <div className="animate-spin w-8 h-8 border-2 border-brand-cyan border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p className="text-gray-400">Loading screenshot...</p>
+                <p className="text-gray-500 text-sm mt-2">This may take up to 45 seconds for draft pages</p>
+              </div>
+            </div>
+          )}
+
+          {screenshotError && !loading && (
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+              <div className="text-yellow-500 text-5xl mb-4">⚠</div>
+              <h3 className="text-xl font-semibold text-white mb-2">Screenshot Unavailable</h3>
+              <p className="text-gray-400 mb-4 max-w-md">
+                The screenshot service couldn't capture this page. This can happen if:
+              </p>
+              <ul className="text-gray-500 text-sm mb-6 list-disc list-inside">
+                <li>Puppeteer/Chromium isn't available on the server</li>
+                <li>WordPress login credentials are incorrect</li>
+                <li>The page took too long to load</li>
+                <li>The site has bot protection enabled</li>
+              </ul>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setScreenshotError(false);
+                    loadScreenshotAndElements();
+                  }}
+                  className="px-4 py-2 bg-brand-cyan text-slate-900 font-medium rounded hover:bg-brand-cyan/90 transition"
+                >
+                  Try Again
+                </button>
+                <button
+                  onClick={() => setMode('preview')}
+                  className="px-4 py-2 bg-slate-700 text-white rounded hover:bg-slate-600 transition"
+                >
+                  Use Live Preview
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!screenshotError && screenshotUrl && !loading && (
+            <div className="relative inline-block">
+              {/* Screenshot image */}
+              <img
+                ref={imageRef}
+                src={screenshotUrl}
+                alt="Page Screenshot"
+                onLoad={handleImageLoad}
+                onError={handleImageError}
+                className="max-w-full shadow-lg rounded"
+                style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+              />
+
+              {/* Clickable element overlays */}
+              {elements.map((element) => (
+                <div
+                  key={element.id}
+                  style={getElementStyle(element)}
+                  className={getElementOverlayClass(element)}
+                  onMouseEnter={() => setHoveredElement(element.id)}
+                  onMouseLeave={() => setHoveredElement(null)}
+                  onClick={() => handleElementClick(element)}
+                  title={`${element.type || 'Element'} - Click to edit`}
+                >
+                  {/* Show edit icon on hover for images */}
+                  {(hoveredElement === element.id || selectedElement?.id === element.id) && (element.isImage || element.hasBackground) && (
+                    <div className="absolute top-1 right-1 bg-brand-gold text-slate-900 p-1 rounded shadow text-xs font-medium">
+                      📷 Edit Image
+                    </div>
+                  )}
+                  {(hoveredElement === element.id || selectedElement?.id === element.id) && element.isText && (
+                    <div className="absolute top-1 right-1 bg-brand-cyan text-slate-900 p-1 rounded shadow text-xs font-medium">
+                      ✏️ Edit Text
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Bottom action bar for screenshot mode */}
+          <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 px-4 py-3 flex items-center justify-between">
+            <div className="text-sm text-gray-400">
+              Screenshot mode - click elements to edit
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setScreenshotError(false);
+                  loadScreenshotAndElements();
+                }}
+                className="px-4 py-2 bg-slate-700 text-white rounded hover:bg-slate-600 transition flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh Screenshot
+              </button>
+              <a
+                href={getElementorEditUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded transition flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Edit in Elementor
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
