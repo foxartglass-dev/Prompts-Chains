@@ -230,7 +230,11 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   -- Audience avatars (each has own main prompt + variations, linked to Tag Manager)
   audience_avatars JSONB DEFAULT '[{"id": 1, "name": "Default", "mainPrompt": "", "variations": []}]',
   -- Pre-made image bank
-  image_bank JSONB DEFAULT '[]', -- Array of {id, url, variation, avatarTag, orientation, prompt, createdAt}
+  image_bank JSONB DEFAULT '[]', -- Array of {id, url, title, category, variation, avatarTag, orientation, prompt, createdAt}
+  -- Custom categories for sorting uploaded images
+  image_categories JSONB DEFAULT '["Hero", "Service", "Team", "Equipment", "Before/After", "Other"]',
+  -- LLM auto-tagging for uploads
+  auto_tag_enabled BOOLEAN DEFAULT true,
   -- Legacy chat history (for backwards compatibility)
   chat_history JSONB DEFAULT '[]', -- Array of {role, content, images?, timestamp}
   -- DUAL CHAT SYSTEM

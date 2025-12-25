@@ -521,6 +521,93 @@ When creating prompts, be specific and technical. Include details about lighting
   }
 });
 
+/**
+ * POST /api/image-creation/auto-tag
+ * Use LLM to analyze an image and suggest title/category
+ */
+router.post('/auto-tag', async (req, res) => {
+  try {
+    const {
+      imageUrl,
+      categories = [],
+      currentTitle = '',
+      openaiApiKey
+    } = req.body;
+
+    const apiKey = openaiApiKey || process.env.OPENAI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(400).json({ error: 'OpenAI API key is required for auto-tagging' });
+    }
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'Image URL is required' });
+    }
+
+    const openai = new OpenAI({ apiKey });
+
+    // Build the prompt for image analysis
+    const categoriesList = categories.length > 0 ? categories.join(', ') : 'Hero, Service, Team, Equipment, Before/After, Other';
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an image analyzer for a business content system. Analyze the image and provide:
+1. A short, descriptive title (2-5 words) that describes what's in the image
+2. The best category from this list: ${categoriesList}
+
+Respond in JSON format only:
+{"title": "your suggested title", "category": "matching category"}`
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: currentTitle
+                ? `Current title: "${currentTitle}". Analyze this image and suggest a better title and category.`
+                : 'Analyze this image and suggest a title and category.'
+            },
+            {
+              type: 'image_url',
+              image_url: { url: imageUrl, detail: 'low' }
+            }
+          ]
+        }
+      ],
+      max_tokens: 150
+    });
+
+    // Parse the response
+    const content = response.choices[0].message.content;
+    let result;
+    try {
+      // Extract JSON from the response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      result = jsonMatch ? JSON.parse(jsonMatch[0]) : { title: currentTitle, category: 'Other' };
+    } catch (e) {
+      result = { title: currentTitle, category: 'Other' };
+    }
+
+    // Validate category is in the list
+    if (!categories.includes(result.category)) {
+      result.category = 'Other';
+    }
+
+    res.json({
+      success: true,
+      suggestedTitle: result.title || currentTitle,
+      suggestedCategory: result.category || 'Other'
+    });
+
+  } catch (error) {
+    console.error('Auto-tag error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ========================================
 // SETTINGS MANAGEMENT
 // ========================================
@@ -549,6 +636,9 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           logo_images: [],
           audience_avatars: [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
           image_bank: [],
+          // Image categories and auto-tag
+          image_categories: ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'],
+          auto_tag_enabled: true,
           chat_history: [],
           // Dual chat system defaults
           consultant_chat_history: [],
@@ -575,6 +665,9 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         logo_images: results[0].logo_images || [],
         audience_avatars: results[0].audience_avatars || [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
         image_bank: results[0].image_bank || [],
+        // Image categories and auto-tag
+        image_categories: results[0].image_categories || ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'],
+        auto_tag_enabled: results[0].auto_tag_enabled ?? true,
         chat_history: results[0].chat_history || [],
         // Dual chat system
         consultant_chat_history: results[0].consultant_chat_history || [],
@@ -609,6 +702,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       logo_images,
       audience_avatars,
       image_bank,
+      // Image categories and auto-tag
+      image_categories,
+      auto_tag_enabled,
       chat_history,
       // Dual chat system
       consultant_chat_history,
@@ -638,6 +734,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           logo_images,
           audience_avatars,
           image_bank,
+          image_categories,
+          auto_tag_enabled,
           chat_history,
           consultant_chat_history,
           consultant_model,
@@ -656,6 +754,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           ${JSON.stringify(logo_images ?? [])},
           ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
           ${JSON.stringify(image_bank ?? [])},
+          ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
+          ${auto_tag_enabled ?? true},
           ${JSON.stringify(chat_history ?? [])},
           ${JSON.stringify(consultant_chat_history ?? [])},
           ${consultant_model ?? 'gpt-4o'},
@@ -683,6 +783,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
         logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
         audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
         image_bank = COALESCE(${image_bank ? JSON.stringify(image_bank) : null}::jsonb, image_bank),
+        image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
+        auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
         chat_history = COALESCE(${chat_history ? JSON.stringify(chat_history) : null}::jsonb, chat_history),
         consultant_chat_history = COALESCE(${consultant_chat_history ? JSON.stringify(consultant_chat_history) : null}::jsonb, consultant_chat_history),
         consultant_model = COALESCE(${consultant_model}, consultant_model),

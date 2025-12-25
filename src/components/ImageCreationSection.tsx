@@ -49,6 +49,8 @@ interface AudienceAvatar {
 interface BankImage {
   id: string;
   url: string;
+  title?: string; // Editable title shown on image
+  category?: string; // Custom sorting category
   variation: string;
   variationId: string;
   avatarTag?: string; // Which avatar/tag this image belongs to
@@ -85,6 +87,10 @@ interface ImageCreationSettings {
   logo_images: LogoImage[];
   audience_avatars: AudienceAvatar[];
   image_bank: BankImage[];
+  // Custom sorting categories for uploaded images
+  image_categories: string[];
+  // LLM auto-tagging for uploads
+  auto_tag_enabled: boolean;
   // Legacy single chat history (for migration)
   chat_history: ChatMessage[];
   // Dual chat system
@@ -121,6 +127,9 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   logo_images: [],
   audience_avatars: [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
   image_bank: [],
+  // Custom categories for sorting uploaded images
+  image_categories: ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'],
+  auto_tag_enabled: true,
   chat_history: [],
   // Dual chat defaults
   consultant_chat_history: [],
@@ -203,11 +212,25 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Bank filtering
   const [bankFilter, setBankFilter] = useState<string>('all');
   const [bankSort, setBankSort] = useState<'newest' | 'oldest' | 'variation'>('newest');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  // Image title editing
+  const [editingImageId, setEditingImageId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState<string>('');
+
+  // Category management
+  const [newCategoryInput, setNewCategoryInput] = useState<string>('');
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+
+  // Upload processing
+  const [uploadingToBank, setUploadingToBank] = useState(false);
+  const [autoTagging, setAutoTagging] = useState(false);
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoFileInputRef = useRef<HTMLInputElement>(null);
   const actionShotsInputRef = useRef<HTMLInputElement>(null);
+  const bankUploadInputRef = useRef<HTMLInputElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const mainPromptRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -320,6 +343,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             ? data.settings.audience_avatars
             : [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
           image_bank: data.settings.image_bank || [],
+          // Image categories and auto-tag
+          image_categories: data.settings.image_categories?.length > 0
+            ? data.settings.image_categories
+            : DEFAULT_SETTINGS.image_categories,
+          auto_tag_enabled: data.settings.auto_tag_enabled ?? true,
           chat_history: data.settings.chat_history || [],
           // Dual chat system
           consultant_chat_history: migratedConsultantHistory,
@@ -399,8 +427,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Filter and sort bank images
   const getFilteredBankImages = (includeUsed: boolean) => {
     let images = settings.image_bank.filter(img => includeUsed ? img.used : !img.used);
+    // Filter by variation
     if (bankFilter !== 'all') {
       images = images.filter(img => img.variation === bankFilter);
+    }
+    // Filter by category
+    if (categoryFilter !== 'all') {
+      images = images.filter(img => img.category === categoryFilter);
     }
     switch (bankSort) {
       case 'newest':
@@ -415,6 +448,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
     return images;
   };
+
+  // Get unique categories for filter
+  const uniqueCategories = [...new Set(settings.image_bank.map(img => img.category).filter(Boolean))];
 
   const availableImages = getFilteredBankImages(false);
   const usedImages = getFilteredBankImages(true);
@@ -1253,6 +1289,172 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     showNotification('Image restored to available', 'info');
   };
 
+  // ========== UPLOAD TO BANK ==========
+
+  /**
+   * Handle bulk upload of images to bank
+   */
+  const handleBankUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    setUploadingToBank(true);
+    const newImages: BankImage[] = [];
+
+    for (const file of Array.from(files)) {
+      try {
+        // Convert file to base64 data URL
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        // Get filename without extension for default title
+        const defaultTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+
+        const newImage: BankImage = {
+          id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          url: dataUrl,
+          title: defaultTitle,
+          category: 'Other', // Default category, will be auto-tagged if enabled
+          variation: 'Uploaded',
+          variationId: 'uploaded',
+          avatarTag: activeAvatar?.tag,
+          orientation: 'landscape', // Could detect from image dimensions
+          prompt: 'Manually uploaded',
+          createdAt: new Date().toISOString(),
+          used: false
+        };
+
+        newImages.push(newImage);
+      } catch (error) {
+        console.error(`Failed to process file ${file.name}:`, error);
+      }
+    }
+
+    // Add to bank
+    const updatedBank = [...settings.image_bank, ...newImages];
+    updateSettings({ image_bank: updatedBank });
+
+    showNotification(`Uploaded ${newImages.length} image(s) to bank`, 'success');
+
+    // Auto-tag if enabled
+    if (settings.auto_tag_enabled && newImages.length > 0) {
+      await autoTagImages(newImages.map(img => img.id));
+    }
+
+    setUploadingToBank(false);
+  };
+
+  /**
+   * LLM Auto-tagging for uploaded images
+   */
+  const autoTagImages = async (imageIds: string[]) => {
+    if (imageIds.length === 0) return;
+
+    setAutoTagging(true);
+    log('Auto-tagging uploaded images...', LogStatus.WORKING);
+
+    try {
+      // Get images to tag
+      const imagesToTag = settings.image_bank.filter(img => imageIds.includes(img.id));
+
+      for (const img of imagesToTag) {
+        try {
+          // Call LLM to analyze and categorize the image
+          const res = await fetch('/api/image-creation/auto-tag', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageUrl: img.url,
+              categories: settings.image_categories,
+              currentTitle: img.title
+            })
+          });
+
+          const data = await res.json();
+          if (data.success) {
+            // Update image with LLM suggestions
+            const newBank = settings.image_bank.map(bankImg =>
+              bankImg.id === img.id
+                ? {
+                    ...bankImg,
+                    title: data.suggestedTitle || bankImg.title,
+                    category: data.suggestedCategory || bankImg.category
+                  }
+                : bankImg
+            );
+            updateSettings({ image_bank: newBank });
+          }
+        } catch (error) {
+          console.error(`Auto-tag failed for image ${img.id}:`, error);
+        }
+      }
+
+      log('Auto-tagging complete', LogStatus.SUCCESS);
+    } catch (error) {
+      console.error('Auto-tagging error:', error);
+      log('Auto-tagging failed', LogStatus.ERROR);
+    }
+
+    setAutoTagging(false);
+  };
+
+  /**
+   * Update image title
+   */
+  const handleUpdateImageTitle = (imageId: string, newTitle: string) => {
+    const newBank = settings.image_bank.map(img =>
+      img.id === imageId ? { ...img, title: newTitle } : img
+    );
+    updateSettings({ image_bank: newBank });
+    setEditingImageId(null);
+    setEditingTitle('');
+  };
+
+  /**
+   * Update image category
+   */
+  const handleUpdateImageCategory = (imageId: string, newCategory: string) => {
+    const newBank = settings.image_bank.map(img =>
+      img.id === imageId ? { ...img, category: newCategory } : img
+    );
+    updateSettings({ image_bank: newBank });
+  };
+
+  /**
+   * Add a new custom category
+   */
+  const handleAddCategory = () => {
+    if (!newCategoryInput.trim()) return;
+    if (settings.image_categories.includes(newCategoryInput.trim())) {
+      showNotification('Category already exists', 'error');
+      return;
+    }
+    updateSettings({
+      image_categories: [...settings.image_categories, newCategoryInput.trim()]
+    });
+    setNewCategoryInput('');
+    showNotification('Category added', 'success');
+  };
+
+  /**
+   * Remove a custom category
+   */
+  const handleRemoveCategory = (category: string) => {
+    // Move any images with this category to "Other"
+    const newBank = settings.image_bank.map(img =>
+      img.category === category ? { ...img, category: 'Other' } : img
+    );
+    const newCategories = settings.image_categories.filter(c => c !== category);
+    updateSettings({
+      image_bank: newBank,
+      image_categories: newCategories.length > 0 ? newCategories : ['Other']
+    });
+    showNotification('Category removed', 'info');
+  };
+
   // Variation Order Handlers
   const handleSetVariationOrder = (variationId: string) => {
     const currentOrder = settings.manual_variation_order || [];
@@ -2059,14 +2261,90 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             </button>
             {isBankOpen && (
               <div className="p-4 border-t border-brand-cyan/30 space-y-3">
+                {/* Upload and Auto-tag Controls */}
+                <div className="flex gap-3 flex-wrap items-center justify-between bg-slate-800/50 p-3 rounded-lg border border-brand-cyan/20">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => bankUploadInputRef.current?.click()}
+                      disabled={uploadingToBank}
+                      className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 text-xs font-medium transition flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                      {uploadingToBank ? 'Uploading...' : 'Upload Images'}
+                    </button>
+                    <input
+                      ref={bankUploadInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => handleBankUpload(e.target.files)}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => setShowCategoryManager(!showCategoryManager)}
+                      className="px-2 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" /></svg>
+                      Categories
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-brand-gold/70">Auto-tag:</label>
+                    <button
+                      onClick={() => updateSettings({ auto_tag_enabled: !settings.auto_tag_enabled })}
+                      className={`relative w-10 h-5 rounded-full transition ${settings.auto_tag_enabled ? 'bg-brand-cyan' : 'bg-slate-600'}`}
+                    >
+                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.auto_tag_enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                    {autoTagging && <span className="text-xs text-brand-cyan animate-pulse">Tagging...</span>}
+                  </div>
+                </div>
+
+                {/* Category Manager (collapsible) */}
+                {showCategoryManager && (
+                  <div className="bg-slate-800/30 p-3 rounded-lg border border-brand-gold/20 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-brand-gold font-medium">Manage Categories</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newCategoryInput}
+                          onChange={(e) => setNewCategoryInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                          placeholder="New category..."
+                          className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs w-32"
+                        />
+                        <button onClick={handleAddCategory} className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-white text-xs">Add</button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {settings.image_categories.map(cat => (
+                        <span key={cat} className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 rounded text-xs text-white">
+                          {cat}
+                          {cat !== 'Other' && (
+                            <button onClick={() => handleRemoveCategory(cat)} className="text-red-400 hover:text-red-300">&times;</button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Filter and Sort Controls */}
                 <div className="flex gap-3 flex-wrap items-center justify-between">
                   <div className="flex gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <label className="text-xs text-brand-gold/70">Filter:</label>
+                      <label className="text-xs text-brand-gold/70">Variation:</label>
                       <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
-                        <option value="all">All Variations</option>
+                        <option value="all">All</option>
                         {uniqueVariations.map(v => (<option key={v} value={v}>{v}</option>))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-brand-gold/70">Category:</label>
+                      <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
+                        <option value="all">All</option>
+                        {settings.image_categories.map(c => (<option key={c} value={c}>{c}</option>))}
                       </select>
                     </div>
                     <div className="flex items-center gap-2">
@@ -2094,12 +2372,42 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                     )}
                   </div>
                 </div>
+
+                {/* Image Grid */}
                 {availableImages.length > 0 ? (
                   <div className="grid grid-cols-4 gap-3">
                     {availableImages.map((img) => (
                       <div key={img.id} className={`relative group cursor-pointer ${selectedForDownload.has(img.id) ? 'ring-2 ring-brand-cyan' : ''}`}>
+                        {/* Title label at top - editable */}
+                        <div
+                          className="absolute top-0 left-0 right-0 z-10 bg-slate-900/90 border-b border-brand-cyan/30 px-1.5 py-0.5 rounded-t"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {editingImageId === img.id ? (
+                            <input
+                              type="text"
+                              value={editingTitle}
+                              onChange={(e) => setEditingTitle(e.target.value)}
+                              onBlur={() => handleUpdateImageTitle(img.id, editingTitle)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleUpdateImageTitle(img.id, editingTitle);
+                                if (e.key === 'Escape') { setEditingImageId(null); setEditingTitle(''); }
+                              }}
+                              autoFocus
+                              className="w-full bg-transparent border-none text-[10px] text-white focus:outline-none"
+                            />
+                          ) : (
+                            <div
+                              onClick={() => { setEditingImageId(img.id); setEditingTitle(img.title || ''); }}
+                              className="text-[10px] text-white truncate cursor-text hover:text-brand-cyan"
+                              title="Click to edit title"
+                            >
+                              {img.title || img.variation}
+                            </div>
+                          )}
+                        </div>
                         {/* Selection checkbox */}
-                        <div className="absolute top-1 left-1 z-10">
+                        <div className="absolute top-5 left-1 z-10">
                           <input
                             type="checkbox"
                             checked={selectedForDownload.has(img.id)}
@@ -2108,15 +2416,29 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                             className="w-4 h-4 rounded border-2 border-brand-cyan text-brand-cyan focus:ring-brand-cyan bg-slate-900/80"
                           />
                         </div>
+                        {/* Category badge */}
+                        {img.category && img.category !== 'Other' && (
+                          <div className="absolute top-5 right-1 z-10">
+                            <select
+                              value={img.category || 'Other'}
+                              onChange={(e) => { e.stopPropagation(); handleUpdateImageCategory(img.id, e.target.value); }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="bg-purple-600/80 text-white text-[9px] px-1 py-0.5 rounded border-none cursor-pointer appearance-none"
+                              style={{ minWidth: 'auto', paddingRight: '0.5rem' }}
+                            >
+                              {settings.image_categories.map(c => (<option key={c} value={c}>{c}</option>))}
+                            </select>
+                          </div>
+                        )}
                         {/* Image - click to preview */}
                         <img
                           src={img.url}
-                          alt={img.variation}
-                          className="w-full h-24 object-cover rounded border border-brand-cyan/30"
+                          alt={img.title || img.variation}
+                          className="w-full h-24 object-cover rounded-b border border-brand-cyan/30 pt-4"
                           onClick={() => setPreviewImage(img)}
                         />
                         {/* Hover overlay with actions */}
-                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
+                        <div className="absolute inset-0 top-4 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded-b flex flex-col items-center justify-center p-1 gap-1">
                           <span className="text-[10px] text-white font-semibold">{img.variation}</span>
                           <div className="flex gap-1 flex-wrap justify-center">
                             <button onClick={() => setPreviewImage(img)} className="px-2 py-0.5 bg-blue-600/80 rounded text-white text-[10px]">Expand</button>
@@ -2131,7 +2453,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                     ))}
                   </div>
                 ) : (
-                  <p className="text-center text-brand-gold/50 py-4">No available images.</p>
+                  <div className="text-center py-8">
+                    <p className="text-brand-gold/50 mb-2">No available images.</p>
+                    <button
+                      onClick={() => bankUploadInputRef.current?.click()}
+                      className="px-4 py-2 bg-brand-cyan/20 hover:bg-brand-cyan/30 border border-brand-cyan/50 rounded text-brand-cyan text-sm transition"
+                    >
+                      Upload your first images
+                    </button>
+                  </div>
                 )}
               </div>
             )}
