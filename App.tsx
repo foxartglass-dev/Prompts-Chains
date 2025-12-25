@@ -21,6 +21,7 @@ import IdeasBacklog from './src/components/IdeasBacklog';
 import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components/DefaultWorkflowSelector';
 import WordPressSettings from './src/components/WordPressSettings';
 import ArticlesPage from './src/pages/ArticlesPage';
+import ImageCreationSection from './src/components/ImageCreationSection';
 
 // Types for workflow
 interface WorkflowItem {
@@ -2792,6 +2793,18 @@ const App: React.FC = () => {
                             </div>
                         </div>
                     )}
+
+                    {/* 7. Image Creation Section */}
+                    {renderSection('7. Image Creation', 'imageCreation',
+                        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>,
+                        <ImageCreationSection
+                            workflowId={currentWorkflowId}
+                            showNotification={showNotification}
+                        />
+                    )}
+
                     <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan">
                         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5`}><Icon type="info" className="h-6 w-6"/><span className="ml-3">Processing Log</span></h2>
                         <div className="p-5 pt-0 border-t border-brand-cyan/30">
