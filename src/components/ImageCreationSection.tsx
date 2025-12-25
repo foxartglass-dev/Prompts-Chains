@@ -4,11 +4,12 @@
  *
  * Features:
  * - Reference images for style consistency (collapsible)
- * - Audience avatars with main prompts + variations
+ * - Logo upload with action shots for brand consistency
+ * - Audience avatars synced with Tag Manager (H, J, C)
  * - Variation placeholder system (clickable tags to insert into prompt)
  * - Chat interface with GPT-4o for prompt refinement
  * - Batch Generate section (collapsible)
- * - Image Bank section (separate, with sorting/filtering)
+ * - Image Bank section with preview modal and download
  * - Used/Archive section with page links
  * - Page integration controls with variation order
  * - Processing Log integration
@@ -23,6 +24,12 @@ interface ReferenceImage {
   tags?: string[];
 }
 
+interface LogoImage {
+  url: string;
+  filename?: string;
+  type: 'logo' | 'action'; // logo = the actual logo, action = photos showing logo in use
+}
+
 interface Variation {
   id: string;
   name: string;
@@ -33,6 +40,7 @@ interface Variation {
 interface AudienceAvatar {
   id: number;
   name: string;
+  tag?: string; // Links to Tag Manager tag (e.g., "H", "J", "C")
   mainPrompt: string;
   variations: Variation[];
   referenceImages?: ReferenceImage[];
@@ -43,6 +51,7 @@ interface BankImage {
   url: string;
   variation: string;
   variationId: string;
+  avatarTag?: string; // Which avatar/tag this image belongs to
   orientation: string;
   prompt: string;
   createdAt: string;
@@ -58,10 +67,16 @@ interface ChatMessage {
   timestamp: string;
 }
 
+interface Tag {
+  id: number;
+  name: string;
+}
+
 interface ImageCreationSettings {
   enabled: boolean;
   prompt_assistant_model: string;
   reference_images: ReferenceImage[];
+  logo_images: LogoImage[];
   audience_avatars: AudienceAvatar[];
   image_bank: BankImage[];
   chat_history: ChatMessage[];
@@ -81,6 +96,7 @@ enum LogStatus {
 
 interface Props {
   workflowId?: number;
+  tags?: Tag[]; // Tags from Tag Manager
   onSettingsChange?: (settings: ImageCreationSettings) => void;
   showNotification: (message: string, type: 'success' | 'info' | 'error') => void;
   addLog?: (message: string, status: LogStatus) => void;
@@ -90,6 +106,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   enabled: false,
   prompt_assistant_model: 'gpt-4o',
   reference_images: [],
+  logo_images: [],
   audience_avatars: [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
   image_bank: [],
   chat_history: [],
@@ -112,7 +129,7 @@ const AVAILABLE_MODELS = [
 // Variation placeholder tag
 const VARIATION_PLACEHOLDER = '{variation}';
 
-const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, showNotification, addLog }) => {
+const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettingsChange, showNotification, addLog }) => {
   // State
   const [settings, setSettings] = useState<ImageCreationSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -121,11 +138,18 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
 
   // Collapsible sections
   const [isReferenceOpen, setIsReferenceOpen] = useState(false);
+  const [isLogoOpen, setIsLogoOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(true);
   const [isUsedOpen, setIsUsedOpen] = useState(false);
   const [isOrderOpen, setIsOrderOpen] = useState(false);
+
+  // Image preview modal
+  const [previewImage, setPreviewImage] = useState<BankImage | null>(null);
+
+  // Bulk selection for download
+  const [selectedForDownload, setSelectedForDownload] = useState<Set<string>>(new Set());
 
   // Active avatar
   const [activeAvatarId, setActiveAvatarId] = useState<number>(1);
@@ -149,6 +173,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+  const actionShotsInputRef = useRef<HTMLInputElement>(null);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const mainPromptRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -170,6 +196,43 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
       setLoaded(false);
     }
   }, [workflowId]);
+
+  // Sync Tag Manager tags with Audience Avatars
+  useEffect(() => {
+    if (!loaded || tags.length === 0) return;
+
+    // Check if we need to sync avatars with tags
+    const existingTags = new Set(settings.audience_avatars.map(a => a.tag).filter(Boolean));
+    const tagManagerTags = new Set(tags.map(t => t.name));
+
+    // Find new tags that don't have avatars
+    const newTags = tags.filter(t => !existingTags.has(t.name));
+
+    if (newTags.length > 0) {
+      const newAvatars = newTags.map((tag, idx) => ({
+        id: Date.now() + idx,
+        name: `${tag.name}`, // Just the tag name, user can rename
+        tag: tag.name,
+        mainPrompt: '',
+        variations: []
+      }));
+
+      // Keep existing avatars but mark any that don't have tags if tags exist
+      const updatedAvatars = [
+        ...settings.audience_avatars.filter(a => a.tag || !tagManagerTags.size),
+        ...newAvatars
+      ];
+
+      // If no avatars left with tags but we have tags, just add new ones
+      if (updatedAvatars.length === 0) {
+        updateSettings({ audience_avatars: newAvatars });
+      } else {
+        updateSettings({ audience_avatars: updatedAvatars });
+      }
+
+      log(`Synced ${newTags.length} new avatars from Tag Manager`, LogStatus.INFO);
+    }
+  }, [tags, loaded]);
 
   // Scroll chat to bottom on new messages
   useEffect(() => {
@@ -200,6 +263,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
           ...data.settings,
           // Ensure arrays are arrays
           reference_images: data.settings.reference_images || [],
+          logo_images: data.settings.logo_images || [],
           audience_avatars: data.settings.audience_avatars?.length > 0
             ? data.settings.audience_avatars
             : [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
@@ -375,6 +439,105 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
   const handleRemoveReference = (index: number) => {
     const newImages = settings.reference_images.filter((_, i) => i !== index);
     updateSettings({ reference_images: newImages });
+  };
+
+  // Logo Image Handlers
+  const handleUploadLogo = async (files: FileList | null, type: 'logo' | 'action') => {
+    if (!files || files.length === 0) return;
+    const newImages: LogoImage[] = [];
+    for (const file of Array.from(files)) {
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      newImages.push({ url: dataUrl, filename: file.name, type });
+    }
+    updateSettings({
+      logo_images: [...settings.logo_images, ...newImages]
+    });
+    showNotification(`Added ${newImages.length} ${type === 'logo' ? 'logo' : 'action shot'}(s)`, 'success');
+  };
+
+  const handleRemoveLogo = (index: number) => {
+    const newImages = settings.logo_images.filter((_, i) => i !== index);
+    updateSettings({ logo_images: newImages });
+  };
+
+  // Get logos and action shots separately
+  const logoImages = settings.logo_images.filter(img => img.type === 'logo');
+  const actionShots = settings.logo_images.filter(img => img.type === 'action');
+
+  // Download handlers
+  const handleDownloadImage = async (img: BankImage) => {
+    try {
+      const response = await fetch(img.url);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${img.variation}-${img.id}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      showNotification('Image downloaded', 'success');
+    } catch (error) {
+      showNotification('Failed to download image', 'error');
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedForDownload.size === 0) {
+      showNotification('Select images to download', 'error');
+      return;
+    }
+
+    const imagesToDownload = settings.image_bank.filter(img => selectedForDownload.has(img.id));
+    log(`Downloading ${imagesToDownload.length} images...`, LogStatus.WORKING);
+
+    for (let i = 0; i < imagesToDownload.length; i++) {
+      const img = imagesToDownload[i];
+      try {
+        const response = await fetch(img.url);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${img.variation}-${img.id}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        // Small delay between downloads to prevent browser issues
+        await new Promise(r => setTimeout(r, 200));
+      } catch (error) {
+        console.error('Failed to download:', img.id);
+      }
+    }
+
+    setSelectedForDownload(new Set());
+    log(`Downloaded ${imagesToDownload.length} images`, LogStatus.SUCCESS);
+    showNotification(`Downloaded ${imagesToDownload.length} images`, 'success');
+  };
+
+  const toggleDownloadSelection = (id: string) => {
+    const newSelected = new Set(selectedForDownload);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedForDownload(newSelected);
+  };
+
+  const selectAllForDownload = () => {
+    const availableIds = availableImages.map(img => img.id);
+    setSelectedForDownload(new Set(availableIds));
+  };
+
+  const clearDownloadSelection = () => {
+    setSelectedForDownload(new Set());
   };
 
   // Audience Avatar Handlers
@@ -834,10 +997,128 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
             )}
           </div>
 
+          {/* Logo & Action Shots (Collapsible) */}
+          <div className="bg-slate-900 rounded-lg border border-pink-500/50 overflow-hidden">
+            <button
+              onClick={() => setIsLogoOpen(!isLogoOpen)}
+              className="w-full flex items-center justify-between p-3 text-pink-400 hover:bg-slate-800/50 transition"
+            >
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                </svg>
+                Logo & Action Shots ({logoImages.length} logo, {actionShots.length} action)
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isLogoOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {isLogoOpen && (
+              <div className="p-4 border-t border-pink-500/30 space-y-4">
+                {/* Logo Upload */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm text-pink-300 font-medium">Logo Image (the actual logo)</label>
+                    <button
+                      onClick={() => logoFileInputRef.current?.click()}
+                      className="flex items-center gap-1 px-3 py-1 bg-pink-600 hover:bg-pink-500 rounded text-white text-xs transition"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Upload Logo
+                    </button>
+                    <input
+                      ref={logoFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleUploadLogo(e.target.files, 'logo')}
+                      className="hidden"
+                    />
+                  </div>
+                  {logoImages.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {logoImages.map((img, idx) => {
+                        const globalIdx = settings.logo_images.findIndex(i => i === img);
+                        return (
+                          <div key={idx} className="relative group">
+                            <img src={img.url} alt={img.filename || 'Logo'} className="h-20 w-auto object-contain rounded border-2 border-pink-500/50 bg-white p-1" />
+                            <button onClick={() => handleRemoveLogo(globalIdx)} className="absolute -top-2 -right-2 p-1 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition">
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-pink-300/50 italic">No logo uploaded. Use {'{logo}'} placeholder in prompts.</p>
+                  )}
+                </div>
+
+                {/* Action Shots */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm text-pink-300 font-medium">Action Shots (logo on shirts, vehicles, etc.)</label>
+                    <button
+                      onClick={() => actionShotsInputRef.current?.click()}
+                      className="flex items-center gap-1 px-3 py-1 bg-pink-600 hover:bg-pink-500 rounded text-white text-xs transition"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Upload Action Shots
+                    </button>
+                    <input
+                      ref={actionShotsInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => handleUploadLogo(e.target.files, 'action')}
+                      className="hidden"
+                    />
+                  </div>
+                  {actionShots.length > 0 ? (
+                    <div className="grid grid-cols-4 gap-2">
+                      {actionShots.map((img, idx) => {
+                        const globalIdx = settings.logo_images.findIndex(i => i === img);
+                        return (
+                          <div key={idx} className="relative group">
+                            <img src={img.url} alt={img.filename || `Action ${idx + 1}`} className="w-full h-20 object-cover rounded border border-pink-500/30" />
+                            <button onClick={() => handleRemoveLogo(globalIdx)} className="absolute top-1 right-1 p-1 bg-red-600/80 rounded opacity-0 group-hover:opacity-100 transition">
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-pink-300/50 italic">Upload photos showing the logo on dark blue shirts from different angles.</p>
+                  )}
+                </div>
+
+                <p className="text-xs text-pink-300/70 bg-pink-900/30 p-2 rounded">
+                  <strong>Tip:</strong> These images help AI understand your brand. Use <code className="bg-pink-900/50 px-1 rounded">{'{logo}'}</code> in prompts to reference the logo placement.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Audience Avatars */}
           <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-brand-gold font-semibold">Audience Avatars</h3>
+              <div className="flex items-center gap-3">
+                <h3 className="text-brand-gold font-semibold">Audience Avatars</h3>
+                {tags.length > 0 && (
+                  <span className="text-xs text-brand-cyan/70 bg-brand-cyan/10 px-2 py-0.5 rounded">
+                    Synced with Tag Manager: {tags.map(t => t.name).join(', ')}
+                  </span>
+                )}
+              </div>
               <button onClick={handleAddAvatar} className="text-brand-cyan hover:text-brand-cyan-light text-sm font-medium transition">+ Add Avatar</button>
             </div>
 
@@ -848,9 +1129,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
                   onClick={() => setActiveAvatarId(avatar.id)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${activeAvatarId === avatar.id ? 'bg-brand-gold text-slate-900' : 'bg-slate-800 text-brand-gold hover:bg-slate-700'}`}
                 >
-                  <span>{avatar.name}</span>
-                  {settings.audience_avatars.length > 1 && (
+                  <span>{avatar.name}{avatar.tag ? ` (${avatar.tag})` : ''}</span>
+                  {settings.audience_avatars.length > 1 && !avatar.tag && (
                     <span onClick={(e) => { e.stopPropagation(); handleRemoveAvatar(avatar.id); }} className="hover:text-red-500 cursor-pointer">&times;</span>
+                  )}
+                  {avatar.tag && (
+                    <span className="bg-brand-cyan/20 text-brand-cyan text-[10px] px-1.5 rounded">TAG</span>
                   )}
                 </button>
               ))}
@@ -1090,30 +1374,69 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
             </button>
             {isBankOpen && (
               <div className="p-4 border-t border-brand-cyan/30 space-y-3">
-                <div className="flex gap-3 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-brand-gold/70">Filter:</label>
-                    <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
-                      <option value="all">All Variations</option>
-                      {uniqueVariations.map(v => (<option key={v} value={v}>{v}</option>))}
-                    </select>
+                {/* Filter and Sort Controls */}
+                <div className="flex gap-3 flex-wrap items-center justify-between">
+                  <div className="flex gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-brand-gold/70">Filter:</label>
+                      <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
+                        <option value="all">All Variations</option>
+                        {uniqueVariations.map(v => (<option key={v} value={v}>{v}</option>))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-brand-gold/70">Sort:</label>
+                      <select value={bankSort} onChange={(e) => setBankSort(e.target.value as any)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
+                        <option value="newest">Newest</option>
+                        <option value="oldest">Oldest</option>
+                        <option value="variation">Variation</option>
+                      </select>
+                    </div>
                   </div>
+                  {/* Bulk Download Controls */}
                   <div className="flex items-center gap-2">
-                    <label className="text-xs text-brand-gold/70">Sort:</label>
-                    <select value={bankSort} onChange={(e) => setBankSort(e.target.value as any)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
-                      <option value="newest">Newest</option>
-                      <option value="oldest">Oldest</option>
-                      <option value="variation">Variation</option>
-                    </select>
+                    {selectedForDownload.size > 0 ? (
+                      <>
+                        <span className="text-xs text-brand-cyan">{selectedForDownload.size} selected</span>
+                        <button onClick={handleBulkDownload} className="px-2 py-1 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 text-xs font-medium transition flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                          Download
+                        </button>
+                        <button onClick={clearDownloadSelection} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition">Clear</button>
+                      </>
+                    ) : (
+                      <button onClick={selectAllForDownload} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition">Select All</button>
+                    )}
                   </div>
                 </div>
                 {availableImages.length > 0 ? (
                   <div className="grid grid-cols-4 gap-3">
                     {availableImages.map((img) => (
-                      <div key={img.id} className="relative group">
-                        <img src={img.url} alt={img.variation} className="w-full h-24 object-cover rounded border border-brand-cyan/30" />
+                      <div key={img.id} className={`relative group cursor-pointer ${selectedForDownload.has(img.id) ? 'ring-2 ring-brand-cyan' : ''}`}>
+                        {/* Selection checkbox */}
+                        <div className="absolute top-1 left-1 z-10">
+                          <input
+                            type="checkbox"
+                            checked={selectedForDownload.has(img.id)}
+                            onChange={() => toggleDownloadSelection(img.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded border-2 border-brand-cyan text-brand-cyan focus:ring-brand-cyan bg-slate-900/80"
+                          />
+                        </div>
+                        {/* Image - click to preview */}
+                        <img
+                          src={img.url}
+                          alt={img.variation}
+                          className="w-full h-24 object-cover rounded border border-brand-cyan/30"
+                          onClick={() => setPreviewImage(img)}
+                        />
+                        {/* Hover overlay with actions */}
                         <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
                           <span className="text-[10px] text-white font-semibold">{img.variation}</span>
+                          <div className="flex gap-1 flex-wrap justify-center">
+                            <button onClick={() => setPreviewImage(img)} className="px-2 py-0.5 bg-blue-600/80 rounded text-white text-[10px]">Expand</button>
+                            <button onClick={() => handleDownloadImage(img)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Download</button>
+                          </div>
                           <div className="flex gap-1">
                             <button onClick={() => handleMarkAsUsed(img.id, 'manual')} className="px-2 py-0.5 bg-green-600/80 rounded text-white text-[10px]">Used</button>
                             <button onClick={() => handleRemoveFromBank(img.id)} className="px-2 py-0.5 bg-red-600/80 rounded text-white text-[10px]">Delete</button>
@@ -1244,6 +1567,71 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, onSettingsChange, s
       {saving && (
         <div className="fixed bottom-4 right-4 bg-brand-cyan text-slate-900 px-4 py-2 rounded-lg shadow-lg text-sm font-medium">
           Saving...
+        </div>
+      )}
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={(e) => e.stopPropagation()}>
+            {/* Close button */}
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute -top-10 right-0 text-white hover:text-brand-cyan transition p-2"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Image */}
+            <img
+              src={previewImage.url}
+              alt={previewImage.variation}
+              className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+            />
+
+            {/* Info and actions bar */}
+            <div className="mt-4 bg-slate-900 rounded-lg p-4 flex items-center justify-between">
+              <div className="text-white">
+                <p className="font-semibold">{previewImage.variation}</p>
+                <p className="text-xs text-brand-gold/70 mt-1">
+                  {previewImage.orientation} • {new Date(previewImage.createdAt).toLocaleDateString()}
+                </p>
+                {previewImage.prompt && (
+                  <p className="text-xs text-gray-400 mt-2 max-w-xl truncate" title={previewImage.prompt}>
+                    Prompt: {previewImage.prompt.substring(0, 100)}...
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDownloadImage(previewImage)}
+                  className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-sm transition flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download
+                </button>
+                <button
+                  onClick={() => { handleMarkAsUsed(previewImage.id, 'manual'); setPreviewImage(null); }}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded text-white font-medium text-sm transition"
+                >
+                  Mark as Used
+                </button>
+                <button
+                  onClick={() => { handleRemoveFromBank(previewImage.id); setPreviewImage(null); }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded text-white font-medium text-sm transition"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

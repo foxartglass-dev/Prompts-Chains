@@ -225,16 +225,21 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   prompt_assistant_model VARCHAR(100) DEFAULT 'gpt-4o', -- Model for helping craft prompts (chat)
   -- Reference images for style consistency
   reference_images JSONB DEFAULT '[]', -- Array of {url, filename, tags}
-  -- Audience avatars (each has own main prompt + variations)
+  -- Logo images (logo itself and action shots showing logo in use)
+  logo_images JSONB DEFAULT '[]', -- Array of {url, filename, type: 'logo'|'action'}
+  -- Audience avatars (each has own main prompt + variations, linked to Tag Manager)
   audience_avatars JSONB DEFAULT '[{"id": 1, "name": "Default", "mainPrompt": "", "variations": []}]',
   -- Pre-made image bank
-  image_bank JSONB DEFAULT '[]', -- Array of {id, url, variation, orientation, prompt, createdAt}
+  image_bank JSONB DEFAULT '[]', -- Array of {id, url, variation, avatarTag, orientation, prompt, createdAt}
   -- Chat history with image model
   chat_history JSONB DEFAULT '[]', -- Array of {role, content, images?, timestamp}
   -- Page integration settings
   integration_mode VARCHAR(20) DEFAULT 'bank', -- 'live' or 'bank'
   fallback_to_live BOOLEAN DEFAULT true, -- Make from scratch if bank empty
   image_order JSONB DEFAULT '[]', -- Order of variation IDs for page placement
+  -- Variation order settings
+  variation_order_mode VARCHAR(20) DEFAULT 'sequential', -- 'sequential', 'random', 'manual'
+  manual_variation_order JSONB DEFAULT '[]', -- Array of variation IDs in manual order
   -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

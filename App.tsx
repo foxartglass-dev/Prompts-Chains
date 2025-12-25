@@ -2801,6 +2801,7 @@ const App: React.FC = () => {
                         </svg>,
                         <ImageCreationSection
                             workflowId={currentWorkflowId}
+                            tags={currentProject?.state.tags || []}
                             showNotification={showNotification}
                             addLog={addLog}
                         />
