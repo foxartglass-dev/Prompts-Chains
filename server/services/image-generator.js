@@ -113,8 +113,23 @@ async function generateWithFlux(prompt, options, apiKey) {
     }
   );
 
-  // Flux returns a URL directly
-  const imageUrl = output;
+  // Flux returns output - could be string URL or array
+  console.log(`[Image Generator] Flux raw output:`, typeof output, output);
+
+  // Handle different output formats from Replicate
+  let imageUrl;
+  if (typeof output === 'string') {
+    imageUrl = output;
+  } else if (Array.isArray(output) && output.length > 0) {
+    imageUrl = output[0];
+  } else if (output && output.url) {
+    imageUrl = output.url;
+  } else {
+    console.error('[Image Generator] Unexpected Flux output format:', output);
+    throw new Error('Unexpected Flux output format');
+  }
+
+  console.log(`[Image Generator] Flux image URL:`, imageUrl);
 
   // Parse dimensions from aspect ratio
   let w = 1024, h = 1024;
