@@ -990,6 +990,62 @@ router.get('/available-models', (req, res) => {
   });
 });
 
+/**
+ * POST /api/image-creation/verify-replicate
+ * Verify Replicate API key and get account info
+ */
+router.post('/verify-replicate', async (req, res) => {
+  try {
+    const { replicateApiKey } = req.body;
+    const apiKey = replicateApiKey || process.env.REPLICATE_API_TOKEN;
+
+    if (!apiKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'No Replicate API key provided'
+      });
+    }
+
+    // Call Replicate account endpoint
+    const response = await fetch('https://api.replicate.com/v1/account', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return res.status(response.status).json({
+        success: false,
+        error: error.detail || 'Invalid API key or request failed',
+        status: response.status
+      });
+    }
+
+    const account = await response.json();
+
+    res.json({
+      success: true,
+      account: {
+        type: account.type,
+        username: account.username,
+        name: account.name,
+        github_url: account.github_url
+      },
+      message: `Connected to Replicate as: ${account.username}`,
+      note: 'Billing info not available via API - check https://replicate.com/account/billing'
+    });
+
+  } catch (error) {
+    console.error('Replicate verification error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // ========================================
 // IMAGE BANK INTEGRATION FOR ARTICLES
 // ========================================
