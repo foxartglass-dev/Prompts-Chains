@@ -232,7 +232,7 @@ const App: React.FC = () => {
 
             // Only auto-save if enabled
             const autoSaveEnabled = currentProject?.state?.autoSaveEnabled ?? true;
-            const autoSaveSeconds = currentProject?.state?.autoSaveSeconds ?? 3;
+            const autoSaveSeconds = currentProject?.state?.autoSaveSeconds ?? 30;
 
             if (autoSaveEnabled) {
                 autoSaveTimerRef.current = setTimeout(() => {
@@ -1586,8 +1586,8 @@ const App: React.FC = () => {
                                             type="number"
                                             min="1"
                                             max="60"
-                                            value={currentProject.state.autoSaveSeconds ?? 3}
-                                            onChange={e => setCurrentProjectState(p => ({...p, autoSaveSeconds: parseInt(e.target.value) || 3}))}
+                                            value={currentProject.state.autoSaveSeconds ?? 30}
+                                            onChange={e => setCurrentProjectState(p => ({...p, autoSaveSeconds: parseInt(e.target.value) || 30}))}
                                             className="w-16 bg-slate-700 border border-brand-cyan/50 rounded px-2 py-1 text-white text-sm"
                                         />
                                         <span className="text-slate-400 text-sm">seconds</span>
@@ -2311,12 +2311,17 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Save Status - Compact single line */}
+                        {/* Save Button - Always clickable, shows last save time */}
                         {currentWorkflowContext.workflowName && (
                             <button
                                 onClick={() => saveWorkflowToDatabase(true)}
-                                disabled={isSaving || !hasUnsavedChanges}
-                                className="flex items-center gap-1 px-1.5 py-1 rounded-lg font-semibold transition border-2 bg-brand-cyan text-slate-900 border-brand-cyan text-xs"
+                                disabled={isSaving}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg font-semibold transition border-2 text-xs cursor-pointer hover:opacity-80 ${
+                                    hasUnsavedChanges
+                                        ? 'bg-yellow-500 text-slate-900 border-yellow-500'
+                                        : 'bg-brand-cyan text-slate-900 border-brand-cyan'
+                                }`}
+                                title="Click to save now"
                             >
                                 {isSaving ? (
                                     <>
@@ -2324,23 +2329,18 @@ const App: React.FC = () => {
                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
-                                        <span className="font-bold">Saving</span>
-                                    </>
-                                ) : hasUnsavedChanges ? (
-                                    <>
-                                        <span className="font-bold">Save</span>
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
-                                        </svg>
+                                        <span className="font-bold">Saving...</span>
                                     </>
                                 ) : (
                                     <>
-                                        <span className="font-bold">Saved</span>
                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
                                         </svg>
+                                        <span className="font-bold">
+                                            {hasUnsavedChanges ? 'Save' : 'Saved'}
+                                        </span>
                                         {lastSaveTime && (
-                                            <span className="font-bold">{lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                            <span className="text-[10px] opacity-75">{lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                         )}
                                     </>
                                 )}

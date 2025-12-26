@@ -134,7 +134,7 @@ const initialProjectState: ProjectState = {
   apiKeys: { zeroGpt: '', anthropic: '', openai: '', gemini: '', grok: '', openRouter: '', xai: '' },
   useOpenRouter: false,
   autoSaveEnabled: true,
-  autoSaveSeconds: 3,
+  autoSaveSeconds: 30,
   provider: 'anthropic',
   model: 'claude-sonnet-4-5-20250929',
   model2: 'not-in-use',
