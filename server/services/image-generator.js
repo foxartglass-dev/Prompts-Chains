@@ -105,7 +105,7 @@ async function generateWithFlux(prompt, options, apiKey) {
       input: {
         prompt: prompt,
         aspect_ratio: aspectRatio,
-        output_format: "webp",
+        output_format: "png",
         output_quality: output_quality,
         safety_tolerance: 2,
         prompt_upsampling: true  // Enhances prompts for better results
