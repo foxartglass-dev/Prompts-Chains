@@ -2430,14 +2430,16 @@ const App: React.FC = () => {
                                         </button>
                                     </div>
                                 </div>
-                                <div className="w-24">
+                                <div className="w-28">
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center text-xs">Model</label>
                                     <select
                                         value={currentProject.state.imageModel || 'flux-1.1-pro'}
-                                        onChange={e => setCurrentProjectState(p => ({...p, imageModel: e.target.value as 'gpt-image-1.5' | 'flux-1.1-pro'}))}
+                                        onChange={e => setCurrentProjectState(p => ({...p, imageModel: e.target.value}))}
                                         className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                     >
                                         <option value="flux-1.1-pro">Flux 1.1</option>
+                                        <option value="seedream-4">Seedream 4</option>
+                                        <option value="ideogram-v3-turbo">Ideogram v3</option>
                                         <option value="gpt-image-1.5">GPT Img</option>
                                     </select>
                                 </div>

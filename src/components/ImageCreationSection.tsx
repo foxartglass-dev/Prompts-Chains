@@ -107,7 +107,9 @@ const IMAGE_GENERATION_MODELS = [
   { id: 'gpt-image-1', name: 'GPT-Image-1', provider: 'openai', description: 'Previous generation' },
   { id: 'gpt-image-1-mini', name: 'GPT-Image-1 Mini', provider: 'openai', description: 'Faster, lower cost' },
   { id: 'dall-e-3', name: 'DALL-E 3', provider: 'openai', description: 'Legacy model' },
-  { id: 'flux-1.1-pro', name: 'FLUX 1.1 Pro', provider: 'replicate', description: 'Via Replicate API' },
+  { id: 'flux-1.1-pro', name: 'FLUX 1.1 Pro (~$0.04)', provider: 'replicate', description: 'Fast, good prompt adherence' },
+  { id: 'seedream-4', name: 'Seedream 4 (~$0.03)', provider: 'replicate', description: 'Best value, 4K support (ByteDance)' },
+  { id: 'ideogram-v3-turbo', name: 'Ideogram v3 Turbo (~$0.04)', provider: 'replicate', description: 'Great realism, text rendering' },
 ];
 
 // Image Model Prompting Guide Knowledge Base

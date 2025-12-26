@@ -1,6 +1,9 @@
 /**
  * Image Generator Service
- * Supports both OpenAI gpt-image-1.5 and Flux 1.1 Pro via Replicate
+ * Supports OpenAI gpt-image-1.5 and multiple Replicate models:
+ * - Flux 1.1 Pro (~$0.04/image) - Fast, good prompt adherence
+ * - Seedream 4 (~$0.03/image) - Best value, 4K support
+ * - Ideogram v3 Turbo (~$0.04/image) - Great realism, text rendering
  */
 
 import OpenAI from 'openai';
@@ -162,6 +165,164 @@ async function generateWithFlux(prompt, options, apiKey) {
 }
 
 /**
+ * Generate a single image using Seedream 4 via Replicate
+ * Cost: ~$0.03 per image (cheapest option)
+ */
+async function generateWithSeedream(prompt, options, apiKey) {
+  const replicate = new Replicate({ auth: apiKey });
+
+  const { size = '1024x1024' } = options;
+
+  // Determine aspect ratio from size or width/height
+  let aspectRatio = '1:1';
+  if (options.width && options.height) {
+    if (options.width > options.height) {
+      aspectRatio = '16:9';
+    } else if (options.height > options.width) {
+      aspectRatio = '9:16';
+    }
+  } else if (size === '1536x1024') {
+    aspectRatio = '16:9';
+  } else if (size === '1024x1536') {
+    aspectRatio = '9:16';
+  }
+
+  console.log(`[Image Generator] Seedream 4, aspect: ${aspectRatio}`);
+
+  const output = await replicate.run(
+    "bytedance/seedream-4",
+    {
+      input: {
+        prompt: prompt,
+        aspect_ratio: aspectRatio,
+        output_format: "png"
+      }
+    }
+  );
+
+  // Handle FileOutput object
+  let imageUrl;
+  if (typeof output === 'string') {
+    imageUrl = output;
+  } else if (output && typeof output.url === 'function') {
+    imageUrl = await output.url();
+  } else if (output && typeof output.url === 'string') {
+    imageUrl = output.url;
+  } else if (Array.isArray(output) && output.length > 0) {
+    const first = output[0];
+    if (typeof first === 'string') {
+      imageUrl = first;
+    } else if (first && typeof first.url === 'function') {
+      imageUrl = await first.url();
+    } else if (first && first.url) {
+      imageUrl = first.url;
+    }
+  }
+
+  if (!imageUrl) {
+    console.error('[Image Generator] Could not extract URL from Seedream output:', output);
+    throw new Error('Could not extract URL from Seedream output');
+  }
+
+  console.log(`[Image Generator] Seedream image URL:`, imageUrl);
+
+  // Parse dimensions from aspect ratio
+  let w = 1024, h = 1024;
+  if (aspectRatio === '16:9') {
+    w = 1344; h = 768;
+  } else if (aspectRatio === '9:16') {
+    w = 768; h = 1344;
+  }
+
+  return {
+    url: imageUrl,
+    width: w,
+    height: h,
+    prompt: prompt,
+    model: 'seedream-4'
+  };
+}
+
+/**
+ * Generate a single image using Ideogram v3 Turbo via Replicate
+ * Cost: ~$0.04 per image
+ */
+async function generateWithIdeogram(prompt, options, apiKey) {
+  const replicate = new Replicate({ auth: apiKey });
+
+  const { size = '1024x1024' } = options;
+
+  // Determine aspect ratio from size or width/height
+  let aspectRatio = '1:1';
+  if (options.width && options.height) {
+    if (options.width > options.height) {
+      aspectRatio = '16:9';
+    } else if (options.height > options.width) {
+      aspectRatio = '9:16';
+    }
+  } else if (size === '1536x1024') {
+    aspectRatio = '16:9';
+  } else if (size === '1024x1536') {
+    aspectRatio = '9:16';
+  }
+
+  console.log(`[Image Generator] Ideogram v3 Turbo, aspect: ${aspectRatio}`);
+
+  const output = await replicate.run(
+    "ideogram-ai/ideogram-v3-turbo",
+    {
+      input: {
+        prompt: prompt,
+        aspect_ratio: aspectRatio,
+        style_type: "Realistic"  // Options: Auto, General, Realistic, Design
+      }
+    }
+  );
+
+  // Handle FileOutput object
+  let imageUrl;
+  if (typeof output === 'string') {
+    imageUrl = output;
+  } else if (output && typeof output.url === 'function') {
+    imageUrl = await output.url();
+  } else if (output && typeof output.url === 'string') {
+    imageUrl = output.url;
+  } else if (Array.isArray(output) && output.length > 0) {
+    const first = output[0];
+    if (typeof first === 'string') {
+      imageUrl = first;
+    } else if (first && typeof first.url === 'function') {
+      imageUrl = await first.url();
+    } else if (first && first.url) {
+      imageUrl = first.url;
+    }
+  }
+
+  if (!imageUrl) {
+    console.error('[Image Generator] Could not extract URL from Ideogram output:', output);
+    throw new Error('Could not extract URL from Ideogram output');
+  }
+
+  console.log(`[Image Generator] Ideogram image URL:`, imageUrl);
+
+  // Parse dimensions from aspect ratio
+  let w = 1024, h = 1024;
+  if (aspectRatio === '16:9') {
+    w = 1344; h = 768;
+  } else if (aspectRatio === '9:16') {
+    w = 768; h = 1344;
+  }
+
+  return {
+    url: imageUrl,
+    width: w,
+    height: h,
+    prompt: prompt,
+    model: 'ideogram-v3-turbo'
+  };
+}
+
+/**
  * Generate a single image using the specified model
  * @param {string} prompt - Image prompt
  * @param {object} options - Generation options (model, quality, size)
@@ -183,8 +344,12 @@ export async function generateImage(prompt, options = {}, apiKey) {
   try {
     if (model === 'gpt-image-1.5') {
       return await generateWithOpenAI(prompt, mergedOptions, apiKey);
+    } else if (model === 'seedream-4') {
+      return await generateWithSeedream(prompt, mergedOptions, apiKey);
+    } else if (model === 'ideogram-v3-turbo') {
+      return await generateWithIdeogram(prompt, mergedOptions, apiKey);
     } else {
-      // Default to Flux for any other model value
+      // Default to Flux for any other model value (including 'flux-1.1-pro')
       return await generateWithFlux(prompt, mergedOptions, apiKey);
     }
   } catch (error) {
@@ -340,12 +505,14 @@ export async function generateArticleImages(chunks, options = {}, apiKey) {
  * - Medium quality: ~$0.042 per 1024x1024
  * - High quality: ~$0.167 per 1024x1024
  *
- * Flux 1.1 Pro pricing:
- * - ~$0.04 per image (all sizes)
+ * Replicate model pricing:
+ * - Flux 1.1 Pro: ~$0.04 per image
+ * - Seedream 4: ~$0.03 per image (cheapest)
+ * - Ideogram v3 Turbo: ~$0.04 per image
  *
  * @param {number} imageCount - Number of images to generate
  * @param {string} quality - 'low', 'medium', or 'high'
- * @param {string} model - 'gpt-image-1.5' or 'flux-1.1-pro'
+ * @param {string} model - model name
  * @returns {{perImage: number, total: number, currency: string}}
  */
 export function estimateCost(imageCount, quality = 'low', model = DEFAULT_MODEL) {
@@ -358,6 +525,10 @@ export function estimateCost(imageCount, quality = 'low', model = DEFAULT_MODEL)
       high: 0.167
     };
     perImage = pricing[quality] || pricing.low;
+  } else if (model === 'seedream-4') {
+    perImage = 0.03;  // Cheapest option
+  } else if (model === 'ideogram-v3-turbo') {
+    perImage = 0.04;
   } else {
     // Flux 1.1 Pro - flat rate
     perImage = 0.04;

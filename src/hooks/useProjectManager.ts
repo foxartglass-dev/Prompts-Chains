@@ -77,8 +77,8 @@ export interface ProjectState {
   metaPublishMode: 'draft' | 'wordpress';     // draft = stop at results, wordpress = auto-push SEO meta
   // Image quality for WordPress publishing (low = web, medium, high = print)
   imageQuality?: 'low' | 'medium' | 'high';
-  // Image model for generation (gpt-image-1.5 = OpenAI, flux-1.1-pro = Replicate)
-  imageModel?: 'gpt-image-1.5' | 'flux-1.1-pro';
+  // Image model for generation (gpt-image-1.5 = OpenAI, others = Replicate)
+  imageModel?: 'gpt-image-1.5' | 'flux-1.1-pro' | 'seedream-4' | 'ideogram-v3-turbo';
 }
 
 export interface Project {
