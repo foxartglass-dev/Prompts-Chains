@@ -75,6 +75,8 @@ export interface ProjectState {
   // Auto-publish modes
   articlePublishMode: 'draft' | 'wordpress';  // draft = stop at results, wordpress = auto-publish article
   metaPublishMode: 'draft' | 'wordpress';     // draft = stop at results, wordpress = auto-push SEO meta
+  // Image quality for WordPress publishing (low = web, medium, high = print)
+  imageQuality?: 'low' | 'medium' | 'high';
 }
 
 export interface Project {

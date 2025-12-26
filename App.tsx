@@ -2392,12 +2392,12 @@ const App: React.FC = () => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Publish</label>
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Image</label>
                                     <div className="flex rounded-lg overflow-hidden border-2 border-brand-gold">
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'off'}))}
-                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 (currentProject.state.wpPublishMode || 'off') === 'off'
                                                     ? 'bg-red-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2408,7 +2408,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'draft'}))}
-                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 currentProject.state.wpPublishMode === 'draft'
                                                     ? 'bg-brand-gold text-black'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2419,15 +2419,28 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'wordpress'}))}
-                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 currentProject.state.wpPublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
                                             }`}
                                         >
-                                            WordPress
+                                            <span className="block">Word</span>
+                                            <span className="block">Press</span>
                                         </button>
                                     </div>
+                                </div>
+                                <div className="w-20">
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Quality</label>
+                                    <select
+                                        value={currentProject.state.imageQuality || 'low'}
+                                        onChange={e => setCurrentProjectState(p => ({...p, imageQuality: e.target.value}))}
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                    >
+                                        <option value="low">Low</option>
+                                        <option value="medium">Med</option>
+                                        <option value="high">High</option>
+                                    </select>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Article</label>
@@ -2435,7 +2448,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'draft'}))}
-                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 (currentProject.state.articlePublishMode || 'draft') === 'draft'
                                                     ? 'bg-brand-gold text-black'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2446,13 +2459,14 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'wordpress'}))}
-                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 currentProject.state.articlePublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
                                             }`}
                                         >
-                                            WordPress
+                                            <span className="block">Word</span>
+                                            <span className="block">Press</span>
                                         </button>
                                     </div>
                                 </div>
@@ -2462,7 +2476,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'draft'}))}
-                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 (currentProject.state.metaPublishMode || 'draft') === 'draft'
                                                     ? 'bg-brand-gold text-black'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2473,13 +2487,14 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'wordpress'}))}
-                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 currentProject.state.metaPublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
                                             }`}
                                         >
-                                            WordPress
+                                            <span className="block">Word</span>
+                                            <span className="block">Press</span>
                                         </button>
                                     </div>
                                 </div>
