@@ -222,7 +222,7 @@ interface Props {
 }
 
 const DEFAULT_SETTINGS: ImageCreationSettings = {
-  enabled: false,
+  enabled: true, // Always enabled - no toggle needed
   prompt_assistant_model: 'gpt-4o',
   image_generation_model: 'gpt-image-1.5', // Latest and best image generation model
   reference_images: [],
@@ -1785,17 +1785,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   return (
     <div className="space-y-4">
-      {/* Enable Toggle + Model Selectors */}
+      {/* Model Selectors + Save */}
       <div className="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-brand-gold/50 flex-wrap gap-3">
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={settings.enabled}
-            onChange={(e) => updateSettings({ enabled: e.target.checked })}
-            className="w-5 h-5 rounded border-2 border-brand-gold text-brand-gold focus:ring-brand-gold bg-slate-900"
-          />
-          <span className="text-brand-gold font-semibold">Enable Image Creation</span>
-        </label>
         <div className="flex items-center gap-4 flex-wrap">
           {/* Image Generation Model - The model that creates images */}
           <div className="flex items-center gap-2">
@@ -1941,9 +1932,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         </div>
       )}
 
-      {settings.enabled && (
-        <>
-          {/* Reference Images (Collapsible) */}
+      {/* Reference Images (Collapsible) */}
           <div className="bg-slate-900 rounded-lg border border-brand-gold/50 overflow-hidden">
             <button
               onClick={() => setIsReferenceOpen(!isReferenceOpen)}
@@ -3208,8 +3197,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
               </label>
             </div>
           </div>
-        </>
-      )}
 
       {saving && (
         <div className="fixed bottom-4 right-4 bg-brand-cyan text-slate-900 px-4 py-2 rounded-lg shadow-lg text-sm font-medium">

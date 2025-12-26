@@ -1030,11 +1030,11 @@ router.post('/get-images-for-article', requireDb, async (req, res) => {
       SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
     `;
 
-    if (settings.length === 0 || !settings[0].enabled) {
+    if (settings.length === 0) {
       return res.json({
         success: true,
         images: [],
-        message: 'Image Creation not enabled for this workflow',
+        message: 'No Image Creation settings found for this workflow',
         mode: 'none'
       });
     }
