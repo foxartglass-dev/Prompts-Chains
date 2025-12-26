@@ -1978,8 +1978,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
               ))}
             </select>
           </div>
-          {/* Image Quality - only show for OpenAI models (gpt-image-*) */}
-          {(settings.image_generation_model || 'flux-1.1-pro').startsWith('gpt-image') && (
+          {/* Image Quality - different options based on model */}
           <div className="flex items-center gap-2">
             <label className="text-sm text-brand-gold/70">Quality:</label>
             <select
@@ -1987,12 +1986,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
               onChange={(e) => updateSettings({ image_quality: e.target.value as 'low' | 'medium' | 'high' })}
               className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm"
             >
-              <option value="low">Low ($0.01) - Web</option>
-              <option value="medium">Medium ($0.04)</option>
-              <option value="high">High ($0.17) - Print</option>
+              {(settings.image_generation_model || 'flux-1.1-pro').startsWith('gpt-image') ? (
+                <>
+                  <option value="low">Low ($0.01) - Web</option>
+                  <option value="medium">Medium ($0.04)</option>
+                  <option value="high">High ($0.17) - Print</option>
+                </>
+              ) : (
+                <>
+                  <option value="low">60% - Small files</option>
+                  <option value="medium">80% - Balanced</option>
+                  <option value="high">100% - Max quality</option>
+                </>
+              )}
             </select>
           </div>
-          )}
           {/* Prompt Assistant Model - The chat model that helps craft prompts */}
           <div className="flex items-center gap-2">
             <label className="text-sm text-brand-gold/70">Prompt Assistant:</label>

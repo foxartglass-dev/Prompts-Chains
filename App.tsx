@@ -2441,8 +2441,7 @@ const App: React.FC = () => {
                                         <option value="gpt-image-1.5">GPT Img</option>
                                     </select>
                                 </div>
-                                {/* Quality dropdown only shows for gpt-image-1.5 */}
-                                {(currentProject.state.imageModel === 'gpt-image-1.5') && (
+                                {/* Quality dropdown - different options based on model */}
                                 <div className="w-20">
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center text-xs">Quality</label>
                                     <select
@@ -2450,12 +2449,21 @@ const App: React.FC = () => {
                                         onChange={e => setCurrentProjectState(p => ({...p, imageQuality: e.target.value as 'low' | 'medium' | 'high'}))}
                                         className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                     >
-                                        <option value="low">Low</option>
-                                        <option value="medium">Med</option>
-                                        <option value="high">High</option>
+                                        {(currentProject.state.imageModel === 'gpt-image-1.5') ? (
+                                            <>
+                                                <option value="low">Low</option>
+                                                <option value="medium">Med</option>
+                                                <option value="high">High</option>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <option value="low">60%</option>
+                                                <option value="medium">80%</option>
+                                                <option value="high">100%</option>
+                                            </>
+                                        )}
                                     </select>
                                 </div>
-                                )}
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Article</label>
                                     <div className="flex rounded-lg overflow-hidden border-2 border-brand-gold">

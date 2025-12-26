@@ -72,8 +72,16 @@ async function generateWithFlux(prompt, options, apiKey) {
 
   const {
     size = '1024x1024',
-    output_quality = 80  // 0-100 compression quality for webp
+    quality = 'medium'  // low, medium, high - maps to output_quality
   } = options;
+
+  // Map quality levels to Flux output_quality (0-100 WebP compression)
+  const qualityMap = {
+    low: 60,     // Smaller files, good for web
+    medium: 80,  // Balanced (default)
+    high: 100    // Max quality, larger files
+  };
+  const output_quality = qualityMap[quality] || 80;
 
   // Determine aspect ratio from size or width/height
   let aspectRatio = '1:1';
