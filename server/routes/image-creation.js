@@ -800,7 +800,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       image_order,
       variation_order_mode,
       manual_variation_order,
-      // Smart Content Matching
+      // Smart Content Matching (may not exist in DB yet)
       smart_matching_enabled,
       smart_matching_mode
     } = req.body;
@@ -812,93 +812,124 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
     console.log('[Image Creation API] Existing record:', existing.length > 0 ? existing[0].id : 'none');
 
+    // Helper function to save core settings (without smart_matching columns that may not exist)
+    const saveCoreSettings = async (isInsert) => {
+      if (isInsert) {
+        const result = await sql`
+          INSERT INTO image_creation_settings (
+            workflow_id,
+            enabled,
+            prompt_assistant_model,
+            image_generation_model,
+            reference_images,
+            logo_images,
+            audience_avatars,
+            image_bank,
+            image_categories,
+            auto_tag_enabled,
+            chat_history,
+            consultant_chat_history,
+            consultant_model,
+            worker_chat_history,
+            worker_model,
+            integration_mode,
+            fallback_to_live,
+            image_order,
+            variation_order_mode,
+            manual_variation_order
+          ) VALUES (
+            ${workflowId},
+            ${enabled ?? false},
+            ${prompt_assistant_model ?? 'gpt-4o'},
+            ${image_generation_model ?? 'gpt-image-1.5'},
+            ${JSON.stringify(reference_images ?? [])},
+            ${JSON.stringify(logo_images ?? [])},
+            ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
+            ${JSON.stringify(image_bank ?? [])},
+            ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
+            ${auto_tag_enabled ?? true},
+            ${JSON.stringify(chat_history ?? [])},
+            ${JSON.stringify(consultant_chat_history ?? [])},
+            ${consultant_model ?? 'gpt-4o'},
+            ${JSON.stringify(worker_chat_history ?? [])},
+            ${worker_model ?? 'gpt-4o-mini'},
+            ${integration_mode ?? 'bank'},
+            ${fallback_to_live ?? true},
+            ${JSON.stringify(image_order ?? [])},
+            ${variation_order_mode ?? 'sequential'},
+            ${JSON.stringify(manual_variation_order ?? [])}
+          )
+          RETURNING id
+        `;
+        return result[0].id;
+      } else {
+        await sql`
+          UPDATE image_creation_settings
+          SET
+            enabled = COALESCE(${enabled}, enabled),
+            prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
+            image_generation_model = COALESCE(${image_generation_model}, image_generation_model),
+            reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
+            logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
+            audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
+            image_bank = COALESCE(${image_bank ? JSON.stringify(image_bank) : null}::jsonb, image_bank),
+            image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
+            auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
+            chat_history = COALESCE(${chat_history ? JSON.stringify(chat_history) : null}::jsonb, chat_history),
+            consultant_chat_history = COALESCE(${consultant_chat_history ? JSON.stringify(consultant_chat_history) : null}::jsonb, consultant_chat_history),
+            consultant_model = COALESCE(${consultant_model}, consultant_model),
+            worker_chat_history = COALESCE(${worker_chat_history ? JSON.stringify(worker_chat_history) : null}::jsonb, worker_chat_history),
+            worker_model = COALESCE(${worker_model}, worker_model),
+            integration_mode = COALESCE(${integration_mode}, integration_mode),
+            fallback_to_live = COALESCE(${fallback_to_live}, fallback_to_live),
+            image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
+            variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
+            manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+            updated_at = CURRENT_TIMESTAMP
+          WHERE workflow_id = ${workflowId}
+        `;
+        return null;
+      }
+    };
+
+    // Try to update smart_matching columns (silently fail if they don't exist)
+    const tryUpdateSmartMatching = async () => {
+      try {
+        await sql`
+          UPDATE image_creation_settings
+          SET
+            smart_matching_enabled = COALESCE(${smart_matching_enabled}, smart_matching_enabled),
+            smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode)
+          WHERE workflow_id = ${workflowId}
+        `;
+        return true;
+      } catch (err) {
+        if (err.message?.includes('smart_matching')) {
+          console.log('[Image Creation API] smart_matching columns not available yet (run migration 006)');
+          return false;
+        }
+        throw err;
+      }
+    };
+
     if (existing.length === 0) {
       // Insert new settings
       console.log('[Image Creation API] Creating new settings record...');
-      const result = await sql`
-        INSERT INTO image_creation_settings (
-          workflow_id,
-          enabled,
-          prompt_assistant_model,
-          image_generation_model,
-          reference_images,
-          logo_images,
-          audience_avatars,
-          image_bank,
-          image_categories,
-          auto_tag_enabled,
-          chat_history,
-          consultant_chat_history,
-          consultant_model,
-          worker_chat_history,
-          worker_model,
-          integration_mode,
-          fallback_to_live,
-          image_order,
-          variation_order_mode,
-          manual_variation_order,
-          smart_matching_enabled,
-          smart_matching_mode
-        ) VALUES (
-          ${workflowId},
-          ${enabled ?? false},
-          ${prompt_assistant_model ?? 'gpt-4o'},
-          ${image_generation_model ?? 'gpt-image-1.5'},
-          ${JSON.stringify(reference_images ?? [])},
-          ${JSON.stringify(logo_images ?? [])},
-          ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
-          ${JSON.stringify(image_bank ?? [])},
-          ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
-          ${auto_tag_enabled ?? true},
-          ${JSON.stringify(chat_history ?? [])},
-          ${JSON.stringify(consultant_chat_history ?? [])},
-          ${consultant_model ?? 'gpt-4o'},
-          ${JSON.stringify(worker_chat_history ?? [])},
-          ${worker_model ?? 'gpt-4o-mini'},
-          ${integration_mode ?? 'bank'},
-          ${fallback_to_live ?? true},
-          ${JSON.stringify(image_order ?? [])},
-          ${variation_order_mode ?? 'sequential'},
-          ${JSON.stringify(manual_variation_order ?? [])},
-          ${smart_matching_enabled ?? false},
-          ${smart_matching_mode ?? 'bank_first'}
-        )
-        RETURNING id
-      `;
+      const newId = await saveCoreSettings(true);
+      console.log('[Image Creation API] Created new record with id:', newId);
 
-      console.log('[Image Creation API] Created new record with id:', result[0].id);
-      return res.json({ success: true, id: result[0].id, created: true });
+      // Try to set smart_matching fields
+      await tryUpdateSmartMatching();
+
+      return res.json({ success: true, id: newId, created: true });
     }
 
     // Update existing settings
     console.log('[Image Creation API] Updating existing record...');
-    await sql`
-      UPDATE image_creation_settings
-      SET
-        enabled = COALESCE(${enabled}, enabled),
-        prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
-        image_generation_model = COALESCE(${image_generation_model}, image_generation_model),
-        reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
-        logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
-        audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
-        image_bank = COALESCE(${image_bank ? JSON.stringify(image_bank) : null}::jsonb, image_bank),
-        image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
-        auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
-        chat_history = COALESCE(${chat_history ? JSON.stringify(chat_history) : null}::jsonb, chat_history),
-        consultant_chat_history = COALESCE(${consultant_chat_history ? JSON.stringify(consultant_chat_history) : null}::jsonb, consultant_chat_history),
-        consultant_model = COALESCE(${consultant_model}, consultant_model),
-        worker_chat_history = COALESCE(${worker_chat_history ? JSON.stringify(worker_chat_history) : null}::jsonb, worker_chat_history),
-        worker_model = COALESCE(${worker_model}, worker_model),
-        integration_mode = COALESCE(${integration_mode}, integration_mode),
-        fallback_to_live = COALESCE(${fallback_to_live}, fallback_to_live),
-        image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
-        variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
-        manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
-        smart_matching_enabled = COALESCE(${smart_matching_enabled}, smart_matching_enabled),
-        smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode),
-        updated_at = CURRENT_TIMESTAMP
-      WHERE workflow_id = ${workflowId}
-    `;
+    await saveCoreSettings(false);
+
+    // Try to update smart_matching fields separately
+    await tryUpdateSmartMatching();
 
     console.log('[Image Creation API] Update complete for workflow:', workflowId);
     res.json({ success: true, updated: true });
