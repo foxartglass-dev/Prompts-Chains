@@ -1094,8 +1094,8 @@ const App: React.FC = () => {
                             console.error('Failed to save article:', saveError);
                         }
 
-                        // Auto-publish to WordPress if articlePublishMode is 'wordpress'
-                        if (currentProject.state.articlePublishMode === 'wordpress') {
+                        // Auto-publish to WordPress if master wpPublishMode is not 'off' and articlePublishMode is 'wordpress'
+                        if (currentProject.state.wpPublishMode !== 'off' && currentProject.state.articlePublishMode === 'wordpress') {
                             const { url, user, password } = currentProject.state.wpCredentials;
                             if (url && user && password) {
                                 addLog(`[${itemLabel}] Auto-publishing to WordPress...`, LogStatus.WORKING, item.id);
@@ -1162,8 +1162,8 @@ const App: React.FC = () => {
                                                 : r
                                         ));
 
-                                        // Auto-push SEO meta if metaPublishMode is 'wordpress' and we have meta data
-                                        if (currentProject.state.metaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
+                                        // Auto-push SEO meta if master wpPublishMode is not 'off', metaPublishMode is 'wordpress' and we have meta data
+                                        if (currentProject.state.wpPublishMode !== 'off' && currentProject.state.metaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
                                             addLog(`[${itemLabel}] Auto-pushing SEO meta...`, LogStatus.WORKING, item.id);
                                             try {
                                                 const seoResponse = await fetch('/api/seo/push-direct', {
@@ -2390,6 +2390,44 @@ const App: React.FC = () => {
                                         <option value="pages">Page</option>
                                         <option value="posts">Post</option>
                                     </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Publish</label>
+                                    <div className="flex rounded-lg overflow-hidden border-2 border-brand-gold">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'off'}))}
+                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                                (currentProject.state.wpPublishMode || 'off') === 'off'
+                                                    ? 'bg-red-600 text-white'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            Off
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'draft'}))}
+                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                                currentProject.state.wpPublishMode === 'draft'
+                                                    ? 'bg-brand-gold text-black'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            Draft
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'wordpress'}))}
+                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                                currentProject.state.wpPublishMode === 'wordpress'
+                                                    ? 'bg-green-600 text-white'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            WordPress
+                                        </button>
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Article</label>
