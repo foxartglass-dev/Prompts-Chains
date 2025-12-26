@@ -113,20 +113,33 @@ async function generateWithFlux(prompt, options, apiKey) {
     }
   );
 
-  // Flux returns output - could be string URL or array
-  console.log(`[Image Generator] Flux raw output:`, typeof output, output);
+  // Flux returns a FileOutput object with url() method or ReadableStream
+  console.log(`[Image Generator] Flux raw output type:`, typeof output);
 
   // Handle different output formats from Replicate
   let imageUrl;
   if (typeof output === 'string') {
     imageUrl = output;
-  } else if (Array.isArray(output) && output.length > 0) {
-    imageUrl = output[0];
-  } else if (output && output.url) {
+  } else if (output && typeof output.url === 'function') {
+    // FileOutput object - call url() to get the URL
+    imageUrl = await output.url();
+  } else if (output && typeof output.url === 'string') {
     imageUrl = output.url;
-  } else {
-    console.error('[Image Generator] Unexpected Flux output format:', output);
-    throw new Error('Unexpected Flux output format');
+  } else if (Array.isArray(output) && output.length > 0) {
+    // Could be array of FileOutput objects
+    const first = output[0];
+    if (typeof first === 'string') {
+      imageUrl = first;
+    } else if (first && typeof first.url === 'function') {
+      imageUrl = await first.url();
+    } else if (first && first.url) {
+      imageUrl = first.url;
+    }
+  }
+
+  if (!imageUrl) {
+    console.error('[Image Generator] Could not extract URL from Flux output:', output);
+    throw new Error('Could not extract URL from Flux output');
   }
 
   console.log(`[Image Generator] Flux image URL:`, imageUrl);
