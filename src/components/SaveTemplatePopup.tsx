@@ -5,15 +5,17 @@ interface SaveTemplatePopupProps {
   onClose: () => void;
   currentState: any;
   workflowName: string;
+  workflowId?: number; // For copying image creation settings
   onSave: (templateData: any) => Promise<void>;
 }
 
 const SECTION_OPTIONS = [
-  { key: 'prompts', label: 'Prompts', desc: 'Prompt templates and chain structure', stateKey: 'promptTemplates' },
+  { key: 'prompts', label: 'Prompt Templates', desc: 'The prompt chain structure', stateKey: 'promptTemplates' },
   { key: 'placeholders', label: 'Placeholders', desc: 'Global and tagged placeholders', stateKey: 'placeholders' },
   { key: 'tags', label: 'Tags', desc: 'Audience tags (B, E, G, etc.)', stateKey: 'tags' },
-  { key: 'snippets', label: 'Snippets', desc: 'Large reusable text blocks', stateKey: 'taggedSnippets' },
+  { key: 'snippets', label: 'Tagged Snippets', desc: 'Large reusable text blocks', stateKey: 'taggedSnippets' },
   { key: 'settings', label: 'Settings', desc: 'Model, provider, output settings', stateKey: null },
+  { key: 'imageCreation', label: 'Image Creation', desc: 'Avatars, reference images, bank, categories', stateKey: null, isExternal: true },
 ];
 
 const SaveTemplatePopup: React.FC<SaveTemplatePopupProps> = ({
@@ -21,6 +23,7 @@ const SaveTemplatePopup: React.FC<SaveTemplatePopupProps> = ({
   onClose,
   currentState,
   workflowName,
+  workflowId,
   onSave
 }) => {
   const [name, setName] = useState(`${workflowName} Template`);
@@ -31,7 +34,8 @@ const SaveTemplatePopup: React.FC<SaveTemplatePopupProps> = ({
     placeholders: true,
     tags: true,
     snippets: true,
-    settings: true
+    settings: true,
+    imageCreation: true
   });
 
   if (!isOpen) return null;
@@ -80,7 +84,8 @@ const SaveTemplatePopup: React.FC<SaveTemplatePopupProps> = ({
         templateType,
         templateData,
         includes,
-        tags: []
+        tags: [],
+        sourceWorkflowId: workflowId // For copying image creation settings
       });
     } finally {
       setSaving(false);
@@ -93,7 +98,8 @@ const SaveTemplatePopup: React.FC<SaveTemplatePopupProps> = ({
       placeholders: checked,
       tags: checked,
       snippets: checked,
-      settings: checked
+      settings: checked,
+      imageCreation: checked
     });
   };
 

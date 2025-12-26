@@ -1709,6 +1709,7 @@ const App: React.FC = () => {
                     onClose={() => setShowSaveTemplatePopup(false)}
                     currentState={currentProject.state}
                     workflowName={currentWorkflowContext.workflowName || currentProject.name}
+                    workflowId={currentWorkflowId}
                     onSave={async (templateData) => {
                         try {
                             const res = await fetch('/api/templates', {

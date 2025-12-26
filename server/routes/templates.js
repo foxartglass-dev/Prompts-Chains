@@ -88,7 +88,7 @@ router.get('/:id', requireDb, async (req, res) => {
 // POST create template
 router.post('/', requireDb, async (req, res) => {
   try {
-    const { name, description, templateType, templateData, includes, tags } = req.body;
+    const { name, description, templateType, templateData, includes, tags, sourceWorkflowId } = req.body;
 
     if (!name || !templateType) {
       return res.status(400).json({ error: 'Name and template type are required' });
@@ -100,8 +100,46 @@ router.post('/', requireDb, async (req, res) => {
       placeholders: true,
       tags: true,
       snippets: true,
-      settings: true
+      settings: true,
+      imageCreation: true
     };
+
+    // Build final template data
+    let finalTemplateData = templateData || {};
+
+    // If imageCreation is included and we have a source workflow, copy image settings
+    const finalIncludes = includes || defaultIncludes;
+    if (finalIncludes.imageCreation && sourceWorkflowId) {
+      try {
+        const imageSettings = await sql`
+          SELECT * FROM image_creation_settings WHERE workflow_id = ${sourceWorkflowId}
+        `;
+        if (imageSettings.length > 0) {
+          const settings = imageSettings[0];
+          // Store image creation settings in template data (excluding workflow_id and id)
+          finalTemplateData.imageCreation = {
+            enabled: settings.enabled,
+            prompt_assistant_model: settings.prompt_assistant_model,
+            image_generation_model: settings.image_generation_model,
+            image_quality: settings.image_quality,
+            reference_images: settings.reference_images || [],
+            logo_images: settings.logo_images || [],
+            audience_avatars: settings.audience_avatars || [],
+            image_bank: settings.image_bank || [],
+            image_categories: settings.image_categories || [],
+            auto_tag_enabled: settings.auto_tag_enabled,
+            smart_matching_enabled: settings.smart_matching_enabled,
+            image_to_variation_map: settings.image_to_variation_map || {},
+            fallback_to_live: settings.fallback_to_live,
+            image_order: settings.image_order || [],
+            variation_order_mode: settings.variation_order_mode
+          };
+          console.log('[Templates] Included image creation settings from workflow:', sourceWorkflowId);
+        }
+      } catch (imgErr) {
+        console.error('[Templates] Failed to include image settings:', imgErr.message);
+      }
+    }
 
     const result = await sql`
       INSERT INTO templates (name, description, template_type, template_data, includes, tags)
@@ -109,8 +147,8 @@ router.post('/', requireDb, async (req, res) => {
         ${name},
         ${description || ''},
         ${templateType},
-        ${JSON.stringify(templateData || {})},
-        ${JSON.stringify(includes || defaultIncludes)},
+        ${JSON.stringify(finalTemplateData)},
+        ${JSON.stringify(finalIncludes)},
         ${JSON.stringify(tags || [])}
       )
       RETURNING *
