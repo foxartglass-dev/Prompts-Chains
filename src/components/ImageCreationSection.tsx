@@ -2070,6 +2070,51 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
               </button>
             </div>
             <div className="overflow-y-auto p-4 space-y-6">
+              {/* Quick Reference: Image Creation vs WordPress Publishing */}
+              <div className="border border-brand-gold/50 rounded-lg overflow-hidden">
+                <div className="bg-brand-gold/10 px-4 py-2 border-b border-brand-gold/30">
+                  <h3 className="text-sm font-bold text-brand-gold">Quick Reference: Where Images Are Used</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-slate-800">
+                        <th className="px-3 py-2 text-left text-brand-gold/80 font-medium">Feature</th>
+                        <th className="px-3 py-2 text-left text-purple-300 font-medium">Image Creation (Section 7)</th>
+                        <th className="px-3 py-2 text-left text-brand-cyan font-medium">WordPress Publishing</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-gray-300">
+                      <tr className="border-t border-slate-700">
+                        <td className="px-3 py-2 text-brand-gold/70 font-medium">Purpose</td>
+                        <td className="px-3 py-2"><strong>Batch generation</strong> - Create multiple images upfront to populate Image Bank</td>
+                        <td className="px-3 py-2"><strong>Auto-publish</strong> - Generate images on-the-fly during WordPress publishing</td>
+                      </tr>
+                      <tr className="border-t border-slate-700 bg-slate-800/30">
+                        <td className="px-3 py-2 text-brand-gold/70 font-medium">When Used</td>
+                        <td className="px-3 py-2">Before running workflows, to build up a library of images</td>
+                        <td className="px-3 py-2">During article generation when auto-publishing to WordPress</td>
+                      </tr>
+                      <tr className="border-t border-slate-700">
+                        <td className="px-3 py-2 text-brand-gold/70 font-medium">Storage</td>
+                        <td className="px-3 py-2">Images go to <strong>Image Bank</strong> for reuse across articles</td>
+                        <td className="px-3 py-2">Images generated per article and uploaded to WordPress media</td>
+                      </tr>
+                      <tr className="border-t border-slate-700 bg-slate-800/30">
+                        <td className="px-3 py-2 text-brand-gold/70 font-medium">Model Selection</td>
+                        <td className="px-3 py-2">Per-workflow setting (saved with workflow)</td>
+                        <td className="px-3 py-2">Per-project setting (in WordPress section)</td>
+                      </tr>
+                      <tr className="border-t border-slate-700">
+                        <td className="px-3 py-2 text-brand-gold/70 font-medium">Typical Flow</td>
+                        <td className="px-3 py-2">1. Set model/variations → 2. Generate batch → 3. Images saved to bank → 4. Articles pull from bank</td>
+                        <td className="px-3 py-2">1. Article generated → 2. Model generates image → 3. Uploads to WordPress → 4. Page published</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               {/* Flux 1.1 Pro Section */}
               <div className="border border-purple-500/50 rounded-lg overflow-hidden">
                 <div className="bg-purple-900/30 px-4 py-3 border-b border-purple-500/30">
