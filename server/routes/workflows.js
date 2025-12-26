@@ -186,6 +186,73 @@ router.post('/:id/duplicate', requireDb, async (req, res) => {
       RETURNING *
     `;
 
+    const newWorkflowId = result[0].id;
+
+    // Also copy image_creation_settings if they exist for the source workflow
+    try {
+      const imageSettings = await sql`
+        SELECT * FROM image_creation_settings WHERE workflow_id = ${id}
+      `;
+
+      if (imageSettings.length > 0) {
+        const srcSettings = imageSettings[0];
+        console.log('[Workflow Duplicate] Copying image_creation_settings to new workflow:', newWorkflowId);
+
+        await sql`
+          INSERT INTO image_creation_settings (
+            workflow_id,
+            enabled,
+            prompt_assistant_model,
+            image_generation_model,
+            image_quality,
+            reference_images,
+            logo_images,
+            audience_avatars,
+            image_bank,
+            image_categories,
+            auto_tag_enabled,
+            chat_history,
+            dual_chat_left_model,
+            dual_chat_right_model,
+            dual_chat_left_history,
+            dual_chat_right_history,
+            smart_matching_enabled,
+            image_to_variation_map,
+            fallback_to_live,
+            image_order,
+            variation_order_mode
+          )
+          VALUES (
+            ${newWorkflowId},
+            ${srcSettings.enabled},
+            ${srcSettings.prompt_assistant_model},
+            ${srcSettings.image_generation_model},
+            ${srcSettings.image_quality},
+            ${JSON.stringify(srcSettings.reference_images || [])},
+            ${JSON.stringify(srcSettings.logo_images || [])},
+            ${JSON.stringify(srcSettings.audience_avatars || [])},
+            ${JSON.stringify(srcSettings.image_bank || [])},
+            ${JSON.stringify(srcSettings.image_categories || [])},
+            ${srcSettings.auto_tag_enabled},
+            ${JSON.stringify(srcSettings.chat_history || [])},
+            ${srcSettings.dual_chat_left_model},
+            ${srcSettings.dual_chat_right_model},
+            ${JSON.stringify(srcSettings.dual_chat_left_history || [])},
+            ${JSON.stringify(srcSettings.dual_chat_right_history || [])},
+            ${srcSettings.smart_matching_enabled},
+            ${JSON.stringify(srcSettings.image_to_variation_map || {})},
+            ${srcSettings.fallback_to_live},
+            ${JSON.stringify(srcSettings.image_order || [])},
+            ${srcSettings.variation_order_mode}
+          )
+        `;
+        console.log('[Workflow Duplicate] Image settings copied successfully');
+      }
+    } catch (imgErr) {
+      // Log but don't fail the whole operation if image settings copy fails
+      console.error('[Workflow Duplicate] Failed to copy image settings:', imgErr.message);
+    }
+
     res.status(201).json({ workflow: result[0] });
   } catch (error) {
     console.error('Error duplicating workflow:', error);

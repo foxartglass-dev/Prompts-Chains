@@ -86,9 +86,11 @@ interface BankImage {
   orientation: string;
   prompt: string;
   createdAt: string;
+  model?: string; // AI model that generated this image (flux-1.1-pro, seedream-4, etc.)
   used?: boolean;
   usedOn?: string;
   usedAt?: string;
+  archived?: boolean; // For archive system - keeps images for future reference
 }
 
 interface ChatMessage {
@@ -107,69 +109,140 @@ const IMAGE_GENERATION_MODELS = [
   { id: 'gpt-image-1', name: 'GPT-Image-1', provider: 'openai', description: 'Previous generation' },
   { id: 'gpt-image-1-mini', name: 'GPT-Image-1 Mini', provider: 'openai', description: 'Faster, lower cost' },
   { id: 'dall-e-3', name: 'DALL-E 3', provider: 'openai', description: 'Legacy model' },
-  { id: 'flux-1.1-pro', name: 'FLUX 1.1 Pro', provider: 'replicate', description: 'Via Replicate API' },
+  { id: 'flux-1.1-pro', name: 'FLUX 1.1 Pro (~$0.04)', provider: 'replicate', description: 'Fast, good prompt adherence' },
+  { id: 'seedream-4', name: 'Seedream 4 (~$0.03)', provider: 'replicate', description: 'Best value, 4K support (ByteDance)' },
+  { id: 'ideogram-v3-turbo', name: 'Ideogram v3 Turbo (~$0.04)', provider: 'replicate', description: 'Great realism, text rendering' },
 ];
 
-// GPT-Image-1.5 Prompt Guide Knowledge Base
-const GPT_IMAGE_PROMPT_GUIDE = {
-  title: 'GPT-Image-1.5 Prompting Guide',
-  lastUpdated: 'December 2025',
-  sections: [
-    {
-      title: 'Text Rendering',
-      tips: [
-        'Use quotes or CAPS for exact text: \'"Welcome to 2025" in bold sans-serif font\'',
-        'Specify text details: "Centered at bottom, white text on black background, 72pt size"',
-        'Works great for dense and small text - be specific about placement and style',
-      ]
-    },
-    {
-      title: 'Photorealism',
-      tips: [
-        'Use photo language: lens type (85mm portrait lens), lighting quality (soft diffused daylight), framing',
-        'Be specific: "add soft coastal daylight" instead of "make it better"',
-        'Describe camera angle: "shot from slightly below", "eye-level perspective"',
-        'Mention film stocks or processing: "Kodak Portra 400 film look", "clean digital processing"',
-      ]
-    },
-    {
-      title: 'Consistency & Editing',
-      tips: [
-        'Model preserves faces and logos better during edits',
-        'For outfit changes: "same person, change red shirt to blue sweater"',
-        'For lighting: "adjust lighting to golden hour without changing composition"',
-        'Be explicit about what to keep vs change',
-      ]
-    },
-    {
-      title: 'UI/Mockups',
-      tips: [
-        'Describe the product as if it already exists',
-        'Focus on: layout, hierarchy, spacing, real interface elements',
-        'Avoid concept art language - be practical and specific',
-        'Example: "Mobile app screen showing dashboard with 3 metric cards at top, navigation bar at bottom"',
-      ]
-    },
-    {
-      title: 'World Knowledge',
-      tips: [
-        'Model has built-in reasoning and world knowledge',
-        'Example: "Bethel, New York, August 1969" → infers Woodstock',
-        'Can reference cultural events, historical periods, famous locations',
-        'Use contextual cues for accurate scene setting',
-      ]
-    },
-    {
-      title: 'Image Sizes',
-      tips: [
-        '1024x1024 - Square (default)',
-        '1536x1024 - Landscape (wide)',
-        '1024x1536 - Portrait/Vertical (tall) - BEST for hero images',
-        'Use "auto" to let model decide based on content',
-      ]
-    }
-  ]
+// Image Model Prompting Guide Knowledge Base
+const IMAGE_PROMPT_GUIDES = {
+  'gpt-image-1.5': {
+    title: 'GPT-Image-1.5 Prompting Guide',
+    provider: 'OpenAI',
+    lastUpdated: 'December 2025',
+    pricing: 'Low: $0.011 | Medium: $0.042 | High: $0.167 per image',
+    sections: [
+      {
+        title: 'Text Rendering',
+        tips: [
+          'Use quotes or CAPS for exact text: \'"Welcome to 2025" in bold sans-serif font\'',
+          'Specify text details: "Centered at bottom, white text on black background, 72pt size"',
+          'Works great for dense and small text - be specific about placement and style',
+        ]
+      },
+      {
+        title: 'Photorealism',
+        tips: [
+          'Use photo language: lens type (85mm portrait lens), lighting quality (soft diffused daylight), framing',
+          'Be specific: "add soft coastal daylight" instead of "make it better"',
+          'Describe camera angle: "shot from slightly below", "eye-level perspective"',
+          'Mention film stocks or processing: "Kodak Portra 400 film look", "clean digital processing"',
+        ]
+      },
+      {
+        title: 'Consistency & Editing',
+        tips: [
+          'Model preserves faces and logos better during edits',
+          'For outfit changes: "same person, change red shirt to blue sweater"',
+          'For lighting: "adjust lighting to golden hour without changing composition"',
+          'Be explicit about what to keep vs change',
+        ]
+      },
+      {
+        title: 'World Knowledge',
+        tips: [
+          'Model has built-in reasoning and world knowledge',
+          'Example: "Bethel, New York, August 1969" → infers Woodstock',
+          'Can reference cultural events, historical periods, famous locations',
+          'Use contextual cues for accurate scene setting',
+        ]
+      },
+      {
+        title: 'Image Sizes',
+        tips: [
+          '1024x1024 - Square (default)',
+          '1536x1024 - Landscape (wide)',
+          '1024x1536 - Portrait/Vertical (tall) - BEST for hero images',
+        ]
+      }
+    ],
+    links: [
+      { name: 'OpenAI Image Generation Guide', url: 'https://platform.openai.com/docs/guides/image-generation' },
+      { name: 'GPT-Image-1.5 Prompting Guide (Cookbook)', url: 'https://cookbook.openai.com/examples/multimodal/image-gen-1.5-prompting_guide' },
+      { name: 'Images API Reference', url: 'https://platform.openai.com/docs/api-reference/images' },
+    ]
+  },
+  'flux-1.1-pro': {
+    title: 'Flux 1.1 Pro Prompting Guide',
+    provider: 'Replicate (Black Forest Labs)',
+    lastUpdated: 'December 2025',
+    pricing: 'Flat rate: ~$0.04 per image (all sizes)',
+    sections: [
+      {
+        title: 'Prompt Upsampling (Auto-Enhancement)',
+        tips: [
+          'Flux has built-in prompt upsampling that enhances your prompts automatically',
+          'Simple prompts work well - model adds detail and quality cues',
+          'Example: "cat on a couch" becomes a rich, detailed scene',
+          'Good for users who want quick results without complex prompting',
+        ]
+      },
+      {
+        title: 'Photorealism',
+        tips: [
+          'Excels at photorealistic imagery out of the box',
+          'Add lighting descriptions: "golden hour lighting", "soft studio light"',
+          'Specify camera details for photo look: "DSLR photograph", "professional photography"',
+          'Works well with natural, conversational descriptions',
+        ]
+      },
+      {
+        title: 'Aspect Ratios',
+        tips: [
+          '1:1 - Square (default, ~1024x1024)',
+          '16:9 - Landscape/Wide (~1344x768)',
+          '9:16 - Portrait/Vertical (~768x1344) - BEST for hero images',
+          '4:3, 3:4, 3:2, 2:3 - Also supported',
+        ]
+      },
+      {
+        title: 'Style & Artistic Control',
+        tips: [
+          'Add style keywords: "cinematic", "editorial", "commercial photography"',
+          'Describe mood: "warm and inviting", "professional and clean"',
+          'Reference styles: "in the style of National Geographic", "magazine quality"',
+          'Flux handles artistic and realistic styles equally well',
+        ]
+      },
+      {
+        title: 'Output Quality',
+        tips: [
+          'Output quality (0-100) controls WebP compression, not image detail',
+          '80 is default - good balance of quality and file size',
+          'Higher values = larger files, minimal visual improvement',
+          'For web use, 70-80 is recommended',
+        ]
+      },
+      {
+        title: 'Best Practices',
+        tips: [
+          'Be descriptive but not overly complex - Flux handles natural language well',
+          'Focus on subject, setting, lighting, and mood',
+          'No need for negative prompts - Flux handles this automatically',
+          'Fast generation time (~5-10 seconds typically)',
+        ]
+      }
+    ],
+    links: [
+      { name: 'Flux 1.1 Pro on Replicate', url: 'https://replicate.com/black-forest-labs/flux-1.1-pro' },
+      { name: 'Black Forest Labs', url: 'https://blackforestlabs.ai/' },
+      { name: 'Replicate API Docs', url: 'https://replicate.com/docs' },
+    ]
+  }
 };
+
+// Legacy reference for backwards compatibility
+const GPT_IMAGE_PROMPT_GUIDE = IMAGE_PROMPT_GUIDES['gpt-image-1.5'];
 
 // Chat types for the dual chat system
 type ChatType = 'consultant' | 'worker';
@@ -184,6 +257,8 @@ interface ImageCreationSettings {
   prompt_assistant_model: string;
   // Image generation model (gpt-image-1.5, dall-e-3, flux, etc.)
   image_generation_model: string;
+  // Image quality (low, medium, high) - low is best for websites, high for print
+  image_quality: 'low' | 'medium' | 'high';
   reference_images: ReferenceImage[];
   logo_images: LogoImage[];
   audience_avatars: AudienceAvatar[];
@@ -231,7 +306,8 @@ interface Props {
 const DEFAULT_SETTINGS: ImageCreationSettings = {
   enabled: true, // Always enabled - no toggle needed
   prompt_assistant_model: 'gpt-4o',
-  image_generation_model: 'gpt-image-1.5', // Latest and best image generation model
+  image_generation_model: 'flux-1.1-pro', // Default to Flux (gpt-image-1.5 requires org verification)
+  image_quality: 'low', // Default to low for websites (17x cheaper than high, fast)
   reference_images: [],
   logo_images: [],
   audience_avatars: [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
@@ -322,12 +398,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [generating, setGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<string>('');
   const [batchQuantity, setBatchQuantity] = useState(1);
+  const [batchQuality, setBatchQuality] = useState<'low' | 'medium' | 'high'>('low'); // Batch generation quality
   const [selectedVariations, setSelectedVariations] = useState<Set<string>>(new Set());
 
   // Bank filtering
   const [bankFilter, setBankFilter] = useState<string>('all');
   const [bankSort, setBankSort] = useState<'newest' | 'oldest' | 'variation'>('newest');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [modelFilter, setModelFilter] = useState<string>('all');
+  const [showArchived, setShowArchived] = useState<boolean>(false);
+  const [bankFullscreen, setBankFullscreen] = useState<boolean>(false);
 
   // Image title editing
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
@@ -562,10 +642,18 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Get unique variations for filtering
   const uniqueVariations = [...new Set(settings.image_bank.map(img => img.variation))];
+  // Get unique models for filtering
+  const uniqueModels = [...new Set(settings.image_bank.map(img => img.model).filter(Boolean))];
 
   // Filter and sort bank images
   const getFilteredBankImages = (includeUsed: boolean) => {
-    let images = settings.image_bank.filter(img => includeUsed ? img.used : !img.used);
+    let images = settings.image_bank.filter(img => {
+      // Filter by used/available
+      const usedMatch = includeUsed ? img.used : !img.used;
+      // Filter by archived (show archived only when showArchived is true)
+      const archivedMatch = showArchived ? img.archived : !img.archived;
+      return usedMatch && archivedMatch;
+    });
     // Filter by variation
     if (bankFilter !== 'all') {
       images = images.filter(img => img.variation === bankFilter);
@@ -573,6 +661,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     // Filter by category
     if (categoryFilter !== 'all') {
       images = images.filter(img => img.category === categoryFilter);
+    }
+    // Filter by model
+    if (modelFilter !== 'all') {
+      images = images.filter(img => img.model === modelFilter);
     }
     switch (bankSort) {
       case 'newest':
@@ -1384,6 +1476,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           orientation: variation.orientation,
           prompt: fullPrompt,
           createdAt: new Date().toISOString(),
+          model: settings.image_generation_model || 'flux-1.1-pro',
           used: false
         };
 
@@ -1463,6 +1556,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           mainPrompt: '', // Already included in variation prompts
           variations: variationsWithFullPrompt,
           model: settings.image_generation_model || 'gpt-image-1.5',
+          quality: batchQuality, // Use batch-specific quality setting
           referenceImageUrls: settings.reference_images.map(i => i.url).filter(url => !url.startsWith('data:')),
           quantity: batchQuantity
         })
@@ -1484,6 +1578,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             orientation: img.orientation,
             prompt: img.prompt,
             createdAt: new Date().toISOString(),
+            model: img.model || settings.image_generation_model || 'flux-1.1-pro',
             used: false
           }));
 
@@ -1536,6 +1631,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     );
     updateSettings({ image_bank: newBank });
     showNotification('Image restored to available', 'info');
+  };
+
+  const handleArchiveImage = (imageId: string) => {
+    const newBank = settings.image_bank.map(img =>
+      img.id === imageId ? { ...img, archived: !img.archived } : img
+    );
+    updateSettings({ image_bank: newBank });
+    const image = settings.image_bank.find(i => i.id === imageId);
+    showNotification(image?.archived ? 'Image restored from archive' : 'Image archived', 'info');
   };
 
   // ========== UPLOAD TO BANK ==========
@@ -1895,13 +1999,36 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           <div className="flex items-center gap-2">
             <label className="text-sm text-brand-gold/70">Image Model:</label>
             <select
-              value={settings.image_generation_model || 'gpt-image-1.5'}
+              value={settings.image_generation_model || 'flux-1.1-pro'}
               onChange={(e) => updateSettings({ image_generation_model: e.target.value })}
               className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm"
             >
               {IMAGE_GENERATION_MODELS.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
+            </select>
+          </div>
+          {/* Image Quality - different options based on model */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-brand-gold/70">Quality:</label>
+            <select
+              value={settings.image_quality || 'low'}
+              onChange={(e) => updateSettings({ image_quality: e.target.value as 'low' | 'medium' | 'high' })}
+              className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm"
+            >
+              {(settings.image_generation_model || 'flux-1.1-pro').startsWith('gpt-image') ? (
+                <>
+                  <option value="low">Low ($0.01) - Web</option>
+                  <option value="medium">Medium ($0.04)</option>
+                  <option value="high">High ($0.17) - Print</option>
+                </>
+              ) : (
+                <>
+                  <option value="low">60% - Small files</option>
+                  <option value="medium">80% - Balanced</option>
+                  <option value="high">100% - Max quality</option>
+                </>
+              )}
             </select>
           </div>
           {/* Prompt Assistant Model - The chat model that helps craft prompts */}
@@ -1962,14 +2089,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         </div>
       </div>
 
-      {/* Prompt Guide Modal */}
+      {/* Prompt Guide Modal - Shows both GPT-Image and Flux guides */}
       {showPromptGuide && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 rounded-xl border border-brand-gold/50 w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-brand-gold/30">
               <div>
-                <h2 className="text-xl font-bold text-brand-gold">{GPT_IMAGE_PROMPT_GUIDE.title}</h2>
-                <p className="text-sm text-brand-gold/60">Last updated: {GPT_IMAGE_PROMPT_GUIDE.lastUpdated}</p>
+                <h2 className="text-xl font-bold text-brand-gold">Image Model Prompting Guide</h2>
+                <p className="text-sm text-brand-gold/60">Tips for GPT-Image-1.5 and Flux 1.1 Pro</p>
               </div>
               <button
                 onClick={() => setShowPromptGuide(false)}
@@ -1980,39 +2107,120 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                 </svg>
               </button>
             </div>
-            <div className="overflow-y-auto p-4 space-y-4">
-              {GPT_IMAGE_PROMPT_GUIDE.sections.map((section, idx) => (
-                <div key={idx} className="bg-slate-800 rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-brand-cyan mb-3">{section.title}</h3>
-                  <ul className="space-y-2">
-                    {section.tips.map((tip, tipIdx) => (
-                      <li key={tipIdx} className="flex items-start gap-2 text-sm text-gray-300">
-                        <span className="text-brand-gold mt-1">•</span>
-                        <span>{tip}</span>
-                      </li>
-                    ))}
-                  </ul>
+            <div className="overflow-y-auto p-4 space-y-6">
+              {/* Quick Reference: Image Creation vs WordPress Publishing */}
+              <div className="border border-brand-gold/50 rounded-lg overflow-hidden">
+                <div className="bg-brand-gold/10 px-4 py-2 border-b border-brand-gold/30">
+                  <h3 className="text-sm font-bold text-brand-gold">Quick Reference: Where Images Are Used</h3>
                 </div>
-              ))}
-              <div className="bg-slate-800 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-brand-cyan mb-3">Official Documentation</h3>
-                <ul className="space-y-2 text-sm">
-                  <li>
-                    <a href="https://platform.openai.com/docs/guides/image-generation" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-                      OpenAI Image Generation Guide →
-                    </a>
-                  </li>
-                  <li>
-                    <a href="https://cookbook.openai.com/examples/multimodal/image-gen-1.5-prompting_guide" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-                      GPT-Image-1.5 Prompting Guide (Cookbook) →
-                    </a>
-                  </li>
-                  <li>
-                    <a href="https://platform.openai.com/docs/api-reference/images" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-                      Images API Reference →
-                    </a>
-                  </li>
-                </ul>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-slate-800">
+                        <th className="px-3 py-2 text-left text-brand-gold/80 font-medium">Feature</th>
+                        <th className="px-3 py-2 text-left text-purple-300 font-medium">Image Creation (Section 7)</th>
+                        <th className="px-3 py-2 text-left text-brand-cyan font-medium">WordPress Publishing</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-gray-300">
+                      <tr className="border-t border-slate-700">
+                        <td className="px-3 py-2 text-brand-gold/70 font-medium">Purpose</td>
+                        <td className="px-3 py-2"><strong>Batch generation</strong> - Create multiple images upfront to populate Image Bank</td>
+                        <td className="px-3 py-2"><strong>Auto-publish</strong> - Generate images on-the-fly during WordPress publishing</td>
+                      </tr>
+                      <tr className="border-t border-slate-700 bg-slate-800/30">
+                        <td className="px-3 py-2 text-brand-gold/70 font-medium">When Used</td>
+                        <td className="px-3 py-2">Before running workflows, to build up a library of images</td>
+                        <td className="px-3 py-2">During article generation when auto-publishing to WordPress</td>
+                      </tr>
+                      <tr className="border-t border-slate-700">
+                        <td className="px-3 py-2 text-brand-gold/70 font-medium">Storage</td>
+                        <td className="px-3 py-2">Images go to <strong>Image Bank</strong> for reuse across articles</td>
+                        <td className="px-3 py-2">Images generated per article and uploaded to WordPress media</td>
+                      </tr>
+                      <tr className="border-t border-slate-700 bg-slate-800/30">
+                        <td className="px-3 py-2 text-brand-gold/70 font-medium">Model Selection</td>
+                        <td className="px-3 py-2">Per-workflow setting (saved with workflow)</td>
+                        <td className="px-3 py-2">Per-project setting (in WordPress section)</td>
+                      </tr>
+                      <tr className="border-t border-slate-700">
+                        <td className="px-3 py-2 text-brand-gold/70 font-medium">Typical Flow</td>
+                        <td className="px-3 py-2">1. Set model/variations → 2. Generate batch → 3. Images saved to bank → 4. Articles pull from bank</td>
+                        <td className="px-3 py-2">1. Article generated → 2. Model generates image → 3. Uploads to WordPress → 4. Page published</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Flux 1.1 Pro Section */}
+              <div className="border border-purple-500/50 rounded-lg overflow-hidden">
+                <div className="bg-purple-900/30 px-4 py-3 border-b border-purple-500/30">
+                  <h3 className="text-lg font-bold text-purple-300">Flux 1.1 Pro</h3>
+                  <p className="text-xs text-purple-300/70">{IMAGE_PROMPT_GUIDES['flux-1.1-pro'].provider} | {IMAGE_PROMPT_GUIDES['flux-1.1-pro'].pricing}</p>
+                </div>
+                <div className="p-4 space-y-3">
+                  {IMAGE_PROMPT_GUIDES['flux-1.1-pro'].sections.map((section, idx) => (
+                    <div key={idx} className="bg-slate-800/50 rounded-lg p-3">
+                      <h4 className="text-sm font-semibold text-purple-300 mb-2">{section.title}</h4>
+                      <ul className="space-y-1">
+                        {section.tips.map((tip, tipIdx) => (
+                          <li key={tipIdx} className="flex items-start gap-2 text-xs text-gray-300">
+                            <span className="text-purple-400 mt-0.5">•</span>
+                            <span>{tip}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                  <div className="bg-slate-800/50 rounded-lg p-3">
+                    <h4 className="text-sm font-semibold text-purple-300 mb-2">Documentation</h4>
+                    <ul className="space-y-1 text-xs">
+                      {IMAGE_PROMPT_GUIDES['flux-1.1-pro'].links.map((link, idx) => (
+                        <li key={idx}>
+                          <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
+                            {link.name} →
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* GPT-Image-1.5 Section */}
+              <div className="border border-brand-cyan/50 rounded-lg overflow-hidden">
+                <div className="bg-brand-cyan/10 px-4 py-3 border-b border-brand-cyan/30">
+                  <h3 className="text-lg font-bold text-brand-cyan">GPT-Image-1.5</h3>
+                  <p className="text-xs text-brand-cyan/70">{IMAGE_PROMPT_GUIDES['gpt-image-1.5'].provider} | {IMAGE_PROMPT_GUIDES['gpt-image-1.5'].pricing}</p>
+                </div>
+                <div className="p-4 space-y-3">
+                  {IMAGE_PROMPT_GUIDES['gpt-image-1.5'].sections.map((section, idx) => (
+                    <div key={idx} className="bg-slate-800/50 rounded-lg p-3">
+                      <h4 className="text-sm font-semibold text-brand-cyan mb-2">{section.title}</h4>
+                      <ul className="space-y-1">
+                        {section.tips.map((tip, tipIdx) => (
+                          <li key={tipIdx} className="flex items-start gap-2 text-xs text-gray-300">
+                            <span className="text-brand-gold mt-0.5">•</span>
+                            <span>{tip}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                  <div className="bg-slate-800/50 rounded-lg p-3">
+                    <h4 className="text-sm font-semibold text-brand-cyan mb-2">Documentation</h4>
+                    <ul className="space-y-1 text-xs">
+                      {IMAGE_PROMPT_GUIDES['gpt-image-1.5'].links.map((link, idx) => (
+                        <li key={idx}>
+                          <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
+                            {link.name} →
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="p-4 border-t border-brand-gold/30 flex justify-end">
@@ -2951,10 +3159,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             </button>
             {isBatchOpen && (
               <div className="p-4 border-t border-green-500/30 space-y-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <label className="text-xs text-brand-gold/70">Quantity per {activeAvatar?.placeholderMode === 'advanced' ? 'combination' : 'variation'}:</label>
-                  <input type="range" min="1" max="20" value={batchQuantity} onChange={(e) => setBatchQuantity(parseInt(e.target.value))} className="flex-1 accent-green-500" />
+                  <input type="range" min="1" max="20" value={batchQuantity} onChange={(e) => setBatchQuantity(parseInt(e.target.value))} className="flex-1 min-w-[100px] accent-green-500" />
                   <span className="text-green-400 font-bold w-8 text-center">{batchQuantity}</span>
+
+                  {/* Quality selector for batch generation */}
+                  <div className="flex items-center gap-2 ml-4 pl-4 border-l border-green-500/30">
+                    <label className="text-xs text-brand-gold/70">Quality:</label>
+                    <select
+                      value={batchQuality}
+                      onChange={(e) => setBatchQuality(e.target.value as 'low' | 'medium' | 'high')}
+                      className="bg-slate-800 border border-green-500/50 rounded px-2 py-1 text-white text-xs"
+                    >
+                      <option value="low">Low ($0.01) - Web</option>
+                      <option value="medium">Medium ($0.04)</option>
+                      <option value="high">High ($0.17) - Print</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Advanced Mode: Show placeholder combinations */}
@@ -3121,6 +3343,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                       </select>
                     </div>
                     <div className="flex items-center gap-2">
+                      <label className="text-xs text-brand-gold/70">Model:</label>
+                      <select value={modelFilter} onChange={(e) => setModelFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
+                        <option value="all">All</option>
+                        {uniqueModels.map(m => (<option key={m} value={m}>{m}</option>))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
                       <label className="text-xs text-brand-gold/70">Sort:</label>
                       <select value={bankSort} onChange={(e) => setBankSort(e.target.value as any)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
                         <option value="newest">Newest</option>
@@ -3128,9 +3357,27 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                         <option value="variation">Variation</option>
                       </select>
                     </div>
+                    {/* Archive toggle */}
+                    <button
+                      onClick={() => setShowArchived(!showArchived)}
+                      className={`px-2 py-1 rounded text-xs transition flex items-center gap-1 ${showArchived ? 'bg-amber-600 text-white' : 'bg-slate-700 text-white/70 hover:bg-slate-600'}`}
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                      {showArchived ? 'Archived' : 'Archive'}
+                    </button>
                   </div>
-                  {/* Bulk Download Controls */}
+                  {/* Right side controls */}
                   <div className="flex items-center gap-2">
+                    {/* Fullscreen toggle */}
+                    <button
+                      onClick={() => setBankFullscreen(true)}
+                      className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition flex items-center gap-1"
+                      title="Expand to fullscreen"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                      Expand
+                    </button>
+                    {/* Bulk Download Controls */}
                     {selectedForDownload.size > 0 ? (
                       <>
                         <span className="text-xs text-brand-cyan">{selectedForDownload.size} selected</span>
@@ -3151,36 +3398,54 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                   <div className="grid grid-cols-4 gap-3">
                     {availableImages.map((img) => (
                       <div key={img.id} className={`relative group cursor-pointer ${selectedForDownload.has(img.id) ? 'ring-2 ring-brand-cyan' : ''}`}>
-                        {/* Title label at top - editable */}
+                        {/* Title label at top with model badge */}
                         <div
                           className="absolute top-0 left-0 right-0 z-10 bg-slate-900/90 border-b border-brand-cyan/30 px-1.5 py-0.5 rounded-t"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {editingImageId === img.id ? (
-                            <input
-                              type="text"
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              onBlur={() => handleUpdateImageTitle(img.id, editingTitle)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleUpdateImageTitle(img.id, editingTitle);
-                                if (e.key === 'Escape') { setEditingImageId(null); setEditingTitle(''); }
-                              }}
-                              autoFocus
-                              className="w-full bg-transparent border-none text-[10px] text-white focus:outline-none"
-                            />
-                          ) : (
-                            <div
-                              onClick={() => { setEditingImageId(img.id); setEditingTitle(img.title || ''); }}
-                              className="text-[10px] text-white truncate cursor-text hover:text-brand-cyan"
-                              title="Click to edit title"
-                            >
-                              {img.title || img.variation}
-                            </div>
-                          )}
+                          <div className="flex items-center justify-between gap-1">
+                            {editingImageId === img.id ? (
+                              <input
+                                type="text"
+                                value={editingTitle}
+                                onChange={(e) => setEditingTitle(e.target.value)}
+                                onBlur={() => handleUpdateImageTitle(img.id, editingTitle)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleUpdateImageTitle(img.id, editingTitle);
+                                  if (e.key === 'Escape') { setEditingImageId(null); setEditingTitle(''); }
+                                }}
+                                autoFocus
+                                className="flex-1 bg-transparent border-none text-[10px] text-white focus:outline-none"
+                              />
+                            ) : (
+                              <div
+                                onClick={() => { setEditingImageId(img.id); setEditingTitle(img.title || ''); }}
+                                className="text-[10px] text-white truncate cursor-text hover:text-brand-cyan flex-1"
+                                title="Click to edit title"
+                              >
+                                {img.title || img.variation}
+                              </div>
+                            )}
+                            {/* Model badge */}
+                            {img.model && (
+                              <span className={`text-[8px] px-1 py-0.5 rounded font-medium ${
+                                img.model === 'seedream-4' ? 'bg-green-600/80 text-white' :
+                                img.model === 'ideogram-v3-turbo' ? 'bg-purple-600/80 text-white' :
+                                img.model === 'flux-1.1-pro' ? 'bg-blue-600/80 text-white' :
+                                img.model.startsWith('gpt') ? 'bg-emerald-600/80 text-white' :
+                                'bg-slate-600/80 text-white'
+                              }`}>
+                                {img.model.replace('-1.1-pro', '').replace('-v3-turbo', '').replace('-4', '4').replace('gpt-image-', 'gpt')}
+                              </span>
+                            )}
+                          </div>
+                          {/* Timestamp */}
+                          <div className="text-[8px] text-brand-gold/50">
+                            {new Date(img.createdAt).toLocaleDateString()} {new Date(img.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </div>
                         </div>
                         {/* Selection checkbox */}
-                        <div className="absolute top-5 left-1 z-10">
+                        <div className="absolute top-7 left-1 z-10">
                           <input
                             type="checkbox"
                             checked={selectedForDownload.has(img.id)}
@@ -3191,7 +3456,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                         </div>
                         {/* Category badge */}
                         {img.category && img.category !== 'Other' && (
-                          <div className="absolute top-5 right-1 z-10">
+                          <div className="absolute top-7 right-1 z-10">
                             <select
                               value={img.category || 'Other'}
                               onChange={(e) => { e.stopPropagation(); handleUpdateImageCategory(img.id, e.target.value); }}
@@ -3207,11 +3472,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                         <img
                           src={img.url}
                           alt={img.title || img.variation}
-                          className="w-full h-24 object-cover rounded-b border border-brand-cyan/30 pt-4"
+                          className="w-full h-24 object-cover rounded-b border border-brand-cyan/30 pt-6"
                           onClick={() => setPreviewImage(img)}
                         />
                         {/* Hover overlay with actions */}
-                        <div className="absolute inset-0 top-4 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded-b flex flex-col items-center justify-center p-1 gap-1">
+                        <div className="absolute inset-0 top-6 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded-b flex flex-col items-center justify-center p-1 gap-1">
                           <span className="text-[10px] text-white font-semibold">{img.variation}</span>
                           <div className="flex gap-1 flex-wrap justify-center">
                             <button onClick={() => setPreviewImage(img)} className="px-2 py-0.5 bg-blue-600/80 rounded text-white text-[10px]">Expand</button>
@@ -3219,6 +3484,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                           </div>
                           <div className="flex gap-1">
                             <button onClick={() => handleMarkAsUsed(img.id, 'manual')} className="px-2 py-0.5 bg-green-600/80 rounded text-white text-[10px]">Used</button>
+                            <button onClick={() => handleArchiveImage(img.id)} className="px-2 py-0.5 bg-amber-600/80 rounded text-white text-[10px]">Archive</button>
                             <button onClick={() => handleRemoveFromBank(img.id)} className="px-2 py-0.5 bg-red-600/80 rounded text-white text-[10px]">Delete</button>
                           </div>
                         </div>
@@ -3412,6 +3678,127 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       {saving && (
         <div className="fixed bottom-4 right-4 bg-brand-cyan text-slate-900 px-4 py-2 rounded-lg shadow-lg text-sm font-medium">
           Saving...
+        </div>
+      )}
+
+      {/* Fullscreen Image Bank Modal */}
+      {bankFullscreen && (
+        <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30 bg-slate-900">
+            <h2 className="text-xl font-bold text-brand-cyan flex items-center gap-2">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              Image Bank ({availableImages.length} {showArchived ? 'archived' : 'available'})
+            </h2>
+            <div className="flex items-center gap-4">
+              {/* Filters in fullscreen */}
+              <div className="flex gap-3 flex-wrap">
+                <select value={modelFilter} onChange={(e) => setModelFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm">
+                  <option value="all">All Models</option>
+                  {uniqueModels.map(m => (<option key={m} value={m}>{m}</option>))}
+                </select>
+                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm">
+                  <option value="all">All Categories</option>
+                  {settings.image_categories.map(c => (<option key={c} value={c}>{c}</option>))}
+                </select>
+                <button
+                  onClick={() => setShowArchived(!showArchived)}
+                  className={`px-3 py-1 rounded text-sm transition ${showArchived ? 'bg-amber-600 text-white' : 'bg-slate-700 text-white/70 hover:bg-slate-600'}`}
+                >
+                  {showArchived ? 'Viewing Archive' : 'View Archive'}
+                </button>
+              </div>
+              <button
+                onClick={() => setBankFullscreen(false)}
+                className="p-2 hover:bg-slate-800 rounded-full text-white transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          </div>
+          {/* Image Grid - fullscreen */}
+          <div className="flex-1 overflow-auto p-6">
+            {availableImages.length > 0 ? (
+              <div className="grid grid-cols-6 gap-4">
+                {availableImages.map((img) => (
+                  <div key={img.id} className={`relative group cursor-pointer bg-slate-900 rounded-lg overflow-hidden border border-brand-cyan/30 ${selectedForDownload.has(img.id) ? 'ring-2 ring-brand-cyan' : ''}`}>
+                    {/* Header with model and timestamp */}
+                    <div className="p-2 bg-slate-800/80 border-b border-brand-cyan/20">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs text-white font-medium truncate">{img.title || img.variation}</span>
+                        {img.model && (
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
+                            img.model === 'seedream-4' ? 'bg-green-600/80 text-white' :
+                            img.model === 'ideogram-v3-turbo' ? 'bg-purple-600/80 text-white' :
+                            img.model === 'flux-1.1-pro' ? 'bg-blue-600/80 text-white' :
+                            img.model.startsWith('gpt') ? 'bg-emerald-600/80 text-white' :
+                            'bg-slate-600/80 text-white'
+                          }`}>
+                            {img.model.replace('-1.1-pro', '').replace('-v3-turbo', ' v3').replace('-4', ' 4').replace('gpt-image-', 'GPT ')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-brand-gold/50">
+                        {new Date(img.createdAt).toLocaleDateString()} {new Date(img.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </div>
+                    </div>
+                    {/* Image */}
+                    <img
+                      src={img.url}
+                      alt={img.title || img.variation}
+                      className="w-full h-40 object-cover"
+                      onClick={() => setPreviewImage(img)}
+                    />
+                    {/* Actions overlay */}
+                    <div className="absolute inset-0 top-12 bg-black/70 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-2 p-2">
+                      <div className="flex gap-2 flex-wrap justify-center">
+                        <button onClick={() => setPreviewImage(img)} className="px-3 py-1 bg-blue-600 rounded text-white text-xs">View</button>
+                        <button onClick={() => handleDownloadImage(img)} className="px-3 py-1 bg-brand-cyan rounded text-slate-900 text-xs font-medium">Download</button>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleArchiveImage(img.id)} className="px-3 py-1 bg-amber-600 rounded text-white text-xs">
+                          {img.archived ? 'Restore' : 'Archive'}
+                        </button>
+                        <button onClick={() => handleRemoveFromBank(img.id)} className="px-3 py-1 bg-red-600 rounded text-white text-xs">Delete</button>
+                      </div>
+                    </div>
+                    {/* Selection checkbox */}
+                    <div className="absolute top-12 left-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedForDownload.has(img.id)}
+                        onChange={() => toggleDownloadSelection(img.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-5 h-5 rounded border-2 border-brand-cyan text-brand-cyan focus:ring-brand-cyan bg-slate-900/80"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-brand-gold/50 text-lg">{showArchived ? 'No archived images.' : 'No available images.'}</p>
+              </div>
+            )}
+          </div>
+          {/* Footer with bulk actions */}
+          <div className="p-4 border-t border-brand-cyan/30 bg-slate-900 flex justify-between items-center">
+            <div className="text-sm text-brand-gold/70">
+              {selectedForDownload.size > 0 ? `${selectedForDownload.size} images selected` : 'Click images to select for bulk download'}
+            </div>
+            <div className="flex gap-2">
+              {selectedForDownload.size > 0 && (
+                <>
+                  <button onClick={handleBulkDownload} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-sm transition flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Download Selected
+                  </button>
+                  <button onClick={clearDownloadSelection} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm transition">Clear Selection</button>
+                </>
+              )}
+              <button onClick={selectAllForDownload} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm transition">Select All</button>
+            </div>
+          </div>
         </div>
       )}
 

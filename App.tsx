@@ -1709,6 +1709,7 @@ const App: React.FC = () => {
                     onClose={() => setShowSaveTemplatePopup(false)}
                     currentState={currentProject.state}
                     workflowName={currentWorkflowContext.workflowName || currentProject.name}
+                    workflowId={currentWorkflowId}
                     onSave={async (templateData) => {
                         try {
                             const res = await fetch('/api/templates', {
@@ -2379,7 +2380,7 @@ const App: React.FC = () => {
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
                                 WordPress Admin Credentials
                             </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-end">
+                            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto] gap-2 items-end">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
                                     <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
@@ -2392,12 +2393,12 @@ const App: React.FC = () => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Publish</label>
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Image</label>
                                     <div className="flex rounded-lg overflow-hidden border-2 border-brand-gold">
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'off'}))}
-                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 (currentProject.state.wpPublishMode || 'off') === 'off'
                                                     ? 'bg-red-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2408,7 +2409,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'draft'}))}
-                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 currentProject.state.wpPublishMode === 'draft'
                                                     ? 'bg-brand-gold text-black'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2419,15 +2420,52 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'wordpress'}))}
-                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 currentProject.state.wpPublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
                                             }`}
                                         >
-                                            WordPress
+                                            <span className="block">Word</span>
+                                            <span className="block">Press</span>
                                         </button>
                                     </div>
+                                </div>
+                                <div className="w-28">
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center text-xs">Model</label>
+                                    <select
+                                        value={currentProject.state.imageModel || 'flux-1.1-pro'}
+                                        onChange={e => setCurrentProjectState(p => ({...p, imageModel: e.target.value}))}
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                    >
+                                        <option value="flux-1.1-pro">Flux 1.1</option>
+                                        <option value="seedream-4">Seedream 4</option>
+                                        <option value="ideogram-v3-turbo">Ideogram v3</option>
+                                        <option value="gpt-image-1.5">GPT Img</option>
+                                    </select>
+                                </div>
+                                {/* Quality dropdown - different options based on model */}
+                                <div className="w-20">
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center text-xs">Quality</label>
+                                    <select
+                                        value={currentProject.state.imageQuality || 'low'}
+                                        onChange={e => setCurrentProjectState(p => ({...p, imageQuality: e.target.value as 'low' | 'medium' | 'high'}))}
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                    >
+                                        {(currentProject.state.imageModel === 'gpt-image-1.5') ? (
+                                            <>
+                                                <option value="low">Low</option>
+                                                <option value="medium">Med</option>
+                                                <option value="high">High</option>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <option value="low">60%</option>
+                                                <option value="medium">80%</option>
+                                                <option value="high">100%</option>
+                                            </>
+                                        )}
+                                    </select>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Article</label>
@@ -2435,7 +2473,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'draft'}))}
-                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 (currentProject.state.articlePublishMode || 'draft') === 'draft'
                                                     ? 'bg-brand-gold text-black'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2446,13 +2484,14 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'wordpress'}))}
-                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 currentProject.state.articlePublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
                                             }`}
                                         >
-                                            WordPress
+                                            <span className="block">Word</span>
+                                            <span className="block">Press</span>
                                         </button>
                                     </div>
                                 </div>
@@ -2462,7 +2501,7 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'draft'}))}
-                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 (currentProject.state.metaPublishMode || 'draft') === 'draft'
                                                     ? 'bg-brand-gold text-black'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
@@ -2473,25 +2512,26 @@ const App: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'wordpress'}))}
-                                            className={`px-3 py-2.5 text-xs font-medium transition-all ${
+                                            className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 currentProject.state.metaPublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
                                                     : 'bg-slate-900 text-white hover:bg-slate-800'
                                             }`}
                                         >
-                                            WordPress
+                                            <span className="block">Word</span>
+                                            <span className="block">Press</span>
                                         </button>
                                     </div>
                                 </div>
-                                <div className="w-28">
-                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">SEO Plugin</label>
+                                <div className="w-24">
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center text-xs">SEO Plugin</label>
                                     <select
                                         value={currentProject.state.seoPlugin || 'rankmath'}
                                         onChange={e => setCurrentProjectState(p => ({...p, seoPlugin: e.target.value}))}
-                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-2 py-2.5 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                     >
                                         <option value="rankmath">Rank Math</option>
-                                        <option value="yoast">Yoast SEO</option>
+                                        <option value="yoast">Yoast</option>
                                         <option value="aioseo">AIOSEO</option>
                                         <option value="seopress">SEOPress</option>
                                     </select>

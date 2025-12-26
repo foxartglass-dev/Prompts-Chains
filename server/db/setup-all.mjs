@@ -220,6 +220,18 @@ async function setup() {
       console.log('  - smart_matching_mode already exists');
     }
 
+    // Migration 007: image_quality column
+    const hasImageQuality = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'image_quality'
+    `;
+    if (hasImageQuality.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN image_quality VARCHAR(20) DEFAULT 'low'`;
+      console.log('  ✓ Added image_quality column');
+    } else {
+      console.log('  - image_quality already exists');
+    }
+
     // Articles table additional columns
     const hasArticlePushAuto = await sql`
       SELECT column_name FROM information_schema.columns

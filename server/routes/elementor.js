@@ -297,7 +297,8 @@ router.post('/publish', async (req, res) => {
     // Step 2: Get image creation settings and determine mode
     let effectiveUseBank = useImageBank;
     let effectiveGenerateLive = generateImages;
-    let imageGenModel = 'gpt-image-1.5';
+    let imageGenModel = 'flux-1.1-pro';  // Default to Flux (gpt-image-1.5 requires org verification)
+    let imageQuality = 'low'; // Default to low for websites (cheapest)
 
     if (workflowId && isDatabaseEnabled()) {
       try {
@@ -311,10 +312,12 @@ router.post('/publish', async (req, res) => {
           // Check integration_mode to determine behavior
           const integrationMode = config.integration_mode || 'bank';
           const fallbackToLive = config.fallback_to_live ?? true;
-          imageGenModel = config.image_generation_model || 'gpt-image-1.5';
+          imageGenModel = config.image_generation_model || 'flux-1.1-pro';
+          imageQuality = config.image_quality || 'low';
 
           console.log('[Elementor Publish] Integration mode:', integrationMode);
           console.log('[Elementor Publish] Image generation model:', imageGenModel);
+          console.log('[Elementor Publish] Image quality:', imageQuality);
 
           if (integrationMode === 'live') {
             // "Generate Live" mode - skip bank, generate fresh images
@@ -511,7 +514,8 @@ router.post('/publish', async (req, res) => {
         wpCredentials,
         maxImages: imagesToGenerate,
         maxWords,
-        model: imageGenModel // Pass the configured model
+        model: imageGenModel, // gpt-image-1.5 or flux-1.1-pro
+        quality: imageQuality // low/medium/high (for gpt-image-1.5)
       });
 
       // Merge pipeline images with bank images
