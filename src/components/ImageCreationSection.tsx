@@ -110,66 +110,135 @@ const IMAGE_GENERATION_MODELS = [
   { id: 'flux-1.1-pro', name: 'FLUX 1.1 Pro', provider: 'replicate', description: 'Via Replicate API' },
 ];
 
-// GPT-Image-1.5 Prompt Guide Knowledge Base
-const GPT_IMAGE_PROMPT_GUIDE = {
-  title: 'GPT-Image-1.5 Prompting Guide',
-  lastUpdated: 'December 2025',
-  sections: [
-    {
-      title: 'Text Rendering',
-      tips: [
-        'Use quotes or CAPS for exact text: \'"Welcome to 2025" in bold sans-serif font\'',
-        'Specify text details: "Centered at bottom, white text on black background, 72pt size"',
-        'Works great for dense and small text - be specific about placement and style',
-      ]
-    },
-    {
-      title: 'Photorealism',
-      tips: [
-        'Use photo language: lens type (85mm portrait lens), lighting quality (soft diffused daylight), framing',
-        'Be specific: "add soft coastal daylight" instead of "make it better"',
-        'Describe camera angle: "shot from slightly below", "eye-level perspective"',
-        'Mention film stocks or processing: "Kodak Portra 400 film look", "clean digital processing"',
-      ]
-    },
-    {
-      title: 'Consistency & Editing',
-      tips: [
-        'Model preserves faces and logos better during edits',
-        'For outfit changes: "same person, change red shirt to blue sweater"',
-        'For lighting: "adjust lighting to golden hour without changing composition"',
-        'Be explicit about what to keep vs change',
-      ]
-    },
-    {
-      title: 'UI/Mockups',
-      tips: [
-        'Describe the product as if it already exists',
-        'Focus on: layout, hierarchy, spacing, real interface elements',
-        'Avoid concept art language - be practical and specific',
-        'Example: "Mobile app screen showing dashboard with 3 metric cards at top, navigation bar at bottom"',
-      ]
-    },
-    {
-      title: 'World Knowledge',
-      tips: [
-        'Model has built-in reasoning and world knowledge',
-        'Example: "Bethel, New York, August 1969" → infers Woodstock',
-        'Can reference cultural events, historical periods, famous locations',
-        'Use contextual cues for accurate scene setting',
-      ]
-    },
-    {
-      title: 'Image Sizes',
-      tips: [
-        '1024x1024 - Square (default)',
-        '1536x1024 - Landscape (wide)',
-        '1024x1536 - Portrait/Vertical (tall) - BEST for hero images',
-        'Use "auto" to let model decide based on content',
-      ]
-    }
-  ]
+// Image Model Prompting Guide Knowledge Base
+const IMAGE_PROMPT_GUIDES = {
+  'gpt-image-1.5': {
+    title: 'GPT-Image-1.5 Prompting Guide',
+    provider: 'OpenAI',
+    lastUpdated: 'December 2025',
+    pricing: 'Low: $0.011 | Medium: $0.042 | High: $0.167 per image',
+    sections: [
+      {
+        title: 'Text Rendering',
+        tips: [
+          'Use quotes or CAPS for exact text: \'"Welcome to 2025" in bold sans-serif font\'',
+          'Specify text details: "Centered at bottom, white text on black background, 72pt size"',
+          'Works great for dense and small text - be specific about placement and style',
+        ]
+      },
+      {
+        title: 'Photorealism',
+        tips: [
+          'Use photo language: lens type (85mm portrait lens), lighting quality (soft diffused daylight), framing',
+          'Be specific: "add soft coastal daylight" instead of "make it better"',
+          'Describe camera angle: "shot from slightly below", "eye-level perspective"',
+          'Mention film stocks or processing: "Kodak Portra 400 film look", "clean digital processing"',
+        ]
+      },
+      {
+        title: 'Consistency & Editing',
+        tips: [
+          'Model preserves faces and logos better during edits',
+          'For outfit changes: "same person, change red shirt to blue sweater"',
+          'For lighting: "adjust lighting to golden hour without changing composition"',
+          'Be explicit about what to keep vs change',
+        ]
+      },
+      {
+        title: 'World Knowledge',
+        tips: [
+          'Model has built-in reasoning and world knowledge',
+          'Example: "Bethel, New York, August 1969" → infers Woodstock',
+          'Can reference cultural events, historical periods, famous locations',
+          'Use contextual cues for accurate scene setting',
+        ]
+      },
+      {
+        title: 'Image Sizes',
+        tips: [
+          '1024x1024 - Square (default)',
+          '1536x1024 - Landscape (wide)',
+          '1024x1536 - Portrait/Vertical (tall) - BEST for hero images',
+        ]
+      }
+    ],
+    links: [
+      { name: 'OpenAI Image Generation Guide', url: 'https://platform.openai.com/docs/guides/image-generation' },
+      { name: 'GPT-Image-1.5 Prompting Guide (Cookbook)', url: 'https://cookbook.openai.com/examples/multimodal/image-gen-1.5-prompting_guide' },
+      { name: 'Images API Reference', url: 'https://platform.openai.com/docs/api-reference/images' },
+    ]
+  },
+  'flux-1.1-pro': {
+    title: 'Flux 1.1 Pro Prompting Guide',
+    provider: 'Replicate (Black Forest Labs)',
+    lastUpdated: 'December 2025',
+    pricing: 'Flat rate: ~$0.04 per image (all sizes)',
+    sections: [
+      {
+        title: 'Prompt Upsampling (Auto-Enhancement)',
+        tips: [
+          'Flux has built-in prompt upsampling that enhances your prompts automatically',
+          'Simple prompts work well - model adds detail and quality cues',
+          'Example: "cat on a couch" becomes a rich, detailed scene',
+          'Good for users who want quick results without complex prompting',
+        ]
+      },
+      {
+        title: 'Photorealism',
+        tips: [
+          'Excels at photorealistic imagery out of the box',
+          'Add lighting descriptions: "golden hour lighting", "soft studio light"',
+          'Specify camera details for photo look: "DSLR photograph", "professional photography"',
+          'Works well with natural, conversational descriptions',
+        ]
+      },
+      {
+        title: 'Aspect Ratios',
+        tips: [
+          '1:1 - Square (default, ~1024x1024)',
+          '16:9 - Landscape/Wide (~1344x768)',
+          '9:16 - Portrait/Vertical (~768x1344) - BEST for hero images',
+          '4:3, 3:4, 3:2, 2:3 - Also supported',
+        ]
+      },
+      {
+        title: 'Style & Artistic Control',
+        tips: [
+          'Add style keywords: "cinematic", "editorial", "commercial photography"',
+          'Describe mood: "warm and inviting", "professional and clean"',
+          'Reference styles: "in the style of National Geographic", "magazine quality"',
+          'Flux handles artistic and realistic styles equally well',
+        ]
+      },
+      {
+        title: 'Output Quality',
+        tips: [
+          'Output quality (0-100) controls WebP compression, not image detail',
+          '80 is default - good balance of quality and file size',
+          'Higher values = larger files, minimal visual improvement',
+          'For web use, 70-80 is recommended',
+        ]
+      },
+      {
+        title: 'Best Practices',
+        tips: [
+          'Be descriptive but not overly complex - Flux handles natural language well',
+          'Focus on subject, setting, lighting, and mood',
+          'No need for negative prompts - Flux handles this automatically',
+          'Fast generation time (~5-10 seconds typically)',
+        ]
+      }
+    ],
+    links: [
+      { name: 'Flux 1.1 Pro on Replicate', url: 'https://replicate.com/black-forest-labs/flux-1.1-pro' },
+      { name: 'Black Forest Labs', url: 'https://blackforestlabs.ai/' },
+      { name: 'Replicate API Docs', url: 'https://replicate.com/docs' },
+    ]
+  }
 };
+
+// Legacy reference for backwards compatibility
+const GPT_IMAGE_PROMPT_GUIDE = IMAGE_PROMPT_GUIDES['gpt-image-1.5'];
 
 // Chat types for the dual chat system
 type ChatType = 'consultant' | 'worker';
@@ -233,7 +302,7 @@ interface Props {
 const DEFAULT_SETTINGS: ImageCreationSettings = {
   enabled: true, // Always enabled - no toggle needed
   prompt_assistant_model: 'gpt-4o',
-  image_generation_model: 'gpt-image-1.5', // Latest and best image generation model
+  image_generation_model: 'flux-1.1-pro', // Default to Flux (gpt-image-1.5 requires org verification)
   image_quality: 'low', // Default to low for websites (17x cheaper than high, fast)
   reference_images: [],
   logo_images: [],
@@ -1900,7 +1969,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           <div className="flex items-center gap-2">
             <label className="text-sm text-brand-gold/70">Image Model:</label>
             <select
-              value={settings.image_generation_model || 'gpt-image-1.5'}
+              value={settings.image_generation_model || 'flux-1.1-pro'}
               onChange={(e) => updateSettings({ image_generation_model: e.target.value })}
               className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm"
             >
@@ -1909,7 +1978,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
               ))}
             </select>
           </div>
-          {/* Image Quality - low is best for websites, high for print */}
+          {/* Image Quality - only show for OpenAI models (gpt-image-*) */}
+          {(settings.image_generation_model || 'flux-1.1-pro').startsWith('gpt-image') && (
           <div className="flex items-center gap-2">
             <label className="text-sm text-brand-gold/70">Quality:</label>
             <select
@@ -1922,6 +1992,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
               <option value="high">High ($0.17) - Print</option>
             </select>
           </div>
+          )}
           {/* Prompt Assistant Model - The chat model that helps craft prompts */}
           <div className="flex items-center gap-2">
             <label className="text-sm text-brand-gold/70">Prompt Assistant:</label>
@@ -1980,14 +2051,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         </div>
       </div>
 
-      {/* Prompt Guide Modal */}
+      {/* Prompt Guide Modal - Shows both GPT-Image and Flux guides */}
       {showPromptGuide && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 rounded-xl border border-brand-gold/50 w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-brand-gold/30">
               <div>
-                <h2 className="text-xl font-bold text-brand-gold">{GPT_IMAGE_PROMPT_GUIDE.title}</h2>
-                <p className="text-sm text-brand-gold/60">Last updated: {GPT_IMAGE_PROMPT_GUIDE.lastUpdated}</p>
+                <h2 className="text-xl font-bold text-brand-gold">Image Model Prompting Guide</h2>
+                <p className="text-sm text-brand-gold/60">Tips for GPT-Image-1.5 and Flux 1.1 Pro</p>
               </div>
               <button
                 onClick={() => setShowPromptGuide(false)}
@@ -1998,39 +2069,75 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                 </svg>
               </button>
             </div>
-            <div className="overflow-y-auto p-4 space-y-4">
-              {GPT_IMAGE_PROMPT_GUIDE.sections.map((section, idx) => (
-                <div key={idx} className="bg-slate-800 rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-brand-cyan mb-3">{section.title}</h3>
-                  <ul className="space-y-2">
-                    {section.tips.map((tip, tipIdx) => (
-                      <li key={tipIdx} className="flex items-start gap-2 text-sm text-gray-300">
-                        <span className="text-brand-gold mt-1">•</span>
-                        <span>{tip}</span>
-                      </li>
-                    ))}
-                  </ul>
+            <div className="overflow-y-auto p-4 space-y-6">
+              {/* Flux 1.1 Pro Section */}
+              <div className="border border-purple-500/50 rounded-lg overflow-hidden">
+                <div className="bg-purple-900/30 px-4 py-3 border-b border-purple-500/30">
+                  <h3 className="text-lg font-bold text-purple-300">Flux 1.1 Pro</h3>
+                  <p className="text-xs text-purple-300/70">{IMAGE_PROMPT_GUIDES['flux-1.1-pro'].provider} | {IMAGE_PROMPT_GUIDES['flux-1.1-pro'].pricing}</p>
                 </div>
-              ))}
-              <div className="bg-slate-800 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-brand-cyan mb-3">Official Documentation</h3>
-                <ul className="space-y-2 text-sm">
-                  <li>
-                    <a href="https://platform.openai.com/docs/guides/image-generation" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-                      OpenAI Image Generation Guide →
-                    </a>
-                  </li>
-                  <li>
-                    <a href="https://cookbook.openai.com/examples/multimodal/image-gen-1.5-prompting_guide" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-                      GPT-Image-1.5 Prompting Guide (Cookbook) →
-                    </a>
-                  </li>
-                  <li>
-                    <a href="https://platform.openai.com/docs/api-reference/images" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-                      Images API Reference →
-                    </a>
-                  </li>
-                </ul>
+                <div className="p-4 space-y-3">
+                  {IMAGE_PROMPT_GUIDES['flux-1.1-pro'].sections.map((section, idx) => (
+                    <div key={idx} className="bg-slate-800/50 rounded-lg p-3">
+                      <h4 className="text-sm font-semibold text-purple-300 mb-2">{section.title}</h4>
+                      <ul className="space-y-1">
+                        {section.tips.map((tip, tipIdx) => (
+                          <li key={tipIdx} className="flex items-start gap-2 text-xs text-gray-300">
+                            <span className="text-purple-400 mt-0.5">•</span>
+                            <span>{tip}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                  <div className="bg-slate-800/50 rounded-lg p-3">
+                    <h4 className="text-sm font-semibold text-purple-300 mb-2">Documentation</h4>
+                    <ul className="space-y-1 text-xs">
+                      {IMAGE_PROMPT_GUIDES['flux-1.1-pro'].links.map((link, idx) => (
+                        <li key={idx}>
+                          <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
+                            {link.name} →
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* GPT-Image-1.5 Section */}
+              <div className="border border-brand-cyan/50 rounded-lg overflow-hidden">
+                <div className="bg-brand-cyan/10 px-4 py-3 border-b border-brand-cyan/30">
+                  <h3 className="text-lg font-bold text-brand-cyan">GPT-Image-1.5</h3>
+                  <p className="text-xs text-brand-cyan/70">{IMAGE_PROMPT_GUIDES['gpt-image-1.5'].provider} | {IMAGE_PROMPT_GUIDES['gpt-image-1.5'].pricing}</p>
+                </div>
+                <div className="p-4 space-y-3">
+                  {IMAGE_PROMPT_GUIDES['gpt-image-1.5'].sections.map((section, idx) => (
+                    <div key={idx} className="bg-slate-800/50 rounded-lg p-3">
+                      <h4 className="text-sm font-semibold text-brand-cyan mb-2">{section.title}</h4>
+                      <ul className="space-y-1">
+                        {section.tips.map((tip, tipIdx) => (
+                          <li key={tipIdx} className="flex items-start gap-2 text-xs text-gray-300">
+                            <span className="text-brand-gold mt-0.5">•</span>
+                            <span>{tip}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                  <div className="bg-slate-800/50 rounded-lg p-3">
+                    <h4 className="text-sm font-semibold text-brand-cyan mb-2">Documentation</h4>
+                    <ul className="space-y-1 text-xs">
+                      {IMAGE_PROMPT_GUIDES['gpt-image-1.5'].links.map((link, idx) => (
+                        <li key={idx}>
+                          <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
+                            {link.name} →
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="p-4 border-t border-brand-gold/30 flex justify-end">
