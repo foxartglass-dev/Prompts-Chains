@@ -320,7 +320,7 @@ router.post('/batch-generate', async (req, res) => {
       variations = [], // Array of {id, name, prompt, orientation}
       referenceImageUrls = [],
       quantity = 1, // How many of each variation
-      model = 'gpt-image-1.5', // Default to latest model
+      model = 'gpt-image-1', // Default to gpt-image-1 (actual OpenAI model name)
       quality = 'high',
       openaiApiKey
     } = req.body;
@@ -412,13 +412,24 @@ router.post('/batch-generate', async (req, res) => {
               model: model
             };
           } catch (error) {
-            // Try fallback to dall-e-3
+            console.error(`[Batch Generate] Error with ${model}:`, error.message);
+
+            // Try fallback to dall-e-3 with compatible size
             try {
+              // DALL-E 3 only supports: 1024x1024, 1024x1792, 1792x1024
+              const dalle3Size = item.orientation === 'vertical'
+                ? '1024x1792'
+                : item.orientation === 'landscape'
+                  ? '1792x1024'
+                  : '1024x1024';
+
+              console.log(`[Batch Generate] Trying fallback to dall-e-3 with size ${dalle3Size}`);
+
               const response = await openai.images.generate({
                 model: 'dall-e-3',
                 prompt: item.prompt,
                 n: 1,
-                size: item.size,
+                size: dalle3Size,
                 quality: 'hd'
               });
 
@@ -430,10 +441,11 @@ router.post('/batch-generate', async (req, res) => {
                 variation: item.variation,
                 variationId: item.variationId,
                 orientation: item.orientation,
-                size: item.size,
+                size: dalle3Size,
                 model: 'dall-e-3'
               };
             } catch (fallbackError) {
+              console.error(`[Batch Generate] Fallback also failed:`, fallbackError.message);
               return {
                 success: false,
                 error: fallbackError.message,
