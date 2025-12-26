@@ -738,7 +738,9 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           manual_variation_order: [],
           // Smart Content Matching defaults
           smart_matching_enabled: false,
-          smart_matching_mode: 'bank_first'
+          smart_matching_mode: 'bank_first',
+          // Image quality default
+          image_quality: 'low'
         },
         isNew: true
       });
@@ -771,7 +773,9 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         manual_variation_order: results[0].manual_variation_order || [],
         // Smart Content Matching
         smart_matching_enabled: results[0].smart_matching_enabled ?? false,
-        smart_matching_mode: results[0].smart_matching_mode || 'bank_first'
+        smart_matching_mode: results[0].smart_matching_mode || 'bank_first',
+        // Image quality
+        image_quality: results[0].image_quality || 'low'
       }
     });
 
@@ -794,6 +798,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       enabled,
       prompt_assistant_model,
       image_generation_model,
+      image_quality, // low, medium, high - low is best for websites
       reference_images,
       logo_images,
       audience_avatars,
@@ -833,6 +838,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
             enabled,
             prompt_assistant_model,
             image_generation_model,
+            image_quality,
             reference_images,
             logo_images,
             audience_avatars,
@@ -854,6 +860,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
             ${enabled ?? false},
             ${prompt_assistant_model ?? 'gpt-4o'},
             ${image_generation_model ?? 'gpt-image-1.5'},
+            ${image_quality ?? 'low'},
             ${JSON.stringify(reference_images ?? [])},
             ${JSON.stringify(logo_images ?? [])},
             ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
@@ -881,6 +888,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
             enabled = COALESCE(${enabled}, enabled),
             prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
             image_generation_model = COALESCE(${image_generation_model}, image_generation_model),
+            image_quality = COALESCE(${image_quality}, image_quality),
             reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
             logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
             audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),

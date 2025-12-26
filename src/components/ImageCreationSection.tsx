@@ -184,6 +184,8 @@ interface ImageCreationSettings {
   prompt_assistant_model: string;
   // Image generation model (gpt-image-1.5, dall-e-3, flux, etc.)
   image_generation_model: string;
+  // Image quality (low, medium, high) - low is best for websites, high for print
+  image_quality: 'low' | 'medium' | 'high';
   reference_images: ReferenceImage[];
   logo_images: LogoImage[];
   audience_avatars: AudienceAvatar[];
@@ -232,6 +234,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   enabled: true, // Always enabled - no toggle needed
   prompt_assistant_model: 'gpt-4o',
   image_generation_model: 'gpt-image-1.5', // Latest and best image generation model
+  image_quality: 'low', // Default to low for websites (17x cheaper than high, fast)
   reference_images: [],
   logo_images: [],
   audience_avatars: [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
@@ -1463,6 +1466,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           mainPrompt: '', // Already included in variation prompts
           variations: variationsWithFullPrompt,
           model: settings.image_generation_model || 'gpt-image-1.5',
+          quality: settings.image_quality || 'low',
           referenceImageUrls: settings.reference_images.map(i => i.url).filter(url => !url.startsWith('data:')),
           quantity: batchQuantity
         })
@@ -1902,6 +1906,19 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
               {IMAGE_GENERATION_MODELS.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
+            </select>
+          </div>
+          {/* Image Quality - low is best for websites, high for print */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-brand-gold/70">Quality:</label>
+            <select
+              value={settings.image_quality || 'low'}
+              onChange={(e) => updateSettings({ image_quality: e.target.value as 'low' | 'medium' | 'high' })}
+              className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm"
+            >
+              <option value="low">Low ($0.01) - Web</option>
+              <option value="medium">Medium ($0.04)</option>
+              <option value="high">High ($0.17) - Print</option>
             </select>
           </div>
           {/* Prompt Assistant Model - The chat model that helps craft prompts */}
