@@ -320,7 +320,7 @@ router.post('/batch-generate', async (req, res) => {
       variations = [], // Array of {id, name, prompt, orientation}
       referenceImageUrls = [],
       quantity = 1, // How many of each variation
-      model = 'gpt-image-1', // Default to gpt-image-1 (actual OpenAI model name)
+      model = 'gpt-image-1.5', // Latest model (Dec 2025) - better prompts, 20% cheaper
       quality = 'high',
       openaiApiKey
     } = req.body;
