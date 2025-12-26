@@ -116,40 +116,11 @@ router.post('/generate', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('GPT Image generation error:', error);
-
-    // Handle specific OpenAI errors
-    if (error.code === 'model_not_found') {
-      // Fallback to dall-e-3 if gpt-image-1 not available
-      try {
-        const apiKey = req.body.openaiApiKey || process.env.OPENAI_API_KEY;
-        const openai = new OpenAI({ apiKey });
-
-        const response = await openai.images.generate({
-          model: 'dall-e-3',
-          prompt: req.body.prompt,
-          n: 1,
-          size: req.body.size || '1024x1024',
-          quality: req.body.quality === 'high' ? 'hd' : 'standard',
-          style: req.body.style || 'vivid'
-        });
-
-        return res.json({
-          success: true,
-          image: {
-            url: response.data[0].url,
-            prompt: req.body.prompt,
-            revisedPrompt: response.data[0].revised_prompt,
-            model: 'dall-e-3',
-            note: 'Used DALL-E 3 fallback'
-          }
-        });
-      } catch (fallbackError) {
-        return res.status(500).json({ error: fallbackError.message });
-      }
-    }
-
-    res.status(500).json({ error: error.message });
+    console.error('[Image Generation] Error:', error.message);
+    res.status(500).json({
+      error: error.message,
+      model: req.body.model || 'gpt-image-1.5'
+    });
   }
 });
 
@@ -274,38 +245,11 @@ Generate an image that matches the described style exactly while depicting the c
     });
 
   } catch (error) {
-    console.error('Reference-based generation error:', error);
-
-    // Fallback to dall-e-3
-    if (error.code === 'model_not_found' || error.message?.includes('gpt-image-1')) {
-      try {
-        const apiKey = req.body.openaiApiKey || process.env.OPENAI_API_KEY;
-        const openai = new OpenAI({ apiKey });
-
-        const response = await openai.images.generate({
-          model: 'dall-e-3',
-          prompt: req.body.prompt,
-          n: 1,
-          size: req.body.size || '1024x1024',
-          quality: 'hd'
-        });
-
-        return res.json({
-          success: true,
-          image: {
-            url: response.data[0].url,
-            prompt: req.body.prompt,
-            revisedPrompt: response.data[0].revised_prompt,
-            model: 'dall-e-3',
-            note: 'Used DALL-E 3 fallback'
-          }
-        });
-      } catch (fallbackError) {
-        return res.status(500).json({ error: fallbackError.message });
-      }
-    }
-
-    res.status(500).json({ error: error.message });
+    console.error('[Reference Generation] Error:', error.message);
+    res.status(500).json({
+      error: error.message,
+      model: req.body.model || 'gpt-image-1.5'
+    });
   }
 });
 
@@ -413,46 +357,13 @@ router.post('/batch-generate', async (req, res) => {
             };
           } catch (error) {
             console.error(`[Batch Generate] Error with ${model}:`, error.message);
-
-            // Try fallback to dall-e-3 with compatible size
-            try {
-              // DALL-E 3 only supports: 1024x1024, 1024x1792, 1792x1024
-              const dalle3Size = item.orientation === 'vertical'
-                ? '1024x1792'
-                : item.orientation === 'landscape'
-                  ? '1792x1024'
-                  : '1024x1024';
-
-              console.log(`[Batch Generate] Trying fallback to dall-e-3 with size ${dalle3Size}`);
-
-              const response = await openai.images.generate({
-                model: 'dall-e-3',
-                prompt: item.prompt,
-                n: 1,
-                size: dalle3Size,
-                quality: 'hd'
-              });
-
-              return {
-                success: true,
-                url: response.data[0].url,
-                prompt: item.prompt,
-                revisedPrompt: response.data[0].revised_prompt,
-                variation: item.variation,
-                variationId: item.variationId,
-                orientation: item.orientation,
-                size: dalle3Size,
-                model: 'dall-e-3'
-              };
-            } catch (fallbackError) {
-              console.error(`[Batch Generate] Fallback also failed:`, fallbackError.message);
-              return {
-                success: false,
-                error: fallbackError.message,
-                variation: item.variation,
-                variationId: item.variationId
-              };
-            }
+            return {
+              success: false,
+              error: error.message,
+              variation: item.variation,
+              variationId: item.variationId,
+              model: model
+            };
           }
         })
       );

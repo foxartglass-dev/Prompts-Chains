@@ -2,6 +2,8 @@
  * Image Pipeline Service
  * Orchestrates the full image generation flow:
  * Article Content → Chunks → Actions → Prompts → Images → WordPress
+ *
+ * Uses OpenAI gpt-image-1.5 for all image generation
  */
 
 import chunkContent, { extractTitle, countWords } from './content-chunker.js';
@@ -24,7 +26,7 @@ export async function processArticleWithImages(content, options = {}) {
 
     // API keys
     openaiApiKey,
-    replicateApiKey,
+    replicateApiKey, // Legacy - no longer used, kept for backwards compatibility
 
     // Style DNA
     styleDNA = null,
@@ -37,6 +39,10 @@ export async function processArticleWithImages(content, options = {}) {
     maxImages = 4,
     heroImage = true,
     maxWords = 300,
+
+    // Model options (NEW)
+    model = 'gpt-image-1.5',
+    quality = 'low', // low for websites, medium, high for print
 
     // Callbacks
     onProgress = null
@@ -101,9 +107,9 @@ export async function processArticleWithImages(content, options = {}) {
       });
     }
 
-    // Step 4: Generate images
-    if (!replicateApiKey) {
-      progress('skipping_images', { message: 'No Replicate key, skipping image generation' });
+    // Step 4: Generate images using OpenAI gpt-image-1.5
+    if (!openaiApiKey) {
+      progress('skipping_images', { message: 'No OpenAI key, skipping image generation' });
       return {
         chunks,
         title: pageTitle,
@@ -112,12 +118,12 @@ export async function processArticleWithImages(content, options = {}) {
       };
     }
 
-    progress('generating_images', { message: 'Generating images with FLUX...' });
+    progress('generating_images', { message: `Generating images with ${model}...` });
 
     const chunksWithImages = await generateArticleImages(
       chunks,
-      { maxImages, heroImage },
-      replicateApiKey,
+      { maxImages, heroImage, model, quality },
+      openaiApiKey,  // Now uses OpenAI instead of Replicate
       (index, total, result) => {
         progress('image_progress', {
           message: `Generated image ${index + 1} of ${total}`,
@@ -132,7 +138,7 @@ export async function processArticleWithImages(content, options = {}) {
     progress('images_generated', {
       message: `Generated ${imageCount} images`,
       count: imageCount,
-      cost: estimateCost(imageCount)
+      cost: estimateCost(imageCount, quality)
     });
 
     // Step 5: Upload to WordPress (optional)
@@ -155,7 +161,7 @@ export async function processArticleWithImages(content, options = {}) {
       title: pageTitle,
       styleDNA: activeStyleDNA,
       imagesGenerated: imageCount,
-      estimatedCost: estimateCost(imageCount)
+      estimatedCost: estimateCost(imageCount, quality)
     };
 
   } catch (error) {
@@ -233,7 +239,7 @@ async function uploadImagesToWordPress(chunks, wpCredentials, onProgress = null)
     if (!chunk.imageData?.url) return;
 
     try {
-      // Download image from Replicate URL
+      // Download image from OpenAI URL
       const imageResponse = await fetch(chunk.imageData.url);
       if (!imageResponse.ok) throw new Error('Failed to download image');
 
@@ -259,7 +265,7 @@ async function uploadImagesToWordPress(chunks, wpCredentials, onProgress = null)
       if (onProgress) onProgress(current, total);
     } catch (error) {
       console.error(`Failed to upload image for ${namePrefix}:`, error);
-      // Don't fail the whole process, keep Replicate URL as fallback
+      // Don't fail the whole process, keep OpenAI URL as fallback
     }
   }
 
@@ -286,10 +292,12 @@ export async function generateImagesForChunks(chunks, options = {}) {
   const {
     styleDNA,
     openaiApiKey,
-    replicateApiKey,
+    replicateApiKey, // Legacy - no longer used
     keyword = '',
     title = '',
-    maxImages = 4
+    maxImages = 4,
+    model = 'gpt-image-1.5',
+    quality = 'low'
   } = options;
 
   // Generate prompts if needed
@@ -306,9 +314,9 @@ export async function generateImagesForChunks(chunks, options = {}) {
     addBasicPrompts(chunks, styleDNA || {}, keyword, maxImages);
   }
 
-  // Generate images
-  if (replicateApiKey) {
-    await generateArticleImages(chunks, { maxImages }, replicateApiKey);
+  // Generate images using OpenAI
+  if (openaiApiKey) {
+    await generateArticleImages(chunks, { maxImages, model, quality }, openaiApiKey);
   }
 
   return chunks;
@@ -325,7 +333,8 @@ export async function previewPrompts(content, options = {}) {
     keyword = '',
     title = null,
     maxImages = 4,
-    maxWords = 300
+    maxWords = 300,
+    quality = 'low'
   } = options;
 
   // Chunk content
@@ -378,7 +387,7 @@ export async function previewPrompts(content, options = {}) {
     styleDNA: activeStyleDNA,
     prompts,
     chunks,
-    estimatedCost: estimateCost(prompts.length)
+    estimatedCost: estimateCost(prompts.length, quality)
   };
 }
 

@@ -298,6 +298,7 @@ router.post('/publish', async (req, res) => {
     let effectiveUseBank = useImageBank;
     let effectiveGenerateLive = generateImages;
     let imageGenModel = 'gpt-image-1.5';
+    let imageQuality = 'low'; // Default to low for websites (cheapest)
 
     if (workflowId && isDatabaseEnabled()) {
       try {
@@ -312,9 +313,11 @@ router.post('/publish', async (req, res) => {
           const integrationMode = config.integration_mode || 'bank';
           const fallbackToLive = config.fallback_to_live ?? true;
           imageGenModel = config.image_generation_model || 'gpt-image-1.5';
+          imageQuality = config.image_quality || 'low';
 
           console.log('[Elementor Publish] Integration mode:', integrationMode);
           console.log('[Elementor Publish] Image generation model:', imageGenModel);
+          console.log('[Elementor Publish] Image quality:', imageQuality);
 
           if (integrationMode === 'live') {
             // "Generate Live" mode - skip bank, generate fresh images
@@ -500,18 +503,18 @@ router.post('/publish', async (req, res) => {
       const imagesToGenerate = dynamicMaxImages - imagesFromBank;
       console.log(`[Elementor Publish] Generating ${imagesToGenerate} live images with model: ${imageGenModel}`);
 
-      // Use the image pipeline for remaining images
+      // Use the image pipeline for remaining images (now uses OpenAI gpt-image-1.5)
       const pipelineResult = await processArticleWithImages(cleanedContent, {
         title,
         keyword,
         styleDNA,
         referenceImages,
         openaiApiKey: openaiApiKey || process.env.OPENAI_API_KEY,
-        replicateApiKey: replicateApiKey || process.env.REPLICATE_API_TOKEN,
         wpCredentials,
         maxImages: imagesToGenerate,
         maxWords,
-        model: imageGenModel // Pass the configured model
+        model: imageGenModel, // Pass the configured model (gpt-image-1.5)
+        quality: imageQuality // Pass quality setting (low/medium/high)
       });
 
       // Merge pipeline images with bank images
