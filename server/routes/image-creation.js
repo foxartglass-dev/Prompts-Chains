@@ -326,10 +326,20 @@ router.post('/batch-generate', async (req, res) => {
       }
     }
 
-    // Generate images using unified generateImage function (with concurrency limit)
-    const concurrencyLimit = 2;
+    // Generate images using unified generateImage function
+    // For Replicate models, use sequential processing with delay to avoid rate limits
+    const isReplicateModel = ['flux-1.1-pro', 'seedream-4', 'ideogram-v3-turbo'].includes(model);
+    const concurrencyLimit = isReplicateModel ? 1 : 2; // Sequential for Replicate to avoid rate limits
+    const delayBetweenRequests = isReplicateModel ? 11000 : 0; // 11 second delay for Replicate (rate limit is 6/min)
+
     for (let i = 0; i < promptsToGenerate.length; i += concurrencyLimit) {
       const batch = promptsToGenerate.slice(i, i + concurrencyLimit);
+
+      // Add delay between Replicate requests (except for the first one)
+      if (isReplicateModel && i > 0) {
+        console.log(`[Batch Generate] Waiting ${delayBetweenRequests/1000}s to avoid rate limit...`);
+        await new Promise(resolve => setTimeout(resolve, delayBetweenRequests));
+      }
 
       const batchResults = await Promise.all(
         batch.map(async (item) => {
