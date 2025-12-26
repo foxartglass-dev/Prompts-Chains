@@ -330,6 +330,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [uploadingToBank, setUploadingToBank] = useState(false);
   const [autoTagging, setAutoTagging] = useState(false);
   const [showPromptGuide, setShowPromptGuide] = useState(false);
+  const [selectedCombinations, setSelectedCombinations] = useState<Set<string>>(new Set()); // For advanced mode batch
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -581,6 +582,73 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   const availableImages = getFilteredBankImages(false);
   const usedImages = getFilteredBankImages(true);
+
+  // Generate all possible combinations from placeholder categories (for advanced mode)
+  const generatePlaceholderCombinations = useCallback(() => {
+    if (!activeAvatar?.placeholderCategories || activeAvatar.placeholderCategories.length === 0) {
+      return [];
+    }
+
+    const categories = activeAvatar.placeholderCategories;
+
+    // Generate cartesian product of all options
+    const generateCartesian = (arrays: PlaceholderOption[][]): PlaceholderOption[][] => {
+      if (arrays.length === 0) return [[]];
+      const [first, ...rest] = arrays;
+      const restCombinations = generateCartesian(rest);
+      return first.flatMap(option =>
+        restCombinations.map(combo => [option, ...combo])
+      );
+    };
+
+    const optionArrays = categories.map(cat => cat.options);
+    const allCombinations = generateCartesian(optionArrays);
+
+    // Map combinations to objects with labels and replacement maps
+    return allCombinations.map((combo, idx) => {
+      const label = combo.map((opt, catIdx) => opt.text).join(' + ');
+      const shortLabel = combo.map((opt, catIdx) => `${categories[catIdx].name.charAt(0)}${opt.number}`).join('-');
+      const replacements: Record<string, string> = {};
+      categories.forEach((cat, catIdx) => {
+        replacements[cat.placeholder] = combo[catIdx].text;
+      });
+      return {
+        id: `combo-${idx}`,
+        label,
+        shortLabel,
+        replacements
+      };
+    });
+  }, [activeAvatar?.placeholderCategories]);
+
+  const placeholderCombinations = generatePlaceholderCombinations();
+
+  // Build prompt with placeholder replacements (for advanced mode)
+  const buildAdvancedPrompt = (mainPrompt: string, replacements: Record<string, string>): string => {
+    let result = mainPrompt;
+    Object.entries(replacements).forEach(([placeholder, value]) => {
+      result = result.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value);
+    });
+    return result;
+  };
+
+  // Select all combinations (advanced mode)
+  const selectAllCombinations = () => {
+    setSelectedCombinations(new Set(placeholderCombinations.map(c => c.id)));
+  };
+
+  // Toggle combination selection
+  const toggleCombinationSelection = (comboId: string) => {
+    setSelectedCombinations(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(comboId)) {
+        newSet.delete(comboId);
+      } else {
+        newSet.add(comboId);
+      }
+      return newSet;
+    });
+  };
 
   // Insert variation placeholder into main prompt at cursor
   const insertVariationPlaceholder = () => {
@@ -1331,35 +1399,59 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setGenerating(false);
   };
 
-  // Image Generation - Batch
+  // Image Generation - Batch (supports both Simple and Advanced modes)
   const handleBatchGenerate = async () => {
-    if (!activeAvatar || selectedVariations.size === 0) {
-      showNotification('Select variations to generate', 'error');
-      return;
+    const isAdvancedMode = activeAvatar?.placeholderMode === 'advanced';
+
+    // Validate based on mode
+    if (isAdvancedMode) {
+      if (!activeAvatar || selectedCombinations.size === 0) {
+        showNotification('Select combinations to generate', 'error');
+        return;
+      }
+    } else {
+      if (!activeAvatar || selectedVariations.size === 0) {
+        showNotification('Select variations to generate', 'error');
+        return;
+      }
     }
 
     setGenerating(true);
-    const variationsToGenerate = activeAvatar.variations.filter(v => selectedVariations.has(v.id));
-    const totalImages = variationsToGenerate.length * batchQuantity;
 
-    setGenerationProgress(`Starting batch generation of ${totalImages} images...`);
-    log(`Starting batch generation: ${totalImages} images`, LogStatus.WORKING);
+    let variationsWithFullPrompt: { id: string; name: string; prompt: string; orientation: string }[] = [];
 
-    try {
-      // Build prompts with main prompt + variation
-      const variationsWithFullPrompt = variationsToGenerate.map(v => ({
+    if (isAdvancedMode) {
+      // Advanced mode: use placeholder combinations
+      const combosToGenerate = placeholderCombinations.filter(c => selectedCombinations.has(c.id));
+      variationsWithFullPrompt = combosToGenerate.map(combo => ({
+        id: combo.id,
+        name: combo.shortLabel,
+        prompt: buildAdvancedPrompt(activeAvatar.mainPrompt, combo.replacements),
+        orientation: 'vertical' // Default to vertical for advanced mode
+      }));
+    } else {
+      // Simple mode: use variations
+      const variationsToGenerate = activeAvatar.variations.filter(v => selectedVariations.has(v.id));
+      variationsWithFullPrompt = variationsToGenerate.map(v => ({
         id: v.id,
         name: v.name,
         prompt: buildFinalPrompt(activeAvatar.mainPrompt, v.prompt),
         orientation: v.orientation
       }));
+    }
 
+    const totalImages = variationsWithFullPrompt.length * batchQuantity;
+    setGenerationProgress(`Starting batch generation of ${totalImages} images...`);
+    log(`Starting batch generation: ${totalImages} images (${isAdvancedMode ? 'Advanced' : 'Simple'} mode)`, LogStatus.WORKING);
+
+    try {
       const res = await fetch('/api/image-creation/batch-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mainPrompt: '', // Already included in variation prompts
           variations: variationsWithFullPrompt,
+          model: settings.image_generation_model || 'gpt-image-1.5',
           referenceImageUrls: settings.reference_images.map(i => i.url).filter(url => !url.startsWith('data:')),
           quantity: batchQuantity
         })
@@ -2834,38 +2926,87 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             )}
           </div>
 
-          {/* Batch Generate (Collapsible) */}
+          {/* Batch Generate (Collapsible) - Supports Simple and Advanced modes */}
           <div className="bg-slate-900 rounded-lg border border-green-500/50 overflow-hidden">
             <button onClick={() => setIsBatchOpen(!isBatchOpen)} className="w-full flex items-center justify-between p-3 text-green-400 hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
                 Batch Generate Images
+                {activeAvatar?.placeholderMode === 'advanced' && (
+                  <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-[10px] rounded">ADVANCED</span>
+                )}
               </span>
               <svg className={`w-5 h-5 transition-transform ${isBatchOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
             </button>
             {isBatchOpen && (
               <div className="p-4 border-t border-green-500/30 space-y-3">
                 <div className="flex items-center gap-3">
-                  <label className="text-xs text-brand-gold/70">Quantity per variation:</label>
+                  <label className="text-xs text-brand-gold/70">Quantity per {activeAvatar?.placeholderMode === 'advanced' ? 'combination' : 'variation'}:</label>
                   <input type="range" min="1" max="20" value={batchQuantity} onChange={(e) => setBatchQuantity(parseInt(e.target.value))} className="flex-1 accent-green-500" />
                   <span className="text-green-400 font-bold w-8 text-center">{batchQuantity}</span>
                 </div>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs text-brand-gold/70">Select Variations:</label>
-                    <button onClick={selectAllVariations} className="text-xs text-brand-cyan hover:text-brand-cyan-light">Select All</button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {activeAvatar?.variations.map((v) => (
-                      <label key={v.id} className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs cursor-pointer transition ${selectedVariations.has(v.id) ? 'bg-green-500 text-slate-900' : 'bg-slate-800 text-brand-gold border border-brand-gold/50'}`}>
-                        <input type="checkbox" checked={selectedVariations.has(v.id)} onChange={() => toggleVariationSelection(v.id)} className="hidden" />
-                        {v.name}
+
+                {/* Advanced Mode: Show placeholder combinations */}
+                {activeAvatar?.placeholderMode === 'advanced' ? (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-brand-gold/70">
+                        Select Combinations ({placeholderCombinations.length} possible):
                       </label>
-                    ))}
+                      <button onClick={selectAllCombinations} className="text-xs text-brand-cyan hover:text-brand-cyan-light">Select All</button>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto space-y-1 bg-slate-800/50 p-2 rounded">
+                      {placeholderCombinations.map((combo) => (
+                        <label
+                          key={combo.id}
+                          className={`flex items-center gap-2 px-3 py-2 rounded text-xs cursor-pointer transition ${
+                            selectedCombinations.has(combo.id)
+                              ? 'bg-green-500 text-slate-900'
+                              : 'bg-slate-700 text-brand-gold hover:bg-slate-600'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedCombinations.has(combo.id)}
+                            onChange={() => toggleCombinationSelection(combo.id)}
+                            className="hidden"
+                          />
+                          <span className="font-mono text-[10px] text-purple-300 mr-2">{combo.shortLabel}</span>
+                          <span className="truncate">{combo.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {placeholderCombinations.length === 0 && (
+                      <p className="text-xs text-brand-gold/50 italic">Add placeholder categories above to generate combinations</p>
+                    )}
                   </div>
-                </div>
-                <button onClick={handleBatchGenerate} disabled={generating || selectedVariations.size === 0} className="w-full py-3 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded text-white font-bold transition">
-                  {generating ? 'Generating...' : `Generate ${selectedVariations.size * batchQuantity} Images`}
+                ) : (
+                  /* Simple Mode: Show variations */
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-brand-gold/70">Select Variations:</label>
+                      <button onClick={selectAllVariations} className="text-xs text-brand-cyan hover:text-brand-cyan-light">Select All</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {activeAvatar?.variations.map((v) => (
+                        <label key={v.id} className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs cursor-pointer transition ${selectedVariations.has(v.id) ? 'bg-green-500 text-slate-900' : 'bg-slate-800 text-brand-gold border border-brand-gold/50'}`}>
+                          <input type="checkbox" checked={selectedVariations.has(v.id)} onChange={() => toggleVariationSelection(v.id)} className="hidden" />
+                          {v.name}
+                        </label>
+                      ))}
+                      {(!activeAvatar?.variations || activeAvatar.variations.length === 0) && (
+                        <p className="text-xs text-brand-gold/50 italic">Add variations above first, or switch to Advanced mode</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleBatchGenerate}
+                  disabled={generating || (activeAvatar?.placeholderMode === 'advanced' ? selectedCombinations.size === 0 : selectedVariations.size === 0)}
+                  className="w-full py-3 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded text-white font-bold transition"
+                >
+                  {generating ? 'Generating...' : `Generate ${(activeAvatar?.placeholderMode === 'advanced' ? selectedCombinations.size : selectedVariations.size) * batchQuantity} Images`}
                 </button>
               </div>
             )}
