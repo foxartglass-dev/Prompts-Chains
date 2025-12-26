@@ -325,6 +325,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [generating, setGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<string>('');
   const [batchQuantity, setBatchQuantity] = useState(1);
+  const [batchQuality, setBatchQuality] = useState<'low' | 'medium' | 'high'>('low'); // Batch generation quality
   const [selectedVariations, setSelectedVariations] = useState<Set<string>>(new Set());
 
   // Bank filtering
@@ -1466,7 +1467,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           mainPrompt: '', // Already included in variation prompts
           variations: variationsWithFullPrompt,
           model: settings.image_generation_model || 'gpt-image-1.5',
-          quality: settings.image_quality || 'low',
+          quality: batchQuality, // Use batch-specific quality setting
           referenceImageUrls: settings.reference_images.map(i => i.url).filter(url => !url.startsWith('data:')),
           quantity: batchQuantity
         })
@@ -2968,10 +2969,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             </button>
             {isBatchOpen && (
               <div className="p-4 border-t border-green-500/30 space-y-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <label className="text-xs text-brand-gold/70">Quantity per {activeAvatar?.placeholderMode === 'advanced' ? 'combination' : 'variation'}:</label>
-                  <input type="range" min="1" max="20" value={batchQuantity} onChange={(e) => setBatchQuantity(parseInt(e.target.value))} className="flex-1 accent-green-500" />
+                  <input type="range" min="1" max="20" value={batchQuantity} onChange={(e) => setBatchQuantity(parseInt(e.target.value))} className="flex-1 min-w-[100px] accent-green-500" />
                   <span className="text-green-400 font-bold w-8 text-center">{batchQuantity}</span>
+
+                  {/* Quality selector for batch generation */}
+                  <div className="flex items-center gap-2 ml-4 pl-4 border-l border-green-500/30">
+                    <label className="text-xs text-brand-gold/70">Quality:</label>
+                    <select
+                      value={batchQuality}
+                      onChange={(e) => setBatchQuality(e.target.value as 'low' | 'medium' | 'high')}
+                      className="bg-slate-800 border border-green-500/50 rounded px-2 py-1 text-white text-xs"
+                    >
+                      <option value="low">Low ($0.01) - Web</option>
+                      <option value="medium">Medium ($0.04)</option>
+                      <option value="high">High ($0.17) - Print</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Advanced Mode: Show placeholder combinations */}
