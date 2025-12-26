@@ -56,13 +56,27 @@ export async function getProviders(): Promise<LlmProvider[]> {
  */
 export async function generateContent(request: GenerateRequest): Promise<string> {
   try {
+    const controller = new AbortController();
+    // 5 minute timeout for long AI requests
+    const timeoutId = setTimeout(() => controller.abort(), 300000);
+
     const response = await fetch(`${API_BASE}/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(request),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
+
+    // Handle non-JSON responses (like 502 from proxy)
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      throw new Error(`Server error (${response.status}): ${text.substring(0, 200)}`);
+    }
 
     const data = await response.json();
 
@@ -77,6 +91,10 @@ export async function generateContent(request: GenerateRequest): Promise<string>
     return data.content;
   } catch (error) {
     if (error instanceof Error) {
+      // Provide more context for timeout errors
+      if (error.name === 'AbortError') {
+        return 'Error: Request timeout - AI request took too long (5 min limit)';
+      }
       return `Error: ${error.message}`;
     }
     return 'Error: An unknown error occurred';

@@ -20,6 +20,100 @@ import { processArticleWithImages, previewPrompts } from '../services/image-pipe
 
 const router = express.Router();
 
+/**
+ * Clean content before processing
+ * - Remove markdown # at start of text
+ * - Remove stray dashes (keep keyword dashes like "move-in")
+ * - Ensure proper H2 title separation
+ */
+function cleanContent(content) {
+  if (!content) return content;
+
+  let cleaned = content;
+
+  // Remove markdown # at the very start (but not ## which is H2)
+  cleaned = cleaned.replace(/^#\s+/gm, '');
+
+  // Remove stray dashes at end of sentences/paragraphs (not within words)
+  // Keep dashes in compound words like "move-in", "full-time"
+  cleaned = cleaned.replace(/\s+[-–—]\s*$/gm, ''); // End of line dashes
+  cleaned = cleaned.replace(/\s+[-–—]\s+(?=[A-Z])/g, '. '); // Mid-sentence break dashes before capital
+
+  // Ensure H2 titles are on their own line (not run-on with body text)
+  // If H2 is followed by text without line break, add one
+  cleaned = cleaned.replace(/(<\/h2>)([^\n<])/g, '$1\n$2');
+  cleaned = cleaned.replace(/(##\s+[^\n]+)([^\n#])/g, '$1\n$2');
+
+  return cleaned.trim();
+}
+
+/**
+ * Determine which chunks should receive images based on natural breaks
+ * Rule: Place image at the LAST paragraph/section break UNDER 300 words since previous image
+ *
+ * @param {Object} chunked - Chunked content with intro and chunks
+ * @param {number} maxWordsPerImage - Max words between images (default 300)
+ * @returns {Array<number>} Array of chunk indices that should receive images (0 = intro/hero)
+ */
+function getImagePlacementIndices(chunked, maxWordsPerImage = 300) {
+  const indices = [];
+
+  // Hero image always goes on intro (index 0)
+  if (chunked.intro) {
+    indices.push(0);
+  }
+
+  // Track words since last image
+  let wordsSinceLastImage = 0;
+  let lastValidBreakIndex = -1;
+  let lastValidBreakWords = 0;
+
+  // Process each chunk (body sections)
+  const chunks = chunked.chunks || [];
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const chunkWords = chunk.wordCount || 0;
+
+    // Check if adding this chunk would exceed the limit
+    if (wordsSinceLastImage + chunkWords >= maxWordsPerImage) {
+      // Place image at the LAST valid break (before we exceeded)
+      if (lastValidBreakIndex >= 0 && !indices.includes(lastValidBreakIndex + 1)) {
+        // +1 because indices[0] is intro, chunks start at index 1
+        indices.push(lastValidBreakIndex + 1);
+        // Recalculate words since that break
+        wordsSinceLastImage = 0;
+        for (let j = lastValidBreakIndex + 1; j <= i; j++) {
+          wordsSinceLastImage += chunks[j]?.wordCount || 0;
+        }
+        lastValidBreakIndex = -1;
+      } else {
+        // No valid break found, place on current chunk
+        indices.push(i + 1); // +1 for intro offset
+        wordsSinceLastImage = 0;
+        lastValidBreakIndex = -1;
+      }
+    } else {
+      // This is a valid break point (under 300 words)
+      wordsSinceLastImage += chunkWords;
+      lastValidBreakIndex = i;
+      lastValidBreakWords = wordsSinceLastImage;
+    }
+  }
+
+  return indices;
+}
+
+/**
+ * Determine hero image side - alternates based on some identifier
+ * @param {string} identifier - Article ID, keyword, or timestamp to determine side
+ */
+function getHeroImageSide(identifier) {
+  // Use simple hash of identifier to alternate
+  if (!identifier) return 'right';
+  const hash = identifier.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return hash % 2 === 0 ? 'right' : 'left';
+}
+
 // Middleware to check database availability
 const requireDb = (req, res, next) => {
   if (!isDatabaseEnabled()) {
@@ -129,7 +223,10 @@ router.post('/preview', async (req, res) => {
 /**
  * POST /api/elementor/publish
  * Full pipeline: Article → Elementor Page on WordPress
- * Optionally generates AI images with Style DNA
+ * Supports:
+ * 1. Pull from Image Bank (uses pre-made images by tag)
+ * 2. Generate live images with Style DNA
+ * 3. No images (text only)
  */
 router.post('/publish', async (req, res) => {
   try {
@@ -154,10 +251,12 @@ router.post('/publish', async (req, res) => {
       publishDate,
       // Database tracking
       articleId,
+      workflowId, // NEW: For Image Bank integration
       // Push tracking (manual vs auto)
       isManualPush = false,
-      // Image generation options (NEW)
-      generateImages = false,
+      // Image options
+      useImageBank = true, // NEW: Pull from Image Bank by tag
+      generateImages = false, // Fallback to live generation
       styleDNA = null,
       referenceImages = null,
       openaiApiKey = null,
@@ -176,14 +275,190 @@ router.post('/publish', async (req, res) => {
 
     const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
 
-    let chunked;
+    // Step 0: Clean content (remove markdown #, stray dashes, fix H2 titles)
+    const cleanedContent = cleanContent(content);
+
+    // Step 1: Chunk the content first
+    let chunked = chunkContent(cleanedContent, { maxWords });
     let imagesGenerated = 0;
+    let imagesFromBank = 0;
     let estimatedCost = null;
 
-    // Step 1: Process content with or without images
-    if (generateImages) {
-      // Use the image pipeline for full processing
-      const pipelineResult = await processArticleWithImages(content, {
+    // Determine which chunks should receive images (based on natural breaks under 300 words)
+    const imagePlacementIndices = getImagePlacementIndices(chunked, 300);
+    const dynamicMaxImages = imagePlacementIndices.length;
+
+    // Determine hero image side (alternates per article based on keyword/title)
+    const heroImageSide = getHeroImageSide(keyword || title || `${Date.now()}`);
+
+    // Body images start on OPPOSITE side of hero
+    const bodyStartSide = heroImageSide === 'right' ? 'left' : 'right';
+
+    // Step 2: Try to get images from Image Bank if workflowId provided
+    if (useImageBank && workflowId && isDatabaseEnabled()) {
+      try {
+        const bankImages = await sql`
+          SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+        `;
+
+        if (bankImages.length > 0 && bankImages[0].enabled) {
+          const config = bankImages[0];
+          const imageBank = config.image_bank || [];
+          const avatars = config.audience_avatars || [];
+          const variationOrderMode = config.variation_order_mode || 'sequential';
+          const manualOrder = config.manual_variation_order || [];
+
+          // Extract tag from keyword (e.g., "Standard Cleaning(H)" -> "H")
+          const tagMatch = keyword?.match(/\(([A-Z])\)/i);
+          const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+
+          // Find matching avatar by tag
+          let targetAvatar = articleTag ? avatars.find(a => a.tag === articleTag) : avatars[0];
+
+          // Debug logging
+          console.log('[Image Bank] Keyword:', keyword);
+          console.log('[Image Bank] Article tag:', articleTag);
+          console.log('[Image Bank] Bank size:', imageBank.length);
+          console.log('[Image Bank] Avatars:', avatars.map(a => ({ name: a.name, tag: a.tag })));
+          console.log('[Image Bank] Target avatar:', targetAvatar?.name, targetAvatar?.tag);
+
+          // Get available images from bank matching the tag
+          let availableImages = imageBank.filter(img => {
+            if (img.used) {
+              console.log('[Image Bank] Skipping used image:', img.id);
+              return false;
+            }
+            // If article has a tag and image has a tag, they must match
+            if (articleTag && img.avatarTag) {
+              const matches = img.avatarTag === articleTag;
+              if (!matches) console.log('[Image Bank] Tag mismatch:', img.avatarTag, '!=', articleTag);
+              return matches;
+            }
+            // If no tags, check variation match
+            if (targetAvatar?.variations?.length > 0) {
+              const matches = targetAvatar.variations.some(v => v.id === img.variationId);
+              if (!matches) console.log('[Image Bank] Variation mismatch for image:', img.id);
+              return matches;
+            }
+            // No tag requirements - include all unused images
+            return true;
+          });
+
+          console.log('[Image Bank] Available images after filter:', availableImages.length);
+
+          // Sort by variation order
+          if (variationOrderMode === 'manual' && manualOrder.length > 0) {
+            availableImages = availableImages.sort((a, b) => {
+              const aIdx = manualOrder.indexOf(a.variationId);
+              const bIdx = manualOrder.indexOf(b.variationId);
+              return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+            });
+          } else if (variationOrderMode === 'random') {
+            availableImages = availableImages.sort(() => Math.random() - 0.5);
+          }
+
+          // === IMAGE SELECTION LOGIC ===
+          // Rule 1: First image (hero) SHOULD be vertical, but use any if none available
+          // Rule 2: Remaining images can be either orientation (word wrap in content)
+          // Rule 3: Body images start on OPPOSITE side of hero, then alternate
+
+          // Separate vertical and non-vertical images
+          const verticalImages = availableImages.filter(img => img.orientation === 'vertical');
+          const otherImages = availableImages.filter(img => img.orientation !== 'vertical');
+
+          // Select hero image (prefer vertical, but fallback to any)
+          let heroImage = verticalImages.length > 0 ? verticalImages[0] : null;
+
+          // FALLBACK: If no vertical images, use first available image for hero
+          if (!heroImage && availableImages.length > 0) {
+            heroImage = availableImages[0];
+            console.log('[Image Bank] No vertical images found, using first available for hero');
+          }
+
+          // Select remaining images (can be any orientation, prefer landscape for word wrap)
+          const remainingVertical = heroImage && verticalImages.includes(heroImage)
+            ? verticalImages.slice(1)
+            : verticalImages;
+          const remainingOther = heroImage && !verticalImages.includes(heroImage)
+            ? otherImages.filter(img => img !== heroImage)
+            : otherImages;
+          const remainingImages = [...remainingOther, ...remainingVertical];
+
+          // Build final image list: hero first, then remaining
+          const imagesToUse = [];
+          if (heroImage) {
+            imagesToUse.push(heroImage);
+          }
+
+          // Add remaining images based on placement indices (natural breaks under 300 words)
+          const remainingNeeded = imagePlacementIndices.length - imagesToUse.length;
+          imagesToUse.push(...remainingImages.slice(0, remainingNeeded));
+
+          // Assign images to chunks based on imagePlacementIndices (NOT sequential)
+          imagesToUse.forEach((img, imgIdx) => {
+            // Get the actual chunk index from placement indices
+            const placementIndex = imagePlacementIndices[imgIdx];
+            const isHero = placementIndex === 0;
+
+            // Body image side alternation: starts opposite of hero, then alternates
+            const bodyImageCount = imagePlacementIndices.filter((idx, i) => i < imgIdx && idx > 0).length;
+            const bodySide = bodyImageCount % 2 === 0 ? bodyStartSide : (bodyStartSide === 'left' ? 'right' : 'left');
+
+            // Hero image: vertical (tall) for side-by-side with intro text
+            // Body images: dimensions based on orientation for word wrap
+            const imageData = {
+              url: img.url,
+              alt: img.variation || 'Article image',
+              width: isHero
+                ? (img.orientation === 'vertical' ? 400 : 500)  // Hero: narrower for side-by-side
+                : (img.orientation === 'landscape' ? 450 : 300), // Body: sized for word wrap
+              height: isHero
+                ? (img.orientation === 'vertical' ? 600 : 400)  // Hero: taller
+                : (img.orientation === 'landscape' ? 300 : 400), // Body: for word wrap
+              side: isHero ? heroImageSide : bodySide,
+              orientation: img.orientation // Pass through for debugging
+            };
+
+            if (isHero && chunked.intro) {
+              chunked.intro.imageData = imageData;
+            } else {
+              // placementIndex is 1-based for chunks (0 = intro), so subtract 1
+              const chunkIdx = placementIndex - 1;
+              if (chunked.chunks[chunkIdx]) {
+                chunked.chunks[chunkIdx].imageData = imageData;
+              }
+            }
+          });
+
+          imagesFromBank = imagesToUse.length;
+
+          // Mark images as used
+          if (imagesToUse.length > 0) {
+            const usedIds = new Set(imagesToUse.map(i => i.id));
+            const updatedBank = imageBank.map(img => {
+              if (usedIds.has(img.id)) {
+                return { ...img, used: true, usedOn: keyword, usedAt: new Date().toISOString() };
+              }
+              return img;
+            });
+
+            await sql`
+              UPDATE image_creation_settings
+              SET image_bank = ${JSON.stringify(updatedBank)}::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE workflow_id = ${workflowId}
+            `;
+          }
+        }
+      } catch (bankError) {
+        console.error('Image Bank error (continuing without bank):', bankError);
+      }
+    }
+
+    // Step 3: Fall back to live generation if needed
+    if (generateImages && imagesFromBank < dynamicMaxImages) {
+      // Use the image pipeline for remaining images
+      const pipelineResult = await processArticleWithImages(cleanedContent, {
         title,
         keyword,
         styleDNA,
@@ -191,34 +466,39 @@ router.post('/publish', async (req, res) => {
         openaiApiKey: openaiApiKey || process.env.OPENAI_API_KEY,
         replicateApiKey: replicateApiKey || process.env.REPLICATE_API_TOKEN,
         wpCredentials,
-        maxImages,
+        maxImages: dynamicMaxImages - imagesFromBank,
         maxWords
       });
 
-      chunked = pipelineResult.chunks;
+      // Merge pipeline images with bank images
+      if (!chunked.intro?.imageData && pipelineResult.chunks.intro?.imageData) {
+        chunked.intro.imageData = pipelineResult.chunks.intro.imageData;
+      }
+      pipelineResult.chunks.chunks.forEach((pChunk, idx) => {
+        if (pChunk.imageData && chunked.chunks[idx] && !chunked.chunks[idx].imageData) {
+          chunked.chunks[idx].imageData = pChunk.imageData;
+        }
+      });
+
       imagesGenerated = pipelineResult.imagesGenerated || 0;
       estimatedCost = pipelineResult.estimatedCost;
-    } else {
-      // Standard chunking without images
-      chunked = chunkContent(content, { maxWords });
     }
 
-    // Step 2: Extract or use provided title
-    const pageTitle = title || extractTitle(content) || 'Untitled Page';
+    // Step 4: Extract or use provided title
+    const pageTitle = title || extractTitle(cleanedContent) || 'Untitled Page';
 
-    // Step 3: Build Elementor structure
+    // Step 5: Build Elementor structure
     const elementorData = buildElementorPage(chunked, {
       title: pageTitle,
-      ctaText,
-      ctaUrl,
       includeStatsBar,
-      statsBarPosition
+      statsBarPosition,
+      heroImageSide // Pass hero side for alternating layout
     });
 
-    // Step 4: Get Elementor meta fields
+    // Step 6: Get Elementor meta fields
     const elementorMeta = getElementorMetaFields(elementorData);
 
-    // Step 5: Create WordPress page
+    // Step 7: Create WordPress page
     const pageResult = await createElementorPage(wpCredentials, {
       title: pageTitle,
       slug,
@@ -227,7 +507,7 @@ router.post('/publish', async (req, res) => {
       publishDate
     });
 
-    // Step 6: Update article in database if articleId provided
+    // Step 8: Update article in database if articleId provided
     if (articleId && isDatabaseEnabled()) {
       try {
         if (isManualPush) {
@@ -267,7 +547,9 @@ router.post('/publish', async (req, res) => {
       page: pageResult,
       chunks: chunked.chunkCount,
       wordCount: chunked.totalWords,
+      imagesFromBank,
       imagesGenerated,
+      totalImages: imagesFromBank + imagesGenerated,
       estimatedCost
     });
   } catch (error) {

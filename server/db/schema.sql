@@ -212,9 +212,56 @@ CREATE TABLE IF NOT EXISTS gbp_oauth_tokens (
 );
 
 -- ============================================
+-- IMAGE CREATION SETTINGS (per workflow)
+-- ============================================
+
+-- Image Creation settings for the "7. Image Creation" section
+CREATE TABLE IF NOT EXISTS image_creation_settings (
+  id SERIAL PRIMARY KEY,
+  workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE UNIQUE,
+  -- Enable/disable image creation for this workflow
+  enabled BOOLEAN DEFAULT false,
+  -- LLM Models
+  prompt_assistant_model VARCHAR(100) DEFAULT 'gpt-4o', -- Model for helping craft prompts (chat)
+  image_generation_model VARCHAR(100) DEFAULT 'gpt-image-1.5', -- Model for generating images (gpt-image-1.5, dall-e-3, etc.)
+  -- Reference images for style consistency
+  reference_images JSONB DEFAULT '[]', -- Array of {url, filename, tags}
+  -- Logo images (logo itself and action shots showing logo in use)
+  logo_images JSONB DEFAULT '[]', -- Array of {url, filename, type: 'logo'|'action'}
+  -- Audience avatars (each has own main prompt + variations, linked to Tag Manager)
+  audience_avatars JSONB DEFAULT '[{"id": 1, "name": "Default", "mainPrompt": "", "variations": []}]',
+  -- Pre-made image bank
+  image_bank JSONB DEFAULT '[]', -- Array of {id, url, title, category, variation, avatarTag, orientation, prompt, createdAt}
+  -- Custom categories for sorting uploaded images
+  image_categories JSONB DEFAULT '["Hero", "Service", "Team", "Equipment", "Before/After", "Other"]',
+  -- LLM auto-tagging for uploads
+  auto_tag_enabled BOOLEAN DEFAULT true,
+  -- Legacy chat history (for backwards compatibility)
+  chat_history JSONB DEFAULT '[]', -- Array of {role, content, images?, timestamp}
+  -- DUAL CHAT SYSTEM
+  -- Consultant Chat: Strategic partner with vision for dialing in image style
+  consultant_chat_history JSONB DEFAULT '[]', -- Array of {role, content, images?, timestamp}
+  consultant_model VARCHAR(100) DEFAULT 'gpt-4o', -- Vision-capable model for consultant
+  -- Worker Chat: Operational helper that sees consultant context + setup
+  worker_chat_history JSONB DEFAULT '[]', -- Array of {role, content, images?, timestamp}
+  worker_model VARCHAR(100) DEFAULT 'gpt-4o-mini', -- Can use cheaper model for operations
+  -- Page integration settings
+  integration_mode VARCHAR(20) DEFAULT 'bank', -- 'live' or 'bank'
+  fallback_to_live BOOLEAN DEFAULT true, -- Make from scratch if bank empty
+  image_order JSONB DEFAULT '[]', -- Order of variation IDs for page placement
+  -- Variation order settings
+  variation_order_mode VARCHAR(20) DEFAULT 'sequential', -- 'sequential', 'random', 'manual'
+  manual_variation_order JSONB DEFAULT '[]', -- Array of variation IDs in manual order
+  -- Timestamps
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
 -- INDEXES
 -- ============================================
 
+CREATE INDEX IF NOT EXISTS idx_image_creation_workflow ON image_creation_settings(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_locations_client_id ON locations(client_id);
 CREATE INDEX IF NOT EXISTS idx_websites_client_id ON websites(client_id);
 CREATE INDEX IF NOT EXISTS idx_workflows_client_id ON workflows(client_id);

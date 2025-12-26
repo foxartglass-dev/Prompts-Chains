@@ -91,25 +91,34 @@ function buildTextEditorWidget(content, imageData = null, imageAlignment = 'left
  * @returns {Object} Elementor widget object
  */
 function buildImageWidget(imageData, options = {}) {
-  const { align = 'center' } = options;
+  const { align = 'center', fitToContainer = false } = options;
   // Prefer WordPress URL (permanent) over Replicate URL (temporary)
   const imageUrl = imageData.wpUrl || imageData.url;
   const imageId = imageData.wpMediaId || imageData.id || 0;
+
+  const settings = {
+    image: {
+      url: imageUrl,
+      id: imageId,
+      alt: imageData.alt || ''
+    },
+    image_size: 'full',
+    align: align
+  };
+
+  // For hero images: auto-adjust height to match text container
+  if (fitToContainer) {
+    settings.height = { unit: '%', size: 100 };
+    settings.object_fit = 'cover'; // Cover maintains aspect while filling
+    settings.object_position = 'center center';
+  }
 
   return {
     id: generateElementId(),
     elType: 'widget',
     widgetType: 'image',
     isInner: false,
-    settings: {
-      image: {
-        url: imageUrl,
-        id: imageId,
-        alt: imageData.alt || ''
-      },
-      image_size: 'full',
-      align: align
-    },
+    settings,
     elements: []
   };
 }
@@ -154,20 +163,32 @@ function buildContainer(elements, options = {}) {
     padding = { top: '0', right: '0', bottom: '0', left: '0' },
     gap = '20',
     contentWidth = 'boxed',
-    boxedWidth = 1140
+    boxedWidth = 1140,
+    alignItems = 'flex-start', // flex-start, center, flex-end, stretch
+    verticalAlign = 'flex-start' // For child alignment
   } = options;
+
+  const settings = {
+    flex_direction: direction,
+    content_width: contentWidth,
+    boxed_width: { unit: 'px', size: boxedWidth },
+    flex_gap: { column: gap, row: gap, unit: 'px' },
+    padding: { unit: 'px', ...padding, isLinked: false }
+  };
+
+  // Add alignment settings for row layouts
+  if (direction === 'row') {
+    settings.flex_align_items = alignItems;
+  }
+  if (verticalAlign !== 'flex-start') {
+    settings.flex_justify_content = verticalAlign;
+  }
 
   return {
     id: generateElementId(),
     elType: 'container',
     isInner: isInner,
-    settings: {
-      flex_direction: direction,
-      content_width: contentWidth,
-      boxed_width: { unit: 'px', size: boxedWidth },
-      flex_gap: { column: gap, row: gap, unit: 'px' },
-      padding: { unit: 'px', ...padding, isLinked: false }
-    },
+    settings,
     elements: elements
   };
 }
@@ -180,38 +201,39 @@ function buildContainer(elements, options = {}) {
  * @returns {Object} Elementor container
  */
 function buildHeroSection(title, introChunk, options = {}) {
-  // CTA button disabled by default - set ctaText and ctaUrl in options to enable
-  const { ctaText = '', ctaUrl = '' } = options;
+  // heroImageSide: 'left' or 'right' - alternates per article
+  const { heroImageSide = 'right' } = options;
 
-  // Left side: Title + intro text (+ optional CTA button)
-  const leftElements = [];
+  // Text side: Title + intro text (NO CTA button)
+  const textElements = [];
 
   if (title) {
-    leftElements.push(buildHeadingWidget(title, 'h1', { align: 'center' }));
+    textElements.push(buildHeadingWidget(title, 'h1', { align: 'center' }));
   }
 
   if (introChunk && introChunk.content) {
-    leftElements.push(buildTextEditorWidget(introChunk.content));
+    textElements.push(buildTextEditorWidget(introChunk.content));
   }
 
-  if (ctaText && ctaUrl) {
-    leftElements.push(buildButtonWidget(ctaText, ctaUrl));
-  }
-
-  const leftContainer = buildContainer(leftElements, {
+  const textContainer = buildContainer(textElements, {
     isInner: true,
     direction: 'column',
     contentWidth: 'full'
   });
 
-  // Right side: Hero image (if available)
-  const rightElements = [];
+  // Image side: Hero image (if available)
+  const imageElements = [];
 
   if (introChunk && introChunk.imageData && introChunk.imageData.url) {
-    rightElements.push(buildImageWidget(introChunk.imageData));
+    // Auto-adjust image to match text height with object-fit
+    const imageWidget = buildImageWidget(introChunk.imageData, {
+      align: 'center',
+      fitToContainer: true // Signal to use height: 100%
+    });
+    imageElements.push(imageWidget);
   } else {
-    // Placeholder - will be filled when images are generated
-    rightElements.push({
+    // Placeholder spacer when no image
+    imageElements.push({
       id: generateElementId(),
       elType: 'widget',
       widgetType: 'spacer',
@@ -221,19 +243,26 @@ function buildHeroSection(title, introChunk, options = {}) {
     });
   }
 
-  const rightContainer = buildContainer(rightElements, {
+  const imageContainer = buildContainer(imageElements, {
     isInner: true,
     direction: 'column',
-    contentWidth: 'full'
+    contentWidth: 'full',
+    verticalAlign: 'stretch' // Image container stretches to match text
   });
 
+  // Arrange containers based on heroImageSide
+  const containers = heroImageSide === 'left'
+    ? [imageContainer, textContainer]
+    : [textContainer, imageContainer];
+
   // Main hero container (row direction for side-by-side)
-  return buildContainer([leftContainer, rightContainer], {
+  return buildContainer(containers, {
     direction: 'row',
-    padding: { top: '90', right: '20', bottom: '90', left: '20' },
-    gap: '50',
+    padding: { top: '60', right: '20', bottom: '60', left: '20' },
+    gap: '40',
     contentWidth: 'boxed',
-    boxedWidth: 1140
+    boxedWidth: 1140,
+    alignItems: 'stretch' // Both columns same height
   });
 }
 
@@ -330,17 +359,16 @@ function buildStatsBarPlaceholder(options = {}) {
 function buildElementorPage(chunkedContent, options = {}) {
   const {
     title = '',
-    ctaText = '',  // No CTA button by default
-    ctaUrl = '',
     includeStatsBar = false,
-    statsBarPosition = 'middle' // 'middle' or 'bottom'
+    statsBarPosition = 'middle', // 'middle' or 'bottom'
+    heroImageSide = 'right' // 'left' or 'right' - alternates per article
   } = options;
 
   const pageElements = [];
 
-  // 1. Hero section (intro)
+  // 1. Hero section (intro) - image on heroImageSide
   if (chunkedContent.intro || title) {
-    pageElements.push(buildHeroSection(title, chunkedContent.intro, { ctaText, ctaUrl }));
+    pageElements.push(buildHeroSection(title, chunkedContent.intro, { heroImageSide }));
   }
 
   // 2. Content sections

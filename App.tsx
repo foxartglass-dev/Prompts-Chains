@@ -21,6 +21,7 @@ import IdeasBacklog from './src/components/IdeasBacklog';
 import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components/DefaultWorkflowSelector';
 import WordPressSettings from './src/components/WordPressSettings';
 import ArticlesPage from './src/pages/ArticlesPage';
+import ImageCreationSection from './src/components/ImageCreationSection';
 
 // Types for workflow
 interface WorkflowItem {
@@ -231,7 +232,7 @@ const App: React.FC = () => {
 
             // Only auto-save if enabled
             const autoSaveEnabled = currentProject?.state?.autoSaveEnabled ?? true;
-            const autoSaveSeconds = currentProject?.state?.autoSaveSeconds ?? 3;
+            const autoSaveSeconds = currentProject?.state?.autoSaveSeconds ?? 30;
 
             if (autoSaveEnabled) {
                 autoSaveTimerRef.current = setTimeout(() => {
@@ -1093,8 +1094,8 @@ const App: React.FC = () => {
                             console.error('Failed to save article:', saveError);
                         }
 
-                        // Auto-publish to WordPress if articlePublishMode is 'wordpress'
-                        if (currentProject.state.articlePublishMode === 'wordpress') {
+                        // Auto-publish to WordPress if master wpPublishMode is not 'off' and articlePublishMode is 'wordpress'
+                        if (currentProject.state.wpPublishMode !== 'off' && currentProject.state.articlePublishMode === 'wordpress') {
                             const { url, user, password } = currentProject.state.wpCredentials;
                             if (url && user && password) {
                                 addLog(`[${itemLabel}] Auto-publishing to WordPress...`, LogStatus.WORKING, item.id);
@@ -1122,7 +1123,8 @@ const App: React.FC = () => {
                                     });
                                     const title = wpTitle.trim() || metaTitles[0] || item.name;
 
-                                    // Publish via Elementor
+                                    // Publish via Elementor (with Image Bank integration)
+                                    addLog(`[${itemLabel}] Preparing images from Image Bank...`, LogStatus.WORKING, item.id);
                                     const publishResponse = await fetch('/api/elementor/publish', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
@@ -1134,11 +1136,24 @@ const App: React.FC = () => {
                                             content: finalOutput,
                                             status: 'draft',
                                             includeStatsBar: false,
+                                            // Image Bank integration
+                                            workflowId: currentWorkflowId,
+                                            keyword: item.name, // Contains tag like "Standard Cleaning(H)"
+                                            useImageBank: true,
+                                            maxImages: 4,
                                         }),
                                     });
                                     const publishData = await publishResponse.json();
 
                                     if (publishResponse.ok && publishData.page?.id) {
+                                        // Log image results
+                                        if (publishData.imagesFromBank > 0) {
+                                            addLog(`[${itemLabel}] Added ${publishData.imagesFromBank} images from Image Bank`, LogStatus.SUCCESS, item.id);
+                                        } else if (publishData.totalImages > 0) {
+                                            addLog(`[${itemLabel}] Generated ${publishData.totalImages} images`, LogStatus.SUCCESS, item.id);
+                                        } else {
+                                            addLog(`[${itemLabel}] No images added (Image Bank empty or disabled)`, LogStatus.INFO, item.id);
+                                        }
                                         addLog(`[${itemLabel}] Published to WordPress!`, LogStatus.SUCCESS, item.id);
                                         // Update result with WP link
                                         setResults(prev => prev.map(r =>
@@ -1147,8 +1162,8 @@ const App: React.FC = () => {
                                                 : r
                                         ));
 
-                                        // Auto-push SEO meta if metaPublishMode is 'wordpress' and we have meta data
-                                        if (currentProject.state.metaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
+                                        // Auto-push SEO meta if master wpPublishMode is not 'off', metaPublishMode is 'wordpress' and we have meta data
+                                        if (currentProject.state.wpPublishMode !== 'off' && currentProject.state.metaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
                                             addLog(`[${itemLabel}] Auto-pushing SEO meta...`, LogStatus.WORKING, item.id);
                                             try {
                                                 const seoResponse = await fetch('/api/seo/push-direct', {
@@ -1259,7 +1274,8 @@ const App: React.FC = () => {
             let data;
 
             if (useElementor) {
-                // Use Elementor publishing endpoint
+                // Use Elementor publishing endpoint (with Image Bank integration)
+                addLog(`[${result.item.name}] Preparing images from Image Bank...`, LogStatus.WORKING, result.item.id);
                 response = await fetch('/api/elementor/publish', {
                     method: 'POST',
                     headers: {
@@ -1273,6 +1289,12 @@ const App: React.FC = () => {
                         content: result.finalOutput,
                         status: 'draft',
                         includeStatsBar: false,
+                        // Image Bank integration
+                        workflowId: currentWorkflowId,
+                        keyword: result.item.name, // Contains tag like "Standard Cleaning(H)"
+                        useImageBank: true,
+                        maxImages: 4,
+                        isManualPush: true,
                     }),
                 });
 
@@ -1280,6 +1302,13 @@ const App: React.FC = () => {
 
                 if (!response.ok) {
                     throw new Error(data.error || `Elementor API Error: ${response.statusText}`);
+                }
+
+                // Log image results
+                if (data.imagesFromBank > 0) {
+                    addLog(`[${result.item.name}] Added ${data.imagesFromBank} images from Image Bank`, LogStatus.SUCCESS, result.item.id);
+                } else if (data.totalImages > 0) {
+                    addLog(`[${result.item.name}] Generated ${data.totalImages} images`, LogStatus.SUCCESS, result.item.id);
                 }
 
                 updateResultStatus(result.item.id, 'published', data.page?.link);
@@ -1557,8 +1586,8 @@ const App: React.FC = () => {
                                             type="number"
                                             min="1"
                                             max="60"
-                                            value={currentProject.state.autoSaveSeconds ?? 3}
-                                            onChange={e => setCurrentProjectState(p => ({...p, autoSaveSeconds: parseInt(e.target.value) || 3}))}
+                                            value={currentProject.state.autoSaveSeconds ?? 30}
+                                            onChange={e => setCurrentProjectState(p => ({...p, autoSaveSeconds: parseInt(e.target.value) || 30}))}
                                             className="w-16 bg-slate-700 border border-brand-cyan/50 rounded px-2 py-1 text-white text-sm"
                                         />
                                         <span className="text-slate-400 text-sm">seconds</span>
@@ -2282,12 +2311,17 @@ const App: React.FC = () => {
                             />
                         </div>
 
-                        {/* Save Status - Compact single line */}
+                        {/* Save Button - Always clickable, shows last save time */}
                         {currentWorkflowContext.workflowName && (
                             <button
                                 onClick={() => saveWorkflowToDatabase(true)}
-                                disabled={isSaving || !hasUnsavedChanges}
-                                className="flex items-center gap-1 px-1.5 py-1 rounded-lg font-semibold transition border-2 bg-brand-cyan text-slate-900 border-brand-cyan text-xs"
+                                disabled={isSaving}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg font-semibold transition border-2 text-xs cursor-pointer hover:opacity-80 ${
+                                    hasUnsavedChanges
+                                        ? 'bg-yellow-500 text-slate-900 border-yellow-500'
+                                        : 'bg-brand-cyan text-slate-900 border-brand-cyan'
+                                }`}
+                                title="Click to save now"
                             >
                                 {isSaving ? (
                                     <>
@@ -2295,23 +2329,18 @@ const App: React.FC = () => {
                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
-                                        <span className="font-bold">Saving</span>
-                                    </>
-                                ) : hasUnsavedChanges ? (
-                                    <>
-                                        <span className="font-bold">Save</span>
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
-                                        </svg>
+                                        <span className="font-bold">Saving...</span>
                                     </>
                                 ) : (
                                     <>
-                                        <span className="font-bold">Saved</span>
                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
                                         </svg>
+                                        <span className="font-bold">
+                                            {hasUnsavedChanges ? 'Save' : 'Saved'}
+                                        </span>
                                         {lastSaveTime && (
-                                            <span className="font-bold">{lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                            <span className="text-[10px] opacity-75">{lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                         )}
                                     </>
                                 )}
@@ -2361,6 +2390,44 @@ const App: React.FC = () => {
                                         <option value="pages">Page</option>
                                         <option value="posts">Post</option>
                                     </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Publish</label>
+                                    <div className="flex rounded-lg overflow-hidden border-2 border-brand-gold">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'off'}))}
+                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                                (currentProject.state.wpPublishMode || 'off') === 'off'
+                                                    ? 'bg-red-600 text-white'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            Off
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'draft'}))}
+                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                                currentProject.state.wpPublishMode === 'draft'
+                                                    ? 'bg-brand-gold text-black'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            Draft
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'wordpress'}))}
+                                            className={`px-2.5 py-2.5 text-xs font-medium transition-all ${
+                                                currentProject.state.wpPublishMode === 'wordpress'
+                                                    ? 'bg-green-600 text-white'
+                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            WordPress
+                                        </button>
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Article</label>
@@ -2792,6 +2859,20 @@ const App: React.FC = () => {
                             </div>
                         </div>
                     )}
+
+                    {/* 7. Image Creation Section */}
+                    {renderSection('7. Image Creation', 'imageCreation',
+                        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>,
+                        <ImageCreationSection
+                            workflowId={currentWorkflowId}
+                            tags={currentProject?.state.tags || []}
+                            showNotification={showNotification}
+                            addLog={addLog}
+                        />
+                    )}
+
                     <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan">
                         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5`}><Icon type="info" className="h-6 w-6"/><span className="ml-3">Processing Log</span></h2>
                         <div className="p-5 pt-0 border-t border-brand-cyan/30">
