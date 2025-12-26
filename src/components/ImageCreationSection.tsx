@@ -204,6 +204,13 @@ interface ImageCreationSettings {
   image_order: string[];
   variation_order_mode: 'sequential' | 'random' | 'manual';
   manual_variation_order: string[];
+  // Smart Content Matching (Phase 2 feature)
+  smart_matching_enabled: boolean; // Master toggle for smart content matching
+  smart_matching_mode: 'bank_first' | 'generate_first' | 'bank_only' | 'generate_only';
+  // bank_first: Try to find matching image in bank, generate if not found
+  // generate_first: Always generate new, add to bank for future
+  // bank_only: Only use existing bank images, skip if no match
+  // generate_only: Always generate fresh, never use bank
 }
 
 enum LogStatus {
@@ -242,7 +249,10 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   fallback_to_live: true,
   image_order: [],
   variation_order_mode: 'sequential',
-  manual_variation_order: []
+  manual_variation_order: [],
+  // Smart Content Matching - OFF by default until user is ready
+  smart_matching_enabled: false,
+  smart_matching_mode: 'bank_first' // Default: check bank first, generate if no match
 };
 
 const AVAILABLE_MODELS = [
@@ -3337,6 +3347,65 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                 <span className="text-sm text-brand-gold/70">Generate if bank empty</span>
               </label>
             </div>
+          </div>
+
+          {/* Smart Content Matching (Phase 2 - Future Feature) */}
+          <div className={`bg-slate-900 p-4 rounded-lg border ${settings.smart_matching_enabled ? 'border-purple-500' : 'border-slate-700'} transition-colors`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <h3 className={`font-semibold ${settings.smart_matching_enabled ? 'text-purple-400' : 'text-slate-500'}`}>
+                  Smart Content Matching
+                </h3>
+                <span className="px-2 py-0.5 bg-purple-600/30 text-purple-300 text-[10px] rounded font-medium">BETA</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settings.smart_matching_enabled}
+                  onChange={(e) => updateSettings({ smart_matching_enabled: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+              </label>
+            </div>
+
+            {settings.smart_matching_enabled ? (
+              <div className="space-y-3">
+                <p className="text-xs text-purple-300/70">
+                  AI analyzes article text and automatically matches or generates images based on surrounding content.
+                  Images placed next to text about "cleaning the sink" will show sink cleaning.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'bank_first' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'bank_first'} onChange={() => updateSettings({ smart_matching_mode: 'bank_first' })} className="hidden" />
+                    <span className="text-xs font-medium">Bank First</span>
+                  </label>
+                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'generate_first' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'generate_first'} onChange={() => updateSettings({ smart_matching_mode: 'generate_first' })} className="hidden" />
+                    <span className="text-xs font-medium">Generate First</span>
+                  </label>
+                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'bank_only' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'bank_only'} onChange={() => updateSettings({ smart_matching_mode: 'bank_only' })} className="hidden" />
+                    <span className="text-xs font-medium">Bank Only</span>
+                  </label>
+                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'generate_only' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'generate_only'} onChange={() => updateSettings({ smart_matching_mode: 'generate_only' })} className="hidden" />
+                    <span className="text-xs font-medium">Generate Only</span>
+                  </label>
+                </div>
+                <div className="text-[10px] text-slate-500 space-y-1">
+                  <p><strong>Bank First:</strong> Search bank for matching image → Generate if no match</p>
+                  <p><strong>Generate First:</strong> Always generate fresh → Save to bank for future</p>
+                  <p><strong>Bank Only:</strong> Only use existing bank images → Skip if no match</p>
+                  <p><strong>Generate Only:</strong> Always generate new → Don't use bank</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Enable to have AI automatically match images to article content for optimal SEO.
+                Images will be selected or generated based on the text they appear next to.
+              </p>
+            )}
           </div>
 
       {saving && (

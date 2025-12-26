@@ -700,7 +700,10 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           fallback_to_live: true,
           image_order: [],
           variation_order_mode: 'sequential',
-          manual_variation_order: []
+          manual_variation_order: [],
+          // Smart Content Matching defaults
+          smart_matching_enabled: false,
+          smart_matching_mode: 'bank_first'
         },
         isNew: true
       });
@@ -730,7 +733,10 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         fallback_to_live: results[0].fallback_to_live,
         image_order: results[0].image_order || [],
         variation_order_mode: results[0].variation_order_mode || 'sequential',
-        manual_variation_order: results[0].manual_variation_order || []
+        manual_variation_order: results[0].manual_variation_order || [],
+        // Smart Content Matching
+        smart_matching_enabled: results[0].smart_matching_enabled ?? false,
+        smart_matching_mode: results[0].smart_matching_mode || 'bank_first'
       }
     });
 
@@ -770,7 +776,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       fallback_to_live,
       image_order,
       variation_order_mode,
-      manual_variation_order
+      manual_variation_order,
+      // Smart Content Matching
+      smart_matching_enabled,
+      smart_matching_mode
     } = req.body;
 
     // Check if settings exist
@@ -804,7 +813,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           fallback_to_live,
           image_order,
           variation_order_mode,
-          manual_variation_order
+          manual_variation_order,
+          smart_matching_enabled,
+          smart_matching_mode
         ) VALUES (
           ${workflowId},
           ${enabled ?? false},
@@ -825,7 +836,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           ${fallback_to_live ?? true},
           ${JSON.stringify(image_order ?? [])},
           ${variation_order_mode ?? 'sequential'},
-          ${JSON.stringify(manual_variation_order ?? [])}
+          ${JSON.stringify(manual_variation_order ?? [])},
+          ${smart_matching_enabled ?? false},
+          ${smart_matching_mode ?? 'bank_first'}
         )
         RETURNING id
       `;
@@ -858,6 +871,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
         image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
         variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
         manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+        smart_matching_enabled = COALESCE(${smart_matching_enabled}, smart_matching_enabled),
+        smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode),
         updated_at = CURRENT_TIMESTAMP
       WHERE workflow_id = ${workflowId}
     `;
@@ -1202,6 +1217,516 @@ router.post('/release-images', requireDb, async (req, res) => {
 
   } catch (error) {
     console.error('Release images error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// SMART CONTENT MATCHING
+// ========================================
+
+/**
+ * POST /api/image-creation/analyze-content
+ * Analyze paragraph text to extract topics and keywords for image matching
+ * Uses GPT to understand the semantic content
+ */
+router.post('/analyze-content', async (req, res) => {
+  try {
+    const {
+      text, // The paragraph text to analyze
+      context = '', // Optional surrounding context
+      openaiApiKey
+    } = req.body;
+
+    const apiKey = openaiApiKey || process.env.OPENAI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(400).json({ error: 'OpenAI API key required for content analysis' });
+    }
+
+    if (!text || text.trim().length === 0) {
+      return res.status(400).json({ error: 'Text content required' });
+    }
+
+    const openai = new OpenAI({ apiKey });
+
+    // Use GPT to extract semantic topics from the text
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini', // Use mini for speed/cost
+      messages: [
+        {
+          role: 'system',
+          content: `You are a content analyzer for a house cleaning business image matching system.
+Extract the key visual topics from the provided text that would be relevant for selecting or generating an image.
+
+Focus on:
+- What activity is being described (e.g., "cleaning the sink", "mopping floors")
+- What objects/items are mentioned (e.g., "kitchen countertops", "stove burners")
+- What location/room is referenced (e.g., "kitchen", "bathroom", "living room")
+- What type of person might be shown (age range, gender if implied)
+- What mood/tone is conveyed (professional, friendly, thorough)
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "primaryTopic": "the main visual subject for the image",
+  "activity": "specific cleaning action if mentioned",
+  "location": "room or area type",
+  "objects": ["list", "of", "relevant", "objects"],
+  "keywords": ["semantic", "keywords", "for", "matching"],
+  "suggestedPromptAdditions": "brief text to add to base prompt for this specific content"
+}`
+        },
+        {
+          role: 'user',
+          content: context
+            ? `Context: ${context}\n\nAnalyze this paragraph:\n${text}`
+            : `Analyze this paragraph:\n${text}`
+        }
+      ],
+      max_tokens: 300,
+      temperature: 0.3 // Low temperature for consistent extraction
+    });
+
+    // Parse the response
+    const content = response.choices[0].message.content;
+    let analysis;
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+    } catch (e) {
+      console.error('Failed to parse content analysis:', e);
+      // Fallback to basic extraction
+      analysis = {
+        primaryTopic: text.substring(0, 50),
+        keywords: text.split(/\s+/).filter(w => w.length > 4).slice(0, 5),
+        activity: null,
+        location: null,
+        objects: [],
+        suggestedPromptAdditions: ''
+      };
+    }
+
+    res.json({
+      success: true,
+      analysis,
+      originalText: text.substring(0, 200) + (text.length > 200 ? '...' : ''),
+      usage: response.usage
+    });
+
+  } catch (error) {
+    console.error('Content analysis error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/image-creation/smart-match-image
+ * Find the best matching image from bank based on content analysis
+ * Or generate a new one if no good match found
+ */
+router.post('/smart-match-image', requireDb, async (req, res) => {
+  try {
+    const {
+      workflowId,
+      contentAnalysis, // From analyze-content endpoint
+      avatarTag, // Which avatar/tag to use for generation
+      articleId, // Track which article uses the image
+      openaiApiKey
+    } = req.body;
+
+    const apiKey = openaiApiKey || process.env.OPENAI_API_KEY;
+
+    if (!workflowId || !contentAnalysis) {
+      return res.status(400).json({ error: 'workflowId and contentAnalysis required' });
+    }
+
+    // Get settings including smart matching config
+    const settings = await sql`
+      SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+    `;
+
+    if (settings.length === 0) {
+      return res.status(404).json({ error: 'No Image Creation settings found' });
+    }
+
+    const config = settings[0];
+    const smartMatchingEnabled = config.smart_matching_enabled ?? false;
+    const smartMatchingMode = config.smart_matching_mode || 'bank_first';
+    const imageBank = config.image_bank || [];
+    const avatars = config.audience_avatars || [];
+    const imageGenModel = config.image_generation_model || 'gpt-image-1.5';
+
+    if (!smartMatchingEnabled) {
+      return res.json({
+        success: false,
+        message: 'Smart Content Matching is not enabled',
+        mode: 'disabled'
+      });
+    }
+
+    // Find the target avatar
+    let targetAvatar = avatarTag
+      ? avatars.find(a => a.tag === avatarTag)
+      : avatars[0];
+
+    // Keywords from content analysis
+    const keywords = contentAnalysis.keywords || [];
+    const primaryTopic = contentAnalysis.primaryTopic || '';
+    const activity = contentAnalysis.activity || '';
+
+    // Function to score how well an image matches the content
+    const scoreImageMatch = (img) => {
+      let score = 0;
+      const imgText = `${img.title || ''} ${img.prompt || ''} ${img.variation || ''}`.toLowerCase();
+
+      // Check primary topic
+      if (primaryTopic && imgText.includes(primaryTopic.toLowerCase())) {
+        score += 10;
+      }
+
+      // Check activity
+      if (activity && imgText.includes(activity.toLowerCase())) {
+        score += 8;
+      }
+
+      // Check keywords
+      for (const keyword of keywords) {
+        if (imgText.includes(keyword.toLowerCase())) {
+          score += 3;
+        }
+      }
+
+      // Bonus for matching avatar tag
+      if (avatarTag && img.avatarTag === avatarTag) {
+        score += 5;
+      }
+
+      // Penalty for already used images
+      if (img.used) {
+        score -= 15;
+      }
+
+      return score;
+    };
+
+    let selectedImage = null;
+    let generatedImage = null;
+    let source = 'none';
+
+    // Handle different modes
+    if (smartMatchingMode === 'bank_first' || smartMatchingMode === 'bank_only') {
+      // Try to find a matching image in the bank
+      const scoredImages = imageBank
+        .filter(img => !img.used) // Only unused images
+        .map(img => ({ ...img, matchScore: scoreImageMatch(img) }))
+        .filter(img => img.matchScore > 0) // Only positive matches
+        .sort((a, b) => b.matchScore - a.matchScore);
+
+      if (scoredImages.length > 0) {
+        selectedImage = scoredImages[0];
+        source = 'bank';
+
+        // Mark the image as used
+        const updatedBank = imageBank.map(img =>
+          img.id === selectedImage.id
+            ? {
+                ...img,
+                used: true,
+                usedOn: primaryTopic || 'Smart matched content',
+                usedAt: new Date().toISOString(),
+                usedByArticleId: articleId,
+                matchScore: selectedImage.matchScore
+              }
+            : img
+        );
+
+        await sql`
+          UPDATE image_creation_settings
+          SET image_bank = ${JSON.stringify(updatedBank)}::jsonb,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE workflow_id = ${workflowId}
+        `;
+      }
+    }
+
+    // Generate if needed and allowed
+    const shouldGenerate =
+      !selectedImage &&
+      (smartMatchingMode === 'generate_first' ||
+       smartMatchingMode === 'generate_only' ||
+       (smartMatchingMode === 'bank_first' && !selectedImage));
+
+    if (shouldGenerate && apiKey && targetAvatar?.mainPrompt) {
+      // Build a content-aware prompt
+      let prompt = targetAvatar.mainPrompt;
+
+      // Add content-specific additions if available
+      if (contentAnalysis.suggestedPromptAdditions) {
+        prompt += `\n\n${contentAnalysis.suggestedPromptAdditions}`;
+      }
+
+      // Replace placeholders if in advanced mode
+      if (targetAvatar.placeholderMode === 'advanced' && targetAvatar.placeholderCategories) {
+        // Find relevant options based on content analysis
+        for (const category of targetAvatar.placeholderCategories) {
+          // Try to match content analysis to placeholder options
+          let bestOption = category.options[0]; // Default to first
+          const categoryLower = category.name.toLowerCase();
+
+          // If this category relates to the analyzed content, try to find a match
+          if (activity && categoryLower.includes('clean')) {
+            const matchingOption = category.options.find(opt =>
+              activity.toLowerCase().includes(opt.text.toLowerCase()) ||
+              opt.text.toLowerCase().includes(activity.toLowerCase())
+            );
+            if (matchingOption) bestOption = matchingOption;
+          }
+
+          // Replace the placeholder
+          prompt = prompt.replace(category.placeholder, bestOption.text);
+        }
+      }
+
+      try {
+        // Generate the image
+        const openai = new OpenAI({ apiKey });
+
+        // Adjust size for GPT-Image models
+        let size = '1024x1536'; // Default to portrait for hero images
+        if (imageGenModel.startsWith('gpt-image')) {
+          const sizeMap = {
+            '1792x1024': '1536x1024',
+            '1024x1792': '1024x1536',
+          };
+          size = sizeMap[size] || size;
+        }
+
+        const generateParams = {
+          model: imageGenModel,
+          prompt: prompt,
+          n: 1,
+          size: size,
+        };
+
+        if (imageGenModel === 'dall-e-3') {
+          generateParams.quality = 'hd';
+        } else if (imageGenModel.startsWith('gpt-image')) {
+          generateParams.quality = 'high';
+        }
+
+        const response = await openai.images.generate(generateParams);
+
+        generatedImage = {
+          id: `img-smart-${Date.now()}`,
+          url: response.data[0].url,
+          prompt: prompt,
+          revisedPrompt: response.data[0].revised_prompt,
+          avatarTag: targetAvatar?.tag || null,
+          createdAt: new Date().toISOString(),
+          smartMatched: true,
+          contentAnalysis: contentAnalysis
+        };
+        source = 'generated';
+
+        // Add to bank for future use (if mode allows)
+        if (smartMatchingMode !== 'generate_only') {
+          const newBankEntry = {
+            ...generatedImage,
+            title: primaryTopic || 'Smart generated image',
+            used: true,
+            usedOn: primaryTopic || 'Smart matched content',
+            usedAt: new Date().toISOString(),
+            usedByArticleId: articleId
+          };
+
+          await sql`
+            UPDATE image_creation_settings
+            SET image_bank = image_bank || ${JSON.stringify([newBankEntry])}::jsonb,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE workflow_id = ${workflowId}
+          `;
+        }
+
+      } catch (genError) {
+        console.error('Smart match generation error:', genError);
+        // Continue without generated image
+      }
+    }
+
+    const finalImage = selectedImage || generatedImage;
+
+    res.json({
+      success: !!finalImage,
+      image: finalImage ? {
+        id: finalImage.id,
+        url: finalImage.url,
+        prompt: finalImage.prompt,
+        title: finalImage.title || primaryTopic,
+        matchScore: selectedImage?.matchScore,
+        source: source
+      } : null,
+      source,
+      mode: smartMatchingMode,
+      contentAnalysis,
+      avatarUsed: targetAvatar?.name,
+      message: finalImage
+        ? `Image ${source === 'bank' ? 'matched from bank' : 'generated'} for content`
+        : 'No suitable image found or generated'
+    });
+
+  } catch (error) {
+    console.error('Smart match error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/image-creation/smart-match-batch
+ * Match images for multiple content chunks in an article
+ * Used by the Elementor publish flow
+ */
+router.post('/smart-match-batch', requireDb, async (req, res) => {
+  try {
+    const {
+      workflowId,
+      chunks, // Array of {id, text, context?} for each content chunk needing an image
+      avatarTag,
+      articleId,
+      openaiApiKey
+    } = req.body;
+
+    const apiKey = openaiApiKey || process.env.OPENAI_API_KEY;
+
+    if (!workflowId || !chunks?.length) {
+      return res.status(400).json({ error: 'workflowId and chunks array required' });
+    }
+
+    // Get settings
+    const settings = await sql`
+      SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+    `;
+
+    if (settings.length === 0) {
+      return res.status(404).json({ error: 'No Image Creation settings found' });
+    }
+
+    const config = settings[0];
+
+    if (!config.smart_matching_enabled) {
+      return res.json({
+        success: false,
+        results: [],
+        message: 'Smart Content Matching is not enabled'
+      });
+    }
+
+    const results = [];
+    const openai = new OpenAI({ apiKey });
+
+    // Process each chunk
+    for (const chunk of chunks) {
+      try {
+        // Step 1: Analyze the content
+        const analysisResponse = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `Extract key visual topics from text for image matching. Respond with JSON: {"primaryTopic":"main subject","activity":"action","keywords":["list"],"suggestedPromptAdditions":"brief additions"}`
+            },
+            { role: 'user', content: chunk.text }
+          ],
+          max_tokens: 200,
+          temperature: 0.3
+        });
+
+        let analysis;
+        try {
+          const jsonMatch = analysisResponse.choices[0].message.content.match(/\{[\s\S]*\}/);
+          analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { keywords: [] };
+        } catch (e) {
+          analysis = { primaryTopic: chunk.text.substring(0, 30), keywords: [] };
+        }
+
+        // Step 2: Try to find/generate matching image
+        // (Simplified inline version of smart-match-image logic)
+        const imageBank = config.image_bank || [];
+        const keywords = analysis.keywords || [];
+        const primaryTopic = analysis.primaryTopic || '';
+
+        // Score and find best match
+        let bestMatch = null;
+        let bestScore = 0;
+
+        for (const img of imageBank) {
+          if (img.used) continue;
+          const imgText = `${img.title || ''} ${img.prompt || ''} ${img.variation || ''}`.toLowerCase();
+          let score = 0;
+
+          if (primaryTopic && imgText.includes(primaryTopic.toLowerCase())) score += 10;
+          for (const kw of keywords) {
+            if (imgText.includes(kw.toLowerCase())) score += 3;
+          }
+          if (avatarTag && img.avatarTag === avatarTag) score += 5;
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = img;
+          }
+        }
+
+        results.push({
+          chunkId: chunk.id,
+          analysis,
+          image: bestMatch ? {
+            id: bestMatch.id,
+            url: bestMatch.url,
+            title: bestMatch.title,
+            matchScore: bestScore,
+            source: 'bank'
+          } : null,
+          needsGeneration: !bestMatch && config.smart_matching_mode !== 'bank_only'
+        });
+
+        // Mark image as used if found
+        if (bestMatch) {
+          config.image_bank = imageBank.map(img =>
+            img.id === bestMatch.id
+              ? { ...img, used: true, usedOn: primaryTopic, usedAt: new Date().toISOString(), usedByArticleId: articleId }
+              : img
+          );
+        }
+
+      } catch (chunkError) {
+        console.error('Error processing chunk:', chunk.id, chunkError);
+        results.push({
+          chunkId: chunk.id,
+          error: chunkError.message,
+          image: null
+        });
+      }
+    }
+
+    // Save updated bank if any images were used
+    if (results.some(r => r.image)) {
+      await sql`
+        UPDATE image_creation_settings
+        SET image_bank = ${JSON.stringify(config.image_bank)}::jsonb,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE workflow_id = ${workflowId}
+      `;
+    }
+
+    res.json({
+      success: true,
+      results,
+      matched: results.filter(r => r.image).length,
+      needGeneration: results.filter(r => r.needsGeneration).length,
+      total: chunks.length
+    });
+
+  } catch (error) {
+    console.error('Smart match batch error:', error);
     res.status(500).json({ error: error.message });
   }
 });
