@@ -2379,7 +2379,7 @@ const App: React.FC = () => {
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
                                 WordPress Admin Credentials
                             </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-end">
+                            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto] gap-2 items-end">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Site URL</label>
                                     <input type="text" placeholder="https://yourdomain.com" value={currentProject.state.wpCredentials.url} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
@@ -2498,15 +2498,15 @@ const App: React.FC = () => {
                                         </button>
                                     </div>
                                 </div>
-                                <div className="w-28">
-                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">SEO Plugin</label>
+                                <div className="w-24">
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center text-xs">SEO Plugin</label>
                                     <select
                                         value={currentProject.state.seoPlugin || 'rankmath'}
                                         onChange={e => setCurrentProjectState(p => ({...p, seoPlugin: e.target.value}))}
-                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-2 py-2.5 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                     >
                                         <option value="rankmath">Rank Math</option>
-                                        <option value="yoast">Yoast SEO</option>
+                                        <option value="yoast">Yoast</option>
                                         <option value="aioseo">AIOSEO</option>
                                         <option value="seopress">SEOPress</option>
                                     </select>
