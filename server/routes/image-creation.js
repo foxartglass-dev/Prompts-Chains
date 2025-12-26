@@ -357,40 +357,6 @@ router.post('/batch-generate', async (req, res) => {
             };
           } catch (error) {
             console.error(`[Batch Generate] Error with ${model}:`, error.message);
-
-            // If gpt-image-1.5 requires org verification, fallback to dall-e-3
-            if (error.message?.includes('verified') || error.message?.includes('403')) {
-              try {
-                console.log(`[Batch Generate] Trying fallback to dall-e-3...`);
-                const dalle3Size = item.orientation === 'vertical' ? '1024x1792'
-                  : item.orientation === 'landscape' ? '1792x1024' : '1024x1024';
-
-                const fallbackResponse = await openai.images.generate({
-                  model: 'dall-e-3',
-                  prompt: item.prompt,
-                  n: 1,
-                  size: dalle3Size,
-                  quality: 'hd'
-                });
-
-                console.log(`[Batch Generate] DALL-E 3 fallback succeeded`);
-                return {
-                  success: true,
-                  url: fallbackResponse.data[0].url,
-                  prompt: item.prompt,
-                  revisedPrompt: fallbackResponse.data[0].revised_prompt,
-                  variation: item.variation,
-                  variationId: item.variationId,
-                  orientation: item.orientation,
-                  size: dalle3Size,
-                  model: 'dall-e-3',
-                  note: 'Used DALL-E 3 (verify org for gpt-image-1.5)'
-                };
-              } catch (fallbackError) {
-                console.error(`[Batch Generate] DALL-E 3 fallback failed:`, fallbackError.message);
-              }
-            }
-
             return {
               success: false,
               error: error.message,
