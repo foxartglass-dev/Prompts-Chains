@@ -145,6 +145,11 @@ async function generateWithFlux(prompt, options, apiKey) {
     throw new Error('Could not extract URL from Flux output');
   }
 
+  // Handle URL object (has href property) vs string
+  if (typeof imageUrl === 'object' && imageUrl.href) {
+    imageUrl = imageUrl.href;
+  }
+
   console.log(`[Image Generator] Flux image URL:`, imageUrl);
 
   // Parse dimensions from aspect ratio
@@ -224,6 +229,11 @@ async function generateWithSeedream(prompt, options, apiKey) {
     throw new Error('Could not extract URL from Seedream output');
   }
 
+  // Handle URL object (has href property) vs string
+  if (typeof imageUrl === 'object' && imageUrl.href) {
+    imageUrl = imageUrl.href;
+  }
+
   console.log(`[Image Generator] Seedream image URL:`, imageUrl);
 
   // Parse dimensions from aspect ratio
@@ -301,6 +311,11 @@ async function generateWithIdeogram(prompt, options, apiKey) {
   if (!imageUrl) {
     console.error('[Image Generator] Could not extract URL from Ideogram output:', output);
     throw new Error('Could not extract URL from Ideogram output');
+  }
+
+  // Handle URL object (has href property) vs string
+  if (typeof imageUrl === 'object' && imageUrl.href) {
+    imageUrl = imageUrl.href;
   }
 
   console.log(`[Image Generator] Ideogram image URL:`, imageUrl);
