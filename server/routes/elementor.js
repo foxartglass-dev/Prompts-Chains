@@ -294,8 +294,47 @@ router.post('/publish', async (req, res) => {
     // Body images start on OPPOSITE side of hero
     const bodyStartSide = heroImageSide === 'right' ? 'left' : 'right';
 
-    // Step 2: Try to get images from Image Bank if workflowId provided
-    if (useImageBank && workflowId && isDatabaseEnabled()) {
+    // Step 2: Get image creation settings and determine mode
+    let effectiveUseBank = useImageBank;
+    let effectiveGenerateLive = generateImages;
+    let imageGenModel = 'gpt-image-1.5';
+
+    if (workflowId && isDatabaseEnabled()) {
+      try {
+        const settingsResult = await sql`
+          SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+        `;
+
+        if (settingsResult.length > 0 && settingsResult[0].enabled) {
+          const config = settingsResult[0];
+
+          // Check integration_mode to determine behavior
+          const integrationMode = config.integration_mode || 'bank';
+          const fallbackToLive = config.fallback_to_live ?? true;
+          imageGenModel = config.image_generation_model || 'gpt-image-1.5';
+
+          console.log('[Elementor Publish] Integration mode:', integrationMode);
+          console.log('[Elementor Publish] Image generation model:', imageGenModel);
+
+          if (integrationMode === 'live') {
+            // "Generate Live" mode - skip bank, generate fresh images
+            effectiveUseBank = false;
+            effectiveGenerateLive = true;
+            console.log('[Elementor Publish] Mode: Generate Live - will create new images');
+          } else {
+            // "Pull from Bank" mode - use bank, optionally fallback to live
+            effectiveUseBank = true;
+            effectiveGenerateLive = fallbackToLive; // Only generate if bank is empty and fallback enabled
+            console.log('[Elementor Publish] Mode: Pull from Bank (fallback:', fallbackToLive, ')');
+          }
+        }
+      } catch (settingsError) {
+        console.error('[Elementor Publish] Failed to fetch settings:', settingsError.message);
+      }
+    }
+
+    // Step 2b: Try to get images from Image Bank if in bank mode
+    if (effectiveUseBank && workflowId && isDatabaseEnabled()) {
       try {
         const bankImages = await sql`
           SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
@@ -455,8 +494,12 @@ router.post('/publish', async (req, res) => {
       }
     }
 
-    // Step 3: Fall back to live generation if needed
-    if (generateImages && imagesFromBank < dynamicMaxImages) {
+    // Step 3: Generate live images if needed (either "Generate Live" mode or fallback)
+    const needsLiveGeneration = effectiveGenerateLive && imagesFromBank < dynamicMaxImages;
+    if (needsLiveGeneration) {
+      const imagesToGenerate = dynamicMaxImages - imagesFromBank;
+      console.log(`[Elementor Publish] Generating ${imagesToGenerate} live images with model: ${imageGenModel}`);
+
       // Use the image pipeline for remaining images
       const pipelineResult = await processArticleWithImages(cleanedContent, {
         title,
@@ -466,8 +509,9 @@ router.post('/publish', async (req, res) => {
         openaiApiKey: openaiApiKey || process.env.OPENAI_API_KEY,
         replicateApiKey: replicateApiKey || process.env.REPLICATE_API_TOKEN,
         wpCredentials,
-        maxImages: dynamicMaxImages - imagesFromBank,
-        maxWords
+        maxImages: imagesToGenerate,
+        maxWords,
+        model: imageGenModel // Pass the configured model
       });
 
       // Merge pipeline images with bank images
@@ -482,6 +526,7 @@ router.post('/publish', async (req, res) => {
 
       imagesGenerated = pipelineResult.imagesGenerated || 0;
       estimatedCost = pipelineResult.estimatedCost;
+      console.log(`[Elementor Publish] Generated ${imagesGenerated} images`);
     }
 
     // Step 4: Extract or use provided title

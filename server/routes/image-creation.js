@@ -320,6 +320,8 @@ router.post('/batch-generate', async (req, res) => {
       variations = [], // Array of {id, name, prompt, orientation}
       referenceImageUrls = [],
       quantity = 1, // How many of each variation
+      model = 'gpt-image-1.5', // Default to latest model
+      quality = 'high',
       openaiApiKey
     } = req.body;
 
@@ -346,11 +348,21 @@ router.post('/batch-generate', async (req, res) => {
           ? `${mainPrompt}\n\nVariation: ${variation.prompt}`
           : variation.prompt;
 
-        const size = variation.orientation === 'vertical'
-          ? '1024x1792'
-          : variation.orientation === 'landscape'
-            ? '1792x1024'
-            : '1024x1024';
+        // GPT-Image models use different sizes than DALL-E
+        let size;
+        if (model.startsWith('gpt-image')) {
+          size = variation.orientation === 'vertical'
+            ? '1024x1536'
+            : variation.orientation === 'landscape'
+              ? '1536x1024'
+              : '1024x1024';
+        } else {
+          size = variation.orientation === 'vertical'
+            ? '1024x1792'
+            : variation.orientation === 'landscape'
+              ? '1792x1024'
+              : '1024x1024';
+        }
 
         promptsToGenerate.push({
           prompt: fullPrompt,
@@ -370,13 +382,23 @@ router.post('/batch-generate', async (req, res) => {
       const batchResults = await Promise.all(
         batch.map(async (item) => {
           try {
-            const response = await openai.images.generate({
-              model: 'gpt-image-1',
+            // Build generation params based on model
+            const generateParams = {
+              model: model,
               prompt: item.prompt,
               n: 1,
               size: item.size,
-              quality: 'hd'
-            });
+            };
+
+            // Add quality param based on model type
+            if (model === 'dall-e-3') {
+              generateParams.quality = quality === 'high' ? 'hd' : 'standard';
+            } else if (model.startsWith('gpt-image')) {
+              generateParams.quality = quality;
+            }
+
+            console.log(`[Batch Generate] Using model: ${model}, size: ${item.size}`);
+            const response = await openai.images.generate(generateParams);
 
             return {
               success: true,
@@ -386,7 +408,8 @@ router.post('/batch-generate', async (req, res) => {
               variation: item.variation,
               variationId: item.variationId,
               orientation: item.orientation,
-              size: item.size
+              size: item.size,
+              model: model
             };
           } catch (error) {
             // Try fallback to dall-e-3
