@@ -2430,11 +2430,24 @@ const App: React.FC = () => {
                                         </button>
                                     </div>
                                 </div>
+                                <div className="w-24">
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center text-xs">Model</label>
+                                    <select
+                                        value={currentProject.state.imageModel || 'flux-1.1-pro'}
+                                        onChange={e => setCurrentProjectState(p => ({...p, imageModel: e.target.value as 'gpt-image-1.5' | 'flux-1.1-pro'}))}
+                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                    >
+                                        <option value="flux-1.1-pro">Flux 1.1</option>
+                                        <option value="gpt-image-1.5">GPT Img</option>
+                                    </select>
+                                </div>
+                                {/* Quality dropdown only shows for gpt-image-1.5 */}
+                                {(currentProject.state.imageModel === 'gpt-image-1.5') && (
                                 <div className="w-20">
-                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Quality</label>
+                                    <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center text-xs">Quality</label>
                                     <select
                                         value={currentProject.state.imageQuality || 'low'}
-                                        onChange={e => setCurrentProjectState(p => ({...p, imageQuality: e.target.value}))}
+                                        onChange={e => setCurrentProjectState(p => ({...p, imageQuality: e.target.value as 'low' | 'medium' | 'high'}))}
                                         className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                     >
                                         <option value="low">Low</option>
@@ -2442,6 +2455,7 @@ const App: React.FC = () => {
                                         <option value="high">High</option>
                                     </select>
                                 </div>
+                                )}
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center">Article</label>
                                     <div className="flex rounded-lg overflow-hidden border-2 border-brand-gold">

@@ -297,7 +297,7 @@ router.post('/publish', async (req, res) => {
     // Step 2: Get image creation settings and determine mode
     let effectiveUseBank = useImageBank;
     let effectiveGenerateLive = generateImages;
-    let imageGenModel = 'gpt-image-1.5';
+    let imageGenModel = 'flux-1.1-pro';  // Default to Flux (gpt-image-1.5 requires org verification)
     let imageQuality = 'low'; // Default to low for websites (cheapest)
 
     if (workflowId && isDatabaseEnabled()) {
@@ -312,7 +312,7 @@ router.post('/publish', async (req, res) => {
           // Check integration_mode to determine behavior
           const integrationMode = config.integration_mode || 'bank';
           const fallbackToLive = config.fallback_to_live ?? true;
-          imageGenModel = config.image_generation_model || 'gpt-image-1.5';
+          imageGenModel = config.image_generation_model || 'flux-1.1-pro';
           imageQuality = config.image_quality || 'low';
 
           console.log('[Elementor Publish] Integration mode:', integrationMode);
@@ -503,18 +503,19 @@ router.post('/publish', async (req, res) => {
       const imagesToGenerate = dynamicMaxImages - imagesFromBank;
       console.log(`[Elementor Publish] Generating ${imagesToGenerate} live images with model: ${imageGenModel}`);
 
-      // Use the image pipeline for remaining images (now uses OpenAI gpt-image-1.5)
+      // Use the image pipeline for remaining images
       const pipelineResult = await processArticleWithImages(cleanedContent, {
         title,
         keyword,
         styleDNA,
         referenceImages,
         openaiApiKey: openaiApiKey || process.env.OPENAI_API_KEY,
+        replicateApiKey: replicateApiKey || process.env.REPLICATE_API_TOKEN,
         wpCredentials,
         maxImages: imagesToGenerate,
         maxWords,
-        model: imageGenModel, // Pass the configured model (gpt-image-1.5)
-        quality: imageQuality // Pass quality setting (low/medium/high)
+        model: imageGenModel, // gpt-image-1.5 or flux-1.1-pro
+        quality: imageQuality // low/medium/high (for gpt-image-1.5)
       });
 
       // Merge pipeline images with bank images

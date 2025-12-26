@@ -3,7 +3,7 @@
  * Orchestrates the full image generation flow:
  * Article Content → Chunks → Actions → Prompts → Images → WordPress
  *
- * Uses OpenAI gpt-image-1.5 for all image generation
+ * Supports both OpenAI gpt-image-1.5 and Flux 1.1 Pro via Replicate
  */
 
 import chunkContent, { extractTitle, countWords } from './content-chunker.js';
@@ -26,7 +26,7 @@ export async function processArticleWithImages(content, options = {}) {
 
     // API keys
     openaiApiKey,
-    replicateApiKey, // Legacy - no longer used, kept for backwards compatibility
+    replicateApiKey,  // Used for Flux 1.1 Pro
 
     // Style DNA
     styleDNA = null,
@@ -40,8 +40,8 @@ export async function processArticleWithImages(content, options = {}) {
     heroImage = true,
     maxWords = 300,
 
-    // Model options (NEW)
-    model = 'gpt-image-1.5',
+    // Model options
+    model = 'flux-1.1-pro',  // Default to Flux since gpt-image-1.5 requires org verification
     quality = 'low', // low for websites, medium, high for print
 
     // Callbacks
@@ -107,9 +107,13 @@ export async function processArticleWithImages(content, options = {}) {
       });
     }
 
-    // Step 4: Generate images using OpenAI gpt-image-1.5
-    if (!openaiApiKey) {
-      progress('skipping_images', { message: 'No OpenAI key, skipping image generation' });
+    // Step 4: Generate images using selected model
+    // Select correct API key based on model
+    const imageApiKey = model === 'gpt-image-1.5' ? openaiApiKey : replicateApiKey;
+
+    if (!imageApiKey) {
+      const keyType = model === 'gpt-image-1.5' ? 'OpenAI' : 'Replicate';
+      progress('skipping_images', { message: `No ${keyType} key, skipping image generation` });
       return {
         chunks,
         title: pageTitle,
@@ -123,7 +127,7 @@ export async function processArticleWithImages(content, options = {}) {
     const chunksWithImages = await generateArticleImages(
       chunks,
       { maxImages, heroImage, model, quality },
-      openaiApiKey,  // Now uses OpenAI instead of Replicate
+      imageApiKey,  // Use appropriate API key for the model
       (index, total, result) => {
         progress('image_progress', {
           message: `Generated image ${index + 1} of ${total}`,
@@ -138,7 +142,7 @@ export async function processArticleWithImages(content, options = {}) {
     progress('images_generated', {
       message: `Generated ${imageCount} images`,
       count: imageCount,
-      cost: estimateCost(imageCount, quality)
+      cost: estimateCost(imageCount, quality, model)
     });
 
     // Step 5: Upload to WordPress (optional)
@@ -292,11 +296,11 @@ export async function generateImagesForChunks(chunks, options = {}) {
   const {
     styleDNA,
     openaiApiKey,
-    replicateApiKey, // Legacy - no longer used
+    replicateApiKey,
     keyword = '',
     title = '',
     maxImages = 4,
-    model = 'gpt-image-1.5',
+    model = 'flux-1.1-pro',  // Default to Flux
     quality = 'low'
   } = options;
 
@@ -314,9 +318,12 @@ export async function generateImagesForChunks(chunks, options = {}) {
     addBasicPrompts(chunks, styleDNA || {}, keyword, maxImages);
   }
 
-  // Generate images using OpenAI
-  if (openaiApiKey) {
-    await generateArticleImages(chunks, { maxImages, model, quality }, openaiApiKey);
+  // Select correct API key based on model
+  const imageApiKey = model === 'gpt-image-1.5' ? openaiApiKey : replicateApiKey;
+
+  // Generate images using selected model
+  if (imageApiKey) {
+    await generateArticleImages(chunks, { maxImages, model, quality }, imageApiKey);
   }
 
   return chunks;
@@ -334,7 +341,8 @@ export async function previewPrompts(content, options = {}) {
     title = null,
     maxImages = 4,
     maxWords = 300,
-    quality = 'low'
+    quality = 'low',
+    model = 'flux-1.1-pro'  // Default to Flux
   } = options;
 
   // Chunk content
@@ -387,7 +395,7 @@ export async function previewPrompts(content, options = {}) {
     styleDNA: activeStyleDNA,
     prompts,
     chunks,
-    estimatedCost: estimateCost(prompts.length, quality)
+    estimatedCost: estimateCost(prompts.length, quality, model)
   };
 }
 

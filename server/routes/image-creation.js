@@ -5,11 +5,13 @@
 
 import express from 'express';
 import OpenAI from 'openai';
+import Replicate from 'replicate';
 import { sql, isDatabaseEnabled } from '../db/index.js';
 import fetch from 'node-fetch';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { generateImage } from '../services/image-generator.js';
 
 const router = express.Router();
 
@@ -264,22 +266,27 @@ router.post('/batch-generate', async (req, res) => {
       variations = [], // Array of {id, name, prompt, orientation}
       referenceImageUrls = [],
       quantity = 1, // How many of each variation
-      model = 'gpt-image-1.5', // Latest model (Dec 2025) - better prompts, 20% cheaper
-      quality = 'high',
-      openaiApiKey
+      model = 'flux-1.1-pro', // Default to Flux (gpt-image-1.5 requires org verification)
+      quality = 'low',
+      openaiApiKey,
+      replicateApiKey
     } = req.body;
 
-    const apiKey = openaiApiKey || process.env.OPENAI_API_KEY;
+    // Select correct API key based on model
+    const apiKey = model === 'gpt-image-1.5'
+      ? (openaiApiKey || process.env.OPENAI_API_KEY)
+      : (replicateApiKey || process.env.REPLICATE_API_TOKEN);
+
+    const keyType = model === 'gpt-image-1.5' ? 'OpenAI' : 'Replicate';
 
     if (!apiKey) {
-      return res.status(400).json({ error: 'OpenAI API key is required' });
+      return res.status(400).json({ error: `${keyType} API key is required for ${model}` });
     }
 
     if (!mainPrompt && variations.length === 0) {
       return res.status(400).json({ error: 'Main prompt or variations required' });
     }
 
-    const openai = new OpenAI({ apiKey });
     const results = [];
     const errors = [];
 
@@ -292,7 +299,7 @@ router.post('/batch-generate', async (req, res) => {
           ? `${mainPrompt}\n\nVariation: ${variation.prompt}`
           : variation.prompt;
 
-        // GPT-Image models use different sizes than DALL-E
+        // Determine size based on orientation
         let size;
         if (model.startsWith('gpt-image')) {
           size = variation.orientation === 'vertical'
@@ -301,10 +308,11 @@ router.post('/batch-generate', async (req, res) => {
               ? '1536x1024'
               : '1024x1024';
         } else {
+          // Flux uses aspect ratios, we'll pass size and let image-generator handle it
           size = variation.orientation === 'vertical'
-            ? '1024x1792'
+            ? '1024x1536'
             : variation.orientation === 'landscape'
-              ? '1792x1024'
+              ? '1536x1024'
               : '1024x1024';
         }
 
@@ -318,7 +326,7 @@ router.post('/batch-generate', async (req, res) => {
       }
     }
 
-    // Generate images (with concurrency limit)
+    // Generate images using unified generateImage function (with concurrency limit)
     const concurrencyLimit = 2;
     for (let i = 0; i < promptsToGenerate.length; i += concurrencyLimit) {
       const batch = promptsToGenerate.slice(i, i + concurrencyLimit);
@@ -326,29 +334,20 @@ router.post('/batch-generate', async (req, res) => {
       const batchResults = await Promise.all(
         batch.map(async (item) => {
           try {
-            // Build generation params based on model
-            const generateParams = {
-              model: model,
-              prompt: item.prompt,
-              n: 1,
-              size: item.size,
-            };
-
-            // Add quality param based on model type
-            if (model === 'dall-e-3') {
-              generateParams.quality = quality === 'high' ? 'hd' : 'standard';
-            } else if (model.startsWith('gpt-image')) {
-              generateParams.quality = quality;
-            }
-
             console.log(`[Batch Generate] Using model: ${model}, size: ${item.size}`);
-            const response = await openai.images.generate(generateParams);
+
+            // Use unified generateImage function that handles both OpenAI and Flux
+            const result = await generateImage(item.prompt, {
+              model,
+              quality,
+              size: item.size
+            }, apiKey);
 
             return {
               success: true,
-              url: response.data[0].url,
+              url: result.url,
               prompt: item.prompt,
-              revisedPrompt: response.data[0].revised_prompt,
+              revisedPrompt: result.revisedPrompt,
               variation: item.variation,
               variationId: item.variationId,
               orientation: item.orientation,
@@ -628,7 +627,7 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         settings: {
           enabled: false,
           prompt_assistant_model: 'gpt-4o',
-          image_generation_model: 'gpt-image-1.5',
+          image_generation_model: 'flux-1.1-pro',
           reference_images: [],
           logo_images: [],
           audience_avatars: [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
@@ -663,7 +662,7 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         id: results[0].id,
         enabled: results[0].enabled,
         prompt_assistant_model: results[0].prompt_assistant_model,
-        image_generation_model: results[0].image_generation_model || 'gpt-image-1.5',
+        image_generation_model: results[0].image_generation_model || 'flux-1.1-pro',
         reference_images: results[0].reference_images || [],
         logo_images: results[0].logo_images || [],
         audience_avatars: results[0].audience_avatars || [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
@@ -770,7 +769,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
             ${workflowId},
             ${enabled ?? false},
             ${prompt_assistant_model ?? 'gpt-4o'},
-            ${image_generation_model ?? 'gpt-image-1.5'},
+            ${image_generation_model ?? 'flux-1.1-pro'},
             ${image_quality ?? 'low'},
             ${JSON.stringify(reference_images ?? [])},
             ${JSON.stringify(logo_images ?? [])},
@@ -1316,10 +1315,12 @@ router.post('/smart-match-image', requireDb, async (req, res) => {
       contentAnalysis, // From analyze-content endpoint
       avatarTag, // Which avatar/tag to use for generation
       articleId, // Track which article uses the image
-      openaiApiKey
+      openaiApiKey,
+      replicateApiKey
     } = req.body;
 
-    const apiKey = openaiApiKey || process.env.OPENAI_API_KEY;
+    const openaiKey = openaiApiKey || process.env.OPENAI_API_KEY;
+    const replicateKey = replicateApiKey || process.env.REPLICATE_API_TOKEN;
 
     if (!workflowId || !contentAnalysis) {
       return res.status(400).json({ error: 'workflowId and contentAnalysis required' });
@@ -1339,7 +1340,7 @@ router.post('/smart-match-image', requireDb, async (req, res) => {
     const smartMatchingMode = config.smart_matching_mode || 'bank_first';
     const imageBank = config.image_bank || [];
     const avatars = config.audience_avatars || [];
-    const imageGenModel = config.image_generation_model || 'gpt-image-1.5';
+    const imageGenModel = config.image_generation_model || 'flux-1.1-pro';
 
     if (!smartMatchingEnabled) {
       return res.json({
@@ -1473,39 +1474,32 @@ router.post('/smart-match-image', requireDb, async (req, res) => {
       }
 
       try {
-        // Generate the image
-        const openai = new OpenAI({ apiKey });
+        // Select correct API key based on model
+        const imageApiKey = imageGenModel === 'gpt-image-1.5' ? openaiKey : replicateKey;
 
-        // Adjust size for GPT-Image models
-        let size = '1024x1536'; // Default to portrait for hero images
-        if (imageGenModel.startsWith('gpt-image')) {
-          const sizeMap = {
-            '1792x1024': '1536x1024',
-            '1024x1792': '1024x1536',
-          };
-          size = sizeMap[size] || size;
+        if (!imageApiKey) {
+          const keyType = imageGenModel === 'gpt-image-1.5' ? 'OpenAI' : 'Replicate';
+          console.log(`[Smart Match] No ${keyType} API key for ${imageGenModel}`);
+          throw new Error(`${keyType} API key required for ${imageGenModel}`);
         }
 
-        const generateParams = {
+        // Use portrait for hero images
+        const size = '1024x1536';
+
+        console.log(`[Smart Match] Generating image with ${imageGenModel}`);
+
+        // Use unified generateImage function
+        const result = await generateImage(prompt, {
           model: imageGenModel,
-          prompt: prompt,
-          n: 1,
-          size: size,
-        };
-
-        if (imageGenModel === 'dall-e-3') {
-          generateParams.quality = 'hd';
-        } else if (imageGenModel.startsWith('gpt-image')) {
-          generateParams.quality = 'high';
-        }
-
-        const response = await openai.images.generate(generateParams);
+          quality: 'low', // Use low for web performance
+          size: size
+        }, imageApiKey);
 
         generatedImage = {
           id: `img-smart-${Date.now()}`,
-          url: response.data[0].url,
+          url: result.url,
           prompt: prompt,
-          revisedPrompt: response.data[0].revised_prompt,
+          revisedPrompt: result.revisedPrompt,
           avatarTag: targetAvatar?.tag || null,
           createdAt: new Date().toISOString(),
           smartMatched: true,
