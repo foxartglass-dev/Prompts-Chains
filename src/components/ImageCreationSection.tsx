@@ -99,7 +99,7 @@ interface ChatMessage {
 }
 
 // Models that support vision/images (for chat assistants)
-const IMAGE_CAPABLE_MODELS = ['gpt-4o', 'gpt-5.2-2025-12-11', 'claude-sonnet-4-5-20250929', 'claude-3-5-sonnet-20241022', 'gemini-2.5-pro'];
+const IMAGE_CAPABLE_MODELS = ['gpt-image-1.5', 'gpt-4o', 'gpt-5.2-2025-12-11', 'claude-sonnet-4-5-20250929', 'claude-3-5-sonnet-20241022', 'gemini-2.5-pro'];
 
 // Image generation models (for actually creating images)
 const IMAGE_GENERATION_MODELS = [
@@ -256,6 +256,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
 };
 
 const AVAILABLE_MODELS = [
+  { id: 'gpt-image-1.5', name: 'GPT-Image-1.5 (Best for Images)', provider: 'openai' },
   { id: 'gpt-5.2-2025-12-11', name: 'GPT-5.2', provider: 'openai' },
   { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai' },
