@@ -288,6 +288,9 @@ interface ImageCreationSettings {
   // generate_first: Always generate new, add to bank for future
   // bank_only: Only use existing bank images, skip if no match
   // generate_only: Always generate fresh, never use bank
+  // Editable algorithm rules (user-configurable)
+  placement_rule: string;
+  smart_matching_rule: string;
 }
 
 enum LogStatus {
@@ -330,7 +333,10 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   manual_variation_order: [],
   // Smart Content Matching - OFF by default until user is ready
   smart_matching_enabled: false,
-  smart_matching_mode: 'bank_first' // Default: check bank first, generate if no match
+  smart_matching_mode: 'bank_first', // Default: check bank first, generate if no match
+  // Editable algorithm rules
+  placement_rule: 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
+  smart_matching_rule: 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.'
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -4214,7 +4220,56 @@ Start by introducing yourself and asking about their business in a friendly way.
               </div>
 
               {/* ─────────────────────────────────────────────────────
-                  SECTION 3: Variation Order
+                  SECTION 3: Algorithm Rules (Editable)
+              ───────────────────────────────────────────────────── */}
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-emerald-500/30">
+                <div className="flex items-center gap-2 mb-4">
+                  <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                  <h3 className="text-emerald-400 font-semibold">Algorithm Rules</h3>
+                  <span className="px-2 py-0.5 bg-emerald-600/30 text-emerald-300 text-[10px] rounded font-medium">EDITABLE</span>
+                </div>
+
+                {/* Placement Rule */}
+                <div className="mb-4">
+                  <label className="text-xs text-emerald-400 mb-2 block font-medium flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" /></svg>
+                    Placement Rule:
+                  </label>
+                  <textarea
+                    value={settings.placement_rule || ''}
+                    onChange={(e) => updateSettings({ placement_rule: e.target.value })}
+                    className="w-full bg-slate-900 border border-emerald-500/30 rounded-lg p-3 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    rows={2}
+                    placeholder="Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}."
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Use <code className="bg-slate-700 px-1 rounded">{'{300}'}</code> for word count, <code className="bg-slate-700 px-1 rounded">{'{right/left/alt}'}</code> for hero position
+                  </p>
+                </div>
+
+                {/* Smart Matching Rule */}
+                <div>
+                  <label className="text-xs text-emerald-400 mb-2 block font-medium flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    Smart Content Matching Rule:
+                  </label>
+                  <textarea
+                    value={settings.smart_matching_rule || ''}
+                    onChange={(e) => updateSettings({ smart_matching_rule: e.target.value })}
+                    className="w-full bg-slate-900 border border-emerald-500/30 rounded-lg p-3 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    rows={2}
+                    placeholder="Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}."
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Use <code className="bg-slate-700 px-1 rounded">{'{50-75}'}</code> for word range, <code className="bg-slate-700 px-1 rounded">{'{placeholder_categories}'}</code> for match source
+                  </p>
+                </div>
+              </div>
+
+              {/* ─────────────────────────────────────────────────────
+                  SECTION 4: Variation Order
               ───────────────────────────────────────────────────── */}
               <div className="bg-slate-800/50 rounded-lg border border-orange-500/30 overflow-hidden">
                 <button onClick={() => setIsOrderOpen(!isOrderOpen)} className="w-full flex items-center justify-between p-4 text-orange-400 hover:bg-slate-800/80 transition">

@@ -695,6 +695,9 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           // Smart Content Matching defaults
           smart_matching_enabled: false,
           smart_matching_mode: 'bank_first',
+          // Algorithm rules (editable)
+          placement_rule: 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
+          smart_matching_rule: 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
           // Image quality default
           image_quality: 'low'
         },
@@ -730,6 +733,9 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         // Smart Content Matching
         smart_matching_enabled: results[0].smart_matching_enabled ?? false,
         smart_matching_mode: results[0].smart_matching_mode || 'bank_first',
+        // Algorithm rules (editable)
+        placement_rule: results[0].placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
+        smart_matching_rule: results[0].smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
         // Image quality
         image_quality: results[0].image_quality || 'low'
       }
@@ -775,7 +781,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       manual_variation_order,
       // Smart Content Matching (may not exist in DB yet)
       smart_matching_enabled,
-      smart_matching_mode
+      smart_matching_mode,
+      // Algorithm rules (editable)
+      placement_rule,
+      smart_matching_rule
     } = req.body;
 
     // Check if settings exist
@@ -868,20 +877,22 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       }
     };
 
-    // Try to update smart_matching columns (silently fail if they don't exist)
+    // Try to update smart_matching columns and algorithm rules (silently fail if they don't exist)
     const tryUpdateSmartMatching = async () => {
       try {
         await sql`
           UPDATE image_creation_settings
           SET
             smart_matching_enabled = COALESCE(${smart_matching_enabled}, smart_matching_enabled),
-            smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode)
+            smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode),
+            placement_rule = COALESCE(${placement_rule}, placement_rule),
+            smart_matching_rule = COALESCE(${smart_matching_rule}, smart_matching_rule)
           WHERE workflow_id = ${workflowId}
         `;
         return true;
       } catch (err) {
-        if (err.message?.includes('smart_matching')) {
-          console.log('[Image Creation API] smart_matching columns not available yet (run migration 006)');
+        if (err.message?.includes('smart_matching') || err.message?.includes('placement_rule')) {
+          console.log('[Image Creation API] smart_matching/algorithm columns not available yet (run migration)');
           return false;
         }
         throw err;
