@@ -1446,7 +1446,19 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
     parts.push('');
 
-    parts.push('Help the user organize prompts, create variation schedules, and manage the operational side of image creation.');
+    // Algorithm rules context
+    parts.push('⚙️ IMAGE INTEGRATION SETTINGS:');
+    parts.push(`  - Source Mode: ${settings.integration_mode === 'bank' ? 'Pull from Bank' : 'Generate Live'}`);
+    parts.push(`  - Fallback to Live: ${settings.fallback_to_live ? 'Yes' : 'No'}`);
+    parts.push(`  - Smart Matching: ${settings.smart_matching_enabled ? 'ENABLED' : 'Disabled'}`);
+    parts.push(`  - Smart Matching Mode: ${settings.smart_matching_mode || 'bank_first'}`);
+    parts.push('');
+    parts.push('📐 ALGORITHM RULES (user can edit these):');
+    parts.push(`  - Placement Rule: "${settings.placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.'}"`);
+    parts.push(`  - Smart Matching Rule: "${settings.smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.'}"`);
+    parts.push('');
+
+    parts.push('Help the user organize prompts, create variation schedules, refine algorithm rules, and manage the operational side of image creation.');
 
     return parts.join('\n');
   };
@@ -1572,7 +1584,19 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       `- Audience Tags: ${tags.map(t => `${t.name} (${t.description || 'no description'})`).join(', ') || 'None configured'}`,
       `- Existing Avatars: ${settings.audience_avatars.map(a => `${a.name}${a.mainPrompt ? ' (has prompt)' : ' (no prompt yet)'}`).join(', ')}`,
       `- Image Categories: ${settings.image_categories.join(', ')}`,
-      `- Current Bank: ${availableImages.length} images`
+      `- Current Bank: ${availableImages.length} images`,
+      ``,
+      `IMAGE INTEGRATION SETTINGS:`,
+      `- Source Mode: ${settings.integration_mode === 'bank' ? 'Pull from Bank' : 'Generate Live'}`,
+      `- Fallback to Live: ${settings.fallback_to_live ? 'Yes' : 'No'}`,
+      `- Smart Matching: ${settings.smart_matching_enabled ? 'ENABLED' : 'Disabled'}`,
+      `- Smart Matching Mode: ${settings.smart_matching_mode || 'bank_first'}`,
+      ``,
+      `ALGORITHM RULES (editable by user):`,
+      `- Placement Rule: "${settings.placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.'}"`,
+      `- Smart Matching Rule: "${settings.smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.'}"`,
+      ``,
+      `NOTE: You can help the user refine these algorithm rules. Suggest improvements based on their content strategy and SEO goals.`
     ].join('\n');
 
     const planningSystemMessage: ChatMessage = {
