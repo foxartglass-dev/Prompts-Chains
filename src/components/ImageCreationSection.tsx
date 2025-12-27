@@ -4018,209 +4018,265 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
           </div>
 
-          {/* Variation Order for Page Integration (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-orange-500/50 overflow-hidden">
-            <button onClick={() => setIsOrderOpen(!isOrderOpen)} className="w-full flex items-center justify-between p-3 text-orange-400 hover:bg-slate-800/50 transition">
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-                Variation Order ({settings.manual_variation_order?.length || 0} set)
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isOrderOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {isOrderOpen && (
-              <div className="p-4 border-t border-orange-500/30 space-y-3">
-                <p className="text-xs text-brand-gold/70">Click variations in the order you want them used on pages. Each page gets unique variations.</p>
-
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="text-xs text-brand-gold/70">Mode:</label>
-                  <select
-                    value={settings.variation_order_mode || 'sequential'}
-                    onChange={(e) => updateSettings({ variation_order_mode: e.target.value as any })}
-                    className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs"
-                  >
-                    <option value="sequential">Sequential (1, 2, 3...)</option>
-                    <option value="random">Random (no duplicates)</option>
-                    <option value="manual">Manual Order Below</option>
-                  </select>
-                  {settings.variation_order_mode === 'manual' && (
-                    <button onClick={clearVariationOrder} className="text-xs text-red-400 hover:text-red-300">Clear Order</button>
+          {/* ═══════════════════════════════════════════════════════════════════
+              UNIFIED IMAGE INTEGRATION SETTINGS DASHBOARD
+              All page integration, smart matching, and ordering in ONE place
+          ═══════════════════════════════════════════════════════════════════ */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/30 rounded-xl border-2 border-purple-500/50 overflow-hidden shadow-lg shadow-purple-500/10">
+            {/* Dashboard Header */}
+            <div className="bg-gradient-to-r from-purple-900/50 to-indigo-900/50 px-5 py-4 border-b border-purple-500/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-600/30 rounded-lg">
+                    <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Image Integration Settings</h2>
+                    <p className="text-xs text-purple-300/70">Configure how images are selected and published to pages</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 bg-purple-600/40 text-purple-200 text-xs rounded-full font-medium border border-purple-500/30">
+                    {settings.integration_mode === 'bank' ? '📦 Bank Mode' : '⚡ Live Mode'}
+                  </span>
+                  {settings.smart_matching_enabled && (
+                    <span className="px-2.5 py-1 bg-emerald-600/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-500/30">
+                      🎯 Smart Match ON
+                    </span>
                   )}
                 </div>
-
-                {settings.variation_order_mode === 'manual' && (
-                  <div className="flex flex-wrap gap-2">
-                    {activeAvatar?.variations.map((v) => {
-                      const orderNum = getVariationOrderNumber(v.id);
-                      return (
-                        <button
-                          key={v.id}
-                          onClick={() => handleSetVariationOrder(v.id)}
-                          className={`relative px-3 py-1.5 rounded text-xs font-medium transition ${orderNum ? 'bg-orange-500 text-slate-900' : 'bg-slate-800 text-brand-gold border border-brand-gold/50 hover:bg-slate-700'}`}
-                        >
-                          {orderNum && <span className="absolute -top-2 -left-2 w-5 h-5 bg-orange-700 text-white rounded-full text-[10px] flex items-center justify-center">{orderNum}</span>}
-                          {v.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {settings.manual_variation_order && settings.manual_variation_order.length > 0 && settings.variation_order_mode === 'manual' && (
-                  <div className="text-xs text-orange-300 bg-orange-900/30 p-2 rounded">
-                    Order: {settings.manual_variation_order.map((id, idx) => {
-                      const v = activeAvatar?.variations.find(v => v.id === id);
-                      return v ? `${idx + 1}. ${v.name}` : '';
-                    }).filter(Boolean).join(' → ')}
-                  </div>
-                )}
               </div>
-            )}
-          </div>
-
-          {/* Page Integration Controls */}
-          <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50">
-            <h3 className="text-brand-gold font-semibold mb-3">Page Integration</h3>
-            <div className="flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="integration_mode" checked={settings.integration_mode === 'bank'} onChange={() => updateSettings({ integration_mode: 'bank' })} className="accent-brand-gold" />
-                <span className="text-sm text-white">Pull from Bank</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="integration_mode" checked={settings.integration_mode === 'live'} onChange={() => updateSettings({ integration_mode: 'live' })} className="accent-brand-gold" />
-                <span className="text-sm text-white">Generate Live</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer ml-4">
-                <input type="checkbox" checked={settings.fallback_to_live} onChange={(e) => updateSettings({ fallback_to_live: e.target.checked })} className="w-4 h-4 rounded border-brand-gold text-brand-gold focus:ring-brand-gold bg-slate-900" />
-                <span className="text-sm text-brand-gold/70">Generate if bank empty</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Smart Content Matching (Phase 2 - Future Feature) */}
-          <div className={`bg-slate-900 p-4 rounded-lg border ${settings.smart_matching_enabled ? 'border-purple-500' : 'border-slate-700'} transition-colors`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <h3 className={`font-semibold ${settings.smart_matching_enabled ? 'text-purple-400' : 'text-slate-500'}`}>
-                  Smart Content Matching
-                </h3>
-                <span className="px-2 py-0.5 bg-purple-600/30 text-purple-300 text-[10px] rounded font-medium">BETA</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.smart_matching_enabled}
-                  onChange={(e) => updateSettings({ smart_matching_enabled: e.target.checked })}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-              </label>
             </div>
 
-            {settings.smart_matching_enabled ? (
-              <div className="space-y-4">
-                <p className="text-xs text-purple-300/70">
-                  AI analyzes article text and matches images based on keywords in placeholder categories.
-                  Use the keyword field in each placeholder option above to define match terms.
-                </p>
-
-                {/* Smart Matching Mode */}
-                <div>
-                  <label className="text-xs text-purple-400 mb-2 block">Matching Strategy:</label>
-                  <div className="flex flex-wrap gap-2">
-                    <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'bank_first' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                      <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'bank_first'} onChange={() => updateSettings({ smart_matching_mode: 'bank_first' })} className="hidden" />
-                      <span className="text-xs font-medium">Bank First</span>
-                    </label>
-                    <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'generate_first' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                      <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'generate_first'} onChange={() => updateSettings({ smart_matching_mode: 'generate_first' })} className="hidden" />
-                      <span className="text-xs font-medium">Generate First</span>
-                    </label>
-                    <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'bank_only' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                      <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'bank_only'} onChange={() => updateSettings({ smart_matching_mode: 'bank_only' })} className="hidden" />
-                      <span className="text-xs font-medium">Bank Only</span>
-                    </label>
-                    <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'generate_only' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                      <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'generate_only'} onChange={() => updateSettings({ smart_matching_mode: 'generate_only' })} className="hidden" />
-                      <span className="text-xs font-medium">Generate Only</span>
-                    </label>
-                  </div>
+            <div className="p-5 space-y-5">
+              {/* ─────────────────────────────────────────────────────
+                  SECTION 1: Image Source Mode
+              ───────────────────────────────────────────────────── */}
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-brand-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  <h3 className="text-brand-gold font-semibold">Image Source</h3>
                 </div>
 
-                {/* Category Matching Configuration */}
-                {activeAvatar?.placeholderCategories && activeAvatar.placeholderCategories.length > 0 && (
-                  <div className="bg-slate-800/50 rounded-lg p-3">
-                    <label className="text-xs text-purple-400 mb-2 block">Category Matching Rules:</label>
-                    <div className="space-y-2">
-                      {activeAvatar.placeholderCategories.map(cat => (
-                        <div key={cat.id} className="flex items-center gap-3 text-xs">
-                          <span className="text-white font-medium w-28 truncate">{cat.name}</span>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`cat-match-${cat.id}`}
-                              checked={!cat.isRandomized}
-                              onChange={() => {
-                                const updatedCats = activeAvatar.placeholderCategories?.map(c =>
-                                  c.id === cat.id ? { ...c, isRandomized: false } : c
-                                );
-                                handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCats });
-                              }}
-                              className="accent-purple-500"
-                            />
-                            <span className="text-purple-300">Match Keywords</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`cat-match-${cat.id}`}
-                              checked={cat.isRandomized === true}
-                              onChange={() => {
-                                const updatedCats = activeAvatar.placeholderCategories?.map(c =>
-                                  c.id === cat.id ? { ...c, isRandomized: true } : c
-                                );
-                                handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCats });
-                              }}
-                              className="accent-amber-500"
-                            />
-                            <span className="text-amber-300">Randomize</span>
-                          </label>
-                        </div>
-                      ))}
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'bank' ? 'bg-brand-gold/20 border-2 border-brand-gold' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
+                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'bank'} onChange={() => updateSettings({ integration_mode: 'bank' })} className="hidden" />
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'bank' ? 'bg-brand-gold text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-2">
-                      <strong>Match Keywords:</strong> Use keyword field to match article content<br/>
-                      <strong>Randomize:</strong> Pick any option randomly (e.g., Gender/Age)
+                    <div>
+                      <span className={`font-medium ${settings.integration_mode === 'bank' ? 'text-brand-gold' : 'text-white'}`}>Pull from Bank</span>
+                      <p className="text-[10px] text-slate-400">Use pre-generated images</p>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'live' ? 'bg-brand-cyan/20 border-2 border-brand-cyan' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
+                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'live'} onChange={() => updateSettings({ integration_mode: 'live' })} className="hidden" />
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'live' ? 'bg-brand-cyan text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    </div>
+                    <div>
+                      <span className={`font-medium ${settings.integration_mode === 'live' ? 'text-brand-cyan' : 'text-white'}`}>Generate Live</span>
+                      <p className="text-[10px] text-slate-400">Create fresh images on-the-fly</p>
+                    </div>
+                  </label>
+                </div>
+
+                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-900/50 rounded">
+                  <input type="checkbox" checked={settings.fallback_to_live} onChange={(e) => updateSettings({ fallback_to_live: e.target.checked })} className="w-4 h-4 rounded border-amber-500 text-amber-500 focus:ring-amber-500 bg-slate-900" />
+                  <span className="text-sm text-amber-400">Fallback: Generate if bank is empty or no match</span>
+                </label>
+              </div>
+
+              {/* ─────────────────────────────────────────────────────
+                  SECTION 2: Smart Content Matching
+              ───────────────────────────────────────────────────── */}
+              <div className={`rounded-lg p-4 border transition-all ${settings.smart_matching_enabled ? 'bg-purple-900/20 border-purple-500' : 'bg-slate-800/30 border-slate-700'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <svg className={`w-5 h-5 ${settings.smart_matching_enabled ? 'text-purple-400' : 'text-slate-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    <h3 className={`font-semibold ${settings.smart_matching_enabled ? 'text-purple-400' : 'text-slate-500'}`}>Smart Content Matching</h3>
+                    <span className="px-2 py-0.5 bg-purple-600/30 text-purple-300 text-[10px] rounded font-medium">BETA</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked={settings.smart_matching_enabled} onChange={(e) => updateSettings({ smart_matching_enabled: e.target.checked })} className="sr-only peer" />
+                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  </label>
+                </div>
+
+                {settings.smart_matching_enabled ? (
+                  <div className="space-y-4">
+                    <p className="text-xs text-purple-300/70">
+                      AI analyzes article text and matches images based on keywords. Define keywords in each placeholder option above.
                     </p>
+
+                    {/* Matching Strategy */}
+                    <div>
+                      <label className="text-xs text-purple-400 mb-2 block font-medium">Matching Strategy:</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { value: 'bank_first', label: 'Bank First', desc: 'Search bank → Generate if no match' },
+                          { value: 'generate_first', label: 'Generate First', desc: 'Always fresh → Save to bank' },
+                          { value: 'bank_only', label: 'Bank Only', desc: 'Only use existing bank images' },
+                          { value: 'generate_only', label: 'Generate Only', desc: 'Always new → Skip bank' }
+                        ].map(opt => (
+                          <label key={opt.value} className={`flex flex-col p-2 rounded cursor-pointer transition ${settings.smart_matching_mode === opt.value ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                            <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === opt.value} onChange={() => updateSettings({ smart_matching_mode: opt.value as any })} className="hidden" />
+                            <span className="text-xs font-medium">{opt.label}</span>
+                            <span className="text-[9px] opacity-70">{opt.desc}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Category Matching Rules */}
+                    {activeAvatar?.placeholderCategories && activeAvatar.placeholderCategories.length > 0 && (
+                      <div className="bg-slate-800/50 rounded-lg p-3 border border-purple-500/20">
+                        <label className="text-xs text-purple-400 mb-3 block font-medium flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
+                          Category Matching Rules:
+                        </label>
+                        <div className="space-y-2">
+                          {activeAvatar.placeholderCategories.map(cat => (
+                            <div key={cat.id} className="flex items-center gap-3 text-xs bg-slate-900/50 p-2 rounded">
+                              <span className="text-white font-medium w-32 truncate">{cat.name}</span>
+                              <div className="flex-1 flex items-center gap-4">
+                                <label className={`flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded transition ${!cat.isRandomized ? 'bg-purple-600/30 border border-purple-500' : 'hover:bg-slate-800'}`}>
+                                  <input
+                                    type="radio"
+                                    name={`cat-match-${cat.id}`}
+                                    checked={!cat.isRandomized}
+                                    onChange={() => {
+                                      const updatedCats = activeAvatar.placeholderCategories?.map(c =>
+                                        c.id === cat.id ? { ...c, isRandomized: false } : c
+                                      );
+                                      handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCats });
+                                    }}
+                                    className="accent-purple-500"
+                                  />
+                                  <span className="text-purple-300">🎯 Match Keywords</span>
+                                </label>
+                                <label className={`flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded transition ${cat.isRandomized === true ? 'bg-amber-600/30 border border-amber-500' : 'hover:bg-slate-800'}`}>
+                                  <input
+                                    type="radio"
+                                    name={`cat-match-${cat.id}`}
+                                    checked={cat.isRandomized === true}
+                                    onChange={() => {
+                                      const updatedCats = activeAvatar.placeholderCategories?.map(c =>
+                                        c.id === cat.id ? { ...c, isRandomized: true } : c
+                                      );
+                                      handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCats });
+                                    }}
+                                    className="accent-amber-500"
+                                  />
+                                  <span className="text-amber-300">🎲 Randomize</span>
+                                </label>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-3">
+                          <strong className="text-purple-400">Match Keywords:</strong> Uses keyword field in placeholder options to match article content<br/>
+                          <strong className="text-amber-400">Randomize:</strong> Picks any option randomly (ideal for Gender/Age categories)
+                        </p>
+                      </div>
+                    )}
+
+                    {/* B-Roll Configuration */}
+                    <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+                      <label className="text-xs text-slate-400 mb-2 block font-medium flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" /></svg>
+                        B-Roll Settings (Coming Soon):
+                      </label>
+                      <div className="flex items-center gap-3 text-xs opacity-50">
+                        <label className="flex items-center gap-2 cursor-not-allowed">
+                          <input type="checkbox" disabled className="accent-purple-500" />
+                          <span className="text-white">Include 1 B-Roll per page</span>
+                        </label>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-2">
+                        B-Roll images show general scenes (cleaning supplies, branded vehicles, etc.)
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    Enable Smart Content Matching to have AI automatically select images based on article content for optimal SEO.
+                  </p>
+                )}
+              </div>
+
+              {/* ─────────────────────────────────────────────────────
+                  SECTION 3: Variation Order
+              ───────────────────────────────────────────────────── */}
+              <div className="bg-slate-800/50 rounded-lg border border-orange-500/30 overflow-hidden">
+                <button onClick={() => setIsOrderOpen(!isOrderOpen)} className="w-full flex items-center justify-between p-4 text-orange-400 hover:bg-slate-800/80 transition">
+                  <span className="flex items-center gap-2 font-semibold">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                    Variation Order
+                    <span className="text-xs text-orange-300/70 font-normal ml-2">
+                      ({settings.variation_order_mode === 'manual' ? `${settings.manual_variation_order?.length || 0} set` : settings.variation_order_mode})
+                    </span>
+                  </span>
+                  <svg className={`w-5 h-5 transition-transform ${isOrderOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                </button>
+                {isOrderOpen && (
+                  <div className="p-4 border-t border-orange-500/30 space-y-3 bg-slate-900/50">
+                    <p className="text-xs text-brand-gold/70">Define the order variations are used across pages. Each page gets unique variations.</p>
+
+                    <div className="flex items-center gap-3 mb-2">
+                      <label className="text-xs text-brand-gold/70">Mode:</label>
+                      <select
+                        value={settings.variation_order_mode || 'sequential'}
+                        onChange={(e) => updateSettings({ variation_order_mode: e.target.value as any })}
+                        className="bg-slate-800 border border-brand-gold/50 rounded px-3 py-1.5 text-white text-xs"
+                      >
+                        <option value="sequential">Sequential (1, 2, 3...)</option>
+                        <option value="random">Random (no duplicates)</option>
+                        <option value="manual">Manual Order Below</option>
+                      </select>
+                      {settings.variation_order_mode === 'manual' && (
+                        <button onClick={clearVariationOrder} className="text-xs text-red-400 hover:text-red-300">Clear Order</button>
+                      )}
+                    </div>
+
+                    {settings.variation_order_mode === 'manual' && (
+                      <div className="flex flex-wrap gap-2">
+                        {activeAvatar?.variations.map((v) => {
+                          const orderNum = getVariationOrderNumber(v.id);
+                          return (
+                            <button
+                              key={v.id}
+                              onClick={() => handleSetVariationOrder(v.id)}
+                              className={`relative px-3 py-1.5 rounded text-xs font-medium transition ${orderNum ? 'bg-orange-500 text-slate-900' : 'bg-slate-800 text-brand-gold border border-brand-gold/50 hover:bg-slate-700'}`}
+                            >
+                              {orderNum && <span className="absolute -top-2 -left-2 w-5 h-5 bg-orange-700 text-white rounded-full text-[10px] flex items-center justify-center">{orderNum}</span>}
+                              {v.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {settings.manual_variation_order && settings.manual_variation_order.length > 0 && settings.variation_order_mode === 'manual' && (
+                      <div className="text-xs text-orange-300 bg-orange-900/30 p-2 rounded border border-orange-500/30">
+                        Order: {settings.manual_variation_order.map((id, idx) => {
+                          const v = activeAvatar?.variations.find(v => v.id === id);
+                          return v ? `${idx + 1}. ${v.name}` : '';
+                        }).filter(Boolean).join(' → ')}
+                      </div>
+                    )}
                   </div>
                 )}
-
-                {/* B-Roll Configuration */}
-                <div className="bg-slate-800/50 rounded-lg p-3">
-                  <label className="text-xs text-purple-400 mb-2 block">B-Roll Settings:</label>
-                  <div className="flex items-center gap-3 text-xs">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" className="accent-purple-500" />
-                      <span className="text-white">Include 1 B-Roll per page</span>
-                    </label>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-2">
-                    B-Roll images show general scenes (cleaning supplies, branded vehicles, etc.)
-                  </p>
-                </div>
-
-                <div className="text-[10px] text-slate-500 space-y-1 border-t border-slate-700 pt-2">
-                  <p><strong>Bank First:</strong> Search bank for matching image → Generate if no match</p>
-                  <p><strong>Generate First:</strong> Always generate fresh → Save to bank for future</p>
-                  <p><strong>Bank Only:</strong> Only use existing bank images → Skip if no match</p>
-                  <p><strong>Generate Only:</strong> Always generate new → Don't use bank</p>
-                </div>
               </div>
-            ) : (
-              <p className="text-xs text-slate-500">
-                Enable to have AI automatically match images to article content for optimal SEO.
-                Images will be selected or generated based on the text they appear next to.
-              </p>
-            )}
+            </div>
           </div>
 
       {saving && (

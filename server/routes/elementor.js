@@ -388,15 +388,96 @@ router.post('/publish', async (req, res) => {
 
           console.log('[Image Bank] Available images after filter:', availableImages.length);
 
-          // Sort by variation order
-          if (variationOrderMode === 'manual' && manualOrder.length > 0) {
-            availableImages = availableImages.sort((a, b) => {
-              const aIdx = manualOrder.indexOf(a.variationId);
-              const bIdx = manualOrder.indexOf(b.variationId);
-              return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+          // ═══════════════════════════════════════════════════════════════
+          // SMART CONTENT MATCHING - Match images to article content
+          // ═══════════════════════════════════════════════════════════════
+          const smartMatchingEnabled = config.smart_matching_enabled || false;
+          const smartMatchingMode = config.smart_matching_mode || 'bank_first';
+
+          if (smartMatchingEnabled && targetAvatar?.placeholderCategories?.length > 0) {
+            console.log('[Smart Matching] Enabled, mode:', smartMatchingMode);
+
+            // Normalize article content for keyword matching
+            const articleText = (cleanedContent || contentHtml || '').toLowerCase();
+
+            // Score each image based on keyword matches
+            availableImages = availableImages.map(img => {
+              let matchScore = 0;
+              const matchedKeywords = [];
+
+              // Parse image variation string to extract placeholder codes
+              // Format: "I3 · (H) · G2" or "I3-(H)-G2"
+              const variationStr = img.variation || img.shortLabel || '';
+              const parts = variationStr.split(/[·\-\s]+/).filter(Boolean);
+
+              // For each placeholder category
+              targetAvatar.placeholderCategories.forEach((cat, catIdx) => {
+                // Skip randomized categories - they don't need matching
+                if (cat.isRandomized) {
+                  console.log('[Smart Matching] Skipping randomized category:', cat.name);
+                  return;
+                }
+
+                // Find the code for this category in the image variation
+                // Get category initial (e.g., "Item_Cleaning" -> "I")
+                const catInitial = cat.name.charAt(0).toUpperCase();
+
+                // Find matching part (e.g., "I3" for Item_Cleaning option 3)
+                const matchingPart = parts.find(p => {
+                  const partMatch = p.match(/^([A-Z])(\d+)$/i);
+                  return partMatch && partMatch[1].toUpperCase() === catInitial;
+                });
+
+                if (matchingPart) {
+                  const optionNum = parseInt(matchingPart.slice(1));
+                  const option = cat.options?.find(o => o.number === optionNum);
+
+                  if (option?.keyword) {
+                    // Check if keyword appears in article
+                    const keywords = option.keyword.toLowerCase().split(/[,;]+/).map(k => k.trim()).filter(Boolean);
+
+                    for (const kw of keywords) {
+                      if (kw && articleText.includes(kw)) {
+                        matchScore += 1;
+                        matchedKeywords.push(kw);
+                        console.log('[Smart Matching] Image', img.id, 'matched keyword:', kw);
+                      }
+                    }
+                  }
+                }
+              });
+
+              return { ...img, matchScore, matchedKeywords };
             });
-          } else if (variationOrderMode === 'random') {
-            availableImages = availableImages.sort(() => Math.random() - 0.5);
+
+            // Sort by match score (highest first), then by original order
+            availableImages.sort((a, b) => {
+              if (b.matchScore !== a.matchScore) {
+                return b.matchScore - a.matchScore;
+              }
+              return 0; // Maintain original order for equal scores
+            });
+
+            console.log('[Smart Matching] Scored images:', availableImages.map(img => ({
+              id: img.id,
+              variation: img.variation,
+              score: img.matchScore,
+              keywords: img.matchedKeywords
+            })));
+          }
+
+          // Sort by variation order (if not using smart matching or as tiebreaker)
+          // Apply variation order sorting only if NOT using smart matching
+          if (!smartMatchingEnabled) {
+            if (variationOrderMode === 'manual' && manualOrder.length > 0) {
+              availableImages = availableImages.sort((a, b) => {
+                const aIdx = manualOrder.indexOf(a.variationId);
+                const bIdx = manualOrder.indexOf(b.variationId);
+                return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+              });
+            } else if (variationOrderMode === 'random') {
+              availableImages = availableImages.sort(() => Math.random() - 0.5);
+            }
           }
 
           // === IMAGE SELECTION LOGIC ===
