@@ -22,6 +22,7 @@ import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components
 import WordPressSettings from './src/components/WordPressSettings';
 import ArticlesPage from './src/pages/ArticlesPage';
 import ImageCreationSection from './src/components/ImageCreationSection';
+import SitePlanningSection from './src/components/SitePlanningSection';
 
 // Types for workflow
 interface WorkflowItem {
@@ -2910,6 +2911,18 @@ const App: React.FC = () => {
                             tags={currentProject?.state.tags || []}
                             showNotification={showNotification}
                             addLog={addLog}
+                        />
+                    )}
+
+                    {/* 8. Site Planning Section */}
+                    {renderSection('8. Site Planning', 'sitePlanning',
+                        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                        </svg>,
+                        <SitePlanningSection
+                            workflowId={currentWorkflowId}
+                            websiteId={currentProject?.website_id || undefined}
+                            showNotification={showNotification}
                         />
                     )}
 

@@ -278,10 +278,70 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
 );
 
 -- ============================================
+-- SITE PLANNING (Section 8 - The Site Truth)
+-- ============================================
+
+-- Site Plan - The master plan for a website's structure
+CREATE TABLE IF NOT EXISTS site_plans (
+  id SERIAL PRIMARY KEY,
+  website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
+  workflow_id INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
+  name VARCHAR(255) DEFAULT 'Site Structure',
+  description TEXT,
+  -- Settings
+  auto_sync_check BOOLEAN DEFAULT true, -- Alert if WP structure differs from plan
+  last_sync_check TIMESTAMP,
+  sync_status VARCHAR(20) DEFAULT 'unknown', -- 'synced', 'differs', 'unknown'
+  -- Metadata
+  total_pages INTEGER DEFAULT 0,
+  max_depth INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Site Plan Nodes - Individual pages/nodes in the site structure
+CREATE TABLE IF NOT EXISTS site_plan_nodes (
+  id SERIAL PRIMARY KEY,
+  site_plan_id INTEGER REFERENCES site_plans(id) ON DELETE CASCADE,
+  parent_id INTEGER REFERENCES site_plan_nodes(id) ON DELETE CASCADE, -- NULL = root node
+  -- Page info
+  title VARCHAR(255) NOT NULL,
+  slug VARCHAR(255),
+  page_type VARCHAR(50) DEFAULT 'page', -- 'page', 'post', 'category', 'landing', 'service', 'location', 'blog'
+  -- Status tracking
+  status VARCHAR(20) DEFAULT 'planned', -- 'planned', 'in_progress', 'built', 'published', 'needs_update'
+  wp_page_id INTEGER, -- Linked WordPress page ID once built
+  wp_post_url VARCHAR(500),
+  -- Content planning
+  target_keyword VARCHAR(255),
+  meta_title VARCHAR(255),
+  meta_description TEXT,
+  content_brief TEXT,
+  assigned_article_id INTEGER REFERENCES articles(id) ON DELETE SET NULL,
+  -- Position in tree
+  sort_order INTEGER DEFAULT 0,
+  depth INTEGER DEFAULT 0, -- 0 = root, 1 = first level, etc.
+  -- SEO/Structure
+  is_pillar_page BOOLEAN DEFAULT false, -- Main category/pillar page
+  is_in_menu BOOLEAN DEFAULT true,
+  menu_order INTEGER,
+  -- Timestamps
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  built_at TIMESTAMP, -- When page was actually created in WP
+  published_at TIMESTAMP
+);
+
+-- ============================================
 -- INDEXES
 -- ============================================
 
 CREATE INDEX IF NOT EXISTS idx_image_creation_workflow ON image_creation_settings(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_site_plans_website ON site_plans(website_id);
+CREATE INDEX IF NOT EXISTS idx_site_plans_workflow ON site_plans(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_site_plan_nodes_plan ON site_plan_nodes(site_plan_id);
+CREATE INDEX IF NOT EXISTS idx_site_plan_nodes_parent ON site_plan_nodes(parent_id);
+CREATE INDEX IF NOT EXISTS idx_site_plan_nodes_wp_page ON site_plan_nodes(wp_page_id);
 CREATE INDEX IF NOT EXISTS idx_locations_client_id ON locations(client_id);
 CREATE INDEX IF NOT EXISTS idx_websites_client_id ON websites(client_id);
 CREATE INDEX IF NOT EXISTS idx_workflows_client_id ON workflows(client_id);
