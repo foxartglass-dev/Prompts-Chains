@@ -45,12 +45,14 @@ interface PlaceholderCategory {
   name: string; // Display name: "Cleaning Item"
   placeholder: string; // The placeholder text: "{Cleaning_Item}"
   options: PlaceholderOption[];
+  isRandomized?: boolean; // If true, pick random option instead of keyword matching
 }
 
 // An option within a category
 interface PlaceholderOption {
   number: number; // 1, 2, 3...
   text: string; // "cleaning the stove burners"
+  keyword?: string; // Short keyword for matching: "kitchen", "bathroom", etc.
 }
 
 // Generation mode for advanced placeholder system
@@ -775,7 +777,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     // Map combinations to objects with labels and replacement maps
     return allCombinations.map((combo, idx) => {
       const label = combo.map((opt, catIdx) => opt.text).join(' + ');
-      const shortLabel = combo.map((opt, catIdx) => `${categories[catIdx].name.charAt(0)}${opt.number}`).join('-');
+      // Build shortLabel with avatar tag in middle: I3-(H)-G2
+      // Use serif-style I with brackets for readability
+      const avatarTag = activeAvatar?.tag || '?';
+      const categoryParts = combo.map((opt, catIdx) => {
+        const catInitial = categories[catIdx].name.charAt(0).toUpperCase();
+        return `${catInitial}${opt.number}`;
+      });
+      // Insert avatar tag in the middle
+      const midpoint = Math.ceil(categoryParts.length / 2);
+      const partsWithTag = [
+        ...categoryParts.slice(0, midpoint),
+        `(${avatarTag})`,
+        ...categoryParts.slice(midpoint)
+      ];
+      const shortLabel = partsWithTag.join(' · '); // Use centered dot for better spacing
       const replacements: Record<string, string> = {};
       categories.forEach((cat, catIdx) => {
         replacements[cat.placeholder] = combo[catIdx].text;
@@ -2262,7 +2278,7 @@ Start by introducing yourself and asking about their business in a friendly way.
     handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCategories });
   };
 
-  const handleUpdatePlaceholderOption = (categoryId: string, optionNumber: number, text: string) => {
+  const handleUpdatePlaceholderOption = (categoryId: string, optionNumber: number, updates: { text?: string; keyword?: string }) => {
     if (!activeAvatar) return;
     const categories = activeAvatar.placeholderCategories || [];
     const updatedCategories = categories.map(cat => {
@@ -2270,7 +2286,7 @@ Start by introducing yourself and asking about their business in a friendly way.
         return {
           ...cat,
           options: cat.options.map(opt =>
-            opt.number === optionNumber ? { ...opt, text } : opt
+            opt.number === optionNumber ? { ...opt, ...updates } : opt
           )
         };
       }
@@ -2944,20 +2960,28 @@ Start by introducing yourself and asking about their business in a friendly way.
                         </div>
 
                         {/* Options for this category */}
-                        <div className="pl-4 space-y-1">
+                        <div className="pl-4 space-y-2">
                           {category.options.map((option, optIndex) => (
                             <div key={option.number} className="flex items-center gap-2">
-                              <span className="w-6 text-center text-xs text-purple-400 font-bold">{option.number}</span>
+                              <span className="w-6 text-center text-sm text-purple-400 font-bold font-serif">{option.number}</span>
+                              <input
+                                type="text"
+                                value={option.keyword || ''}
+                                onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { keyword: e.target.value })}
+                                className="w-20 bg-slate-900 border border-amber-500/50 rounded px-2 py-1 text-amber-400 text-xs font-medium"
+                                placeholder="keyword"
+                                title="Keyword for Smart Content Matching"
+                              />
                               <input
                                 type="text"
                                 value={option.text}
-                                onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, e.target.value)}
+                                onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { text: e.target.value })}
                                 className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-xs"
                                 placeholder={`Option ${option.number} text...`}
                               />
                               <button
                                 onClick={() => handleRemovePlaceholderOption(category.id, option.number)}
-                                className="text-red-400 hover:text-red-300 text-xs"
+                                className="text-red-400 hover:text-red-300 text-sm font-bold"
                               >
                                 ×
                               </button>
@@ -3931,7 +3955,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                         />
                         {/* Hover overlay with actions */}
                         <div className="absolute inset-0 top-6 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded-b flex flex-col items-center justify-center p-1 gap-1">
-                          <span className="text-[10px] text-white font-semibold">{img.variation}</span>
+                          <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
+                          {img.avatarTag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatarTag}</span>}
                           <div className="flex gap-1 flex-wrap justify-center">
                             <button onClick={() => setPreviewImage(img)} className="px-2 py-0.5 bg-blue-600/80 rounded text-white text-[10px]">Expand</button>
                             <button onClick={() => handleDownloadImage(img)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Download</button>
@@ -3978,7 +4003,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <img src={img.url} alt={img.variation} className="w-full h-24 object-cover rounded border border-purple-500/30 opacity-70" />
                         <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-purple-600/90 rounded text-[9px] text-white">USED</div>
                         <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
-                          <span className="text-[10px] text-white font-semibold">{img.variation}</span>
+                          <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
+                          {img.avatarTag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatarTag}</span>}
                           {img.usedOn && <a href={img.usedOn} target="_blank" rel="noopener noreferrer" className="text-[9px] text-brand-cyan underline">View Page</a>}
                           <button onClick={() => handleRestoreFromUsed(img.id)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Restore</button>
                         </div>
@@ -4091,30 +4117,98 @@ Start by introducing yourself and asking about their business in a friendly way.
             </div>
 
             {settings.smart_matching_enabled ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <p className="text-xs text-purple-300/70">
-                  AI analyzes article text and automatically matches or generates images based on surrounding content.
-                  Images placed next to text about "cleaning the sink" will show sink cleaning.
+                  AI analyzes article text and matches images based on keywords in placeholder categories.
+                  Use the keyword field in each placeholder option above to define match terms.
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'bank_first' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'bank_first'} onChange={() => updateSettings({ smart_matching_mode: 'bank_first' })} className="hidden" />
-                    <span className="text-xs font-medium">Bank First</span>
-                  </label>
-                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'generate_first' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'generate_first'} onChange={() => updateSettings({ smart_matching_mode: 'generate_first' })} className="hidden" />
-                    <span className="text-xs font-medium">Generate First</span>
-                  </label>
-                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'bank_only' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'bank_only'} onChange={() => updateSettings({ smart_matching_mode: 'bank_only' })} className="hidden" />
-                    <span className="text-xs font-medium">Bank Only</span>
-                  </label>
-                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'generate_only' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'generate_only'} onChange={() => updateSettings({ smart_matching_mode: 'generate_only' })} className="hidden" />
-                    <span className="text-xs font-medium">Generate Only</span>
-                  </label>
+
+                {/* Smart Matching Mode */}
+                <div>
+                  <label className="text-xs text-purple-400 mb-2 block">Matching Strategy:</label>
+                  <div className="flex flex-wrap gap-2">
+                    <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'bank_first' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                      <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'bank_first'} onChange={() => updateSettings({ smart_matching_mode: 'bank_first' })} className="hidden" />
+                      <span className="text-xs font-medium">Bank First</span>
+                    </label>
+                    <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'generate_first' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                      <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'generate_first'} onChange={() => updateSettings({ smart_matching_mode: 'generate_first' })} className="hidden" />
+                      <span className="text-xs font-medium">Generate First</span>
+                    </label>
+                    <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'bank_only' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                      <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'bank_only'} onChange={() => updateSettings({ smart_matching_mode: 'bank_only' })} className="hidden" />
+                      <span className="text-xs font-medium">Bank Only</span>
+                    </label>
+                    <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'generate_only' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                      <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'generate_only'} onChange={() => updateSettings({ smart_matching_mode: 'generate_only' })} className="hidden" />
+                      <span className="text-xs font-medium">Generate Only</span>
+                    </label>
+                  </div>
                 </div>
-                <div className="text-[10px] text-slate-500 space-y-1">
+
+                {/* Category Matching Configuration */}
+                {activeAvatar?.placeholderCategories && activeAvatar.placeholderCategories.length > 0 && (
+                  <div className="bg-slate-800/50 rounded-lg p-3">
+                    <label className="text-xs text-purple-400 mb-2 block">Category Matching Rules:</label>
+                    <div className="space-y-2">
+                      {activeAvatar.placeholderCategories.map(cat => (
+                        <div key={cat.id} className="flex items-center gap-3 text-xs">
+                          <span className="text-white font-medium w-28 truncate">{cat.name}</span>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`cat-match-${cat.id}`}
+                              checked={!cat.isRandomized}
+                              onChange={() => {
+                                const updatedCats = activeAvatar.placeholderCategories?.map(c =>
+                                  c.id === cat.id ? { ...c, isRandomized: false } : c
+                                );
+                                handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCats });
+                              }}
+                              className="accent-purple-500"
+                            />
+                            <span className="text-purple-300">Match Keywords</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`cat-match-${cat.id}`}
+                              checked={cat.isRandomized === true}
+                              onChange={() => {
+                                const updatedCats = activeAvatar.placeholderCategories?.map(c =>
+                                  c.id === cat.id ? { ...c, isRandomized: true } : c
+                                );
+                                handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCats });
+                              }}
+                              className="accent-amber-500"
+                            />
+                            <span className="text-amber-300">Randomize</span>
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-2">
+                      <strong>Match Keywords:</strong> Use keyword field to match article content<br/>
+                      <strong>Randomize:</strong> Pick any option randomly (e.g., Gender/Age)
+                    </p>
+                  </div>
+                )}
+
+                {/* B-Roll Configuration */}
+                <div className="bg-slate-800/50 rounded-lg p-3">
+                  <label className="text-xs text-purple-400 mb-2 block">B-Roll Settings:</label>
+                  <div className="flex items-center gap-3 text-xs">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" className="accent-purple-500" />
+                      <span className="text-white">Include 1 B-Roll per page</span>
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2">
+                    B-Roll images show general scenes (cleaning supplies, branded vehicles, etc.)
+                  </p>
+                </div>
+
+                <div className="text-[10px] text-slate-500 space-y-1 border-t border-slate-700 pt-2">
                   <p><strong>Bank First:</strong> Search bank for matching image → Generate if no match</p>
                   <p><strong>Generate First:</strong> Always generate fresh → Save to bank for future</p>
                   <p><strong>Bank Only:</strong> Only use existing bank images → Skip if no match</p>
