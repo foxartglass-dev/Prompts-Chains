@@ -60,8 +60,8 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     tags: true,
     snippets: true,
     settings: true,
-    imageCreation: false,
-    sitePlanning: false
+    imageCreation: true,
+    sitePlanning: true
   });
 
   useEffect(() => {

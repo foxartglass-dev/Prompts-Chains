@@ -197,6 +197,7 @@ router.post('/:id/duplicate', requireDb, async (req, res) => {
       if (imageSettings.length > 0) {
         const srcSettings = imageSettings[0];
         console.log('[Workflow Duplicate] Copying image_creation_settings to new workflow:', newWorkflowId);
+        console.log('[Workflow Duplicate] Source settings keys:', Object.keys(srcSettings));
 
         await sql`
           INSERT INTO image_creation_settings (
@@ -204,7 +205,6 @@ router.post('/:id/duplicate', requireDb, async (req, res) => {
             enabled,
             prompt_assistant_model,
             image_generation_model,
-            image_quality,
             reference_images,
             logo_images,
             audience_avatars,
@@ -212,22 +212,21 @@ router.post('/:id/duplicate', requireDb, async (req, res) => {
             image_categories,
             auto_tag_enabled,
             chat_history,
-            dual_chat_left_model,
-            dual_chat_right_model,
-            dual_chat_left_history,
-            dual_chat_right_history,
-            smart_matching_enabled,
-            image_to_variation_map,
+            consultant_chat_history,
+            consultant_model,
+            worker_chat_history,
+            worker_model,
+            integration_mode,
             fallback_to_live,
             image_order,
-            variation_order_mode
+            variation_order_mode,
+            manual_variation_order
           )
           VALUES (
             ${newWorkflowId},
             ${srcSettings.enabled},
             ${srcSettings.prompt_assistant_model},
             ${srcSettings.image_generation_model},
-            ${srcSettings.image_quality},
             ${JSON.stringify(srcSettings.reference_images || [])},
             ${JSON.stringify(srcSettings.logo_images || [])},
             ${JSON.stringify(srcSettings.audience_avatars || [])},
@@ -235,15 +234,15 @@ router.post('/:id/duplicate', requireDb, async (req, res) => {
             ${JSON.stringify(srcSettings.image_categories || [])},
             ${srcSettings.auto_tag_enabled},
             ${JSON.stringify(srcSettings.chat_history || [])},
-            ${srcSettings.dual_chat_left_model},
-            ${srcSettings.dual_chat_right_model},
-            ${JSON.stringify(srcSettings.dual_chat_left_history || [])},
-            ${JSON.stringify(srcSettings.dual_chat_right_history || [])},
-            ${srcSettings.smart_matching_enabled},
-            ${JSON.stringify(srcSettings.image_to_variation_map || {})},
+            ${JSON.stringify(srcSettings.consultant_chat_history || [])},
+            ${srcSettings.consultant_model || 'gpt-4o'},
+            ${JSON.stringify(srcSettings.worker_chat_history || [])},
+            ${srcSettings.worker_model || 'gpt-4o-mini'},
+            ${srcSettings.integration_mode || 'bank'},
             ${srcSettings.fallback_to_live},
             ${JSON.stringify(srcSettings.image_order || [])},
-            ${srcSettings.variation_order_mode}
+            ${srcSettings.variation_order_mode || 'sequential'},
+            ${JSON.stringify(srcSettings.manual_variation_order || [])}
           )
         `;
         console.log('[Workflow Duplicate] Image settings copied successfully');
