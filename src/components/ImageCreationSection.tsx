@@ -424,6 +424,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [showPromptGuide, setShowPromptGuide] = useState(false);
   const [selectedCombinations, setSelectedCombinations] = useState<Set<string>>(new Set()); // For advanced mode batch
 
+  // Extended context for Consultant Chat (articles, workflow info, etc.)
+  const [consultantContext, setConsultantContext] = useState<{
+    articles: any[];
+    workflow: any;
+    websites: any[];
+    lastFetched: string | null;
+  }>({ articles: [], workflow: null, websites: [], lastFetched: null });
+  const [fetchingContext, setFetchingContext] = useState(false);
+
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoFileInputRef = useRef<HTMLInputElement>(null);
@@ -450,6 +459,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       setLoaded(false);
     }
   }, [workflowId]);
+
+  // Fetch extended context when Consultant Chat is opened
+  useEffect(() => {
+    if (isConsultantChatOpen && workflowId) {
+      fetchConsultantContext();
+    }
+  }, [isConsultantChatOpen, workflowId]);
 
   // Sync Tag Manager tags with Audience Avatars
   useEffect(() => {
@@ -566,6 +582,54 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
     setLoading(false);
     setLoaded(true);
+  };
+
+  /**
+   * Fetch extended context for Consultant Chat (articles, workflow, websites)
+   * This gives the AI full visibility into what the user is working on
+   */
+  const fetchConsultantContext = async () => {
+    if (!workflowId) return;
+
+    // Don't refetch if we fetched recently (within 2 minutes)
+    if (consultantContext.lastFetched) {
+      const lastFetch = new Date(consultantContext.lastFetched);
+      const now = new Date();
+      if (now.getTime() - lastFetch.getTime() < 2 * 60 * 1000) {
+        return; // Use cached context
+      }
+    }
+
+    setFetchingContext(true);
+    try {
+      // Fetch workflow details
+      const workflowRes = await fetch(`/api/workflows/${workflowId}`);
+      const workflowData = await workflowRes.json();
+
+      // Fetch articles for this workflow
+      const articlesRes = await fetch(`/api/articles?workflowId=${workflowId}`);
+      const articlesData = await articlesRes.json();
+
+      // Fetch websites
+      const websitesRes = await fetch('/api/websites');
+      const websitesData = await websitesRes.json();
+
+      setConsultantContext({
+        workflow: workflowData.success ? workflowData.workflow : null,
+        articles: articlesData.success ? articlesData.articles : [],
+        websites: websitesData.success ? websitesData.websites : [],
+        lastFetched: new Date().toISOString()
+      });
+
+      console.log('[Image Creation] Fetched consultant context:', {
+        workflow: workflowData.workflow?.name,
+        articleCount: articlesData.articles?.length || 0,
+        websiteCount: websitesData.websites?.length || 0
+      });
+    } catch (error) {
+      console.error('Failed to fetch consultant context:', error);
+    }
+    setFetchingContext(false);
   };
 
   // Debounced save to prevent rapid overwrites
@@ -1076,99 +1140,234 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   /**
    * Build context summary for the consultant chat
-   * Includes: current avatar setup, prompts, variations, reference images, logo, action shots
+   * COMPREHENSIVE: Includes ALL system data - workflow, articles, images, avatars, websites, prompts
+   * This gives the AI full visibility to answer any question about the user's content
    */
   const buildConsultantContext = (): string => {
     const parts: string[] = [];
 
-    parts.push('=== IMAGE CREATION CONSULTANT CONTEXT ===');
-    parts.push('You are an expert image consultant helping design consistent, high-quality images for a client\'s content marketing.');
-    parts.push('You understand SEO, stock photo problems (posed vs natural), and how to create images that match article content.');
+    parts.push('=== COMPREHENSIVE IMAGE & CONTENT CONSULTANT ===');
+    parts.push('You are an expert consultant with FULL VISIBILITY into this content marketing system.');
+    parts.push('You can answer questions about images, articles, prompts, SEO strategy, and help plan content.');
+    parts.push('You understand: image generation, prompt engineering, SEO best practices, stock photo problems, and content strategy.');
     parts.push('');
 
-    // Add GPT-Image model info and prompting knowledge
+    // ========== WORKFLOW & PROJECT CONTEXT ==========
+    parts.push('━━━━━━━━━━ PROJECT CONTEXT ━━━━━━━━━━');
+    if (consultantContext.workflow) {
+      const wf = consultantContext.workflow;
+      parts.push(`📁 WORKFLOW: "${wf.name}"`);
+      if (wf.description) parts.push(`   Description: ${wf.description}`);
+      if (wf.niche) parts.push(`   Niche: ${wf.niche}`);
+      if (wf.target_audience) parts.push(`   Target Audience: ${wf.target_audience}`);
+      if (wf.tone) parts.push(`   Tone: ${wf.tone}`);
+      if (wf.brand_voice) parts.push(`   Brand Voice: ${wf.brand_voice}`);
+    } else {
+      parts.push(`📁 WORKFLOW ID: ${workflowId || 'Not set'}`);
+    }
+    parts.push('');
+
+    // ========== WEBSITES ==========
+    if (consultantContext.websites.length > 0) {
+      parts.push('🌐 CONNECTED WEBSITES:');
+      consultantContext.websites.forEach(w => {
+        parts.push(`   • ${w.name}${w.wp_url ? ` (${w.wp_url})` : ''}`);
+        if (w.client_name) parts.push(`     Client: ${w.client_name}`);
+      });
+      parts.push('');
+    }
+
+    // ========== ARTICLES ==========
+    if (consultantContext.articles.length > 0) {
+      parts.push('━━━━━━━━━━ ARTICLES ━━━━━━━━━━');
+      parts.push(`📝 TOTAL ARTICLES: ${consultantContext.articles.length}`);
+
+      // Group by status
+      const byStatus: { [key: string]: any[] } = {};
+      consultantContext.articles.forEach(a => {
+        const status = a.status || 'unknown';
+        if (!byStatus[status]) byStatus[status] = [];
+        byStatus[status].push(a);
+      });
+
+      Object.entries(byStatus).forEach(([status, articles]) => {
+        parts.push(`   ${status.toUpperCase()}: ${articles.length}`);
+      });
+      parts.push('');
+
+      // Show recent articles with keywords
+      parts.push('📋 ARTICLES LIST (with keywords):');
+      consultantContext.articles.slice(0, 20).forEach((a, idx) => {
+        parts.push(`   ${idx + 1}. "${a.title || a.keyword || '(untitled)'}"`);
+        if (a.keyword) parts.push(`      Keyword: ${a.keyword}`);
+        if (a.meta_title) parts.push(`      Meta Title: ${a.meta_title}`);
+        if (a.status) parts.push(`      Status: ${a.status}`);
+        if (a.images && a.images.length > 0) {
+          parts.push(`      Images: ${a.images.length} attached`);
+        }
+      });
+      if (consultantContext.articles.length > 20) {
+        parts.push(`   ... and ${consultantContext.articles.length - 20} more articles`);
+      }
+      parts.push('');
+    }
+
+    // ========== AUDIENCE TAGS ==========
+    if (tags.length > 0) {
+      parts.push('━━━━━━━━━━ AUDIENCE TAGS ━━━━━━━━━━');
+      parts.push('🏷️ TAGS FROM TAG MANAGER:');
+      tags.forEach(t => {
+        parts.push(`   • ${t.name}${t.description ? `: ${t.description}` : ''}`);
+      });
+      parts.push('');
+    }
+
+    // ========== IMAGE GENERATION MODEL ==========
+    parts.push('━━━━━━━━━━ IMAGE GENERATION ━━━━━━━━━━');
     const selectedModel = settings.image_generation_model || 'gpt-image-1.5';
     parts.push(`🎨 ACTIVE IMAGE MODEL: ${selectedModel}`);
+    parts.push(`   Quality Setting: ${settings.image_quality || 'low'}`);
 
     if (selectedModel.startsWith('gpt-image')) {
       parts.push('');
-      parts.push('📚 GPT-IMAGE PROMPTING KNOWLEDGE (use this to craft better prompts):');
+      parts.push('📚 GPT-IMAGE PROMPTING BEST PRACTICES:');
       GPT_IMAGE_PROMPT_GUIDE.sections.forEach(section => {
-        parts.push(`  ${section.title}:`);
-        section.tips.forEach(tip => {
-          parts.push(`    • ${tip}`);
+        parts.push(`   ${section.title}:`);
+        section.tips.slice(0, 3).forEach(tip => {
+          parts.push(`     • ${tip}`);
         });
       });
-      parts.push('');
-      parts.push('IMPORTANT: Apply this prompting knowledge when helping craft or improve prompts.');
     }
     parts.push('');
 
-    // Current avatar info
-    if (activeAvatar) {
-      parts.push(`📌 ACTIVE AVATAR: ${activeAvatar.name}${activeAvatar.tag ? ` (Tag: ${activeAvatar.tag})` : ''}`);
-      if (activeAvatar.mainPrompt) {
-        parts.push(`📝 MAIN PROMPT TEMPLATE:`);
-        parts.push(`"${activeAvatar.mainPrompt}"`);
+    // ========== AUDIENCE AVATARS (FULL DETAIL) ==========
+    parts.push('━━━━━━━━━━ AUDIENCE AVATARS ━━━━━━━━━━');
+    parts.push(`👥 TOTAL AVATARS: ${settings.audience_avatars.length}`);
+    parts.push('');
+
+    settings.audience_avatars.forEach((avatar, aIdx) => {
+      const isActive = avatar.id === activeAvatarId;
+      parts.push(`${isActive ? '▶️' : '  '} AVATAR ${aIdx + 1}: ${avatar.name}${avatar.tag ? ` [Tag: ${avatar.tag}]` : ''}`);
+
+      if (avatar.mainPrompt) {
+        parts.push(`      📝 Main Prompt Template:`);
+        parts.push(`         "${avatar.mainPrompt}"`);
       }
 
-      // Add placeholder categories (this is the key addition!)
-      if (activeAvatar.placeholderMode === 'advanced' && activeAvatar.placeholderCategories && activeAvatar.placeholderCategories.length > 0) {
-        parts.push('');
-        parts.push('🔧 PLACEHOLDER CATEGORIES (these create variations):');
-        activeAvatar.placeholderCategories.forEach(cat => {
-          parts.push(`  📂 ${cat.name} → placeholder: ${cat.placeholder}`);
+      // Placeholder categories (advanced mode)
+      if (avatar.placeholderMode === 'advanced' && avatar.placeholderCategories && avatar.placeholderCategories.length > 0) {
+        parts.push(`      🔧 Placeholder Categories:`);
+        avatar.placeholderCategories.forEach(cat => {
+          parts.push(`         ${cat.name} (${cat.placeholder}):`);
           if (cat.options && cat.options.length > 0) {
-            cat.options.forEach((opt, idx) => {
-              parts.push(`     ${idx + 1}. "${opt.text}"`);
+            cat.options.forEach((opt, optIdx) => {
+              parts.push(`           ${optIdx + 1}. "${opt.text}"`);
             });
           }
         });
-        parts.push('');
-        parts.push('When the prompt is generated, placeholders like {Item_Cleaning} get replaced with one of the options above.');
       }
 
-      if (activeAvatar.variations.length > 0) {
-        parts.push('');
-        parts.push(`🎨 VARIATIONS (${activeAvatar.variations.length}):`);
-        activeAvatar.variations.forEach(v => {
-          parts.push(`  - ${v.name} (${v.orientation}): "${v.prompt.substring(0, 100)}${v.prompt.length > 100 ? '...' : ''}"`);
+      // Variations
+      if (avatar.variations.length > 0) {
+        parts.push(`      🎨 Variations (${avatar.variations.length}):`);
+        avatar.variations.forEach(v => {
+          parts.push(`         • ${v.name} (${v.orientation}): "${v.prompt.substring(0, 80)}${v.prompt.length > 80 ? '...' : ''}"`);
         });
       }
-    }
+      parts.push('');
+    });
+
+    // ========== IMAGE BANK (DETAILED) ==========
+    parts.push('━━━━━━━━━━ IMAGE BANK ━━━━━━━━━━');
+    const availableImages = settings.image_bank.filter(i => !i.used && !i.archived);
+    const usedImages = settings.image_bank.filter(i => i.used);
+    const archivedImages = settings.image_bank.filter(i => i.archived);
+
+    parts.push(`🏦 IMAGE BANK STATS:`);
+    parts.push(`   Total: ${settings.image_bank.length}`);
+    parts.push(`   Available: ${availableImages.length}`);
+    parts.push(`   Used: ${usedImages.length}`);
+    parts.push(`   Archived: ${archivedImages.length}`);
     parts.push('');
 
-    // All avatars summary
-    if (settings.audience_avatars.length > 1) {
-      parts.push(`👥 ALL AVATARS (${settings.audience_avatars.length}):`);
-      settings.audience_avatars.forEach(a => {
-        parts.push(`  - ${a.name}${a.tag ? ` [${a.tag}]` : ''}: ${a.variations.length} variations`);
+    // Categories in bank
+    if (settings.image_categories.length > 0) {
+      parts.push('📂 IMAGE CATEGORIES:');
+      settings.image_categories.forEach(cat => {
+        const count = settings.image_bank.filter(i => i.category === cat).length;
+        parts.push(`   • ${cat}: ${count} images`);
       });
       parts.push('');
     }
 
-    // Reference images count
-    if (settings.reference_images.length > 0) {
-      parts.push(`📷 REFERENCE IMAGES: ${settings.reference_images.length} images uploaded for style reference`);
+    // Show sample bank images with prompts
+    if (settings.image_bank.length > 0) {
+      parts.push('📸 SAMPLE BANK IMAGES (showing prompts used):');
+      settings.image_bank.slice(0, 10).forEach((img, idx) => {
+        parts.push(`   ${idx + 1}. ${img.title || '(untitled)'}`);
+        parts.push(`      Category: ${img.category || 'Uncategorized'}`);
+        if (img.prompt) {
+          parts.push(`      Prompt: "${img.prompt.substring(0, 100)}${img.prompt.length > 100 ? '...' : ''}"`);
+        }
+        if (img.avatarTag) parts.push(`      Avatar Tag: ${img.avatarTag}`);
+        if (img.orientation) parts.push(`      Orientation: ${img.orientation}`);
+      });
+      if (settings.image_bank.length > 10) {
+        parts.push(`   ... and ${settings.image_bank.length - 10} more images in bank`);
+      }
+      parts.push('');
     }
 
-    // Logo info
+    // ========== REFERENCE IMAGES & BRANDING ==========
+    parts.push('━━━━━━━━━━ BRANDING & STYLE ━━━━━━━━━━');
+
+    if (settings.reference_images.length > 0) {
+      parts.push(`📷 REFERENCE IMAGES: ${settings.reference_images.length} uploaded`);
+      parts.push('   (These define the visual style the user wants)');
+      settings.reference_images.forEach((ref, idx) => {
+        if (ref.filename) parts.push(`   ${idx + 1}. ${ref.filename}`);
+        if (ref.tags && ref.tags.length > 0) {
+          parts.push(`      Tags: ${ref.tags.join(', ')}`);
+        }
+      });
+      parts.push('');
+    }
+
     const logos = settings.logo_images.filter(i => i.type === 'logo');
     const actions = settings.logo_images.filter(i => i.type === 'action');
-    if (logos.length > 0 || actions.length > 0) {
-      parts.push(`🏷️ BRANDING: ${logos.length} logo(s), ${actions.length} action shot(s)`);
+    if (logos.length > 0) {
+      parts.push(`🏷️ LOGO IMAGES: ${logos.length}`);
     }
-
-    // Image bank stats
-    const availableCount = settings.image_bank.filter(i => !i.used).length;
-    const usedCount = settings.image_bank.filter(i => i.used).length;
-    if (settings.image_bank.length > 0) {
-      parts.push(`🏦 IMAGE BANK: ${availableCount} available, ${usedCount} used`);
+    if (actions.length > 0) {
+      parts.push(`📸 ACTION SHOTS (logo in use): ${actions.length}`);
+      parts.push('   (These show the logo/brand in real-world context)');
     }
-
     parts.push('');
-    parts.push('YOUR ROLE: Help dial in the image style, suggest improvements to prompts and placeholder options, discuss what types of images would work best for their articles and SEO strategy.');
-    parts.push('You can suggest adding new placeholder options, modifying the main prompt, or creating new variations.');
+
+    // ========== SMART MATCHING SETTINGS ==========
+    parts.push('━━━━━━━━━━ INTEGRATION SETTINGS ━━━━━━━━━━');
+    parts.push(`🔄 Integration Mode: ${settings.integration_mode}`);
+    parts.push(`   Smart Matching: ${settings.smart_matching_enabled ? 'ON' : 'OFF'}`);
+    if (settings.smart_matching_enabled) {
+      parts.push(`   Matching Mode: ${settings.smart_matching_mode}`);
+    }
+    parts.push(`   Fallback to Live Generation: ${settings.fallback_to_live ? 'Yes' : 'No'}`);
+    parts.push(`   Variation Order: ${settings.variation_order_mode}`);
+    parts.push('');
+
+    // ========== ROLE & CAPABILITIES ==========
+    parts.push('━━━━━━━━━━ YOUR CAPABILITIES ━━━━━━━━━━');
+    parts.push('You can help with:');
+    parts.push('   • Crafting and improving image prompts');
+    parts.push('   • Suggesting new placeholder options and variations');
+    parts.push('   • Planning image strategy for articles');
+    parts.push('   • Analyzing which images would work best for specific content');
+    parts.push('   • Recommending categories and organization');
+    parts.push('   • SEO optimization for image alt text');
+    parts.push('   • Brand consistency across all imagery');
+    parts.push('   • Answering questions about any aspect of the content system');
+    parts.push('');
+    parts.push('Ask me anything about images, articles, prompts, or content strategy!');
 
     return parts.join('\n');
   };
@@ -3122,10 +3321,43 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
                 </div>
 
-                {/* Context info panel */}
-                <div className="px-3 py-2 bg-indigo-900/10 border-b border-indigo-500/20 text-xs text-indigo-300/70">
-                  <strong>Context:</strong> {settings.reference_images.length} ref images, {logoImages.length} logo, {actionShots.length} action shots, {availableImages.length} bank images •
-                  This AI can see your images and help dial in your style.
+                {/* Context info panel - Enhanced visibility */}
+                <div className="px-3 py-2 bg-indigo-900/20 border-b border-indigo-500/20 text-xs">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3 text-indigo-300/80">
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                        <strong>AI Sees:</strong>
+                      </span>
+                      {consultantContext.workflow && (
+                        <span title="Workflow info">📁 {consultantContext.workflow.name}</span>
+                      )}
+                      {consultantContext.articles.length > 0 && (
+                        <span title="Articles">📝 {consultantContext.articles.length} articles</span>
+                      )}
+                      {consultantContext.websites.length > 0 && (
+                        <span title="Websites">🌐 {consultantContext.websites.length} sites</span>
+                      )}
+                      <span title="Reference images">📷 {settings.reference_images.length}</span>
+                      <span title="Image bank">🏦 {availableImages.length}</span>
+                      <span title="Avatars">👥 {settings.audience_avatars.length}</span>
+                      {tags.length > 0 && <span title="Tags">🏷️ {tags.length}</span>}
+                    </div>
+                    <button
+                      onClick={() => fetchConsultantContext()}
+                      disabled={fetchingContext}
+                      className="px-2 py-0.5 bg-indigo-600/30 hover:bg-indigo-600/50 rounded text-indigo-300 transition flex items-center gap-1"
+                      title="Refresh context data"
+                    >
+                      <svg className={`w-3 h-3 ${fetchingContext ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {fetchingContext ? 'Loading...' : 'Refresh'}
+                    </button>
+                  </div>
+                  <div className="mt-1 text-indigo-400/60">
+                    Full context: workflow details, all articles, prompts, placeholders, image bank, branding, and settings
+                  </div>
                 </div>
 
                 {/* Prompt Planning Session Banner */}
@@ -3142,10 +3374,25 @@ Start by introducing yourself and asking about their business in a friendly way.
                 {/* Chat messages */}
                 <div ref={consultantChatRef} className="h-72 overflow-y-auto p-4 space-y-3">
                   {settings.consultant_chat_history.length === 0 ? (
-                    <div className="text-center text-indigo-300/50 py-8 space-y-2">
-                      <p className="text-lg">🎨 Image Style Consultant</p>
-                      <p className="text-sm">Discuss your brand, show reference images, and dial in the perfect style.</p>
-                      <p className="text-xs text-indigo-400/50">This chat automatically sees your uploaded images for context.</p>
+                    <div className="text-center text-indigo-300/50 py-6 space-y-3">
+                      <p className="text-lg">🎨 Full-Context Consultant</p>
+                      <p className="text-sm">I can see everything in your system and answer any question.</p>
+                      <div className="text-xs text-indigo-400/60 space-y-1">
+                        <p>Ask me about:</p>
+                        <p>• Image prompts, variations, and style strategy</p>
+                        <p>• Your articles, keywords, and content planning</p>
+                        <p>• Which images would work best for specific content</p>
+                        <p>• SEO optimization and brand consistency</p>
+                      </div>
+                      <div className="pt-2">
+                        <button
+                          onClick={startPromptPlanningSession}
+                          disabled={consultantLoading}
+                          className="px-4 py-2 bg-purple-600/50 hover:bg-purple-600 rounded-lg text-white text-sm transition"
+                        >
+                          Or start a Prompt Planning Session
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     settings.consultant_chat_history.filter(m => m.role !== 'system').map((msg, idx) => (
