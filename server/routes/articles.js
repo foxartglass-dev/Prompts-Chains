@@ -386,12 +386,26 @@ router.get('/search/:keyword', requireDb, async (req, res) => {
 });
 
 // POST push images to WordPress media library
-router.post('/push-images', requireDb, async (req, res) => {
+router.post('/:articleId/push-images', requireDb, async (req, res) => {
   try {
-    const { articleId, postId, images, wpUrl, wpUser, wpPassword } = req.body;
+    const { articleId } = req.params;
+    const { wpUrl, wpUser, wpPassword } = req.body;
 
-    if (!articleId || !postId || !images || !wpUrl || !wpUser || !wpPassword) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'Missing WordPress credentials' });
+    }
+
+    // Get article with images from database
+    const articles = await sql`SELECT * FROM articles WHERE id = ${articleId}`;
+    if (articles.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    const article = articles[0];
+    const images = article.generated_images || [];
+
+    if (images.length === 0) {
+      return res.status(400).json({ error: 'No images to push' });
     }
 
     const results = [];
@@ -473,6 +487,8 @@ router.post('/push-images', requireDb, async (req, res) => {
 
     res.json({
       success: true,
+      pushed: successCount,
+      skipped: skippedCount,
       message: `${successCount} images uploaded, ${skippedCount} skipped`,
       results
     });
@@ -484,9 +500,10 @@ router.post('/push-images', requireDb, async (req, res) => {
 });
 
 // POST regenerate a single image for an article
-router.post('/regenerate-image', requireDb, async (req, res) => {
+router.post('/:articleId/regenerate-image', requireDb, async (req, res) => {
   try {
-    const { articleId, imageId, prompt, workflowId } = req.body;
+    const { articleId } = req.params;
+    const { imageId, prompt, workflowId } = req.body;
 
     if (!articleId || !imageId || !prompt) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -570,6 +587,75 @@ router.post('/regenerate-image', requireDb, async (req, res) => {
 
   } catch (error) {
     console.error('[Regenerate Image] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST push meta title and description to WordPress
+router.post('/:articleId/push-meta', requireDb, async (req, res) => {
+  try {
+    const { articleId } = req.params;
+    const { wpUrl, wpUser, wpPassword, wpPostId, metaTitle, metaDescription } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword || !wpPostId) {
+      return res.status(400).json({ error: 'Missing WordPress credentials or post ID' });
+    }
+
+    if (!metaTitle && !metaDescription) {
+      return res.status(400).json({ error: 'No meta data to push' });
+    }
+
+    // Build the update payload for Yoast SEO
+    const updatePayload = {};
+    if (metaTitle) {
+      updatePayload.yoast_head_json = updatePayload.yoast_head_json || {};
+      updatePayload.meta = updatePayload.meta || {};
+      updatePayload.meta._yoast_wpseo_title = metaTitle;
+    }
+    if (metaDescription) {
+      updatePayload.meta = updatePayload.meta || {};
+      updatePayload.meta._yoast_wpseo_metadesc = metaDescription;
+    }
+
+    // Also try updating the standard excerpt as fallback
+    if (metaDescription) {
+      updatePayload.excerpt = metaDescription;
+    }
+
+    const auth = Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
+    const wpApiUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/posts/${wpPostId}`;
+
+    const updateRes = await fetch(wpApiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(updatePayload)
+    });
+
+    if (!updateRes.ok) {
+      const errorText = await updateRes.text();
+      console.error('[Push Meta] WordPress API error:', errorText);
+      return res.status(updateRes.status).json({ error: `WordPress error: ${errorText}` });
+    }
+
+    // Update article with selected meta
+    await sql`
+      UPDATE articles
+      SET selected_meta_title = ${metaTitle || null},
+          selected_meta_description = ${metaDescription || null},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${articleId}
+    `;
+
+    res.json({
+      success: true,
+      message: 'Meta data pushed to WordPress'
+    });
+
+  } catch (error) {
+    console.error('[Push Meta] Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
