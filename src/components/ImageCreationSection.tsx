@@ -1082,6 +1082,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
     parts.push('=== IMAGE CREATION CONSULTANT CONTEXT ===');
     parts.push('You are an expert image consultant helping design consistent, high-quality images for a client\'s content marketing.');
+    parts.push('You understand SEO, stock photo problems (posed vs natural), and how to create images that match article content.');
     parts.push('');
 
     // Add GPT-Image model info and prompting knowledge
@@ -1106,12 +1107,31 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     if (activeAvatar) {
       parts.push(`📌 ACTIVE AVATAR: ${activeAvatar.name}${activeAvatar.tag ? ` (Tag: ${activeAvatar.tag})` : ''}`);
       if (activeAvatar.mainPrompt) {
-        parts.push(`📝 Main Prompt Template: "${activeAvatar.mainPrompt}"`);
+        parts.push(`📝 MAIN PROMPT TEMPLATE:`);
+        parts.push(`"${activeAvatar.mainPrompt}"`);
       }
+
+      // Add placeholder categories (this is the key addition!)
+      if (activeAvatar.placeholderMode === 'advanced' && activeAvatar.placeholderCategories && activeAvatar.placeholderCategories.length > 0) {
+        parts.push('');
+        parts.push('🔧 PLACEHOLDER CATEGORIES (these create variations):');
+        activeAvatar.placeholderCategories.forEach(cat => {
+          parts.push(`  📂 ${cat.name} → placeholder: ${cat.placeholder}`);
+          if (cat.options && cat.options.length > 0) {
+            cat.options.forEach((opt, idx) => {
+              parts.push(`     ${idx + 1}. "${opt.text}"`);
+            });
+          }
+        });
+        parts.push('');
+        parts.push('When the prompt is generated, placeholders like {Item_Cleaning} get replaced with one of the options above.');
+      }
+
       if (activeAvatar.variations.length > 0) {
-        parts.push(`🎨 Variations (${activeAvatar.variations.length}):`);
+        parts.push('');
+        parts.push(`🎨 VARIATIONS (${activeAvatar.variations.length}):`);
         activeAvatar.variations.forEach(v => {
-          parts.push(`  - ${v.name} (${v.orientation}): "${v.prompt.substring(0, 80)}${v.prompt.length > 80 ? '...' : ''}"`);
+          parts.push(`  - ${v.name} (${v.orientation}): "${v.prompt.substring(0, 100)}${v.prompt.length > 100 ? '...' : ''}"`);
         });
       }
     }
@@ -1146,7 +1166,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
 
     parts.push('');
-    parts.push('Help the user dial in their image style, suggest improvements to prompts, and discuss image strategy for their content.');
+    parts.push('YOUR ROLE: Help dial in the image style, suggest improvements to prompts and placeholder options, discuss what types of images would work best for their articles and SEO strategy.');
+    parts.push('You can suggest adding new placeholder options, modifying the main prompt, or creating new variations.');
 
     return parts.join('\n');
   };
