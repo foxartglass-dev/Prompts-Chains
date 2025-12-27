@@ -99,19 +99,23 @@ router.post('/generate', async (req, res) => {
       generateParams.quality = quality;
     }
 
-    // Explicitly request URL format for all models
-    generateParams.response_format = 'url';
+    // Only add response_format for models that support it (not gpt-image-1.5)
+    if (!selectedModel.startsWith('gpt-image')) {
+      generateParams.response_format = 'url';
+    }
 
     const response = await openai.images.generate(generateParams);
 
     // Handle both URL and base64 response formats
-    let imageUrl = response.data[0].url;
+    // gpt-image-1.5 returns base64, DALL-E returns URL
+    let imageUrl;
     const revisedPrompt = response.data[0].revised_prompt;
 
-    // If URL is not present but b64_json is, create a data URL
-    if (!imageUrl && response.data[0].b64_json) {
+    if (response.data[0].b64_json) {
       imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
-      console.log('[Image Generation] Converted b64_json to data URL');
+      console.log('[Image Generation] Got base64 image, converted to data URL');
+    } else if (response.data[0].url) {
+      imageUrl = response.data[0].url;
     }
 
     if (!imageUrl) {
@@ -248,15 +252,19 @@ Generate an image that matches the described style exactly while depicting the c
       generateParams.quality = 'high';
     }
 
-    // Explicitly request URL format
-    generateParams.response_format = 'url';
+    // Only add response_format for models that support it (not gpt-image-1.5)
+    if (!selectedModel.startsWith('gpt-image')) {
+      generateParams.response_format = 'url';
+    }
 
     const response = await openai.images.generate(generateParams);
 
     // Handle both URL and base64 response formats
-    let imageUrl = response.data[0].url;
-    if (!imageUrl && response.data[0].b64_json) {
+    let imageUrl;
+    if (response.data[0].b64_json) {
       imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
+    } else if (response.data[0].url) {
+      imageUrl = response.data[0].url;
     }
 
     if (!imageUrl) {
