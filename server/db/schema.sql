@@ -196,6 +196,26 @@ CREATE TABLE IF NOT EXISTS articles (
 );
 
 -- ============================================
+-- WORDPRESS PAGE HIERARCHY (for Site Map visualization)
+-- ============================================
+
+-- Cached WordPress page hierarchy for mind map/site map visualization
+CREATE TABLE IF NOT EXISTS wp_page_hierarchy (
+  id SERIAL PRIMARY KEY,
+  website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
+  wp_page_id INTEGER NOT NULL, -- WordPress page ID
+  wp_parent_id INTEGER DEFAULT 0, -- Parent page ID (0 = top-level)
+  title VARCHAR(500),
+  slug VARCHAR(500),
+  status VARCHAR(20) DEFAULT 'publish', -- publish, draft, private, etc.
+  page_order INTEGER DEFAULT 0, -- Menu order from WordPress
+  elementor_data JSONB DEFAULT NULL, -- Cached Elementor page structure
+  synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(website_id, wp_page_id)
+);
+
+-- ============================================
 -- GBP OAUTH TOKENS (for Google Business Profile API)
 -- ============================================
 
@@ -278,3 +298,5 @@ CREATE INDEX IF NOT EXISTS idx_articles_client_id ON articles(client_id);
 CREATE INDEX IF NOT EXISTS idx_articles_keyword ON articles(keyword);
 CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
 CREATE INDEX IF NOT EXISTS idx_gbp_oauth_location ON gbp_oauth_tokens(location_id);
+CREATE INDEX IF NOT EXISTS idx_wp_hierarchy_website ON wp_page_hierarchy(website_id);
+CREATE INDEX IF NOT EXISTS idx_wp_hierarchy_parent ON wp_page_hierarchy(wp_parent_id);

@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import SEOSetupGuide from './SEOSetupGuide';
 
+// Image associated with an article
+interface ArticleImage {
+  id: string;
+  url: string;
+  prompt: string;
+  placement: string; // e.g., "hero", "section-1", "section-2"
+  wpMediaId?: number;
+  keywords?: string[]; // Keywords this image matches
+  createdAt: string;
+  pushedToWp?: boolean;
+}
+
 interface Article {
   id: number;
   workflow_id: number | null;
@@ -22,6 +34,8 @@ interface Article {
   parent_article_id: number | null;
   created_at: string;
   updated_at: string;
+  // Generated images for this article
+  generated_images: ArticleImage[];
   // Meta SEO selection fields
   selected_meta_title: string | null;
   selected_meta_description: string | null;
@@ -108,6 +122,11 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
   const [expandedContent, setExpandedContent] = useState(false);
   const [localSeoPlugin, setLocalSeoPlugin] = useState<string>('rankmath');
   const [showSEOGuide, setShowSEOGuide] = useState(false);
+
+  // Image management state
+  const [pushingImages, setPushingImages] = useState(false);
+  const [regeneratingImage, setRegeneratingImage] = useState<string | null>(null);
+  const [expandedImages, setExpandedImages] = useState(false);
 
   // Helper to strip tag suffix like "(H)" from item names
   const stripTagFromName = (name: string): string => {
@@ -563,6 +582,119 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       setError('Failed to push to SEO plugin');
     } finally {
       setPushingSeo(false);
+    }
+  };
+
+  // Push images to WordPress media library
+  const pushImagesToWordPress = async () => {
+    if (!selectedArticle) return;
+
+    const images = selectedArticle.generated_images || [];
+    if (images.length === 0) {
+      setError('No images to push');
+      return;
+    }
+
+    if (!selectedArticle.wp_post_id) {
+      setError('Article must be published to WordPress first');
+      return;
+    }
+
+    const wpUrl = selectedArticle.wp_url || wpCredentials?.url;
+    const wpUser = selectedArticle.wp_user || wpCredentials?.user;
+    const wpPassword = selectedArticle.wp_app_password || wpCredentials?.password;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      setError('WordPress credentials not configured');
+      return;
+    }
+
+    setPushingImages(true);
+    try {
+      const res = await fetch('/api/articles/push-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleId: selectedArticle.id,
+          postId: selectedArticle.wp_post_id,
+          images: images,
+          wpUrl,
+          wpUser,
+          wpPassword
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await fetchArticle(selectedArticle.id);
+        setError(null);
+      } else {
+        setError(data.error || 'Failed to push images');
+      }
+    } catch (err) {
+      setError('Failed to push images to WordPress');
+    } finally {
+      setPushingImages(false);
+    }
+  };
+
+  // Regenerate a single image
+  const regenerateImage = async (imageId: string) => {
+    if (!selectedArticle) return;
+
+    const image = (selectedArticle.generated_images || []).find(i => i.id === imageId);
+    if (!image) return;
+
+    setRegeneratingImage(imageId);
+    try {
+      const res = await fetch('/api/articles/regenerate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleId: selectedArticle.id,
+          imageId: imageId,
+          prompt: image.prompt,
+          workflowId: selectedArticle.workflow_id
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await fetchArticle(selectedArticle.id);
+        setError(null);
+      } else {
+        setError(data.error || 'Failed to regenerate image');
+      }
+    } catch (err) {
+      setError('Failed to regenerate image');
+    } finally {
+      setRegeneratingImage(null);
+    }
+  };
+
+  // Delete a single image from article
+  const deleteArticleImage = async (imageId: string) => {
+    if (!selectedArticle) return;
+    if (!confirm('Are you sure you want to remove this image?')) return;
+
+    try {
+      const updatedImages = (selectedArticle.generated_images || []).filter(i => i.id !== imageId);
+
+      const res = await fetch(`/api/articles/${selectedArticle.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          generated_images: updatedImages
+        })
+      });
+
+      if (res.ok) {
+        await fetchArticle(selectedArticle.id);
+      } else {
+        setError('Failed to remove image');
+      }
+    } catch (err) {
+      setError('Failed to remove image');
     }
   };
 
@@ -1280,6 +1412,143 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                         )}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Article Images Section */}
+                  <div className="mt-6 pt-4 border-t border-purple-500/30">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-sm font-semibold text-purple-400 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Article Images ({(selectedArticle.generated_images || []).length})
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        {selectedArticle.wp_post_id && (selectedArticle.generated_images || []).length > 0 && (
+                          <button
+                            onClick={pushImagesToWordPress}
+                            disabled={pushingImages}
+                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 rounded text-sm text-white font-medium flex items-center gap-1.5"
+                          >
+                            {pushingImages ? (
+                              <>
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Pushing...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                Push Images to WP
+                              </>
+                            )}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setExpandedImages(!expandedImages)}
+                          className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 bg-slate-800 px-2 py-1 rounded"
+                        >
+                          {expandedImages ? (
+                            <>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                              </svg>
+                              Collapse
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                              </svg>
+                              Expand
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {(selectedArticle.generated_images || []).length === 0 ? (
+                      <div className="bg-slate-900 rounded-lg p-6 border border-purple-500/30 text-center">
+                        <svg className="w-12 h-12 mx-auto mb-3 text-purple-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <p className="text-gray-400 text-sm mb-2">No images generated yet</p>
+                        <p className="text-gray-500 text-xs">Images will appear here once generated from the Image Creation section</p>
+                      </div>
+                    ) : (
+                      <div className={`grid gap-3 ${expandedImages ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-4 md:grid-cols-6'}`}>
+                        {(selectedArticle.generated_images || []).map((image) => (
+                          <div
+                            key={image.id}
+                            className={`relative group bg-slate-900 rounded-lg border border-purple-500/30 overflow-hidden ${expandedImages ? 'aspect-[4/3]' : 'aspect-square'}`}
+                          >
+                            <img
+                              src={image.url}
+                              alt={image.placement || 'Article image'}
+                              className="w-full h-full object-cover"
+                            />
+                            {/* Overlay with actions */}
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                              <span className="text-xs text-white/80 px-2 py-1 bg-black/50 rounded">
+                                {image.placement || 'Unassigned'}
+                              </span>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => regenerateImage(image.id)}
+                                  disabled={regeneratingImage === image.id}
+                                  className="p-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 rounded text-white transition"
+                                  title="Regenerate this image"
+                                >
+                                  {regeneratingImage === image.id ? (
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => deleteArticleImage(image.id)}
+                                  className="p-1.5 bg-red-600 hover:bg-red-500 rounded text-white transition"
+                                  title="Remove this image"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                              {image.pushedToWp && (
+                                <span className="text-xs text-green-400 flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  In WP
+                                </span>
+                              )}
+                            </div>
+                            {/* Keywords badge */}
+                            {expandedImages && image.keywords && image.keywords.length > 0 && (
+                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                                <div className="flex flex-wrap gap-1">
+                                  {image.keywords.slice(0, 3).map((kw, idx) => (
+                                    <span key={idx} className="text-[10px] bg-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded">
+                                      {kw}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Action Buttons */}

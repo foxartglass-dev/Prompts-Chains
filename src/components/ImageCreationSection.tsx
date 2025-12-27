@@ -384,6 +384,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [consultantInput, setConsultantInput] = useState('');
   const [consultantImages, setConsultantImages] = useState<string[]>([]);
   const [consultantLoading, setConsultantLoading] = useState(false);
+  const [isPromptPlanningSession, setIsPromptPlanningSession] = useState(false);
   const consultantChatRef = useRef<HTMLDivElement>(null);
   const consultantFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1330,6 +1331,150 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     } catch (error) {
       console.error('Consultant chat error:', error);
       showNotification('Failed to send message', 'error');
+    }
+
+    setConsultantLoading(false);
+  };
+
+  /**
+   * Start a Prompt Planning Session - guided workflow to build a complete prompt bank
+   */
+  const startPromptPlanningSession = async () => {
+    setIsPromptPlanningSession(true);
+
+    // Build context about the current setup for the planning session
+    const businessContext = [
+      `CURRENT SETUP:`,
+      `- Reference Images: ${settings.reference_images.length} uploaded`,
+      `- Logo Images: ${logoImages.length} uploaded`,
+      `- Action Shots: ${actionShots.length} uploaded`,
+      `- Audience Tags: ${tags.map(t => `${t.name} (${t.description || 'no description'})`).join(', ') || 'None configured'}`,
+      `- Existing Avatars: ${settings.audience_avatars.map(a => `${a.name}${a.mainPrompt ? ' (has prompt)' : ' (no prompt yet)'}`).join(', ')}`,
+      `- Image Categories: ${settings.image_categories.join(', ')}`,
+      `- Current Bank: ${availableImages.length} images`
+    ].join('\n');
+
+    const planningSystemMessage: ChatMessage = {
+      role: 'system',
+      content: `You are an expert image prompt strategist conducting a PROMPT PLANNING SESSION. Your goal is to help the user build a complete, professional image prompt library for their business.
+
+${businessContext}
+
+SESSION STRUCTURE:
+1. **Discovery Phase** - Ask about the business, brand, target audience, and services
+2. **Style Phase** - Review their reference images and establish the visual style DNA
+3. **Shot Types Phase** - Guide them through different image categories:
+   - Hero Images (main landing page shots)
+   - Service Images (action shots showing work being done)
+   - Team Images (professionals at work)
+   - B-Roll (environmental/atmospheric shots)
+   - Before/After (if applicable)
+4. **Audience Customization** - Create prompt variations for each audience tag
+5. **Diversity & Inclusion** - Ensure representation in imagery
+6. **Export Phase** - Compile all prompts into a structured bank
+
+RULES:
+- Be conversational but efficient - ask 2-3 questions at a time
+- After each answer, summarize what you learned and move forward
+- When creating prompts, format them clearly with categories
+- Consider SEO keywords that should appear in alt text
+- Think about seasonal variations if relevant
+- Create prompts that work with AI image generators (DALL-E, gpt-image, Flux, etc.)
+
+Start by introducing yourself and asking about their business in a friendly way.`,
+      timestamp: new Date().toISOString()
+    };
+
+    const userStartMessage: ChatMessage = {
+      role: 'user',
+      content: "Let's start a Prompt Planning Session. Help me build a complete image prompt library for my business.",
+      timestamp: new Date().toISOString()
+    };
+
+    // Clear existing history and start fresh with planning session
+    updateSettings({ consultant_chat_history: [userStartMessage] });
+    setConsultantLoading(true);
+
+    try {
+      const res = await fetch('/api/image-creation/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: planningSystemMessage.content },
+            { role: 'user', content: userStartMessage.content }
+          ],
+          model: settings.consultant_model,
+          contextImages: getContextImages('consultant')
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: data.message.content,
+          timestamp: new Date().toISOString()
+        };
+        updateSettings({ consultant_chat_history: [userStartMessage, assistantMessage] });
+        showNotification('Prompt Planning Session started!', 'success');
+      } else {
+        showNotification(data.error || 'Failed to start planning session', 'error');
+        setIsPromptPlanningSession(false);
+      }
+    } catch (error) {
+      console.error('Planning session error:', error);
+      showNotification('Failed to start planning session', 'error');
+      setIsPromptPlanningSession(false);
+    }
+
+    setConsultantLoading(false);
+    setIsConsultantChatOpen(true);
+  };
+
+  /**
+   * End the Prompt Planning Session and extract prompts
+   */
+  const endPromptPlanningSession = async () => {
+    setIsPromptPlanningSession(false);
+
+    // Ask the AI to summarize and export the prompts
+    const exportMessage: ChatMessage = {
+      role: 'user',
+      content: "Please summarize all the prompts we've created in this session. Format them as a structured list with categories, so I can save them to my prompt bank.",
+      timestamp: new Date().toISOString()
+    };
+
+    const newHistory = [...settings.consultant_chat_history, exportMessage];
+    updateSettings({ consultant_chat_history: newHistory });
+    setConsultantLoading(true);
+
+    try {
+      const res = await fetch('/api/image-creation/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: newHistory.map(m => ({
+            role: m.role,
+            content: m.content,
+            images: m.images
+          })),
+          model: settings.consultant_model
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: data.message.content,
+          timestamp: new Date().toISOString()
+        };
+        updateSettings({ consultant_chat_history: [...newHistory, assistantMessage] });
+        showNotification('Session complete! Review the exported prompts above.', 'success');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
     }
 
     setConsultantLoading(false);
@@ -2932,7 +3077,32 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                       ))}
                     </select>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {!isPromptPlanningSession ? (
+                      <button
+                        onClick={startPromptPlanningSession}
+                        disabled={consultantLoading}
+                        className="px-2 py-1 bg-purple-600/50 hover:bg-purple-600 disabled:opacity-50 rounded text-white text-xs transition flex items-center gap-1"
+                        title="Start a guided prompt planning session"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        Prompt Planning
+                      </button>
+                    ) : (
+                      <button
+                        onClick={endPromptPlanningSession}
+                        disabled={consultantLoading}
+                        className="px-2 py-1 bg-amber-600/50 hover:bg-amber-600 disabled:opacity-50 rounded text-white text-xs transition flex items-center gap-1 animate-pulse"
+                        title="End session and export prompts"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        End & Export
+                      </button>
+                    )}
                     <button
                       onClick={() => handleSyncConsultantToWorker()}
                       className="px-2 py-1 bg-emerald-600/50 hover:bg-emerald-600 rounded text-white text-xs transition flex items-center gap-1"
@@ -2957,6 +3127,17 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                   <strong>Context:</strong> {settings.reference_images.length} ref images, {logoImages.length} logo, {actionShots.length} action shots, {availableImages.length} bank images •
                   This AI can see your images and help dial in your style.
                 </div>
+
+                {/* Prompt Planning Session Banner */}
+                {isPromptPlanningSession && (
+                  <div className="px-3 py-2 bg-purple-900/40 border-b border-purple-500/50 text-xs text-purple-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span>
+                      <strong>PROMPT PLANNING SESSION</strong> - Building your image prompt library
+                    </div>
+                    <span className="text-purple-300/70">Click "End & Export" when ready</span>
+                  </div>
+                )}
 
                 {/* Chat messages */}
                 <div ref={consultantChatRef} className="h-72 overflow-y-auto p-4 space-y-3">
