@@ -99,10 +99,25 @@ router.post('/generate', async (req, res) => {
       generateParams.quality = quality;
     }
 
+    // Explicitly request URL format for all models
+    generateParams.response_format = 'url';
+
     const response = await openai.images.generate(generateParams);
 
-    const imageUrl = response.data[0].url;
+    // Handle both URL and base64 response formats
+    let imageUrl = response.data[0].url;
     const revisedPrompt = response.data[0].revised_prompt;
+
+    // If URL is not present but b64_json is, create a data URL
+    if (!imageUrl && response.data[0].b64_json) {
+      imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
+      console.log('[Image Generation] Converted b64_json to data URL');
+    }
+
+    if (!imageUrl) {
+      console.error('[Image Generation] No image data in response');
+      return res.status(500).json({ error: 'OpenAI returned no image data' });
+    }
 
     res.json({
       success: true,
@@ -233,12 +248,25 @@ Generate an image that matches the described style exactly while depicting the c
       generateParams.quality = 'high';
     }
 
+    // Explicitly request URL format
+    generateParams.response_format = 'url';
+
     const response = await openai.images.generate(generateParams);
+
+    // Handle both URL and base64 response formats
+    let imageUrl = response.data[0].url;
+    if (!imageUrl && response.data[0].b64_json) {
+      imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
+    }
+
+    if (!imageUrl) {
+      return res.status(500).json({ error: 'OpenAI returned no image data' });
+    }
 
     res.json({
       success: true,
       image: {
-        url: response.data[0].url,
+        url: imageUrl,
         prompt: stylePrompt,
         revisedPrompt: response.data[0].revised_prompt,
         model: selectedModel,

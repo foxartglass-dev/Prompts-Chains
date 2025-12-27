@@ -49,11 +49,24 @@ async function generateWithOpenAI(prompt, options, apiKey) {
     prompt: prompt,
     n: 1,
     size: finalSize,
-    quality: quality
+    quality: quality,
+    response_format: 'url'  // Explicitly request URL (not b64_json)
   });
 
-  const imageUrl = response.data[0].url;
+  // Handle both URL and base64 response formats
+  let imageUrl = response.data[0].url;
   const revisedPrompt = response.data[0].revised_prompt;
+
+  // If URL is not present but b64_json is, create a data URL
+  if (!imageUrl && response.data[0].b64_json) {
+    imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
+    console.log('[Image Generator] Converted b64_json to data URL');
+  }
+
+  if (!imageUrl) {
+    console.error('[Image Generator] No image URL or b64_json in response:', JSON.stringify(response.data[0]).substring(0, 200));
+    throw new Error('OpenAI returned no image data');
+  }
   const [w, h] = finalSize.split('x').map(Number);
 
   return {
