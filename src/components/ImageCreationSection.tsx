@@ -331,11 +331,11 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   smart_matching_mode: 'bank_first' // Default: check bank first, generate if no match
 };
 
+// Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
 const AVAILABLE_MODELS = [
-  { id: 'gpt-image-1.5', name: 'GPT-Image-1.5 (Best for Images)', provider: 'openai' },
+  { id: 'gpt-4o', name: 'GPT-4o (Best for Image Strategy)', provider: 'openai' },
   { id: 'gpt-5.2-2025-12-11', name: 'GPT-5.2', provider: 'openai' },
-  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai' },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Faster)', provider: 'openai' },
   { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', provider: 'anthropic' },
   { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic' },
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google' }
@@ -2990,13 +2990,18 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   </button>
                   <input ref={consultantFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'consultant')} className="hidden" />
-                  <input
-                    type="text"
+                  <textarea
                     value={consultantInput}
-                    onChange={(e) => setConsultantInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendConsultantChat()}
-                    placeholder="Discuss image style, branding, composition..."
-                    className="flex-1 bg-slate-900 border border-indigo-500/50 rounded px-3 py-2 text-white text-sm"
+                    onChange={(e) => {
+                      setConsultantInput(e.target.value);
+                      // Auto-resize textarea
+                      e.target.style.height = 'auto';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendConsultantChat())}
+                    placeholder="Discuss image style, branding, composition, SEO strategy..."
+                    rows={1}
+                    className="flex-1 bg-slate-900 border border-indigo-500/50 rounded px-3 py-2 text-white text-sm resize-none overflow-hidden min-h-[38px] max-h-[200px]"
                   />
                   <button
                     onClick={handleSendConsultantChat}
