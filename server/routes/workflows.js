@@ -253,6 +253,114 @@ router.post('/:id/duplicate', requireDb, async (req, res) => {
       console.error('[Workflow Duplicate] Failed to copy image settings:', imgErr.message);
     }
 
+    // Also copy site_plans and site_plan_nodes if they exist for the source workflow
+    try {
+      const sitePlans = await sql`
+        SELECT * FROM site_plans WHERE workflow_id = ${id}
+      `;
+
+      if (sitePlans.length > 0) {
+        const srcPlan = sitePlans[0];
+        console.log('[Workflow Duplicate] Copying site_plan to new workflow:', newWorkflowId);
+
+        // Create new site plan
+        const newPlanResult = await sql`
+          INSERT INTO site_plans (
+            website_id,
+            workflow_id,
+            name,
+            description,
+            auto_sync_check,
+            sync_status,
+            total_pages,
+            max_depth
+          )
+          VALUES (
+            ${srcPlan.website_id},
+            ${newWorkflowId},
+            ${srcPlan.name},
+            ${srcPlan.description},
+            ${srcPlan.auto_sync_check},
+            ${srcPlan.sync_status},
+            ${srcPlan.total_pages},
+            ${srcPlan.max_depth}
+          )
+          RETURNING *
+        `;
+
+        const newPlanId = newPlanResult[0].id;
+
+        // Copy all nodes - need to handle parent_id mapping
+        const srcNodes = await sql`
+          SELECT * FROM site_plan_nodes WHERE site_plan_id = ${srcPlan.id} ORDER BY id
+        `;
+
+        if (srcNodes.length > 0) {
+          const oldToNewIdMap = {};
+
+          // First pass: insert nodes without parent_id
+          for (const node of srcNodes) {
+            const newNodeResult = await sql`
+              INSERT INTO site_plan_nodes (
+                site_plan_id,
+                parent_id,
+                title,
+                slug,
+                page_type,
+                status,
+                target_keyword,
+                meta_title,
+                meta_description,
+                content_brief,
+                sort_order,
+                depth,
+                is_pillar_page,
+                is_in_menu,
+                menu_order
+              )
+              VALUES (
+                ${newPlanId},
+                ${null},
+                ${node.title},
+                ${node.slug},
+                ${node.page_type},
+                ${'planned'},
+                ${node.target_keyword},
+                ${node.meta_title},
+                ${node.meta_description},
+                ${node.content_brief},
+                ${node.sort_order},
+                ${node.depth},
+                ${node.is_pillar_page},
+                ${node.is_in_menu},
+                ${node.menu_order}
+              )
+              RETURNING *
+            `;
+            oldToNewIdMap[node.id] = newNodeResult[0].id;
+          }
+
+          // Second pass: update parent_id references
+          for (const node of srcNodes) {
+            if (node.parent_id && oldToNewIdMap[node.parent_id]) {
+              await sql`
+                UPDATE site_plan_nodes
+                SET parent_id = ${oldToNewIdMap[node.parent_id]}
+                WHERE id = ${oldToNewIdMap[node.id]}
+              `;
+            }
+          }
+
+          console.log('[Workflow Duplicate] Site plan nodes copied successfully:', srcNodes.length, 'nodes');
+        }
+
+        console.log('[Workflow Duplicate] Site plan copied successfully');
+      }
+    } catch (sitePlanErr) {
+      // Log but don't fail the whole operation if site plan copy fails
+      console.error('[Workflow Duplicate] Failed to copy site plan:', sitePlanErr.message);
+    }
+
     res.status(201).json({ workflow: result[0] });
   } catch (error) {
     console.error('Error duplicating workflow:', error);
