@@ -284,6 +284,16 @@ router.post('/publish', async (req, res) => {
     let imagesFromBank = 0;
     let estimatedCost = null;
 
+    // Image Decision Report - collect data to return to frontend
+    let imageDecisionReport = {
+      mode: 'none', // 'bank', 'live', or 'none'
+      model: null,
+      quality: null,
+      smartMatchingEnabled: false,
+      matchingRules: [],
+      images: [] // Array of {position, type, heading, wordCount, side, action, prompt, matchedKeywords, score}
+    };
+
     // Determine which chunks should receive images (based on natural breaks under 300 words)
     const imagePlacementIndices = getImagePlacementIndices(chunked, 300);
     const dynamicMaxImages = imagePlacementIndices.length;
@@ -651,6 +661,27 @@ router.post('/publish', async (req, res) => {
 
             console.log(`║ Total Matched: ${String(availableImages.length).padEnd(3)} images                                  ║`);
             console.log('╚══════════════════════════════════════════════════════════════╝\n');
+
+            // Populate image decision report for frontend
+            imageDecisionReport.mode = 'bank';
+            imageDecisionReport.smartMatchingEnabled = true;
+            imageDecisionReport.avatar = targetAvatar?.name || 'None';
+            imageDecisionReport.matchPlurals = matchPlurals;
+            imageDecisionReport.matchingRules = [
+              'Always try primary keywords first',
+              'Fall back to secondary keywords if enabled',
+              'Never duplicate primary keywords on a page',
+              'Secondary matches must have different primaries'
+            ];
+            imageDecisionReport.images = availableImages.slice(0, 5).map((img, idx) => ({
+              position: idx + 1,
+              type: idx === 0 ? 'hero' : 'inline',
+              variation: img.variation || img.id,
+              primaryScore: img.primaryScore || 0,
+              secondaryScore: img.secondaryScore || 0,
+              matchedPrimary: img.matchedPrimary || [],
+              matchedSecondary: img.matchedSecondary || []
+            }));
           }
 
           // Sort by variation order (if not using smart matching or as tiebreaker)
@@ -841,6 +872,43 @@ router.post('/publish', async (req, res) => {
       });
 
       console.log('╚══════════════════════════════════════════════════════════════╝\n');
+
+      // Populate image decision report for frontend
+      imageDecisionReport.mode = 'live';
+      imageDecisionReport.model = imageGenModel;
+      imageDecisionReport.quality = imageQuality;
+      imageDecisionReport.smartMatchingEnabled = false;
+
+      // Add hero image to report
+      if (pipelineResult.chunks.intro?.imageData) {
+        const heroAction = pipelineResult.chunks.intro.extractedAction || {};
+        imageDecisionReport.images.push({
+          position: 0,
+          type: 'hero',
+          heading: 'Hero / Intro',
+          action: heroAction.action || 'N/A',
+          mood: heroAction.mood || 'N/A',
+          setting: heroAction.setting || 'N/A',
+          prompt: pipelineResult.chunks.intro.imagePrompt?.substring(0, 200) || 'N/A'
+        });
+      }
+
+      // Add inline images to report
+      pipelineResult.chunks.chunks.forEach((chunk, idx) => {
+        if (chunk.imageData) {
+          const action = chunk.extractedAction || {};
+          imageDecisionReport.images.push({
+            position: idx + 1,
+            type: 'inline',
+            heading: chunk.heading || `Section ${idx + 1}`,
+            wordCount: chunk.wordCount || 0,
+            side: chunk.imageData.side || 'N/A',
+            action: action.action || 'N/A',
+            mood: action.mood || 'N/A',
+            prompt: chunk.imagePrompt?.substring(0, 200) || 'N/A'
+          });
+        }
+      });
     }
 
     // Step 4: Extract or use provided title
@@ -909,7 +977,8 @@ router.post('/publish', async (req, res) => {
       imagesFromBank,
       imagesGenerated,
       totalImages: imagesFromBank + imagesGenerated,
-      estimatedCost
+      estimatedCost,
+      imageDecisionReport // Include decision report for frontend display
     });
   } catch (error) {
     console.error('Publish error:', error);

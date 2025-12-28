@@ -49,6 +49,33 @@ interface LogEntry {
 
 type WpStatus = 'idle' | 'publishing' | 'published' | 'error';
 
+// Image Decision Report from the publish API
+interface ImageDecisionReport {
+  mode: 'bank' | 'live' | 'none';
+  model?: string | null;
+  quality?: string | null;
+  smartMatchingEnabled?: boolean;
+  avatar?: string;
+  matchPlurals?: boolean;
+  matchingRules?: string[];
+  images: Array<{
+    position: number;
+    type: 'hero' | 'inline';
+    heading?: string;
+    variation?: string;
+    wordCount?: number;
+    side?: string;
+    action?: string;
+    mood?: string;
+    setting?: string;
+    prompt?: string;
+    primaryScore?: number;
+    secondaryScore?: number;
+    matchedPrimary?: string[];
+    matchedSecondary?: string[];
+  }>;
+}
+
 interface Result {
   item: WorkflowItem;
   finalOutput: string;
@@ -64,6 +91,7 @@ interface Result {
   wpStatus?: WpStatus;
   wpLink?: string;
   wpError?: string;
+  imageDecisionReport?: ImageDecisionReport;
 }
 
 // Option Variable pending selection types
@@ -1157,10 +1185,10 @@ const App: React.FC = () => {
                                             addLog(`[${itemLabel}] No images added (Image Bank empty or disabled)`, LogStatus.INFO, item.id);
                                         }
                                         addLog(`[${itemLabel}] Published to WordPress!`, LogStatus.SUCCESS, item.id);
-                                        // Update result with WP link
+                                        // Update result with WP link and image decision report
                                         setResults(prev => prev.map(r =>
                                             r.item.id === resultItem.id
-                                                ? { ...r, wpStatus: 'published' as WpStatus, wpLink: publishData.page?.link }
+                                                ? { ...r, wpStatus: 'published' as WpStatus, wpLink: publishData.page?.link, imageDecisionReport: publishData.imageDecisionReport }
                                                 : r
                                         ));
 
@@ -1246,8 +1274,8 @@ const App: React.FC = () => {
             return;
         }
 
-        const updateResultStatus = (itemId: number, status: WpStatus, link?: string, error?: string) => {
-            setResults(prev => prev.map(r => r.item.id === itemId ? { ...r, wpStatus: status, wpLink: link, wpError: error } : r));
+        const updateResultStatus = (itemId: number, status: WpStatus, link?: string, error?: string, imageReport?: ImageDecisionReport) => {
+            setResults(prev => prev.map(r => r.item.id === itemId ? { ...r, wpStatus: status, wpLink: link, wpError: error, imageDecisionReport: imageReport || r.imageDecisionReport } : r));
         };
 
         updateResultStatus(result.item.id, 'publishing');
@@ -1313,7 +1341,7 @@ const App: React.FC = () => {
                     addLog(`[${result.item.name}] Generated ${data.totalImages} images`, LogStatus.SUCCESS, result.item.id);
                 }
 
-                updateResultStatus(result.item.id, 'published', data.page?.link);
+                updateResultStatus(result.item.id, 'published', data.page?.link, undefined, data.imageDecisionReport);
                 addLog(`[${result.item.name}] Successfully published as Elementor page!`, LogStatus.SUCCESS, result.item.id);
 
                 // Auto-push SEO meta if count=1 for both
@@ -3083,6 +3111,103 @@ const App: React.FC = () => {
                                                     ))}
                                                 </div>
                                             </div>
+
+                                            {/* Image Decision Report */}
+                                            {result.imageDecisionReport && result.imageDecisionReport.mode !== 'none' && (
+                                                <details className="mt-3 pt-3 border-t border-brand-cyan/20">
+                                                    <summary className="text-xs font-semibold text-brand-cyan mb-2 cursor-pointer hover:text-brand-cyan/80 flex items-center gap-2">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                                        Image Processing Log ({result.imageDecisionReport.images.length} images)
+                                                    </summary>
+                                                    <div className="bg-slate-800/50 rounded-lg p-3 mt-2 text-xs space-y-2">
+                                                        {/* Header */}
+                                                        <div className="flex flex-wrap gap-2 text-slate-300 pb-2 border-b border-slate-700">
+                                                            <span className="bg-brand-cyan/20 px-2 py-0.5 rounded text-brand-cyan">
+                                                                Mode: {result.imageDecisionReport.mode === 'live' ? 'Generate Live' : 'Pull from Bank'}
+                                                            </span>
+                                                            {result.imageDecisionReport.model && (
+                                                                <span className="bg-purple-500/20 px-2 py-0.5 rounded text-purple-400">
+                                                                    Model: {result.imageDecisionReport.model}
+                                                                </span>
+                                                            )}
+                                                            {result.imageDecisionReport.quality && (
+                                                                <span className="bg-green-500/20 px-2 py-0.5 rounded text-green-400">
+                                                                    Quality: {result.imageDecisionReport.quality}
+                                                                </span>
+                                                            )}
+                                                            {result.imageDecisionReport.smartMatchingEnabled && (
+                                                                <span className="bg-orange-500/20 px-2 py-0.5 rounded text-orange-400">
+                                                                    Smart Matching: ON
+                                                                </span>
+                                                            )}
+                                                            {result.imageDecisionReport.avatar && (
+                                                                <span className="bg-pink-500/20 px-2 py-0.5 rounded text-pink-400">
+                                                                    Avatar: {result.imageDecisionReport.avatar}
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Matching Rules (for bank mode) */}
+                                                        {result.imageDecisionReport.matchingRules && result.imageDecisionReport.matchingRules.length > 0 && (
+                                                            <div className="text-slate-400 text-[10px] pb-2 border-b border-slate-700">
+                                                                <span className="text-brand-gold">Rules Applied:</span>
+                                                                <ol className="list-decimal list-inside mt-1 space-y-0.5">
+                                                                    {result.imageDecisionReport.matchingRules.map((rule, idx) => (
+                                                                        <li key={idx}>{rule}</li>
+                                                                    ))}
+                                                                </ol>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Images */}
+                                                        {result.imageDecisionReport.images.map((img, idx) => (
+                                                            <div key={idx} className="bg-slate-900/50 rounded p-2 border border-slate-700">
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <span className={`font-semibold ${img.type === 'hero' ? 'text-brand-gold' : 'text-brand-cyan'}`}>
+                                                                        {img.type === 'hero' ? '🖼️ HERO' : `📷 Image #${idx}`}
+                                                                        {img.heading && ` - ${img.heading}`}
+                                                                    </span>
+                                                                    {img.side && <span className="text-slate-500">Side: {img.side}</span>}
+                                                                </div>
+
+                                                                {/* For Generate Live mode */}
+                                                                {result.imageDecisionReport?.mode === 'live' && (
+                                                                    <div className="space-y-1 text-slate-400">
+                                                                        {img.action && <div><span className="text-slate-500">Action:</span> {img.action}</div>}
+                                                                        {img.mood && <div><span className="text-slate-500">Mood:</span> {img.mood}</div>}
+                                                                        {img.wordCount !== undefined && <div><span className="text-slate-500">Word Count:</span> {img.wordCount}</div>}
+                                                                        {img.prompt && (
+                                                                            <details className="mt-1">
+                                                                                <summary className="text-slate-500 cursor-pointer hover:text-slate-300">View Prompt</summary>
+                                                                                <div className="mt-1 p-2 bg-slate-800 rounded text-[10px] text-slate-300 max-h-20 overflow-y-auto">{img.prompt}</div>
+                                                                            </details>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* For Bank mode */}
+                                                                {result.imageDecisionReport?.mode === 'bank' && (
+                                                                    <div className="space-y-1 text-slate-400">
+                                                                        {img.variation && <div><span className="text-slate-500">Variation:</span> {img.variation}</div>}
+                                                                        {img.primaryScore !== undefined && (
+                                                                            <div className="flex gap-3">
+                                                                                <span><span className="text-green-400">Primary Score:</span> {img.primaryScore}</span>
+                                                                                <span><span className="text-blue-400">Secondary Score:</span> {img.secondaryScore || 0}</span>
+                                                                            </div>
+                                                                        )}
+                                                                        {img.matchedPrimary && img.matchedPrimary.length > 0 && (
+                                                                            <div><span className="text-green-400">Primary Keywords:</span> {img.matchedPrimary.join(', ')}</div>
+                                                                        )}
+                                                                        {img.matchedSecondary && img.matchedSecondary.length > 0 && (
+                                                                            <div><span className="text-blue-400">Secondary Keywords:</span> {img.matchedSecondary.join(', ')}</div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </details>
+                                            )}
                                         </div>
                                     );
                                 })}
