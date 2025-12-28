@@ -295,6 +295,9 @@ interface ImageCreationSettings {
   placement_rule: string;
   smart_matching_rule: string;
   match_plurals: boolean; // Auto-match plurals (counter → counters, sink → sinks)
+  // Generate Live prompt mode
+  live_prompt_mode: 'main_prompt' | 'smart_prompt'; // main_prompt = use avatar's mainPrompt, smart_prompt = GPT-4o auto-generates
+  smart_prompt_guidance: string; // Guidance/guardrails for GPT-4o when using smart_prompt mode
 }
 
 enum LogStatus {
@@ -341,7 +344,10 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   // Editable algorithm rules
   placement_rule: 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
   smart_matching_rule: 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
-  match_plurals: true // Default ON - auto-match counter/counters, sink/sinks
+  match_plurals: true, // Default ON - auto-match counter/counters, sink/sinks
+  // Generate Live prompt mode - default to smart_prompt (GPT-4o) for backwards compatibility
+  live_prompt_mode: 'smart_prompt',
+  smart_prompt_guidance: '' // Empty by default - user can add guardrails
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -4286,6 +4292,61 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </div>
                   </label>
                 </div>
+
+                {/* Generate Live Prompt Mode Toggle - only show when Live mode is selected */}
+                {settings.integration_mode === 'live' && (
+                  <div className="bg-brand-cyan/10 rounded-lg p-3 border border-brand-cyan/30 mb-3">
+                    <label className="text-xs text-brand-cyan mb-2 block font-medium">Prompt Source for Generate Live:</label>
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <button
+                        type="button"
+                        onClick={() => updateSettings({ live_prompt_mode: 'main_prompt' })}
+                        className={`p-2 rounded text-xs font-medium transition-all ${
+                          settings.live_prompt_mode === 'main_prompt'
+                            ? 'bg-brand-gold text-slate-900'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        Main Prompt
+                        <span className="block text-[10px] opacity-70 mt-0.5">Use your avatar template</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateSettings({ live_prompt_mode: 'smart_prompt' })}
+                        className={`p-2 rounded text-xs font-medium transition-all ${
+                          settings.live_prompt_mode === 'smart_prompt'
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        Smart Prompt (GPT-4o)
+                        <span className="block text-[10px] opacity-70 mt-0.5">AI reads article content</span>
+                      </button>
+                    </div>
+                    {settings.live_prompt_mode === 'main_prompt' && (
+                      <p className="text-[10px] text-brand-gold/70 bg-brand-gold/10 p-2 rounded">
+                        Will use your Main Prompt from the selected Audience Avatar, filling in placeholders like {'{Item_Cleaning}'} based on article keywords.
+                      </p>
+                    )}
+                    {settings.live_prompt_mode === 'smart_prompt' && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] text-purple-300/70 bg-purple-500/10 p-2 rounded">
+                          GPT-4o-mini reads your article and creates prompts automatically based on the content. Add guidance below to influence the style.
+                        </p>
+                        <div>
+                          <label className="text-[10px] text-purple-400 mb-1 block">Guidance / Guardrails (optional):</label>
+                          <textarea
+                            value={settings.smart_prompt_guidance || ''}
+                            onChange={(e) => updateSettings({ smart_prompt_guidance: e.target.value })}
+                            placeholder="e.g., Always show professional cleaners in navy blue uniforms. Include cleaning supplies. Modern residential settings only. No faces."
+                            className="w-full p-2 text-xs bg-slate-900 border border-purple-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
+                            rows={3}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-900/50 rounded">
                   <input type="checkbox" checked={settings.fallback_to_live} onChange={(e) => updateSettings({ fallback_to_live: e.target.checked })} className="w-4 h-4 rounded border-amber-500 text-amber-500 focus:ring-amber-500 bg-slate-900" />

@@ -700,7 +700,10 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           smart_matching_rule: 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
           match_plurals: true, // Default ON - auto-match counter/counters
           // Image quality default
-          image_quality: 'low'
+          image_quality: 'low',
+          // Generate Live prompt mode
+          live_prompt_mode: 'smart_prompt',
+          smart_prompt_guidance: ''
         },
         isNew: true
       });
@@ -739,7 +742,10 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         smart_matching_rule: results[0].smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
         match_plurals: results[0].match_plurals !== false, // Default ON
         // Image quality
-        image_quality: results[0].image_quality || 'low'
+        image_quality: results[0].image_quality || 'low',
+        // Generate Live prompt mode
+        live_prompt_mode: results[0].live_prompt_mode || 'smart_prompt',
+        smart_prompt_guidance: results[0].smart_prompt_guidance || ''
       }
     });
 
@@ -787,7 +793,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       // Algorithm rules (editable)
       placement_rule,
       smart_matching_rule,
-      match_plurals
+      match_plurals,
+      // Generate Live prompt mode
+      live_prompt_mode,
+      smart_prompt_guidance
     } = req.body;
 
     // Check if settings exist
@@ -822,7 +831,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
             fallback_to_live,
             image_order,
             variation_order_mode,
-            manual_variation_order
+            manual_variation_order,
+            live_prompt_mode,
+            smart_prompt_guidance
           ) VALUES (
             ${workflowId},
             ${enabled ?? false},
@@ -844,7 +855,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
             ${fallback_to_live ?? true},
             ${JSON.stringify(image_order ?? [])},
             ${variation_order_mode ?? 'sequential'},
-            ${JSON.stringify(manual_variation_order ?? [])}
+            ${JSON.stringify(manual_variation_order ?? [])},
+            ${live_prompt_mode ?? 'smart_prompt'},
+            ${smart_prompt_guidance ?? ''}
           )
           RETURNING id
         `;
@@ -873,6 +886,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
             image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
             variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
             manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+            live_prompt_mode = COALESCE(${live_prompt_mode}, live_prompt_mode),
+            smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
             updated_at = CURRENT_TIMESTAMP
           WHERE workflow_id = ${workflowId}
         `;

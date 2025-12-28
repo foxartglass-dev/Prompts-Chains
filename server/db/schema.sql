@@ -272,10 +272,24 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   -- Variation order settings
   variation_order_mode VARCHAR(20) DEFAULT 'sequential', -- 'sequential', 'random', 'manual'
   manual_variation_order JSONB DEFAULT '[]', -- Array of variation IDs in manual order
+  -- Generate Live prompt mode settings
+  live_prompt_mode VARCHAR(20) DEFAULT 'smart_prompt', -- 'main_prompt' or 'smart_prompt'
+  smart_prompt_guidance TEXT DEFAULT '', -- Guidance/guardrails for GPT-4o when using smart_prompt mode
   -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Add new columns if they don't exist (for existing databases)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'live_prompt_mode') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN live_prompt_mode VARCHAR(20) DEFAULT 'smart_prompt';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'smart_prompt_guidance') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN smart_prompt_guidance TEXT DEFAULT '';
+  END IF;
+END $$;
 
 -- ============================================
 -- SITE PLANNING (Section 8 - The Site Truth)

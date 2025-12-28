@@ -331,9 +331,30 @@ router.post('/publish', async (req, res) => {
           imageGenModel = config.image_generation_model || 'flux-1.1-pro';
           imageQuality = config.image_quality || 'low';
 
+          // Get prompt mode settings for Generate Live
+          const livePromptMode = config.live_prompt_mode || 'smart_prompt';
+          const smartPromptGuidance = config.smart_prompt_guidance || '';
+          const avatars = config.audience_avatars || [];
+
+          // Extract tag from keyword (e.g., "Standard Cleaning(H)" -> "H")
+          const tagMatch = keyword?.match(/\(([A-Z])\)/i);
+          const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+
+          // Find matching avatar for this article
+          const targetAvatar = articleTag ? avatars.find(a => a.tag === articleTag) : avatars[0];
+
+          // Store these for use in Generate Live
+          config._livePromptMode = livePromptMode;
+          config._smartPromptGuidance = smartPromptGuidance;
+          config._targetAvatar = targetAvatar;
+
           console.log('[Elementor Publish] Integration mode:', integrationMode);
           console.log('[Elementor Publish] Image generation model:', imageGenModel);
           console.log('[Elementor Publish] Image quality:', imageQuality);
+          console.log('[Elementor Publish] Live prompt mode:', livePromptMode);
+          if (targetAvatar) {
+            console.log('[Elementor Publish] Target avatar:', targetAvatar.name);
+          }
 
           if (integrationMode === 'live') {
             // "Generate Live" mode - skip bank, generate fresh images
