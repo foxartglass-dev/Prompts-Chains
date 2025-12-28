@@ -294,6 +294,7 @@ interface ImageCreationSettings {
   // Editable algorithm rules (user-configurable)
   placement_rule: string;
   smart_matching_rule: string;
+  match_plurals: boolean; // Auto-match plurals (counter → counters, sink → sinks)
 }
 
 enum LogStatus {
@@ -339,7 +340,8 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   smart_matching_mode: 'bank_first', // Default: check bank first, generate if no match
   // Editable algorithm rules
   placement_rule: 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
-  smart_matching_rule: 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.'
+  smart_matching_rule: 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
+  match_plurals: true // Default ON - auto-match counter/counters, sink/sinks
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -4432,6 +4434,26 @@ Start by introducing yourself and asking about their business in a friendly way.
                         placeholder="300"
                       />
                     </div>
+                  </div>
+
+                  {/* Plurals Toggle */}
+                  <div className="mt-3 flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-cyan-500/30">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">📝</span>
+                      <div>
+                        <span className="text-sm text-white font-medium">Auto-Match Plurals</span>
+                        <p className="text-[10px] text-slate-400">counter → counters, sink → sinks, countertop → countertops</p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.match_plurals !== false}
+                        onChange={(e) => updateSettings({ match_plurals: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                    </label>
                   </div>
                 </div>
               </div>

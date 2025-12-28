@@ -398,10 +398,35 @@ router.post('/publish', async (req, res) => {
           // ═══════════════════════════════════════════════════════════════
           const smartMatchingEnabled = config.smart_matching_enabled || false;
           const smartMatchingMode = config.smart_matching_mode || 'bank_first';
+          const matchPlurals = config.match_plurals !== false; // Default ON
           const usedPrimaryKeywords = new Set(); // Track used primary keywords (Rule 3)
 
+          // Helper: Generate plural forms of a word
+          const getPluralForms = (word) => {
+            if (!matchPlurals) return [word];
+            const forms = [word];
+            const w = word.toLowerCase().trim();
+            // Add common plural forms
+            if (w.endsWith('s') || w.endsWith('x') || w.endsWith('ch') || w.endsWith('sh')) {
+              forms.push(w + 'es'); // box → boxes, dish → dishes
+            } else if (w.endsWith('y') && !['a','e','i','o','u'].includes(w[w.length-2])) {
+              forms.push(w.slice(0, -1) + 'ies'); // city → cities
+            } else {
+              forms.push(w + 's'); // counter → counters
+            }
+            // Also check if word is already plural, add singular
+            if (w.endsWith('ies')) {
+              forms.push(w.slice(0, -3) + 'y'); // cities → city
+            } else if (w.endsWith('es')) {
+              forms.push(w.slice(0, -2)); // boxes → box
+            } else if (w.endsWith('s') && w.length > 2) {
+              forms.push(w.slice(0, -1)); // counters → counter
+            }
+            return [...new Set(forms)]; // Remove duplicates
+          };
+
           if (smartMatchingEnabled && targetAvatar?.placeholderCategories?.length > 0) {
-            console.log('[Smart Matching] Enabled, mode:', smartMatchingMode);
+            console.log('[Smart Matching] Enabled, mode:', smartMatchingMode, ', plurals:', matchPlurals);
 
             // Normalize article content for keyword matching
             const articleText = (cleanedContent || contentHtml || '').toLowerCase();
@@ -441,10 +466,17 @@ router.post('/publish', async (req, res) => {
                     const primaryKeywords = option.primaryKeywords || [];
                     for (const kw of primaryKeywords) {
                       const kwLower = kw.toLowerCase().trim();
-                      if (kwLower && articleText.includes(kwLower)) {
-                        primaryScore += 10; // Primary matches are worth more
-                        matchedPrimary.push(kwLower);
-                        console.log('[Smart Matching] Image', img.id, 'PRIMARY match:', kwLower);
+                      if (!kwLower) continue;
+
+                      // Check keyword and its plural forms
+                      const forms = getPluralForms(kwLower);
+                      for (const form of forms) {
+                        if (articleText.includes(form)) {
+                          primaryScore += 10; // Primary matches are worth more
+                          matchedPrimary.push(kwLower); // Store original keyword
+                          console.log('[Smart Matching] Image', img.id, 'PRIMARY match:', kwLower, '(found as:', form, ')');
+                          break; // Only count once per keyword
+                        }
                       }
                     }
 
@@ -456,10 +488,17 @@ router.post('/publish', async (req, res) => {
 
                       for (const kw of secondaryKeywords) {
                         const kwLower = kw.toLowerCase().trim();
-                        if (kwLower && articleText.includes(kwLower) && !matchedPrimary.includes(kwLower)) {
-                          secondaryScore += 1; // Secondary matches worth less
-                          matchedSecondary.push(kwLower);
-                          console.log('[Smart Matching] Image', img.id, 'SECONDARY match:', kwLower);
+                        if (!kwLower || matchedPrimary.includes(kwLower)) continue;
+
+                        // Check keyword and its plural forms
+                        const forms = getPluralForms(kwLower);
+                        for (const form of forms) {
+                          if (articleText.includes(form)) {
+                            secondaryScore += 1; // Secondary matches worth less
+                            matchedSecondary.push(kwLower); // Store original keyword
+                            console.log('[Smart Matching] Image', img.id, 'SECONDARY match:', kwLower, '(found as:', form, ')');
+                            break; // Only count once per keyword
+                          }
                         }
                       }
                     }

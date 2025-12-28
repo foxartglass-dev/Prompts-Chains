@@ -698,6 +698,7 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           // Algorithm rules (editable)
           placement_rule: 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
           smart_matching_rule: 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
+          match_plurals: true, // Default ON - auto-match counter/counters
           // Image quality default
           image_quality: 'low'
         },
@@ -736,6 +737,7 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         // Algorithm rules (editable)
         placement_rule: results[0].placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
         smart_matching_rule: results[0].smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
+        match_plurals: results[0].match_plurals !== false, // Default ON
         // Image quality
         image_quality: results[0].image_quality || 'low'
       }
@@ -784,7 +786,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       smart_matching_mode,
       // Algorithm rules (editable)
       placement_rule,
-      smart_matching_rule
+      smart_matching_rule,
+      match_plurals
     } = req.body;
 
     // Check if settings exist
@@ -886,12 +889,13 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
             smart_matching_enabled = COALESCE(${smart_matching_enabled}, smart_matching_enabled),
             smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode),
             placement_rule = COALESCE(${placement_rule}, placement_rule),
-            smart_matching_rule = COALESCE(${smart_matching_rule}, smart_matching_rule)
+            smart_matching_rule = COALESCE(${smart_matching_rule}, smart_matching_rule),
+            match_plurals = COALESCE(${match_plurals}, match_plurals)
           WHERE workflow_id = ${workflowId}
         `;
         return true;
       } catch (err) {
-        if (err.message?.includes('smart_matching') || err.message?.includes('placement_rule')) {
+        if (err.message?.includes('smart_matching') || err.message?.includes('placement_rule') || err.message?.includes('match_plurals')) {
           console.log('[Image Creation API] smart_matching/algorithm columns not available yet (run migration)');
           return false;
         }
