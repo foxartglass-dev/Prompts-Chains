@@ -10,7 +10,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "db:setup": "node server/db/setup-all.mjs",
-    "start": "NODE_ENV=production node server/db/setup-all.mjs && node server/index.js",
+    "start": "npm run build && NODE_ENV=production node server/db/setup-all.mjs && node server/index.js",
     "test": "node server/services/stylelock/tests/core.test.js && node server/services/stylelock/tests/routes.test.js && node server/services/stylelock/tests/settings.test.js && node server/services/stylelock/tests/niche-promptbank.test.js && node server/services/stylelock/tests/utils.test.js && node server/services/stylelock/tests/integration.test.js",
     "test:stylelock": "node server/services/stylelock/tests/core.test.js && node server/services/stylelock/tests/routes.test.js && node server/services/stylelock/tests/settings.test.js && node server/services/stylelock/tests/niche-promptbank.test.js && node server/services/stylelock/tests/utils.test.js && node server/services/stylelock/tests/integration.test.js"
   },
