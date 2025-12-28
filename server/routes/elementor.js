@@ -431,6 +431,47 @@ router.post('/publish', async (req, res) => {
             // Normalize article content for keyword matching
             const articleText = (cleanedContent || contentHtml || '').toLowerCase();
 
+            // ═══════════════════════════════════════════════════════════════
+            // DISAMBIGUATION: Detect keywords that exist in multiple categories
+            // e.g., "sink" in both Kitchen and Bathroom = ambiguous
+            // ═══════════════════════════════════════════════════════════════
+            const keywordToCategoriesMap = new Map(); // keyword → Set of category names
+
+            // Build the map of all primary keywords and their categories
+            targetAvatar.placeholderCategories.forEach(cat => {
+              if (cat.isRandomized) return;
+              cat.options?.forEach(opt => {
+                (opt.primaryKeywords || []).forEach(kw => {
+                  const kwLower = kw.toLowerCase().trim();
+                  if (!kwLower) return;
+                  // Add all plural forms too
+                  const forms = getPluralForms(kwLower);
+                  forms.forEach(form => {
+                    if (!keywordToCategoriesMap.has(form)) {
+                      keywordToCategoriesMap.set(form, new Set());
+                    }
+                    keywordToCategoriesMap.get(form).add(cat.name.toLowerCase());
+                  });
+                });
+              });
+            });
+
+            // Identify ambiguous keywords (exist in 2+ categories)
+            const ambiguousKeywords = new Set();
+            keywordToCategoriesMap.forEach((categories, keyword) => {
+              if (categories.size > 1) {
+                ambiguousKeywords.add(keyword);
+                console.log('[Smart Matching] AMBIGUOUS keyword:', keyword, '→ exists in:', [...categories].join(', '));
+              }
+            });
+
+            // Helper: Check if category keyword is present in article
+            const categoryKeywordInArticle = (categoryName) => {
+              const catKeyword = categoryName.toLowerCase().replace(/_/g, ' ');
+              const forms = getPluralForms(catKeyword);
+              return forms.some(form => articleText.includes(form));
+            };
+
             // Score each image based on keyword matches
             availableImages = availableImages.map(img => {
               let primaryScore = 0;
@@ -470,12 +511,32 @@ router.post('/publish', async (req, res) => {
 
                       // Check keyword and its plural forms
                       const forms = getPluralForms(kwLower);
+                      let foundForm = null;
                       for (const form of forms) {
                         if (articleText.includes(form)) {
-                          primaryScore += 10; // Primary matches are worth more
-                          matchedPrimary.push(kwLower); // Store original keyword
-                          console.log('[Smart Matching] Image', img.id, 'PRIMARY match:', kwLower, '(found as:', form, ')');
-                          break; // Only count once per keyword
+                          foundForm = form;
+                          break;
+                        }
+                      }
+
+                      if (foundForm) {
+                        // DISAMBIGUATION: If keyword is ambiguous, require category keyword too
+                        const isAmbiguous = forms.some(f => ambiguousKeywords.has(f));
+
+                        if (isAmbiguous) {
+                          // Ambiguous keyword - require category name to also be present
+                          if (categoryKeywordInArticle(cat.name)) {
+                            primaryScore += 10;
+                            matchedPrimary.push(kwLower);
+                            console.log('[Smart Matching] Image', img.id, 'PRIMARY match:', kwLower, '(disambiguated by:', cat.name, ')');
+                          } else {
+                            console.log('[Smart Matching] Image', img.id, 'SKIPPED ambiguous keyword:', kwLower, '(need', cat.name, 'in article)');
+                          }
+                        } else {
+                          // Unique keyword - safe to use
+                          primaryScore += 10;
+                          matchedPrimary.push(kwLower);
+                          console.log('[Smart Matching] Image', img.id, 'PRIMARY match:', kwLower, '(found as:', foundForm, ')');
                         }
                       }
                     }

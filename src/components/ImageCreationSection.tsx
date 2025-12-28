@@ -2370,6 +2370,46 @@ Start by introducing yourself and asking about their business in a friendly way.
     });
   };
 
+  // Detect shared/ambiguous keywords across categories
+  const sharedKeywords = useMemo(() => {
+    if (!activeAvatar?.placeholderCategories) return new Map();
+
+    const keywordToCategories = new Map<string, string[]>();
+
+    activeAvatar.placeholderCategories.forEach(cat => {
+      if (cat.isRandomized) return;
+      cat.options?.forEach(opt => {
+        (opt.primaryKeywords || []).forEach(kw => {
+          const kwLower = kw.toLowerCase().trim();
+          if (!kwLower) return;
+          if (!keywordToCategories.has(kwLower)) {
+            keywordToCategories.set(kwLower, []);
+          }
+          const cats = keywordToCategories.get(kwLower)!;
+          if (!cats.includes(cat.name)) {
+            cats.push(cat.name);
+          }
+        });
+      });
+    });
+
+    // Filter to only shared keywords (2+ categories)
+    const shared = new Map<string, string[]>();
+    keywordToCategories.forEach((categories, keyword) => {
+      if (categories.length > 1) {
+        shared.set(keyword, categories);
+      }
+    });
+
+    return shared;
+  }, [activeAvatar?.placeholderCategories]);
+
+  // Check if a keyword is shared across categories
+  const isSharedKeyword = (keyword: string): string[] | null => {
+    const kwLower = keyword.toLowerCase().trim();
+    return sharedKeywords.get(kwLower) || null;
+  };
+
   const handleRemovePlaceholderOption = (categoryId: string, optionNumber: number) => {
     if (!activeAvatar) return;
     const categories = activeAvatar.placeholderCategories || [];
@@ -3050,12 +3090,25 @@ Start by introducing yourself and asking about their business in a friendly way.
                                       <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wide">Primary</span>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-1">
-                                      {(option.primaryKeywords || []).map((kw, kwIdx) => (
-                                        <span key={kwIdx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-600/30 border border-emerald-500 rounded text-emerald-300 text-xs">
-                                          {kw}
-                                          <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'primary')} className="text-emerald-400 hover:text-red-400">×</button>
-                                        </span>
-                                      ))}
+                                      {(option.primaryKeywords || []).map((kw, kwIdx) => {
+                                        const sharedWith = isSharedKeyword(kw);
+                                        const isShared = sharedWith && sharedWith.length > 1;
+                                        return (
+                                          <span
+                                            key={kwIdx}
+                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
+                                              isShared
+                                                ? 'bg-orange-600/30 border border-orange-500 text-orange-300'
+                                                : 'bg-emerald-600/30 border border-emerald-500 text-emerald-300'
+                                            }`}
+                                            title={isShared ? `⚠️ Shared across: ${sharedWith.join(', ')} - requires category keyword in article` : undefined}
+                                          >
+                                            {isShared && <span className="text-orange-400">⚠️</span>}
+                                            {kw}
+                                            <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'primary')} className={`${isShared ? 'text-orange-400' : 'text-emerald-400'} hover:text-red-400`}>×</button>
+                                          </span>
+                                        );
+                                      })}
                                       <input
                                         type="text"
                                         className="w-20 bg-slate-900 border border-emerald-500/30 rounded px-1.5 py-0.5 text-emerald-300 text-xs placeholder-emerald-700"
