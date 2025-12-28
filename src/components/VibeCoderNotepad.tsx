@@ -64,6 +64,9 @@ interface VibeCoderState {
 const STORAGE_KEY = 'vibecoder_notepad';
 
 const loadState = (): VibeCoderState => {
+  if (typeof window === 'undefined') {
+    return { edits: [], codebaseIndex: [] };
+  }
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
@@ -76,6 +79,7 @@ const loadState = (): VibeCoderState => {
 };
 
 const saveState = (state: VibeCoderState) => {
+  if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
@@ -366,7 +370,9 @@ export const VibeCoderNotepad: React.FC<VibeCoderNotepadProps> = ({ isOpen, onCl
       <div className="bg-gradient-to-r from-purple-900 to-indigo-900 p-4 border-b border-purple-500/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">📝</span>
+            <svg className="w-8 h-8 text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
             <div>
               <h2 className="text-white font-bold">VibeCoder Notepad</h2>
               <p className="text-purple-300 text-xs">{pendingEdits.length} pending edits</p>
@@ -391,9 +397,9 @@ export const VibeCoderNotepad: React.FC<VibeCoderNotepadProps> = ({ isOpen, onCl
                   : 'bg-purple-900/50 text-purple-300 hover:bg-purple-800'
               }`}
             >
-              {tab === 'edits' && '✏️ Edits'}
-              {tab === 'index' && '🗺️ Index'}
-              {tab === 'ideas' && '💡 Ideas'}
+              {tab === 'edits' && 'Edits'}
+              {tab === 'index' && 'Index'}
+              {tab === 'ideas' && 'Ideas'}
             </button>
           ))}
         </div>
@@ -551,8 +557,8 @@ export const VibeCoderNotepad: React.FC<VibeCoderNotepadProps> = ({ isOpen, onCl
         {activeTab === 'index' && (
           <div className="space-y-3">
             <div className="bg-slate-800 rounded-lg p-4">
-              <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
-                <span>🗺️</span> Codebase Index
+              <h3 className="text-white font-semibold mb-2">
+                Codebase Index
               </h3>
               <p className="text-xs text-slate-400 mb-3">
                 Breadcrumb trail of edits. Helps future sessions navigate faster.
@@ -587,14 +593,16 @@ export const VibeCoderNotepad: React.FC<VibeCoderNotepadProps> = ({ isOpen, onCl
               }}
               className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-sm transition"
             >
-              📋 Copy Index as Markdown
+              Copy Index as Markdown
             </button>
           </div>
         )}
 
         {activeTab === 'ideas' && (
           <div className="text-center py-8 text-slate-500">
-            <p className="text-4xl mb-2">💡</p>
+            <svg className="w-12 h-12 mx-auto mb-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
             <p>Future feature: Capture ideas for other projects</p>
             <p className="text-xs mt-1">Coming when this becomes a full SaaS</p>
           </div>
@@ -659,7 +667,15 @@ export const VibeCoderToggle: React.FC = () => {
         className="fixed bottom-4 right-4 w-14 h-14 bg-purple-600 hover:bg-purple-500 text-white rounded-full shadow-lg z-40 flex items-center justify-center transition-transform hover:scale-110"
         title="VibeCoder Notepad"
       >
-        <span className="text-2xl">{isOpen ? '✕' : '📝'}</span>
+        {isOpen ? (
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        ) : (
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        )}
       </button>
 
       {/* Notepad Panel */}
