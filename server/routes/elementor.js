@@ -958,6 +958,39 @@ router.post('/publish', async (req, res) => {
     // Step 8: Update article in database if articleId provided
     if (articleId && isDatabaseEnabled()) {
       try {
+        // Build array of generated images to save with article
+        const generatedImagesData = [];
+
+        // Hero image
+        if (chunked.intro?.imageData?.url) {
+          generatedImagesData.push({
+            url: chunked.intro.imageData.url,
+            wpMediaId: chunked.intro.imageData.wpMediaId || null,
+            placement: 'hero',
+            side: chunked.intro.imageData.side || 'right',
+            prompt: chunked.intro.imagePrompt || imageDecisionReport.images.find(i => i.type === 'hero')?.prompt || ''
+          });
+        }
+
+        // Inline images
+        chunked.chunks.forEach((chunk, idx) => {
+          if (chunk.imageData?.url) {
+            generatedImagesData.push({
+              url: chunk.imageData.url,
+              wpMediaId: chunk.imageData.wpMediaId || null,
+              placement: `section-${idx + 1}`,
+              side: chunk.imageData.side || 'left',
+              heading: chunk.heading || `Section ${idx + 1}`,
+              prompt: chunk.imagePrompt || ''
+            });
+          }
+        });
+
+        console.log(`[Elementor Publish] Saving ${generatedImagesData.length} images to article`);
+
+        // Prepare imageDecisionReport for storage (only if images were generated)
+        const reportToSave = imageDecisionReport.mode !== 'none' ? imageDecisionReport : null;
+
         if (isManualPush) {
           // Manual push: increment count and append date
           await sql`
@@ -968,6 +1001,8 @@ router.post('/publish', async (req, res) => {
                 status = ${status === 'publish' ? 'published' : 'draft'},
                 article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
                 article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+                generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
           `;
@@ -980,6 +1015,8 @@ router.post('/publish', async (req, res) => {
                 wp_published_at = CURRENT_TIMESTAMP,
                 status = ${status === 'publish' ? 'published' : 'draft'},
                 article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
+                generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
           `;

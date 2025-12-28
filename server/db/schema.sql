@@ -190,6 +190,8 @@ CREATE TABLE IF NOT EXISTS articles (
   parent_article_id INTEGER REFERENCES articles(id) ON DELETE SET NULL, -- For version history
   -- AI-generated images
   generated_images JSONB DEFAULT '[]', -- Array of {url, prompt, placement, wpMediaId}
+  -- Image decision report (for debugging/understanding AI choices)
+  image_decision_report JSONB DEFAULT NULL, -- {mode, model, quality, images: [...]}
   -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -288,6 +290,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'smart_prompt_guidance') THEN
     ALTER TABLE image_creation_settings ADD COLUMN smart_prompt_guidance TEXT DEFAULT '';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'articles' AND column_name = 'image_decision_report') THEN
+    ALTER TABLE articles ADD COLUMN image_decision_report JSONB DEFAULT NULL;
   END IF;
 END $$;
 
