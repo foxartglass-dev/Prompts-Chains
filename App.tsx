@@ -2441,6 +2441,7 @@ const App: React.FC = () => {
                                         <option value="flux-1.1-pro">Flux 1.1</option>
                                         <option value="seedream-4">Seedream 4</option>
                                         <option value="ideogram-v3-turbo">Ideogram v3</option>
+                                        <option value="ideogram-v3-quality">Ideogram HQ</option>
                                         <option value="gpt-image-1.5">GPT Img</option>
                                     </select>
                                 </div>

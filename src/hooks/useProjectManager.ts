@@ -78,7 +78,7 @@ export interface ProjectState {
   // Image quality for WordPress publishing (low = web, medium, high = print)
   imageQuality?: 'low' | 'medium' | 'high';
   // Image model for generation (gpt-image-1.5 = OpenAI, others = Replicate)
-  imageModel?: 'gpt-image-1.5' | 'flux-1.1-pro' | 'seedream-4' | 'ideogram-v3-turbo';
+  imageModel?: 'gpt-image-1.5' | 'flux-1.1-pro' | 'seedream-4' | 'ideogram-v3-turbo' | 'ideogram-v3-quality';
 }
 
 export interface Project {

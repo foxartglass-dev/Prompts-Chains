@@ -3,7 +3,8 @@
  * Supports OpenAI gpt-image-1.5 and multiple Replicate models:
  * - Flux 1.1 Pro (~$0.04/image) - Fast, good prompt adherence
  * - Seedream 4 (~$0.03/image) - Best value, 4K support
- * - Ideogram v3 Turbo (~$0.04/image) - Great realism, text rendering
+ * - Ideogram v3 Turbo (~$0.04/image) - Fast realism
+ * - Ideogram v3 Quality (~$0.09/image) - Highest quality realism
  */
 
 import OpenAI from 'openai';
@@ -338,6 +339,90 @@ async function generateWithIdeogram(prompt, options, apiKey) {
 }
 
 /**
+ * Generate a single image using Ideogram v3 Quality via Replicate
+ * Cost: ~$0.09 per image (highest quality, stunning realism)
+ */
+async function generateWithIdeogramQuality(prompt, options, apiKey) {
+  const replicate = new Replicate({ auth: apiKey });
+
+  const { size = '1024x1024' } = options;
+
+  // Determine aspect ratio from size or width/height
+  let aspectRatio = '1:1';
+  if (options.width && options.height) {
+    if (options.width > options.height) {
+      aspectRatio = '16:9';
+    } else if (options.height > options.width) {
+      aspectRatio = '9:16';
+    }
+  } else if (size === '1536x1024') {
+    aspectRatio = '16:9';
+  } else if (size === '1024x1536') {
+    aspectRatio = '9:16';
+  }
+
+  console.log(`[Image Generator] Ideogram v3 Quality, aspect: ${aspectRatio}`);
+
+  const output = await replicate.run(
+    "ideogram-ai/ideogram-v3-quality",
+    {
+      input: {
+        prompt: prompt,
+        aspect_ratio: aspectRatio,
+        style_type: "Realistic"  // Options: Auto, General, Realistic, Design
+      }
+    }
+  );
+
+  // Handle FileOutput object
+  let imageUrl;
+  if (typeof output === 'string') {
+    imageUrl = output;
+  } else if (output && typeof output.url === 'function') {
+    imageUrl = await output.url();
+  } else if (output && typeof output.url === 'string') {
+    imageUrl = output.url;
+  } else if (Array.isArray(output) && output.length > 0) {
+    const first = output[0];
+    if (typeof first === 'string') {
+      imageUrl = first;
+    } else if (first && typeof first.url === 'function') {
+      imageUrl = await first.url();
+    } else if (first && first.url) {
+      imageUrl = first.url;
+    }
+  }
+
+  if (!imageUrl) {
+    console.error('[Image Generator] Could not extract URL from Ideogram Quality output:', output);
+    throw new Error('Could not extract URL from Ideogram Quality output');
+  }
+
+  // Handle URL object (has href property) vs string
+  if (typeof imageUrl === 'object' && imageUrl.href) {
+    imageUrl = imageUrl.href;
+  }
+
+  console.log(`[Image Generator] Ideogram Quality image URL:`, imageUrl);
+
+  // Parse dimensions from aspect ratio
+  let w = 1024, h = 1024;
+  if (aspectRatio === '16:9') {
+    w = 1344; h = 768;
+  } else if (aspectRatio === '9:16') {
+    w = 768; h = 1344;
+  }
+
+  return {
+    url: imageUrl,
+    width: w,
+    height: h,
+    prompt: prompt,
+    model: 'ideogram-v3-quality'
+  };
+}
+
+/**
  * Generate a single image using the specified model
  * @param {string} prompt - Image prompt
  * @param {object} options - Generation options (model, quality, size)
@@ -363,6 +448,8 @@ export async function generateImage(prompt, options = {}, apiKey) {
       return await generateWithSeedream(prompt, mergedOptions, apiKey);
     } else if (model === 'ideogram-v3-turbo') {
       return await generateWithIdeogram(prompt, mergedOptions, apiKey);
+    } else if (model === 'ideogram-v3-quality') {
+      return await generateWithIdeogramQuality(prompt, mergedOptions, apiKey);
     } else {
       // Default to Flux for any other model value (including 'flux-1.1-pro')
       return await generateWithFlux(prompt, mergedOptions, apiKey);
@@ -524,6 +611,7 @@ export async function generateArticleImages(chunks, options = {}, apiKey) {
  * - Flux 1.1 Pro: ~$0.04 per image
  * - Seedream 4: ~$0.03 per image (cheapest)
  * - Ideogram v3 Turbo: ~$0.04 per image
+ * - Ideogram v3 Quality: ~$0.09 per image (highest quality)
  *
  * @param {number} imageCount - Number of images to generate
  * @param {string} quality - 'low', 'medium', or 'high'
@@ -544,6 +632,8 @@ export function estimateCost(imageCount, quality = 'low', model = DEFAULT_MODEL)
     perImage = 0.03;  // Cheapest option
   } else if (model === 'ideogram-v3-turbo') {
     perImage = 0.04;
+  } else if (model === 'ideogram-v3-quality') {
+    perImage = 0.09;  // Highest quality realism
   } else {
     // Flux 1.1 Pro - flat rate
     perImage = 0.04;

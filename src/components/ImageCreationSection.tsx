@@ -112,6 +112,7 @@ const IMAGE_GENERATION_MODELS = [
   { id: 'flux-1.1-pro', name: 'FLUX 1.1 Pro (~$0.04)', provider: 'replicate', description: 'Fast, good prompt adherence' },
   { id: 'seedream-4', name: 'Seedream 4 (~$0.03)', provider: 'replicate', description: 'Best value, 4K support (ByteDance)' },
   { id: 'ideogram-v3-turbo', name: 'Ideogram v3 Turbo (~$0.04)', provider: 'replicate', description: 'Great realism, text rendering' },
+  { id: 'ideogram-v3-quality', name: 'Ideogram v3 Quality (~$0.09)', provider: 'replicate', description: 'Highest quality, stunning realism' },
 ];
 
 // Image Model Prompting Guide Knowledge Base
@@ -3431,11 +3432,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                               <span className={`text-[8px] px-1 py-0.5 rounded font-medium ${
                                 img.model === 'seedream-4' ? 'bg-green-600/80 text-white' :
                                 img.model === 'ideogram-v3-turbo' ? 'bg-purple-600/80 text-white' :
+                                img.model === 'ideogram-v3-quality' ? 'bg-pink-600/80 text-white' :
                                 img.model === 'flux-1.1-pro' ? 'bg-blue-600/80 text-white' :
                                 img.model.startsWith('gpt') ? 'bg-emerald-600/80 text-white' :
                                 'bg-slate-600/80 text-white'
                               }`}>
-                                {img.model.replace('-1.1-pro', '').replace('-v3-turbo', '').replace('-4', '4').replace('gpt-image-', 'gpt')}
+                                {img.model.replace('-1.1-pro', '').replace('-v3-turbo', '').replace('-v3-quality', ' HQ').replace('-4', '4').replace('gpt-image-', 'gpt')}
                               </span>
                             )}
                           </div>
@@ -3730,11 +3732,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                           <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
                             img.model === 'seedream-4' ? 'bg-green-600/80 text-white' :
                             img.model === 'ideogram-v3-turbo' ? 'bg-purple-600/80 text-white' :
+                            img.model === 'ideogram-v3-quality' ? 'bg-pink-600/80 text-white' :
                             img.model === 'flux-1.1-pro' ? 'bg-blue-600/80 text-white' :
                             img.model.startsWith('gpt') ? 'bg-emerald-600/80 text-white' :
                             'bg-slate-600/80 text-white'
                           }`}>
-                            {img.model.replace('-1.1-pro', '').replace('-v3-turbo', ' v3').replace('-4', ' 4').replace('gpt-image-', 'GPT ')}
+                            {img.model.replace('-1.1-pro', '').replace('-v3-turbo', ' v3').replace('-v3-quality', ' HQ').replace('-4', ' 4').replace('gpt-image-', 'GPT ')}
                           </span>
                         )}
                       </div>
