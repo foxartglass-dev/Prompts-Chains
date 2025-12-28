@@ -390,9 +390,15 @@ router.post('/publish', async (req, res) => {
 
           // ═══════════════════════════════════════════════════════════════
           // SMART CONTENT MATCHING - Match images to article content
+          // Rules:
+          // 1. Always try primary keywords first
+          // 2. Fall back to secondary keywords if enabled
+          // 3. Never duplicate primary keywords on the same page
+          // 4. Secondary matches must have different primaries
           // ═══════════════════════════════════════════════════════════════
           const smartMatchingEnabled = config.smart_matching_enabled || false;
           const smartMatchingMode = config.smart_matching_mode || 'bank_first';
+          const usedPrimaryKeywords = new Set(); // Track used primary keywords (Rule 3)
 
           if (smartMatchingEnabled && targetAvatar?.placeholderCategories?.length > 0) {
             console.log('[Smart Matching] Enabled, mode:', smartMatchingMode);
@@ -402,8 +408,10 @@ router.post('/publish', async (req, res) => {
 
             // Score each image based on keyword matches
             availableImages = availableImages.map(img => {
-              let matchScore = 0;
-              const matchedKeywords = [];
+              let primaryScore = 0;
+              let secondaryScore = 0;
+              const matchedPrimary = [];
+              const matchedSecondary = [];
 
               // Parse image variation string to extract placeholder codes
               // Format: "I3 · (H) · G2" or "I3-(H)-G2"
@@ -414,15 +422,11 @@ router.post('/publish', async (req, res) => {
               targetAvatar.placeholderCategories.forEach((cat, catIdx) => {
                 // Skip randomized categories - they don't need matching
                 if (cat.isRandomized) {
-                  console.log('[Smart Matching] Skipping randomized category:', cat.name);
                   return;
                 }
 
                 // Find the code for this category in the image variation
-                // Get category initial (e.g., "Item_Cleaning" -> "I")
                 const catInitial = cat.name.charAt(0).toUpperCase();
-
-                // Find matching part (e.g., "I3" for Item_Cleaning option 3)
                 const matchingPart = parts.find(p => {
                   const partMatch = p.match(/^([A-Z])(\d+)$/i);
                   return partMatch && partMatch[1].toUpperCase() === catInitial;
@@ -432,37 +436,87 @@ router.post('/publish', async (req, res) => {
                   const optionNum = parseInt(matchingPart.slice(1));
                   const option = cat.options?.find(o => o.number === optionNum);
 
-                  if (option?.keyword) {
-                    // Check if keyword appears in article
-                    const keywords = option.keyword.toLowerCase().split(/[,;]+/).map(k => k.trim()).filter(Boolean);
+                  if (option) {
+                    // Check PRIMARY keywords first (Rule 1)
+                    const primaryKeywords = option.primaryKeywords || [];
+                    for (const kw of primaryKeywords) {
+                      const kwLower = kw.toLowerCase().trim();
+                      if (kwLower && articleText.includes(kwLower)) {
+                        primaryScore += 10; // Primary matches are worth more
+                        matchedPrimary.push(kwLower);
+                        console.log('[Smart Matching] Image', img.id, 'PRIMARY match:', kwLower);
+                      }
+                    }
 
-                    for (const kw of keywords) {
-                      if (kw && articleText.includes(kw)) {
-                        matchScore += 1;
-                        matchedKeywords.push(kw);
-                        console.log('[Smart Matching] Image', img.id, 'matched keyword:', kw);
+                    // Check SECONDARY keywords if enabled (Rule 2)
+                    if (option.useSecondaryKeywords !== false) {
+                      // Auto-include category name as secondary keyword
+                      const categoryKeyword = cat.name.toLowerCase().replace(/_/g, ' ');
+                      const secondaryKeywords = [categoryKeyword, ...(option.secondaryKeywords || [])];
+
+                      for (const kw of secondaryKeywords) {
+                        const kwLower = kw.toLowerCase().trim();
+                        if (kwLower && articleText.includes(kwLower) && !matchedPrimary.includes(kwLower)) {
+                          secondaryScore += 1; // Secondary matches worth less
+                          matchedSecondary.push(kwLower);
+                          console.log('[Smart Matching] Image', img.id, 'SECONDARY match:', kwLower);
+                        }
                       }
                     }
                   }
                 }
               });
 
-              return { ...img, matchScore, matchedKeywords };
+              // Store the primary keywords for deduplication check
+              return {
+                ...img,
+                primaryScore,
+                secondaryScore,
+                matchScore: primaryScore + secondaryScore,
+                matchedPrimary,
+                matchedSecondary
+              };
             });
 
-            // Sort by match score (highest first), then by original order
+            // Sort: Primary score first, then secondary score
             availableImages.sort((a, b) => {
-              if (b.matchScore !== a.matchScore) {
-                return b.matchScore - a.matchScore;
+              // First by primary score (highest first)
+              if (b.primaryScore !== a.primaryScore) {
+                return b.primaryScore - a.primaryScore;
               }
-              return 0; // Maintain original order for equal scores
+              // Then by secondary score
+              if (b.secondaryScore !== a.secondaryScore) {
+                return b.secondaryScore - a.secondaryScore;
+              }
+              return 0;
             });
 
-            console.log('[Smart Matching] Scored images:', availableImages.map(img => ({
+            // Apply Rule 3 & 4: Filter out duplicates
+            const selectedImages = [];
+            const usedPrimaries = new Set();
+
+            for (const img of availableImages) {
+              // Check if any of this image's primary keywords are already used (Rule 3)
+              const hasDuplicatePrimary = img.matchedPrimary?.some(kw => usedPrimaries.has(kw));
+
+              if (!hasDuplicatePrimary) {
+                selectedImages.push(img);
+                // Mark these primary keywords as used
+                img.matchedPrimary?.forEach(kw => usedPrimaries.add(kw));
+              } else {
+                console.log('[Smart Matching] Skipping image', img.id, '- duplicate primary keyword');
+              }
+            }
+
+            availableImages = selectedImages;
+
+            console.log('[Smart Matching] Final ranked images:', availableImages.slice(0, 5).map(img => ({
               id: img.id,
               variation: img.variation,
-              score: img.matchScore,
-              keywords: img.matchedKeywords
+              primaryScore: img.primaryScore,
+              secondaryScore: img.secondaryScore,
+              primary: img.matchedPrimary,
+              secondary: img.matchedSecondary
             })));
           }
 

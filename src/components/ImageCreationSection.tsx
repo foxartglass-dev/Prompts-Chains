@@ -52,7 +52,10 @@ interface PlaceholderCategory {
 interface PlaceholderOption {
   number: number; // 1, 2, 3...
   text: string; // "cleaning the stove burners"
-  keyword?: string; // Short keyword for matching: "kitchen", "bathroom", etc.
+  // Keyword matching system
+  primaryKeywords: string[]; // Main keywords: ["stove", "burner"] - must match first
+  secondaryKeywords: string[]; // Fallback keywords: ["kitchen"] - used if no primary match
+  useSecondaryKeywords: boolean; // Toggle: allow secondary keyword matching for this option
 }
 
 // Generation mode for advanced placeholder system
@@ -2300,7 +2303,13 @@ Start by introducing yourself and asking about their business in a friendly way.
           : 1;
         return {
           ...cat,
-          options: [...cat.options, { number: nextNumber, text: '' }]
+          options: [...cat.options, {
+            number: nextNumber,
+            text: '',
+            primaryKeywords: [],
+            secondaryKeywords: [],
+            useSecondaryKeywords: true // Default to ON
+          }]
         };
       }
       return cat;
@@ -2308,7 +2317,7 @@ Start by introducing yourself and asking about their business in a friendly way.
     handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCategories });
   };
 
-  const handleUpdatePlaceholderOption = (categoryId: string, optionNumber: number, updates: { text?: string; keyword?: string }) => {
+  const handleUpdatePlaceholderOption = (categoryId: string, optionNumber: number, updates: Partial<PlaceholderOption>) => {
     if (!activeAvatar) return;
     const categories = activeAvatar.placeholderCategories || [];
     const updatedCategories = categories.map(cat => {
@@ -2323,6 +2332,40 @@ Start by introducing yourself and asking about their business in a friendly way.
       return cat;
     });
     handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCategories });
+  };
+
+  // Add a keyword to an option (primary or secondary)
+  const handleAddKeyword = (categoryId: string, optionNumber: number, keyword: string, type: 'primary' | 'secondary') => {
+    if (!activeAvatar || !keyword.trim()) return;
+    const categories = activeAvatar.placeholderCategories || [];
+    const cat = categories.find(c => c.id === categoryId);
+    const opt = cat?.options.find(o => o.number === optionNumber);
+    if (!opt) return;
+
+    const keywordsArray = type === 'primary'
+      ? [...(opt.primaryKeywords || []), keyword.trim()]
+      : [...(opt.secondaryKeywords || []), keyword.trim()];
+
+    handleUpdatePlaceholderOption(categoryId, optionNumber, {
+      [type === 'primary' ? 'primaryKeywords' : 'secondaryKeywords']: keywordsArray
+    });
+  };
+
+  // Remove a keyword from an option
+  const handleRemoveKeyword = (categoryId: string, optionNumber: number, keyword: string, type: 'primary' | 'secondary') => {
+    if (!activeAvatar) return;
+    const categories = activeAvatar.placeholderCategories || [];
+    const cat = categories.find(c => c.id === categoryId);
+    const opt = cat?.options.find(o => o.number === optionNumber);
+    if (!opt) return;
+
+    const keywordsArray = type === 'primary'
+      ? (opt.primaryKeywords || []).filter(k => k !== keyword)
+      : (opt.secondaryKeywords || []).filter(k => k !== keyword);
+
+    handleUpdatePlaceholderOption(categoryId, optionNumber, {
+      [type === 'primary' ? 'primaryKeywords' : 'secondaryKeywords']: keywordsArray
+    });
   };
 
   const handleRemovePlaceholderOption = (categoryId: string, optionNumber: number) => {
@@ -2989,37 +3032,109 @@ Start by introducing yourself and asking about their business in a friendly way.
                           </button>
                         </div>
 
-                        {/* Options for this category */}
-                        <div className="pl-4 space-y-2">
+                        {/* Options for this category - Stacked Layout */}
+                        <div className="pl-2 space-y-3">
                           {category.options.map((option, optIndex) => (
-                            <div key={option.number} className="flex items-center gap-2">
-                              <span className="w-6 text-center text-sm text-purple-400 font-bold font-serif">{option.number}</span>
-                              <input
-                                type="text"
-                                value={option.keyword || ''}
-                                onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { keyword: e.target.value })}
-                                className="w-20 bg-slate-900 border border-amber-500/50 rounded px-2 py-1 text-amber-400 text-xs font-medium"
-                                placeholder="keyword"
-                                title="Keyword for Smart Content Matching"
-                              />
-                              <input
-                                type="text"
-                                value={option.text}
-                                onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { text: e.target.value })}
-                                className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-xs"
-                                placeholder={`Option ${option.number} text...`}
-                              />
-                              <button
-                                onClick={() => handleRemovePlaceholderOption(category.id, option.number)}
-                                className="text-red-400 hover:text-red-300 text-sm font-bold"
-                              >
-                                ×
-                              </button>
+                            <div key={option.number} className="bg-slate-900/50 rounded-lg border border-slate-700 overflow-hidden">
+                              {/* Row 1: Keywords */}
+                              <div className="p-2 bg-slate-800/50 border-b border-slate-700">
+                                <div className="flex items-start gap-4">
+                                  {/* Option Number */}
+                                  <span className="w-6 h-6 flex items-center justify-center bg-purple-600 rounded text-white text-xs font-bold">{option.number}</span>
+
+                                  {/* Primary Keywords */}
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wide">Primary</span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      {(option.primaryKeywords || []).map((kw, kwIdx) => (
+                                        <span key={kwIdx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-600/30 border border-emerald-500 rounded text-emerald-300 text-xs">
+                                          {kw}
+                                          <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'primary')} className="text-emerald-400 hover:text-red-400">×</button>
+                                        </span>
+                                      ))}
+                                      <input
+                                        type="text"
+                                        className="w-20 bg-slate-900 border border-emerald-500/30 rounded px-1.5 py-0.5 text-emerald-300 text-xs placeholder-emerald-700"
+                                        placeholder="+ add"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                            handleAddKeyword(category.id, option.number, e.currentTarget.value, 'primary');
+                                            e.currentTarget.value = '';
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Secondary Keywords */}
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="text-[10px] text-amber-400 font-semibold uppercase tracking-wide">Secondary</span>
+                                      <label className="flex items-center gap-1 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={option.useSecondaryKeywords !== false}
+                                          onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { useSecondaryKeywords: e.target.checked })}
+                                          className="w-3 h-3 rounded border-amber-500 text-amber-500 focus:ring-amber-500 bg-slate-900"
+                                        />
+                                        <span className="text-[9px] text-amber-400/70">ON</span>
+                                      </label>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      {/* Auto-add category name as first secondary keyword (shown as locked) */}
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/20 border border-amber-500/50 rounded text-amber-300/70 text-xs italic">
+                                        {category.name.toLowerCase()}
+                                        <svg className="w-2.5 h-2.5 text-amber-500/50" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                                      </span>
+                                      {(option.secondaryKeywords || []).map((kw, kwIdx) => (
+                                        <span key={kwIdx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/30 border border-amber-500 rounded text-amber-300 text-xs">
+                                          {kw}
+                                          <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'secondary')} className="text-amber-400 hover:text-red-400">×</button>
+                                        </span>
+                                      ))}
+                                      <input
+                                        type="text"
+                                        className="w-20 bg-slate-900 border border-amber-500/30 rounded px-1.5 py-0.5 text-amber-300 text-xs placeholder-amber-700"
+                                        placeholder="+ add"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                            handleAddKeyword(category.id, option.number, e.currentTarget.value, 'secondary');
+                                            e.currentTarget.value = '';
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Delete Option */}
+                                  <button
+                                    onClick={() => handleRemovePlaceholderOption(category.id, option.number)}
+                                    className="p-1 text-red-400 hover:text-red-300 hover:bg-red-600/20 rounded transition"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Prompt Text */}
+                              <div className="p-2">
+                                <input
+                                  type="text"
+                                  value={option.text}
+                                  onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { text: e.target.value })}
+                                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm"
+                                  placeholder={`Prompt text for option ${option.number}...`}
+                                />
+                              </div>
                             </div>
                           ))}
                           <button
                             onClick={() => handleAddPlaceholderOption(category.id)}
-                            className="text-xs text-purple-400 hover:text-purple-300"
+                            className="w-full py-2 border-2 border-dashed border-purple-500/30 rounded-lg text-purple-400 hover:border-purple-500 hover:text-purple-300 text-xs transition"
                           >
                             + Add Option
                           </button>
@@ -4244,51 +4359,80 @@ Start by introducing yourself and asking about their business in a friendly way.
               </div>
 
               {/* ─────────────────────────────────────────────────────
-                  SECTION 3: Algorithm Rules (Editable)
+                  SECTION 3: Matching Rules (Numbered)
               ───────────────────────────────────────────────────── */}
               <div className="bg-slate-800/50 rounded-lg p-4 border border-emerald-500/30">
                 <div className="flex items-center gap-2 mb-4">
                   <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                   </svg>
-                  <h3 className="text-emerald-400 font-semibold">Algorithm Rules</h3>
-                  <span className="px-2 py-0.5 bg-emerald-600/30 text-emerald-300 text-[10px] rounded font-medium">EDITABLE</span>
+                  <h3 className="text-emerald-400 font-semibold">Smart Matching Rules</h3>
                 </div>
 
-                {/* Placement Rule */}
-                <div className="mb-4">
-                  <label className="text-xs text-emerald-400 mb-2 block font-medium flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" /></svg>
-                    Placement Rule:
-                  </label>
-                  <textarea
-                    value={settings.placement_rule || ''}
-                    onChange={(e) => updateSettings({ placement_rule: e.target.value })}
-                    className="w-full bg-slate-900 border border-emerald-500/30 rounded-lg p-3 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
-                    rows={2}
-                    placeholder="Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}."
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Use <code className="bg-slate-700 px-1 rounded">{'{300}'}</code> for word count, <code className="bg-slate-700 px-1 rounded">{'{right/left/alt}'}</code> for hero position
-                  </p>
+                {/* Numbered Rules List */}
+                <div className="space-y-2">
+                  {/* Rule 1 */}
+                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-emerald-500">
+                    <span className="w-6 h-6 flex items-center justify-center bg-emerald-600 rounded-full text-white text-xs font-bold shrink-0">1</span>
+                    <div className="flex-1">
+                      <p className="text-sm text-white">Always try to match <span className="text-emerald-400 font-semibold">Primary Keywords</span> first</p>
+                      <p className="text-xs text-slate-400 mt-1">Search for primary keywords within the word range around image placement</p>
+                    </div>
+                  </div>
+
+                  {/* Rule 2 */}
+                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-amber-500">
+                    <span className="w-6 h-6 flex items-center justify-center bg-amber-600 rounded-full text-white text-xs font-bold shrink-0">2</span>
+                    <div className="flex-1">
+                      <p className="text-sm text-white">If no primary match, fall back to <span className="text-amber-400 font-semibold">Secondary Keywords</span></p>
+                      <p className="text-xs text-slate-400 mt-1">Only if secondary keywords are enabled for that option</p>
+                    </div>
+                  </div>
+
+                  {/* Rule 3 */}
+                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-red-500">
+                    <span className="w-6 h-6 flex items-center justify-center bg-red-600 rounded-full text-white text-xs font-bold shrink-0">3</span>
+                    <div className="flex-1">
+                      <p className="text-sm text-white">Never use the same <span className="text-red-400 font-semibold">Primary Keyword</span> twice on a page</p>
+                      <p className="text-xs text-slate-400 mt-1">Each primary keyword can only appear once per article (no duplicate stove images)</p>
+                    </div>
+                  </div>
+
+                  {/* Rule 4 */}
+                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-purple-500">
+                    <span className="w-6 h-6 flex items-center justify-center bg-purple-600 rounded-full text-white text-xs font-bold shrink-0">4</span>
+                    <div className="flex-1">
+                      <p className="text-sm text-white">Secondary keyword matches must have <span className="text-purple-400 font-semibold">different primaries</span></p>
+                      <p className="text-xs text-slate-400 mt-1">If "kitchen" matches twice, each must be a different primary (stove, then sink)</p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Smart Matching Rule */}
-                <div>
-                  <label className="text-xs text-emerald-400 mb-2 block font-medium flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                    Smart Content Matching Rule:
-                  </label>
-                  <textarea
-                    value={settings.smart_matching_rule || ''}
-                    onChange={(e) => updateSettings({ smart_matching_rule: e.target.value })}
-                    className="w-full bg-slate-900 border border-emerald-500/30 rounded-lg p-3 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
-                    rows={2}
-                    placeholder="Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}."
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Use <code className="bg-slate-700 px-1 rounded">{'{50-75}'}</code> for word range, <code className="bg-slate-700 px-1 rounded">{'{placeholder_categories}'}</code> for match source
-                  </p>
+                {/* Editable Parameters */}
+                <div className="mt-4 pt-4 border-t border-slate-700">
+                  <label className="text-xs text-slate-400 mb-2 block">Matching Parameters:</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] text-emerald-400 block mb-1">Word Range Around Placement</label>
+                      <input
+                        type="text"
+                        value={settings.placement_rule || '50-75'}
+                        onChange={(e) => updateSettings({ placement_rule: e.target.value })}
+                        className="w-full bg-slate-900 border border-emerald-500/30 rounded px-2 py-1.5 text-emerald-300 text-sm font-mono"
+                        placeholder="50-75"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-emerald-400 block mb-1">Max Words Between Images</label>
+                      <input
+                        type="text"
+                        value={settings.smart_matching_rule || '300'}
+                        onChange={(e) => updateSettings({ smart_matching_rule: e.target.value })}
+                        className="w-full bg-slate-900 border border-emerald-500/30 rounded px-2 py-1.5 text-emerald-300 text-sm font-mono"
+                        placeholder="300"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
