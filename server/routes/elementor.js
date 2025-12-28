@@ -306,6 +306,12 @@ router.post('/publish', async (req, res) => {
           SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
         `;
 
+        console.log('[Elementor Publish] Settings found:', settingsResult.length > 0);
+        if (settingsResult.length > 0) {
+          console.log('[Elementor Publish] enabled:', settingsResult[0].enabled);
+          console.log('[Elementor Publish] integration_mode:', settingsResult[0].integration_mode);
+        }
+
         if (settingsResult.length > 0 && settingsResult[0].enabled) {
           const config = settingsResult[0];
 
@@ -330,10 +336,16 @@ router.post('/publish', async (req, res) => {
             effectiveGenerateLive = fallbackToLive; // Only generate if bank is empty and fallback enabled
             console.log('[Elementor Publish] Mode: Pull from Bank (fallback:', fallbackToLive, ')');
           }
+        } else if (settingsResult.length > 0 && !settingsResult[0].enabled) {
+          console.log('[Elementor Publish] ⚠️ Image Creation is DISABLED - skipping image logic');
+        } else {
+          console.log('[Elementor Publish] ⚠️ No Image Creation settings found');
         }
       } catch (settingsError) {
         console.error('[Elementor Publish] Failed to fetch settings:', settingsError.message);
       }
+    } else {
+      console.log('[Elementor Publish] ⚠️ No workflowId or database not enabled');
     }
 
     // Step 2b: Try to get images from Image Bank if in bank mode
