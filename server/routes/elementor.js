@@ -620,14 +620,37 @@ router.post('/publish', async (req, res) => {
 
             availableImages = selectedImages;
 
-            console.log('[Smart Matching] Final ranked images:', availableImages.slice(0, 5).map(img => ({
-              id: img.id,
-              variation: img.variation,
-              primaryScore: img.primaryScore,
-              secondaryScore: img.secondaryScore,
-              primary: img.matchedPrimary,
-              secondary: img.matchedSecondary
-            })));
+            // ═══════════════════════════════════════════════════════════════
+            // SMART MATCHING DECISION REPORT - Show why each image was chosen
+            // ═══════════════════════════════════════════════════════════════
+            console.log('\n╔══════════════════════════════════════════════════════════════╗');
+            console.log('║         SMART CONTENT MATCHING DECISION REPORT               ║');
+            console.log('╠══════════════════════════════════════════════════════════════╣');
+            console.log(`║ Article: ${(keyword || title || 'Untitled').substring(0, 50).padEnd(50)} ║`);
+            console.log(`║ Avatar: ${(targetAvatar?.name || 'None').padEnd(52)} ║`);
+            console.log(`║ Mode: Pull from Bank | Plurals: ${matchPlurals ? 'ON' : 'OFF'}                       ║`);
+            console.log('╠══════════════════════════════════════════════════════════════╣');
+            console.log('║ MATCHING RULES APPLIED:                                      ║');
+            console.log('║  1. Always try primary keywords first                        ║');
+            console.log('║  2. Fall back to secondary keywords if enabled               ║');
+            console.log('║  3. Never duplicate primary keywords on a page               ║');
+            console.log('║  4. Secondary matches must have different primaries          ║');
+            console.log('╠══════════════════════════════════════════════════════════════╣');
+
+            availableImages.slice(0, 5).forEach((img, idx) => {
+              console.log(`║ IMAGE #${idx + 1}: ${(img.variation || img.id).substring(0, 50).padEnd(50)} ║`);
+              console.log(`║   Primary Score: ${String(img.primaryScore || 0).padEnd(5)} | Secondary Score: ${String(img.secondaryScore || 0).padEnd(12)} ║`);
+              if (img.matchedPrimary?.length > 0) {
+                console.log(`║   Primary Keywords: ${img.matchedPrimary.slice(0, 3).join(', ').substring(0, 40).padEnd(40)} ║`);
+              }
+              if (img.matchedSecondary?.length > 0) {
+                console.log(`║   Secondary Keywords: ${img.matchedSecondary.slice(0, 3).join(', ').substring(0, 38).padEnd(38)} ║`);
+              }
+              console.log('╠──────────────────────────────────────────────────────────────╣');
+            });
+
+            console.log(`║ Total Matched: ${String(availableImages.length).padEnd(3)} images                                  ║`);
+            console.log('╚══════════════════════════════════════════════════════════════╝\n');
           }
 
           // Sort by variation order (if not using smart matching or as tiebreaker)
@@ -776,6 +799,48 @@ router.post('/publish', async (req, res) => {
       imagesGenerated = pipelineResult.imagesGenerated || 0;
       estimatedCost = pipelineResult.estimatedCost;
       console.log(`[Elementor Publish] Generated ${imagesGenerated} images`);
+
+      // ═══════════════════════════════════════════════════════════════
+      // IMAGE DECISION REPORT - Log what was generated and why
+      // ═══════════════════════════════════════════════════════════════
+      console.log('\n╔══════════════════════════════════════════════════════════════╗');
+      console.log('║          IMAGE GENERATION DECISION REPORT                    ║');
+      console.log('╠══════════════════════════════════════════════════════════════╣');
+      console.log(`║ Article: ${(title || keyword || 'Untitled').substring(0, 50).padEnd(50)} ║`);
+      console.log(`║ Mode: Generate Live | Model: ${imageGenModel.padEnd(28)} ║`);
+      console.log(`║ Quality: ${imageQuality.padEnd(10)} | Images Generated: ${String(imagesGenerated).padEnd(14)} ║`);
+      console.log('╠══════════════════════════════════════════════════════════════╣');
+
+      // Log hero image if present
+      if (pipelineResult.chunks.intro?.imageData) {
+        const heroAction = pipelineResult.chunks.intro.extractedAction || {};
+        console.log('║ HERO IMAGE:                                                  ║');
+        console.log(`║   Action: ${(heroAction.action || 'N/A').substring(0, 50).padEnd(50)} ║`);
+        console.log(`║   Mood: ${(heroAction.mood || 'N/A').padEnd(52)} ║`);
+        console.log(`║   Setting: ${(heroAction.setting || 'N/A').substring(0, 48).padEnd(48)} ║`);
+        if (pipelineResult.chunks.intro.imagePrompt) {
+          console.log(`║   Prompt: ${pipelineResult.chunks.intro.imagePrompt.substring(0, 50).padEnd(50)} ║`);
+        }
+      }
+
+      // Log inline images
+      let inlineCount = 0;
+      pipelineResult.chunks.chunks.forEach((chunk, idx) => {
+        if (chunk.imageData) {
+          inlineCount++;
+          const action = chunk.extractedAction || {};
+          console.log('╠──────────────────────────────────────────────────────────────╣');
+          console.log(`║ IMAGE #${inlineCount} (Section ${idx + 1}):                                       ║`);
+          console.log(`║   Heading: ${(chunk.heading || 'No heading').substring(0, 48).padEnd(48)} ║`);
+          console.log(`║   Word Count: ${String(chunk.wordCount || 0).padEnd(5)} | Side: ${(chunk.imageData.side || 'N/A').padEnd(25)} ║`);
+          console.log(`║   Action: ${(action.action || 'N/A').substring(0, 50).padEnd(50)} ║`);
+          if (chunk.imagePrompt) {
+            console.log(`║   Prompt: ${chunk.imagePrompt.substring(0, 50).padEnd(50)} ║`);
+          }
+        }
+      });
+
+      console.log('╚══════════════════════════════════════════════════════════════╝\n');
     }
 
     // Step 4: Extract or use provided title
