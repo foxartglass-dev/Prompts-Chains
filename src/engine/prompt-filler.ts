@@ -7,6 +7,7 @@ import { WorkflowItem, ProjectConfig } from './types';
  * Fill a prompt template with all variable types:
  *
  * Variable Syntax:
+ * - [[{opt1}or{opt2}]] → Randomly pick ONE of the options (OR syntax)
  * - [output_key]     → Output from a previous prompt in the chain
  * - {{{snippet}}}    → Tagged snippet (different value per tag)
  * - {key{TAG}}       → Tagged placeholder (specific to one tag)
@@ -26,6 +27,20 @@ export function fillPrompt(
   previousOutputs: Record<string, string> = {}
 ): string {
   let filled = template;
+
+  // 0. Replace [[{opt1}or{opt2}or{opt3}]] with a randomly chosen option
+  // This must happen FIRST so the chosen placeholder can be resolved later
+  filled = filled.replace(/\[\[(.+?)\]\]/g, (match, inner) => {
+    // Split by "or" (case-insensitive, with optional whitespace)
+    const options = inner.split(/\s*or\s*/i).map((opt: string) => opt.trim());
+    if (options.length < 2) {
+      // Not a valid OR pattern, return unchanged
+      return match;
+    }
+    // Randomly pick one option
+    const randomIndex = Math.floor(Math.random() * options.length);
+    return options[randomIndex];
+  });
 
   // 1. Replace [output_key] with previous prompt outputs
   filled = filled.replace(/\[([^\]]+)\]/g, (match, key) => {
