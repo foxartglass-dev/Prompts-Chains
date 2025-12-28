@@ -295,6 +295,11 @@ interface ImageCreationSettings {
   placement_rule: string;
   smart_matching_rule: string;
   match_plurals: boolean; // Auto-match plurals (counter → counters, sink → sinks)
+  // Editable Smart Matching Rules (the 4 core rules)
+  matching_rule_1: string; // Primary keywords rule
+  matching_rule_2: string; // Secondary keywords fallback rule
+  matching_rule_3: string; // No duplicate primaries rule
+  matching_rule_4: string; // Different primaries for secondary matches rule
   // Generate Live prompt mode
   live_prompt_mode: 'main_prompt' | 'smart_prompt'; // main_prompt = use avatar's mainPrompt, smart_prompt = GPT-4o auto-generates
   smart_prompt_guidance: string; // Guidance/guardrails for GPT-4o when using smart_prompt mode
@@ -345,6 +350,11 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   placement_rule: 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
   smart_matching_rule: 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
   match_plurals: true, // Default ON - auto-match counter/counters, sink/sinks
+  // Editable Smart Matching Rules (the 4 core rules) - users can customize these
+  matching_rule_1: 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.',
+  matching_rule_2: 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.',
+  matching_rule_3: 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).',
+  matching_rule_4: 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
   // Generate Live prompt mode - default to smart_prompt (GPT-4o) for backwards compatibility
   live_prompt_mode: 'smart_prompt',
   smart_prompt_guidance: '' // Empty by default - user can add guardrails
@@ -4485,14 +4495,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <h3 className="text-emerald-400 font-semibold">Smart Matching Rules</h3>
                 </div>
 
-                {/* Numbered Rules List */}
-                <div className="space-y-2">
+                {/* Numbered Rules List - EDITABLE */}
+                <div className="space-y-3">
                   {/* Rule 1 */}
                   <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-emerald-500">
                     <span className="w-6 h-6 flex items-center justify-center bg-emerald-600 rounded-full text-white text-xs font-bold shrink-0">1</span>
                     <div className="flex-1">
-                      <p className="text-sm text-white">Always try to match <span className="text-emerald-400 font-semibold">Primary Keywords</span> first</p>
-                      <p className="text-xs text-slate-400 mt-1">Search for primary keywords within the word range around image placement</p>
+                      <label className="text-xs text-emerald-400 font-semibold mb-1 block">Primary Keywords Rule</label>
+                      <textarea
+                        value={settings.matching_rule_1 || 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.'}
+                        onChange={(e) => updateSettings({ matching_rule_1: e.target.value })}
+                        className="w-full bg-slate-800 border border-emerald-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-emerald-500"
+                        rows={2}
+                        placeholder="Rule for primary keyword matching..."
+                      />
                     </div>
                   </div>
 
@@ -4500,8 +4516,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-amber-500">
                     <span className="w-6 h-6 flex items-center justify-center bg-amber-600 rounded-full text-white text-xs font-bold shrink-0">2</span>
                     <div className="flex-1">
-                      <p className="text-sm text-white">If no primary match, fall back to <span className="text-amber-400 font-semibold">Secondary Keywords</span></p>
-                      <p className="text-xs text-slate-400 mt-1">Only if secondary keywords are enabled for that option</p>
+                      <label className="text-xs text-amber-400 font-semibold mb-1 block">Secondary Keywords Fallback Rule</label>
+                      <textarea
+                        value={settings.matching_rule_2 || 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.'}
+                        onChange={(e) => updateSettings({ matching_rule_2: e.target.value })}
+                        className="w-full bg-slate-800 border border-amber-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-amber-500"
+                        rows={2}
+                        placeholder="Rule for secondary keyword fallback..."
+                      />
                     </div>
                   </div>
 
@@ -4509,8 +4531,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-red-500">
                     <span className="w-6 h-6 flex items-center justify-center bg-red-600 rounded-full text-white text-xs font-bold shrink-0">3</span>
                     <div className="flex-1">
-                      <p className="text-sm text-white">Never use the same <span className="text-red-400 font-semibold">Primary Keyword</span> twice on a page</p>
-                      <p className="text-xs text-slate-400 mt-1">Each primary keyword can only appear once per article (no duplicate stove images)</p>
+                      <label className="text-xs text-red-400 font-semibold mb-1 block">No Duplicate Primaries Rule</label>
+                      <textarea
+                        value={settings.matching_rule_3 || 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).'}
+                        onChange={(e) => updateSettings({ matching_rule_3: e.target.value })}
+                        className="w-full bg-slate-800 border border-red-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-red-500"
+                        rows={2}
+                        placeholder="Rule for preventing duplicate primary keywords..."
+                      />
                     </div>
                   </div>
 
@@ -4518,34 +4546,40 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-purple-500">
                     <span className="w-6 h-6 flex items-center justify-center bg-purple-600 rounded-full text-white text-xs font-bold shrink-0">4</span>
                     <div className="flex-1">
-                      <p className="text-sm text-white">Secondary keyword matches must have <span className="text-purple-400 font-semibold">different primaries</span></p>
-                      <p className="text-xs text-slate-400 mt-1">If "kitchen" matches twice, each must be a different primary (stove, then sink)</p>
+                      <label className="text-xs text-purple-400 font-semibold mb-1 block">Different Primaries for Secondary Matches Rule</label>
+                      <textarea
+                        value={settings.matching_rule_4 || 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).'}
+                        onChange={(e) => updateSettings({ matching_rule_4: e.target.value })}
+                        className="w-full bg-slate-800 border border-purple-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-purple-500"
+                        rows={2}
+                        placeholder="Rule for secondary keyword primary diversity..."
+                      />
                     </div>
                   </div>
                 </div>
 
                 {/* Editable Parameters */}
                 <div className="mt-4 pt-4 border-t border-slate-700">
-                  <label className="text-xs text-slate-400 mb-2 block">Matching Parameters:</label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs text-slate-400 mb-3 block">Matching Parameters (use {"{placeholders}"} for dynamic values):</label>
+                  <div className="space-y-3">
                     <div>
-                      <label className="text-[10px] text-emerald-400 block mb-1">Word Range Around Placement</label>
-                      <input
-                        type="text"
-                        value={settings.placement_rule || '50-75'}
+                      <label className="text-xs text-cyan-400 font-semibold block mb-1">Image Placement Rule</label>
+                      <textarea
+                        value={settings.placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.'}
                         onChange={(e) => updateSettings({ placement_rule: e.target.value })}
-                        className="w-full bg-slate-900 border border-emerald-500/30 rounded px-2 py-1.5 text-emerald-300 text-sm font-mono"
-                        placeholder="50-75"
+                        className="w-full bg-slate-800 border border-cyan-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-cyan-500"
+                        rows={2}
+                        placeholder="Place image at last paragraph break under {300} words since previous image..."
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-emerald-400 block mb-1">Max Words Between Images</label>
-                      <input
-                        type="text"
-                        value={settings.smart_matching_rule || '300'}
+                      <label className="text-xs text-cyan-400 font-semibold block mb-1">Smart Matching Rule</label>
+                      <textarea
+                        value={settings.smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.'}
                         onChange={(e) => updateSettings({ smart_matching_rule: e.target.value })}
-                        className="w-full bg-slate-900 border border-emerald-500/30 rounded px-2 py-1.5 text-emerald-300 text-sm font-mono"
-                        placeholder="300"
+                        className="w-full bg-slate-800 border border-cyan-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-cyan-500"
+                        rows={2}
+                        placeholder="Look {50-75} words around image placement for keyword matches..."
                       />
                     </div>
                   </div>

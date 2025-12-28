@@ -699,6 +699,11 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           placement_rule: 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
           smart_matching_rule: 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
           match_plurals: true, // Default ON - auto-match counter/counters
+          // Editable Smart Matching Rules (the 4 core rules)
+          matching_rule_1: 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.',
+          matching_rule_2: 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.',
+          matching_rule_3: 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).',
+          matching_rule_4: 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
           // Image quality default
           image_quality: 'low',
           // Generate Live prompt mode
@@ -741,6 +746,11 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         placement_rule: results[0].placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
         smart_matching_rule: results[0].smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
         match_plurals: results[0].match_plurals !== false, // Default ON
+        // Editable Smart Matching Rules (the 4 core rules)
+        matching_rule_1: results[0].matching_rule_1 || 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.',
+        matching_rule_2: results[0].matching_rule_2 || 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.',
+        matching_rule_3: results[0].matching_rule_3 || 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).',
+        matching_rule_4: results[0].matching_rule_4 || 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
         // Image quality
         image_quality: results[0].image_quality || 'low',
         // Generate Live prompt mode
@@ -794,6 +804,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       placement_rule,
       smart_matching_rule,
       match_plurals,
+      // Editable Smart Matching Rules (the 4 core rules)
+      matching_rule_1,
+      matching_rule_2,
+      matching_rule_3,
+      matching_rule_4,
       // Generate Live prompt mode
       live_prompt_mode,
       smart_prompt_guidance
@@ -905,12 +920,16 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
             smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode),
             placement_rule = COALESCE(${placement_rule}, placement_rule),
             smart_matching_rule = COALESCE(${smart_matching_rule}, smart_matching_rule),
-            match_plurals = COALESCE(${match_plurals}, match_plurals)
+            match_plurals = COALESCE(${match_plurals}, match_plurals),
+            matching_rule_1 = COALESCE(${matching_rule_1}, matching_rule_1),
+            matching_rule_2 = COALESCE(${matching_rule_2}, matching_rule_2),
+            matching_rule_3 = COALESCE(${matching_rule_3}, matching_rule_3),
+            matching_rule_4 = COALESCE(${matching_rule_4}, matching_rule_4)
           WHERE workflow_id = ${workflowId}
         `;
         return true;
       } catch (err) {
-        if (err.message?.includes('smart_matching') || err.message?.includes('placement_rule') || err.message?.includes('match_plurals')) {
+        if (err.message?.includes('smart_matching') || err.message?.includes('placement_rule') || err.message?.includes('match_plurals') || err.message?.includes('matching_rule')) {
           console.log('[Image Creation API] smart_matching/algorithm columns not available yet (run migration)');
           return false;
         }

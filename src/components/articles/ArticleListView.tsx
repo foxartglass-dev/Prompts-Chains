@@ -11,6 +11,26 @@ interface ArticleImage {
   pushedToWp?: boolean;
 }
 
+interface ImageDecisionReportImage {
+  position: number;
+  type: 'hero' | 'inline';
+  source: 'bank' | 'generated' | 'none';
+  side?: string;
+  matchedKeywords?: string[];
+  variationUsed?: string;
+  prompt?: string;
+  url?: string;
+  reason?: string;
+}
+
+interface ImageDecisionReport {
+  mode: 'bank' | 'live' | 'none';
+  model?: string | null;
+  quality?: string | null;
+  smartMatchingEnabled?: boolean;
+  images: ImageDecisionReportImage[];
+}
+
 interface Article {
   id: number;
   workflow_id: number | null;
@@ -39,6 +59,7 @@ interface Article {
   selected_meta_title?: string | null;
   selected_meta_description?: string | null;
   images?: ArticleImage[];
+  image_decision_report?: ImageDecisionReport | null;
 }
 
 interface ArticleListViewProps {
@@ -66,6 +87,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
   // Image management
   const [showImages, setShowImages] = useState(false);
+  const [showImageReport, setShowImageReport] = useState(false);
   const [pushingImages, setPushingImages] = useState(false);
   const [pushingMeta, setPushingMeta] = useState(false);
   const [regeneratingImage, setRegeneratingImage] = useState<string | null>(null);
@@ -250,6 +272,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     setIsEditing(false);
     setError(null);
     setShowImages(false);
+    setShowImageReport(false);
   };
 
   // Push all images to WordPress media library
@@ -520,6 +543,12 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
               <div>
                 <h3 className="text-lg font-semibold text-white">{selectedArticle.keyword}</h3>
+                {/* Page Title - show selected or first meta title */}
+                {(selectedArticle.selected_meta_title || (selectedArticle.meta_titles && selectedArticle.meta_titles.length > 0)) && (
+                  <p className="text-sm text-brand-gold mt-0.5 truncate max-w-xl" title={selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0]}>
+                    {selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0]}
+                  </p>
+                )}
                 <div className="flex items-center gap-3 mt-1 text-sm">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(selectedArticle.status)}`}>
                     {selectedArticle.status}
@@ -822,6 +851,148 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                   </div>
                 )}
               </div>
+
+              {/* Image Decision Report */}
+              {selectedArticle.image_decision_report && (
+                <div className="mt-6">
+                  <button
+                    onClick={() => setShowImageReport(!showImageReport)}
+                    className="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white transition"
+                  >
+                    <svg className={`w-4 h-4 transition-transform ${showImageReport ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    Image Processing Log
+                    <span className="bg-purple-600/30 text-purple-400 px-2 py-0.5 rounded text-xs">
+                      {selectedArticle.image_decision_report.images?.length || 0} decisions
+                    </span>
+                  </button>
+
+                  {showImageReport && (
+                    <div className="mt-3 bg-slate-800/50 rounded-lg p-4 space-y-4">
+                      {/* Report Header */}
+                      <div className="flex items-center gap-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500">Mode:</span>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            selectedArticle.image_decision_report.mode === 'bank' ? 'bg-blue-600/30 text-blue-400' :
+                            selectedArticle.image_decision_report.mode === 'live' ? 'bg-green-600/30 text-green-400' :
+                            'bg-gray-600/30 text-gray-400'
+                          }`}>
+                            {selectedArticle.image_decision_report.mode === 'bank' ? 'Pull from Bank' :
+                             selectedArticle.image_decision_report.mode === 'live' ? 'Generate Live' : 'None'}
+                          </span>
+                        </div>
+                        {selectedArticle.image_decision_report.model && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500">Model:</span>
+                            <span className="text-brand-cyan text-xs">{selectedArticle.image_decision_report.model}</span>
+                          </div>
+                        )}
+                        {selectedArticle.image_decision_report.quality && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500">Quality:</span>
+                            <span className="text-brand-gold text-xs">{selectedArticle.image_decision_report.quality}</span>
+                          </div>
+                        )}
+                        {selectedArticle.image_decision_report.smartMatchingEnabled && (
+                          <span className="px-2 py-0.5 bg-emerald-600/30 text-emerald-400 rounded text-xs">
+                            Smart Matching ON
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Image Decisions */}
+                      <div className="space-y-3">
+                        {selectedArticle.image_decision_report.images?.map((img, idx) => (
+                          <div
+                            key={idx}
+                            className={`p-3 rounded-lg border ${
+                              img.source === 'bank' ? 'bg-blue-900/20 border-blue-500/30' :
+                              img.source === 'generated' ? 'bg-green-900/20 border-green-500/30' :
+                              'bg-gray-900/20 border-gray-500/30'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              {/* Position badge */}
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${
+                                img.type === 'hero' ? 'bg-brand-gold' : 'bg-slate-600'
+                              }`}>
+                                {img.position}
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                {/* Type and Source */}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                    img.type === 'hero' ? 'bg-brand-gold/20 text-brand-gold' : 'bg-slate-600/50 text-slate-300'
+                                  }`}>
+                                    {img.type === 'hero' ? 'Hero' : 'Inline'} {img.side ? `(${img.side})` : ''}
+                                  </span>
+                                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                    img.source === 'bank' ? 'bg-blue-600/30 text-blue-400' :
+                                    img.source === 'generated' ? 'bg-green-600/30 text-green-400' :
+                                    'bg-red-600/30 text-red-400'
+                                  }`}>
+                                    {img.source === 'bank' ? 'From Bank' :
+                                     img.source === 'generated' ? 'Generated' : 'Not Found'}
+                                  </span>
+                                </div>
+
+                                {/* Matched Keywords */}
+                                {img.matchedKeywords && img.matchedKeywords.length > 0 && (
+                                  <div className="mt-2">
+                                    <span className="text-[10px] text-gray-500">Matched Keywords:</span>
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {img.matchedKeywords.map((kw, kwIdx) => (
+                                        <span key={kwIdx} className="text-[10px] bg-emerald-900/30 text-emerald-400 px-1.5 py-0.5 rounded">
+                                          {kw}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Variation Used */}
+                                {img.variationUsed && (
+                                  <div className="mt-1 text-xs text-gray-400">
+                                    <span className="text-gray-500">Variation:</span> {img.variationUsed}
+                                  </div>
+                                )}
+
+                                {/* Prompt (truncated) */}
+                                {img.prompt && (
+                                  <div className="mt-1 text-xs text-gray-400 truncate" title={img.prompt}>
+                                    <span className="text-gray-500">Prompt:</span> {img.prompt}
+                                  </div>
+                                )}
+
+                                {/* Reason (if no image) */}
+                                {img.reason && !img.url && (
+                                  <div className="mt-1 text-xs text-red-400">
+                                    <span className="text-gray-500">Reason:</span> {img.reason}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Thumbnail */}
+                              {img.url && (
+                                <a href={img.url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                                  <img
+                                    src={img.url}
+                                    alt={`Position ${img.position}`}
+                                    className="w-16 h-16 object-cover rounded border border-gray-700 hover:border-brand-cyan transition"
+                                  />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

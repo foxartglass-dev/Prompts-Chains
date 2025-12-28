@@ -277,6 +277,11 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   -- Generate Live prompt mode settings
   live_prompt_mode VARCHAR(20) DEFAULT 'smart_prompt', -- 'main_prompt' or 'smart_prompt'
   smart_prompt_guidance TEXT DEFAULT '', -- Guidance/guardrails for GPT-4o when using smart_prompt mode
+  -- Editable Smart Matching Rules (the 4 core rules)
+  matching_rule_1 TEXT DEFAULT 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.',
+  matching_rule_2 TEXT DEFAULT 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.',
+  matching_rule_3 TEXT DEFAULT 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).',
+  matching_rule_4 TEXT DEFAULT 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
   -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -293,6 +298,19 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'articles' AND column_name = 'image_decision_report') THEN
     ALTER TABLE articles ADD COLUMN image_decision_report JSONB DEFAULT NULL;
+  END IF;
+  -- Add editable matching rules columns
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'matching_rule_1') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN matching_rule_1 TEXT DEFAULT 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'matching_rule_2') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN matching_rule_2 TEXT DEFAULT 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'matching_rule_3') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN matching_rule_3 TEXT DEFAULT 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'matching_rule_4') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN matching_rule_4 TEXT DEFAULT 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).';
   END IF;
 END $$;
 

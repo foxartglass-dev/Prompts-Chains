@@ -317,6 +317,49 @@ export const VibeCoderNotepad: React.FC<VibeCoderNotepadProps> = ({ isOpen, onCl
     }
   };
 
+  // Paste image from clipboard using Clipboard API (for button click)
+  const pasteImageFromClipboard = async (editId?: string) => {
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        for (const type of item.types) {
+          if (type.startsWith('image/')) {
+            const blob = await item.getType(type);
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const dataUrl = event.target?.result as string;
+              if (editId) {
+                // Add to specific edit
+                setState(prev => ({
+                  ...prev,
+                  edits: prev.edits.map(edit => {
+                    if (edit.id === editId) {
+                      return {
+                        ...edit,
+                        images: [...edit.images, { id: generateId(), dataUrl, timestamp: Date.now() }]
+                      };
+                    }
+                    return edit;
+                  })
+                }));
+              } else {
+                // Create new edit with image
+                addNewEdit('', '', [{ id: generateId(), dataUrl, timestamp: Date.now() }]);
+              }
+              showNotification('Image pasted!');
+            };
+            reader.readAsDataURL(blob);
+            return; // Only handle first image
+          }
+        }
+      }
+      showNotification('No image in clipboard');
+    } catch (e) {
+      console.error('Failed to paste from clipboard:', e);
+      showNotification('Could not access clipboard. Try Ctrl+V instead.');
+    }
+  };
+
   // Copy batch for Claude
   const copyBatchForClaude = () => {
     const { batch, remaining } = getEditsBatch(state.edits);
@@ -417,15 +460,27 @@ export const VibeCoderNotepad: React.FC<VibeCoderNotepadProps> = ({ isOpen, onCl
         {activeTab === 'edits' && (
           <>
             {/* Quick Add */}
-            <button
-              onClick={() => addNewEdit()}
-              className="w-full py-3 border-2 border-dashed border-purple-500/50 rounded-lg text-purple-400 hover:border-purple-500 hover:text-purple-300 transition flex items-center justify-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-              </svg>
-              New Edit (or paste image)
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => addNewEdit()}
+                className="flex-1 py-3 border-2 border-dashed border-purple-500/50 rounded-lg text-purple-400 hover:border-purple-500 hover:text-purple-300 transition flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                </svg>
+                + New Edit
+              </button>
+              <button
+                onClick={() => pasteImageFromClipboard()}
+                className="px-4 py-3 border-2 border-dashed border-green-500/50 rounded-lg text-green-400 hover:border-green-500 hover:text-green-300 transition flex items-center justify-center gap-2"
+                title="Paste image from clipboard (or use Ctrl+V)"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Paste Image
+              </button>
+            </div>
 
             {/* Edit Cards */}
             {pendingEdits.map((edit, idx) => (
@@ -489,12 +544,22 @@ export const VibeCoderNotepad: React.FC<VibeCoderNotepadProps> = ({ isOpen, onCl
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs text-slate-400">Images</span>
-                        <span className="text-xs text-purple-400">Paste to add</span>
+                        <button
+                          onClick={() => pasteImageFromClipboard(edit.id)}
+                          className="text-xs text-green-400 hover:text-green-300 flex items-center gap-1"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          Paste to add
+                        </button>
                       </div>
                       <div
                         ref={pasteAreaRef}
                         onPaste={(e) => handlePaste(e.nativeEvent, edit.id)}
-                        className="grid grid-cols-3 gap-2 min-h-[60px] p-2 border border-dashed border-slate-600 rounded"
+                        className="grid grid-cols-3 gap-2 min-h-[60px] p-2 border border-dashed border-slate-600 rounded cursor-pointer hover:border-green-500/50"
+                        onClick={() => pasteImageFromClipboard(edit.id)}
+                        title="Click to paste image or use Ctrl+V"
                       >
                         {edit.images.map((img, imgIdx) => (
                           <div key={img.id} className="relative group">
