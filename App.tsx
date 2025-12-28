@@ -23,6 +23,7 @@ import WordPressSettings from './src/components/WordPressSettings';
 import ArticlesPage from './src/pages/ArticlesPage';
 import ImageCreationSection from './src/components/ImageCreationSection';
 import SitePlanningSection from './src/components/SitePlanningSection';
+import { VibeCoderToggle } from './src/components/VibeCoderNotepad';
 
 // Types for workflow
 interface WorkflowItem {
@@ -3125,6 +3126,9 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* VibeCoder Notepad - Floating toggle button */}
+            <VibeCoderToggle />
         </div>
     );
 };
