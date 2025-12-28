@@ -308,11 +308,11 @@ router.post('/publish', async (req, res) => {
 
         console.log('[Elementor Publish] Settings found:', settingsResult.length > 0);
         if (settingsResult.length > 0) {
-          console.log('[Elementor Publish] enabled:', settingsResult[0].enabled);
           console.log('[Elementor Publish] integration_mode:', settingsResult[0].integration_mode);
         }
 
-        if (settingsResult.length > 0 && settingsResult[0].enabled) {
+        // Note: We ignore the 'enabled' flag - if settings exist, user wants images
+        if (settingsResult.length > 0) {
           const config = settingsResult[0];
 
           // Check integration_mode to determine behavior
@@ -336,8 +336,6 @@ router.post('/publish', async (req, res) => {
             effectiveGenerateLive = fallbackToLive; // Only generate if bank is empty and fallback enabled
             console.log('[Elementor Publish] Mode: Pull from Bank (fallback:', fallbackToLive, ')');
           }
-        } else if (settingsResult.length > 0 && !settingsResult[0].enabled) {
-          console.log('[Elementor Publish] ⚠️ Image Creation is DISABLED - skipping image logic');
         } else {
           console.log('[Elementor Publish] ⚠️ No Image Creation settings found');
         }
