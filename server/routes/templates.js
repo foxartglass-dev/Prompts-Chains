@@ -204,6 +204,74 @@ router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
       };
     }
 
+    // Include Image Creation settings if selected
+    if (selectedIncludes.imageCreation) {
+      try {
+        const imageSettings = await sql`
+          SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+        `;
+        if (imageSettings.length > 0) {
+          const settings = imageSettings[0];
+          templateData.imageCreation = {
+            enabled: settings.enabled,
+            prompt_assistant_model: settings.prompt_assistant_model,
+            image_generation_model: settings.image_generation_model,
+            image_quality: settings.image_quality,
+            reference_images: settings.reference_images || [],
+            logo_images: settings.logo_images || [],
+            audience_avatars: settings.audience_avatars || [],
+            image_bank: settings.image_bank || [],
+            image_categories: settings.image_categories || [],
+            auto_tag_enabled: settings.auto_tag_enabled,
+            smart_matching_enabled: settings.smart_matching_enabled,
+            fallback_to_live: settings.fallback_to_live,
+            variation_order_mode: settings.variation_order_mode
+          };
+        }
+      } catch (err) {
+        console.log('[Template] No image creation settings found for workflow');
+      }
+    }
+
+    // Include Site Planning if selected
+    if (selectedIncludes.sitePlanning) {
+      try {
+        const sitePlans = await sql`
+          SELECT * FROM site_plans WHERE workflow_id = ${workflowId}
+        `;
+        if (sitePlans.length > 0) {
+          const plan = sitePlans[0];
+          const nodes = await sql`
+            SELECT * FROM site_plan_nodes WHERE site_plan_id = ${plan.id} ORDER BY depth, sort_order
+          `;
+          templateData.sitePlanning = {
+            plan: {
+              name: plan.name,
+              description: plan.description,
+              auto_sync_check: plan.auto_sync_check
+            },
+            nodes: nodes.map(n => ({
+              title: n.title,
+              slug: n.slug,
+              page_type: n.page_type,
+              target_keyword: n.target_keyword,
+              meta_title: n.meta_title,
+              meta_description: n.meta_description,
+              content_brief: n.content_brief,
+              sort_order: n.sort_order,
+              depth: n.depth,
+              is_pillar_page: n.is_pillar_page,
+              is_in_menu: n.is_in_menu,
+              menu_order: n.menu_order,
+              parent_slug: nodes.find(p => p.id === n.parent_id)?.slug || null
+            }))
+          };
+        }
+      } catch (err) {
+        console.log('[Template] No site planning found for workflow');
+      }
+    }
+
     // Determine template type based on what's included
     let templateType = 'full_workflow';
     const includedSections = Object.entries(selectedIncludes).filter(([_, v]) => v).map(([k]) => k);

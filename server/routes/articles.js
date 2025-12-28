@@ -385,4 +385,279 @@ router.get('/search/:keyword', requireDb, async (req, res) => {
   }
 });
 
+// POST push images to WordPress media library
+router.post('/:articleId/push-images', requireDb, async (req, res) => {
+  try {
+    const { articleId } = req.params;
+    const { wpUrl, wpUser, wpPassword } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'Missing WordPress credentials' });
+    }
+
+    // Get article with images from database
+    const articles = await sql`SELECT * FROM articles WHERE id = ${articleId}`;
+    if (articles.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    const article = articles[0];
+    const images = article.generated_images || [];
+
+    if (images.length === 0) {
+      return res.status(400).json({ error: 'No images to push' });
+    }
+
+    const results = [];
+    const updatedImages = [];
+
+    for (const image of images) {
+      try {
+        // Skip if already pushed
+        if (image.pushedToWp && image.wpMediaId) {
+          updatedImages.push(image);
+          results.push({ id: image.id, status: 'skipped', wpMediaId: image.wpMediaId });
+          continue;
+        }
+
+        // Fetch the image data
+        let imageBuffer;
+        if (image.url.startsWith('data:')) {
+          // Base64 data URL
+          const base64Data = image.url.replace(/^data:image\/\w+;base64,/, '');
+          imageBuffer = Buffer.from(base64Data, 'base64');
+        } else {
+          // Remote URL - fetch it
+          const imageRes = await fetch(image.url);
+          const arrayBuffer = await imageRes.arrayBuffer();
+          imageBuffer = Buffer.from(arrayBuffer);
+        }
+
+        // Upload to WordPress
+        const filename = `article-${articleId}-${image.id}.png`;
+        const wpMediaUrl = `${wpUrl}/wp-json/wp/v2/media`;
+        const auth = Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
+
+        const uploadRes = await fetch(wpMediaUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Basic ${auth}`,
+            'Content-Disposition': `attachment; filename="${filename}"`,
+            'Content-Type': 'image/png'
+          },
+          body: imageBuffer
+        });
+
+        if (!uploadRes.ok) {
+          const errorText = await uploadRes.text();
+          console.error(`[Push Images] Failed to upload ${image.id}:`, errorText);
+          updatedImages.push({ ...image, pushedToWp: false });
+          results.push({ id: image.id, status: 'failed', error: errorText });
+          continue;
+        }
+
+        const mediaData = await uploadRes.json();
+
+        // Update image with WordPress media ID
+        updatedImages.push({
+          ...image,
+          pushedToWp: true,
+          wpMediaId: mediaData.id,
+          wpMediaUrl: mediaData.source_url
+        });
+        results.push({ id: image.id, status: 'success', wpMediaId: mediaData.id });
+
+      } catch (imgError) {
+        console.error(`[Push Images] Error processing ${image.id}:`, imgError.message);
+        updatedImages.push({ ...image, pushedToWp: false });
+        results.push({ id: image.id, status: 'failed', error: imgError.message });
+      }
+    }
+
+    // Update article with new image data
+    await sql`
+      UPDATE articles
+      SET generated_images = ${JSON.stringify(updatedImages)},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${articleId}
+    `;
+
+    const successCount = results.filter(r => r.status === 'success').length;
+    const skippedCount = results.filter(r => r.status === 'skipped').length;
+
+    res.json({
+      success: true,
+      pushed: successCount,
+      skipped: skippedCount,
+      message: `${successCount} images uploaded, ${skippedCount} skipped`,
+      results
+    });
+
+  } catch (error) {
+    console.error('[Push Images] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST regenerate a single image for an article
+router.post('/:articleId/regenerate-image', requireDb, async (req, res) => {
+  try {
+    const { articleId } = req.params;
+    const { imageId, prompt, workflowId } = req.body;
+
+    if (!articleId || !imageId || !prompt) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Get current article
+    const articles = await sql`SELECT * FROM articles WHERE id = ${articleId}`;
+    if (articles.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    const article = articles[0];
+    const currentImages = article.generated_images || [];
+    const imageIndex = currentImages.findIndex(img => img.id === imageId);
+
+    if (imageIndex === -1) {
+      return res.status(404).json({ error: 'Image not found in article' });
+    }
+
+    // Get workflow's image generation settings
+    let imageModel = 'gpt-image-1.5';
+    let apiKey = process.env.OPENAI_API_KEY;
+
+    if (workflowId) {
+      const settings = await sql`
+        SELECT image_generation_model FROM image_creation_settings WHERE workflow_id = ${workflowId}
+      `;
+      if (settings.length > 0 && settings[0].image_generation_model) {
+        imageModel = settings[0].image_generation_model;
+      }
+    }
+
+    // Generate new image using OpenAI
+    const OpenAI = (await import('openai')).default;
+    const openai = new OpenAI({ apiKey });
+
+    console.log(`[Regenerate Image] Generating with ${imageModel}: ${prompt.substring(0, 50)}...`);
+
+    const response = await openai.images.generate({
+      model: imageModel.startsWith('gpt-image') ? imageModel : 'gpt-image-1.5',
+      prompt: prompt,
+      n: 1,
+      size: '1024x1536',
+      quality: 'low'
+    });
+
+    // Handle response format
+    let imageUrl;
+    if (response.data[0].b64_json) {
+      imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
+    } else if (response.data[0].url) {
+      imageUrl = response.data[0].url;
+    }
+
+    if (!imageUrl) {
+      return res.status(500).json({ error: 'Image generation returned no data' });
+    }
+
+    // Update the image in the array
+    const oldImage = currentImages[imageIndex];
+    currentImages[imageIndex] = {
+      ...oldImage,
+      url: imageUrl,
+      createdAt: new Date().toISOString(),
+      pushedToWp: false, // Reset since it's a new image
+      wpMediaId: undefined
+    };
+
+    // Save to database
+    await sql`
+      UPDATE articles
+      SET generated_images = ${JSON.stringify(currentImages)},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${articleId}
+    `;
+
+    res.json({
+      success: true,
+      image: currentImages[imageIndex]
+    });
+
+  } catch (error) {
+    console.error('[Regenerate Image] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST push meta title and description to WordPress
+router.post('/:articleId/push-meta', requireDb, async (req, res) => {
+  try {
+    const { articleId } = req.params;
+    const { wpUrl, wpUser, wpPassword, wpPostId, metaTitle, metaDescription } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword || !wpPostId) {
+      return res.status(400).json({ error: 'Missing WordPress credentials or post ID' });
+    }
+
+    if (!metaTitle && !metaDescription) {
+      return res.status(400).json({ error: 'No meta data to push' });
+    }
+
+    // Build the update payload for Yoast SEO
+    const updatePayload = {};
+    if (metaTitle) {
+      updatePayload.yoast_head_json = updatePayload.yoast_head_json || {};
+      updatePayload.meta = updatePayload.meta || {};
+      updatePayload.meta._yoast_wpseo_title = metaTitle;
+    }
+    if (metaDescription) {
+      updatePayload.meta = updatePayload.meta || {};
+      updatePayload.meta._yoast_wpseo_metadesc = metaDescription;
+    }
+
+    // Also try updating the standard excerpt as fallback
+    if (metaDescription) {
+      updatePayload.excerpt = metaDescription;
+    }
+
+    const auth = Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
+    const wpApiUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/posts/${wpPostId}`;
+
+    const updateRes = await fetch(wpApiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(updatePayload)
+    });
+
+    if (!updateRes.ok) {
+      const errorText = await updateRes.text();
+      console.error('[Push Meta] WordPress API error:', errorText);
+      return res.status(updateRes.status).json({ error: `WordPress error: ${errorText}` });
+    }
+
+    // Update article with selected meta
+    await sql`
+      UPDATE articles
+      SET selected_meta_title = ${metaTitle || null},
+          selected_meta_description = ${metaDescription || null},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${articleId}
+    `;
+
+    res.json({
+      success: true,
+      message: 'Meta data pushed to WordPress'
+    });
+
+  } catch (error) {
+    console.error('[Push Meta] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

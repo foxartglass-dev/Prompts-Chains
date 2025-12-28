@@ -418,7 +418,7 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 left-0 w-80 bg-slate-900 border-r border-brand-cyan/30 flex flex-col z-40 shadow-xl">
+    <div className="fixed inset-y-0 left-0 w-80 bg-slate-900 border-r-2 border-brand-cyan flex flex-col z-40 shadow-xl shadow-brand-cyan/30" style={{ boxShadow: '4px 0 20px rgba(0, 255, 255, 0.3), inset -2px 0 10px rgba(0, 255, 255, 0.1)' }}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
         <h2 className="text-lg font-semibold text-white">Workflows</h2>
@@ -536,21 +536,21 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
                                   <div className="hidden group-hover:flex gap-1">
                                     <button
                                       onClick={(e) => { e.stopPropagation(); openEditWorkflowDialog(workflow); }}
-                                      className="text-xs text-gray-500 hover:text-cyan-400 px-1"
+                                      className="text-sm text-cyan-400 hover:text-cyan-300 px-1.5 drop-shadow-[0_0_4px_rgba(0,255,255,0.6)]"
                                       title="Rename"
                                     >
                                       ✎
                                     </button>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); duplicateWorkflow(workflow); }}
-                                      className="text-xs text-gray-500 hover:text-white px-1"
+                                      className="text-sm text-brand-gold hover:text-brand-gold-light px-1.5 drop-shadow-[0_0_4px_rgba(255,215,0,0.6)]"
                                       title="Duplicate"
                                     >
                                       ⧉
                                     </button>
                                     <button
                                       onClick={(e) => { e.stopPropagation(); deleteWorkflow(workflow); }}
-                                      className="text-xs text-gray-500 hover:text-red-400 px-1"
+                                      className="text-sm text-red-400 hover:text-red-300 px-1.5 drop-shadow-[0_0_4px_rgba(255,100,100,0.6)]"
                                       title="Delete"
                                     >
                                       ×
@@ -635,21 +635,21 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
                         <div className="hidden group-hover:flex gap-1">
                           <button
                             onClick={(e) => { e.stopPropagation(); openEditWorkflowDialog(workflow); }}
-                            className="text-xs text-gray-500 hover:text-cyan-400 px-1"
+                            className="text-sm text-cyan-400 hover:text-cyan-300 px-1.5 drop-shadow-[0_0_4px_rgba(0,255,255,0.6)]"
                             title="Rename"
                           >
                             ✎
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); duplicateWorkflow(workflow); }}
-                            className="text-xs text-gray-500 hover:text-white px-1"
+                            className="text-sm text-brand-gold hover:text-brand-gold-light px-1.5 drop-shadow-[0_0_4px_rgba(255,215,0,0.6)]"
                             title="Duplicate"
                           >
                             ⧉
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); deleteWorkflow(workflow); }}
-                            className="text-xs text-gray-500 hover:text-red-400 px-1"
+                            className="text-sm text-red-400 hover:text-red-300 px-1.5 drop-shadow-[0_0_4px_rgba(255,100,100,0.6)]"
                             title="Delete"
                           >
                             ×
@@ -691,21 +691,21 @@ const WorkflowNavigation: React.FC<WorkflowNavigationProps> = ({
                     <div className="hidden group-hover:flex gap-1">
                       <button
                         onClick={(e) => { e.stopPropagation(); openEditWorkflowDialog(workflow); }}
-                        className="text-xs text-gray-500 hover:text-cyan-400 px-1"
+                        className="text-sm text-cyan-400 hover:text-cyan-300 px-1.5 drop-shadow-[0_0_4px_rgba(0,255,255,0.6)]"
                         title="Rename"
                       >
                         ✎
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); duplicateWorkflow(workflow); }}
-                        className="text-xs text-gray-500 hover:text-white px-1"
+                        className="text-sm text-brand-gold hover:text-brand-gold-light px-1.5 drop-shadow-[0_0_4px_rgba(255,215,0,0.6)]"
                         title="Duplicate"
                       >
                         ⧉
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteWorkflow(workflow); }}
-                        className="text-xs text-gray-500 hover:text-red-400 px-1"
+                        className="text-sm text-red-400 hover:text-red-300 px-1.5 drop-shadow-[0_0_4px_rgba(255,100,100,0.6)]"
                         title="Delete"
                       >
                         ×

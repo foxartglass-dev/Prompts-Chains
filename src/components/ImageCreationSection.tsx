@@ -45,12 +45,17 @@ interface PlaceholderCategory {
   name: string; // Display name: "Cleaning Item"
   placeholder: string; // The placeholder text: "{Cleaning_Item}"
   options: PlaceholderOption[];
+  isRandomized?: boolean; // If true, pick random option instead of keyword matching
 }
 
 // An option within a category
 interface PlaceholderOption {
   number: number; // 1, 2, 3...
   text: string; // "cleaning the stove burners"
+  // Keyword matching system
+  primaryKeywords: string[]; // Main keywords: ["stove", "burner"] - must match first
+  secondaryKeywords: string[]; // Fallback keywords: ["kitchen"] - used if no primary match
+  useSecondaryKeywords: boolean; // Toggle: allow secondary keyword matching for this option
 }
 
 // Generation mode for advanced placeholder system
@@ -286,6 +291,10 @@ interface ImageCreationSettings {
   // generate_first: Always generate new, add to bank for future
   // bank_only: Only use existing bank images, skip if no match
   // generate_only: Always generate fresh, never use bank
+  // Editable algorithm rules (user-configurable)
+  placement_rule: string;
+  smart_matching_rule: string;
+  match_plurals: boolean; // Auto-match plurals (counter → counters, sink → sinks)
 }
 
 enum LogStatus {
@@ -328,14 +337,18 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   manual_variation_order: [],
   // Smart Content Matching - OFF by default until user is ready
   smart_matching_enabled: false,
-  smart_matching_mode: 'bank_first' // Default: check bank first, generate if no match
+  smart_matching_mode: 'bank_first', // Default: check bank first, generate if no match
+  // Editable algorithm rules
+  placement_rule: 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
+  smart_matching_rule: 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
+  match_plurals: true // Default ON - auto-match counter/counters, sink/sinks
 };
 
+// Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
 const AVAILABLE_MODELS = [
-  { id: 'gpt-image-1.5', name: 'GPT-Image-1.5 (Best for Images)', provider: 'openai' },
+  { id: 'gpt-4o', name: 'GPT-4o (Best for Image Strategy)', provider: 'openai' },
   { id: 'gpt-5.2-2025-12-11', name: 'GPT-5.2', provider: 'openai' },
-  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai' },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Faster)', provider: 'openai' },
   { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', provider: 'anthropic' },
   { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic' },
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google' }
@@ -384,6 +397,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [consultantInput, setConsultantInput] = useState('');
   const [consultantImages, setConsultantImages] = useState<string[]>([]);
   const [consultantLoading, setConsultantLoading] = useState(false);
+  const [isPromptPlanningSession, setIsPromptPlanningSession] = useState(false);
   const consultantChatRef = useRef<HTMLDivElement>(null);
   const consultantFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -423,6 +437,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [showPromptGuide, setShowPromptGuide] = useState(false);
   const [selectedCombinations, setSelectedCombinations] = useState<Set<string>>(new Set()); // For advanced mode batch
 
+  // Extended context for Consultant Chat (articles, workflow info, etc.)
+  const [consultantContext, setConsultantContext] = useState<{
+    articles: any[];
+    workflow: any;
+    websites: any[];
+    lastFetched: string | null;
+  }>({ articles: [], workflow: null, websites: [], lastFetched: null });
+  const [fetchingContext, setFetchingContext] = useState(false);
+
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoFileInputRef = useRef<HTMLInputElement>(null);
@@ -449,6 +472,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       setLoaded(false);
     }
   }, [workflowId]);
+
+  // Fetch extended context when Consultant Chat is opened
+  useEffect(() => {
+    if (isConsultantChatOpen && workflowId) {
+      fetchConsultantContext();
+    }
+  }, [isConsultantChatOpen, workflowId]);
 
   // Sync Tag Manager tags with Audience Avatars
   useEffect(() => {
@@ -565,6 +595,54 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
     setLoading(false);
     setLoaded(true);
+  };
+
+  /**
+   * Fetch extended context for Consultant Chat (articles, workflow, websites)
+   * This gives the AI full visibility into what the user is working on
+   */
+  const fetchConsultantContext = async () => {
+    if (!workflowId) return;
+
+    // Don't refetch if we fetched recently (within 2 minutes)
+    if (consultantContext.lastFetched) {
+      const lastFetch = new Date(consultantContext.lastFetched);
+      const now = new Date();
+      if (now.getTime() - lastFetch.getTime() < 2 * 60 * 1000) {
+        return; // Use cached context
+      }
+    }
+
+    setFetchingContext(true);
+    try {
+      // Fetch workflow details
+      const workflowRes = await fetch(`/api/workflows/${workflowId}`);
+      const workflowData = await workflowRes.json();
+
+      // Fetch articles for this workflow
+      const articlesRes = await fetch(`/api/articles?workflowId=${workflowId}`);
+      const articlesData = await articlesRes.json();
+
+      // Fetch websites
+      const websitesRes = await fetch('/api/websites');
+      const websitesData = await websitesRes.json();
+
+      setConsultantContext({
+        workflow: workflowData.success ? workflowData.workflow : null,
+        articles: articlesData.success ? articlesData.articles : [],
+        websites: websitesData.success ? websitesData.websites : [],
+        lastFetched: new Date().toISOString()
+      });
+
+      console.log('[Image Creation] Fetched consultant context:', {
+        workflow: workflowData.workflow?.name,
+        articleCount: articlesData.articles?.length || 0,
+        websiteCount: websitesData.websites?.length || 0
+      });
+    } catch (error) {
+      console.error('Failed to fetch consultant context:', error);
+    }
+    setFetchingContext(false);
   };
 
   // Debounced save to prevent rapid overwrites
@@ -710,7 +788,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     // Map combinations to objects with labels and replacement maps
     return allCombinations.map((combo, idx) => {
       const label = combo.map((opt, catIdx) => opt.text).join(' + ');
-      const shortLabel = combo.map((opt, catIdx) => `${categories[catIdx].name.charAt(0)}${opt.number}`).join('-');
+      // Build shortLabel with avatar tag in middle: I3-(H)-G2
+      // Use serif-style I with brackets for readability
+      const avatarTag = activeAvatar?.tag || '?';
+      const categoryParts = combo.map((opt, catIdx) => {
+        const catInitial = categories[catIdx].name.charAt(0).toUpperCase();
+        return `${catInitial}${opt.number}`;
+      });
+      // Insert avatar tag in the middle
+      const midpoint = Math.ceil(categoryParts.length / 2);
+      const partsWithTag = [
+        ...categoryParts.slice(0, midpoint),
+        `(${avatarTag})`,
+        ...categoryParts.slice(midpoint)
+      ];
+      const shortLabel = partsWithTag.join(' · '); // Use centered dot for better spacing
       const replacements: Record<string, string> = {};
       categories.forEach((cat, catIdx) => {
         replacements[cat.placeholder] = combo[catIdx].text;
@@ -1075,78 +1167,234 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   /**
    * Build context summary for the consultant chat
-   * Includes: current avatar setup, prompts, variations, reference images, logo, action shots
+   * COMPREHENSIVE: Includes ALL system data - workflow, articles, images, avatars, websites, prompts
+   * This gives the AI full visibility to answer any question about the user's content
    */
   const buildConsultantContext = (): string => {
     const parts: string[] = [];
 
-    parts.push('=== IMAGE CREATION CONSULTANT CONTEXT ===');
-    parts.push('You are an expert image consultant helping design consistent, high-quality images for a client\'s content marketing.');
+    parts.push('=== COMPREHENSIVE IMAGE & CONTENT CONSULTANT ===');
+    parts.push('You are an expert consultant with FULL VISIBILITY into this content marketing system.');
+    parts.push('You can answer questions about images, articles, prompts, SEO strategy, and help plan content.');
+    parts.push('You understand: image generation, prompt engineering, SEO best practices, stock photo problems, and content strategy.');
     parts.push('');
 
-    // Add GPT-Image model info and prompting knowledge
+    // ========== WORKFLOW & PROJECT CONTEXT ==========
+    parts.push('━━━━━━━━━━ PROJECT CONTEXT ━━━━━━━━━━');
+    if (consultantContext.workflow) {
+      const wf = consultantContext.workflow;
+      parts.push(`📁 WORKFLOW: "${wf.name}"`);
+      if (wf.description) parts.push(`   Description: ${wf.description}`);
+      if (wf.niche) parts.push(`   Niche: ${wf.niche}`);
+      if (wf.target_audience) parts.push(`   Target Audience: ${wf.target_audience}`);
+      if (wf.tone) parts.push(`   Tone: ${wf.tone}`);
+      if (wf.brand_voice) parts.push(`   Brand Voice: ${wf.brand_voice}`);
+    } else {
+      parts.push(`📁 WORKFLOW ID: ${workflowId || 'Not set'}`);
+    }
+    parts.push('');
+
+    // ========== WEBSITES ==========
+    if (consultantContext.websites.length > 0) {
+      parts.push('🌐 CONNECTED WEBSITES:');
+      consultantContext.websites.forEach(w => {
+        parts.push(`   • ${w.name}${w.wp_url ? ` (${w.wp_url})` : ''}`);
+        if (w.client_name) parts.push(`     Client: ${w.client_name}`);
+      });
+      parts.push('');
+    }
+
+    // ========== ARTICLES ==========
+    if (consultantContext.articles.length > 0) {
+      parts.push('━━━━━━━━━━ ARTICLES ━━━━━━━━━━');
+      parts.push(`📝 TOTAL ARTICLES: ${consultantContext.articles.length}`);
+
+      // Group by status
+      const byStatus: { [key: string]: any[] } = {};
+      consultantContext.articles.forEach(a => {
+        const status = a.status || 'unknown';
+        if (!byStatus[status]) byStatus[status] = [];
+        byStatus[status].push(a);
+      });
+
+      Object.entries(byStatus).forEach(([status, articles]) => {
+        parts.push(`   ${status.toUpperCase()}: ${articles.length}`);
+      });
+      parts.push('');
+
+      // Show recent articles with keywords
+      parts.push('📋 ARTICLES LIST (with keywords):');
+      consultantContext.articles.slice(0, 20).forEach((a, idx) => {
+        parts.push(`   ${idx + 1}. "${a.title || a.keyword || '(untitled)'}"`);
+        if (a.keyword) parts.push(`      Keyword: ${a.keyword}`);
+        if (a.meta_title) parts.push(`      Meta Title: ${a.meta_title}`);
+        if (a.status) parts.push(`      Status: ${a.status}`);
+        if (a.images && a.images.length > 0) {
+          parts.push(`      Images: ${a.images.length} attached`);
+        }
+      });
+      if (consultantContext.articles.length > 20) {
+        parts.push(`   ... and ${consultantContext.articles.length - 20} more articles`);
+      }
+      parts.push('');
+    }
+
+    // ========== AUDIENCE TAGS ==========
+    if (tags.length > 0) {
+      parts.push('━━━━━━━━━━ AUDIENCE TAGS ━━━━━━━━━━');
+      parts.push('🏷️ TAGS FROM TAG MANAGER:');
+      tags.forEach(t => {
+        parts.push(`   • ${t.name}${t.description ? `: ${t.description}` : ''}`);
+      });
+      parts.push('');
+    }
+
+    // ========== IMAGE GENERATION MODEL ==========
+    parts.push('━━━━━━━━━━ IMAGE GENERATION ━━━━━━━━━━');
     const selectedModel = settings.image_generation_model || 'gpt-image-1.5';
     parts.push(`🎨 ACTIVE IMAGE MODEL: ${selectedModel}`);
+    parts.push(`   Quality Setting: ${settings.image_quality || 'low'}`);
 
     if (selectedModel.startsWith('gpt-image')) {
       parts.push('');
-      parts.push('📚 GPT-IMAGE PROMPTING KNOWLEDGE (use this to craft better prompts):');
+      parts.push('📚 GPT-IMAGE PROMPTING BEST PRACTICES:');
       GPT_IMAGE_PROMPT_GUIDE.sections.forEach(section => {
-        parts.push(`  ${section.title}:`);
-        section.tips.forEach(tip => {
-          parts.push(`    • ${tip}`);
+        parts.push(`   ${section.title}:`);
+        section.tips.slice(0, 3).forEach(tip => {
+          parts.push(`     • ${tip}`);
         });
       });
-      parts.push('');
-      parts.push('IMPORTANT: Apply this prompting knowledge when helping craft or improve prompts.');
     }
     parts.push('');
 
-    // Current avatar info
-    if (activeAvatar) {
-      parts.push(`📌 ACTIVE AVATAR: ${activeAvatar.name}${activeAvatar.tag ? ` (Tag: ${activeAvatar.tag})` : ''}`);
-      if (activeAvatar.mainPrompt) {
-        parts.push(`📝 Main Prompt Template: "${activeAvatar.mainPrompt}"`);
-      }
-      if (activeAvatar.variations.length > 0) {
-        parts.push(`🎨 Variations (${activeAvatar.variations.length}):`);
-        activeAvatar.variations.forEach(v => {
-          parts.push(`  - ${v.name} (${v.orientation}): "${v.prompt.substring(0, 80)}${v.prompt.length > 80 ? '...' : ''}"`);
-        });
-      }
-    }
+    // ========== AUDIENCE AVATARS (FULL DETAIL) ==========
+    parts.push('━━━━━━━━━━ AUDIENCE AVATARS ━━━━━━━━━━');
+    parts.push(`👥 TOTAL AVATARS: ${settings.audience_avatars.length}`);
     parts.push('');
 
-    // All avatars summary
-    if (settings.audience_avatars.length > 1) {
-      parts.push(`👥 ALL AVATARS (${settings.audience_avatars.length}):`);
-      settings.audience_avatars.forEach(a => {
-        parts.push(`  - ${a.name}${a.tag ? ` [${a.tag}]` : ''}: ${a.variations.length} variations`);
+    settings.audience_avatars.forEach((avatar, aIdx) => {
+      const isActive = avatar.id === activeAvatarId;
+      parts.push(`${isActive ? '▶️' : '  '} AVATAR ${aIdx + 1}: ${avatar.name}${avatar.tag ? ` [Tag: ${avatar.tag}]` : ''}`);
+
+      if (avatar.mainPrompt) {
+        parts.push(`      📝 Main Prompt Template:`);
+        parts.push(`         "${avatar.mainPrompt}"`);
+      }
+
+      // Placeholder categories (advanced mode)
+      if (avatar.placeholderMode === 'advanced' && avatar.placeholderCategories && avatar.placeholderCategories.length > 0) {
+        parts.push(`      🔧 Placeholder Categories:`);
+        avatar.placeholderCategories.forEach(cat => {
+          parts.push(`         ${cat.name} (${cat.placeholder}):`);
+          if (cat.options && cat.options.length > 0) {
+            cat.options.forEach((opt, optIdx) => {
+              parts.push(`           ${optIdx + 1}. "${opt.text}"`);
+            });
+          }
+        });
+      }
+
+      // Variations
+      if (avatar.variations.length > 0) {
+        parts.push(`      🎨 Variations (${avatar.variations.length}):`);
+        avatar.variations.forEach(v => {
+          parts.push(`         • ${v.name} (${v.orientation}): "${v.prompt.substring(0, 80)}${v.prompt.length > 80 ? '...' : ''}"`);
+        });
+      }
+      parts.push('');
+    });
+
+    // ========== IMAGE BANK (DETAILED) ==========
+    parts.push('━━━━━━━━━━ IMAGE BANK ━━━━━━━━━━');
+    const availableImages = settings.image_bank.filter(i => !i.used && !i.archived);
+    const usedImages = settings.image_bank.filter(i => i.used);
+    const archivedImages = settings.image_bank.filter(i => i.archived);
+
+    parts.push(`🏦 IMAGE BANK STATS:`);
+    parts.push(`   Total: ${settings.image_bank.length}`);
+    parts.push(`   Available: ${availableImages.length}`);
+    parts.push(`   Used: ${usedImages.length}`);
+    parts.push(`   Archived: ${archivedImages.length}`);
+    parts.push('');
+
+    // Categories in bank
+    if (settings.image_categories.length > 0) {
+      parts.push('📂 IMAGE CATEGORIES:');
+      settings.image_categories.forEach(cat => {
+        const count = settings.image_bank.filter(i => i.category === cat).length;
+        parts.push(`   • ${cat}: ${count} images`);
       });
       parts.push('');
     }
 
-    // Reference images count
+    // Show sample bank images with prompts
+    if (settings.image_bank.length > 0) {
+      parts.push('📸 SAMPLE BANK IMAGES (showing prompts used):');
+      settings.image_bank.slice(0, 10).forEach((img, idx) => {
+        parts.push(`   ${idx + 1}. ${img.title || '(untitled)'}`);
+        parts.push(`      Category: ${img.category || 'Uncategorized'}`);
+        if (img.prompt) {
+          parts.push(`      Prompt: "${img.prompt.substring(0, 100)}${img.prompt.length > 100 ? '...' : ''}"`);
+        }
+        if (img.avatarTag) parts.push(`      Avatar Tag: ${img.avatarTag}`);
+        if (img.orientation) parts.push(`      Orientation: ${img.orientation}`);
+      });
+      if (settings.image_bank.length > 10) {
+        parts.push(`   ... and ${settings.image_bank.length - 10} more images in bank`);
+      }
+      parts.push('');
+    }
+
+    // ========== REFERENCE IMAGES & BRANDING ==========
+    parts.push('━━━━━━━━━━ BRANDING & STYLE ━━━━━━━━━━');
+
     if (settings.reference_images.length > 0) {
-      parts.push(`📷 REFERENCE IMAGES: ${settings.reference_images.length} images uploaded for style reference`);
+      parts.push(`📷 REFERENCE IMAGES: ${settings.reference_images.length} uploaded`);
+      parts.push('   (These define the visual style the user wants)');
+      settings.reference_images.forEach((ref, idx) => {
+        if (ref.filename) parts.push(`   ${idx + 1}. ${ref.filename}`);
+        if (ref.tags && ref.tags.length > 0) {
+          parts.push(`      Tags: ${ref.tags.join(', ')}`);
+        }
+      });
+      parts.push('');
     }
 
-    // Logo info
     const logos = settings.logo_images.filter(i => i.type === 'logo');
     const actions = settings.logo_images.filter(i => i.type === 'action');
-    if (logos.length > 0 || actions.length > 0) {
-      parts.push(`🏷️ BRANDING: ${logos.length} logo(s), ${actions.length} action shot(s)`);
+    if (logos.length > 0) {
+      parts.push(`🏷️ LOGO IMAGES: ${logos.length}`);
     }
-
-    // Image bank stats
-    const availableCount = settings.image_bank.filter(i => !i.used).length;
-    const usedCount = settings.image_bank.filter(i => i.used).length;
-    if (settings.image_bank.length > 0) {
-      parts.push(`🏦 IMAGE BANK: ${availableCount} available, ${usedCount} used`);
+    if (actions.length > 0) {
+      parts.push(`📸 ACTION SHOTS (logo in use): ${actions.length}`);
+      parts.push('   (These show the logo/brand in real-world context)');
     }
-
     parts.push('');
-    parts.push('Help the user dial in their image style, suggest improvements to prompts, and discuss image strategy for their content.');
+
+    // ========== SMART MATCHING SETTINGS ==========
+    parts.push('━━━━━━━━━━ INTEGRATION SETTINGS ━━━━━━━━━━');
+    parts.push(`🔄 Integration Mode: ${settings.integration_mode}`);
+    parts.push(`   Smart Matching: ${settings.smart_matching_enabled ? 'ON' : 'OFF'}`);
+    if (settings.smart_matching_enabled) {
+      parts.push(`   Matching Mode: ${settings.smart_matching_mode}`);
+    }
+    parts.push(`   Fallback to Live Generation: ${settings.fallback_to_live ? 'Yes' : 'No'}`);
+    parts.push(`   Variation Order: ${settings.variation_order_mode}`);
+    parts.push('');
+
+    // ========== ROLE & CAPABILITIES ==========
+    parts.push('━━━━━━━━━━ YOUR CAPABILITIES ━━━━━━━━━━');
+    parts.push('You can help with:');
+    parts.push('   • Crafting and improving image prompts');
+    parts.push('   • Suggesting new placeholder options and variations');
+    parts.push('   • Planning image strategy for articles');
+    parts.push('   • Analyzing which images would work best for specific content');
+    parts.push('   • Recommending categories and organization');
+    parts.push('   • SEO optimization for image alt text');
+    parts.push('   • Brand consistency across all imagery');
+    parts.push('   • Answering questions about any aspect of the content system');
+    parts.push('');
+    parts.push('Ask me anything about images, articles, prompts, or content strategy!');
 
     return parts.join('\n');
   };
@@ -1203,7 +1451,19 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
     parts.push('');
 
-    parts.push('Help the user organize prompts, create variation schedules, and manage the operational side of image creation.');
+    // Algorithm rules context
+    parts.push('⚙️ IMAGE INTEGRATION SETTINGS:');
+    parts.push(`  - Source Mode: ${settings.integration_mode === 'bank' ? 'Pull from Bank' : 'Generate Live'}`);
+    parts.push(`  - Fallback to Live: ${settings.fallback_to_live ? 'Yes' : 'No'}`);
+    parts.push(`  - Smart Matching: ${settings.smart_matching_enabled ? 'ENABLED' : 'Disabled'}`);
+    parts.push(`  - Smart Matching Mode: ${settings.smart_matching_mode || 'bank_first'}`);
+    parts.push('');
+    parts.push('📐 ALGORITHM RULES (user can edit these):');
+    parts.push(`  - Placement Rule: "${settings.placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.'}"`);
+    parts.push(`  - Smart Matching Rule: "${settings.smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.'}"`);
+    parts.push('');
+
+    parts.push('Help the user organize prompts, create variation schedules, refine algorithm rules, and manage the operational side of image creation.');
 
     return parts.join('\n');
   };
@@ -1309,6 +1569,162 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     } catch (error) {
       console.error('Consultant chat error:', error);
       showNotification('Failed to send message', 'error');
+    }
+
+    setConsultantLoading(false);
+  };
+
+  /**
+   * Start a Prompt Planning Session - guided workflow to build a complete prompt bank
+   */
+  const startPromptPlanningSession = async () => {
+    setIsPromptPlanningSession(true);
+
+    // Build context about the current setup for the planning session
+    const businessContext = [
+      `CURRENT SETUP:`,
+      `- Reference Images: ${settings.reference_images.length} uploaded`,
+      `- Logo Images: ${logoImages.length} uploaded`,
+      `- Action Shots: ${actionShots.length} uploaded`,
+      `- Audience Tags: ${tags.map(t => `${t.name} (${t.description || 'no description'})`).join(', ') || 'None configured'}`,
+      `- Existing Avatars: ${settings.audience_avatars.map(a => `${a.name}${a.mainPrompt ? ' (has prompt)' : ' (no prompt yet)'}`).join(', ')}`,
+      `- Image Categories: ${settings.image_categories.join(', ')}`,
+      `- Current Bank: ${availableImages.length} images`,
+      ``,
+      `IMAGE INTEGRATION SETTINGS:`,
+      `- Source Mode: ${settings.integration_mode === 'bank' ? 'Pull from Bank' : 'Generate Live'}`,
+      `- Fallback to Live: ${settings.fallback_to_live ? 'Yes' : 'No'}`,
+      `- Smart Matching: ${settings.smart_matching_enabled ? 'ENABLED' : 'Disabled'}`,
+      `- Smart Matching Mode: ${settings.smart_matching_mode || 'bank_first'}`,
+      ``,
+      `ALGORITHM RULES (editable by user):`,
+      `- Placement Rule: "${settings.placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.'}"`,
+      `- Smart Matching Rule: "${settings.smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.'}"`,
+      ``,
+      `NOTE: You can help the user refine these algorithm rules. Suggest improvements based on their content strategy and SEO goals.`
+    ].join('\n');
+
+    const planningSystemMessage: ChatMessage = {
+      role: 'system',
+      content: `You are an expert image prompt strategist conducting a PROMPT PLANNING SESSION. Your goal is to help the user build a complete, professional image prompt library for their business.
+
+${businessContext}
+
+SESSION STRUCTURE:
+1. **Discovery Phase** - Ask about the business, brand, target audience, and services
+2. **Style Phase** - Review their reference images and establish the visual style DNA
+3. **Shot Types Phase** - Guide them through different image categories:
+   - Hero Images (main landing page shots)
+   - Service Images (action shots showing work being done)
+   - Team Images (professionals at work)
+   - B-Roll (environmental/atmospheric shots)
+   - Before/After (if applicable)
+4. **Audience Customization** - Create prompt variations for each audience tag
+5. **Diversity & Inclusion** - Ensure representation in imagery
+6. **Export Phase** - Compile all prompts into a structured bank
+
+RULES:
+- Be conversational but efficient - ask 2-3 questions at a time
+- After each answer, summarize what you learned and move forward
+- When creating prompts, format them clearly with categories
+- Consider SEO keywords that should appear in alt text
+- Think about seasonal variations if relevant
+- Create prompts that work with AI image generators (DALL-E, gpt-image, Flux, etc.)
+
+Start by introducing yourself and asking about their business in a friendly way.`,
+      timestamp: new Date().toISOString()
+    };
+
+    const userStartMessage: ChatMessage = {
+      role: 'user',
+      content: "Let's start a Prompt Planning Session. Help me build a complete image prompt library for my business.",
+      timestamp: new Date().toISOString()
+    };
+
+    // Clear existing history and start fresh with planning session
+    updateSettings({ consultant_chat_history: [userStartMessage] });
+    setConsultantLoading(true);
+
+    try {
+      const res = await fetch('/api/image-creation/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: planningSystemMessage.content },
+            { role: 'user', content: userStartMessage.content }
+          ],
+          model: settings.consultant_model,
+          contextImages: getContextImages('consultant')
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: data.message.content,
+          timestamp: new Date().toISOString()
+        };
+        updateSettings({ consultant_chat_history: [userStartMessage, assistantMessage] });
+        showNotification('Prompt Planning Session started!', 'success');
+      } else {
+        showNotification(data.error || 'Failed to start planning session', 'error');
+        setIsPromptPlanningSession(false);
+      }
+    } catch (error) {
+      console.error('Planning session error:', error);
+      showNotification('Failed to start planning session', 'error');
+      setIsPromptPlanningSession(false);
+    }
+
+    setConsultantLoading(false);
+    setIsConsultantChatOpen(true);
+  };
+
+  /**
+   * End the Prompt Planning Session and extract prompts
+   */
+  const endPromptPlanningSession = async () => {
+    setIsPromptPlanningSession(false);
+
+    // Ask the AI to summarize and export the prompts
+    const exportMessage: ChatMessage = {
+      role: 'user',
+      content: "Please summarize all the prompts we've created in this session. Format them as a structured list with categories, so I can save them to my prompt bank.",
+      timestamp: new Date().toISOString()
+    };
+
+    const newHistory = [...settings.consultant_chat_history, exportMessage];
+    updateSettings({ consultant_chat_history: newHistory });
+    setConsultantLoading(true);
+
+    try {
+      const res = await fetch('/api/image-creation/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: newHistory.map(m => ({
+            role: m.role,
+            content: m.content,
+            images: m.images
+          })),
+          model: settings.consultant_model
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: data.message.content,
+          timestamp: new Date().toISOString()
+        };
+        updateSettings({ consultant_chat_history: [...newHistory, assistantMessage] });
+        showNotification('Session complete! Review the exported prompts above.', 'success');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
     }
 
     setConsultantLoading(false);
@@ -1889,7 +2305,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           : 1;
         return {
           ...cat,
-          options: [...cat.options, { number: nextNumber, text: '' }]
+          options: [...cat.options, {
+            number: nextNumber,
+            text: '',
+            primaryKeywords: [],
+            secondaryKeywords: [],
+            useSecondaryKeywords: true // Default to ON
+          }]
         };
       }
       return cat;
@@ -1897,7 +2319,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCategories });
   };
 
-  const handleUpdatePlaceholderOption = (categoryId: string, optionNumber: number, text: string) => {
+  const handleUpdatePlaceholderOption = (categoryId: string, optionNumber: number, updates: Partial<PlaceholderOption>) => {
     if (!activeAvatar) return;
     const categories = activeAvatar.placeholderCategories || [];
     const updatedCategories = categories.map(cat => {
@@ -1905,13 +2327,87 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         return {
           ...cat,
           options: cat.options.map(opt =>
-            opt.number === optionNumber ? { ...opt, text } : opt
+            opt.number === optionNumber ? { ...opt, ...updates } : opt
           )
         };
       }
       return cat;
     });
     handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCategories });
+  };
+
+  // Add a keyword to an option (primary or secondary)
+  const handleAddKeyword = (categoryId: string, optionNumber: number, keyword: string, type: 'primary' | 'secondary') => {
+    if (!activeAvatar || !keyword.trim()) return;
+    const categories = activeAvatar.placeholderCategories || [];
+    const cat = categories.find(c => c.id === categoryId);
+    const opt = cat?.options.find(o => o.number === optionNumber);
+    if (!opt) return;
+
+    const keywordsArray = type === 'primary'
+      ? [...(opt.primaryKeywords || []), keyword.trim()]
+      : [...(opt.secondaryKeywords || []), keyword.trim()];
+
+    handleUpdatePlaceholderOption(categoryId, optionNumber, {
+      [type === 'primary' ? 'primaryKeywords' : 'secondaryKeywords']: keywordsArray
+    });
+  };
+
+  // Remove a keyword from an option
+  const handleRemoveKeyword = (categoryId: string, optionNumber: number, keyword: string, type: 'primary' | 'secondary') => {
+    if (!activeAvatar) return;
+    const categories = activeAvatar.placeholderCategories || [];
+    const cat = categories.find(c => c.id === categoryId);
+    const opt = cat?.options.find(o => o.number === optionNumber);
+    if (!opt) return;
+
+    const keywordsArray = type === 'primary'
+      ? (opt.primaryKeywords || []).filter(k => k !== keyword)
+      : (opt.secondaryKeywords || []).filter(k => k !== keyword);
+
+    handleUpdatePlaceholderOption(categoryId, optionNumber, {
+      [type === 'primary' ? 'primaryKeywords' : 'secondaryKeywords']: keywordsArray
+    });
+  };
+
+  // Detect shared/ambiguous keywords across categories
+  const sharedKeywords = useMemo(() => {
+    if (!activeAvatar?.placeholderCategories) return new Map();
+
+    const keywordToCategories = new Map<string, string[]>();
+
+    activeAvatar.placeholderCategories.forEach(cat => {
+      if (cat.isRandomized) return;
+      cat.options?.forEach(opt => {
+        (opt.primaryKeywords || []).forEach(kw => {
+          const kwLower = kw.toLowerCase().trim();
+          if (!kwLower) return;
+          if (!keywordToCategories.has(kwLower)) {
+            keywordToCategories.set(kwLower, []);
+          }
+          const cats = keywordToCategories.get(kwLower)!;
+          if (!cats.includes(cat.name)) {
+            cats.push(cat.name);
+          }
+        });
+      });
+    });
+
+    // Filter to only shared keywords (2+ categories)
+    const shared = new Map<string, string[]>();
+    keywordToCategories.forEach((categories, keyword) => {
+      if (categories.length > 1) {
+        shared.set(keyword, categories);
+      }
+    });
+
+    return shared;
+  }, [activeAvatar?.placeholderCategories]);
+
+  // Check if a keyword is shared across categories
+  const isSharedKeyword = (keyword: string): string[] | null => {
+    const kwLower = keyword.toLowerCase().trim();
+    return sharedKeywords.get(kwLower) || null;
   };
 
   const handleRemovePlaceholderOption = (categoryId: string, optionNumber: number) => {
@@ -2578,29 +3074,122 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                           </button>
                         </div>
 
-                        {/* Options for this category */}
-                        <div className="pl-4 space-y-1">
+                        {/* Options for this category - Stacked Layout */}
+                        <div className="pl-2 space-y-3">
                           {category.options.map((option, optIndex) => (
-                            <div key={option.number} className="flex items-center gap-2">
-                              <span className="w-6 text-center text-xs text-purple-400 font-bold">{option.number}</span>
-                              <input
-                                type="text"
-                                value={option.text}
-                                onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, e.target.value)}
-                                className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-xs"
-                                placeholder={`Option ${option.number} text...`}
-                              />
-                              <button
-                                onClick={() => handleRemovePlaceholderOption(category.id, option.number)}
-                                className="text-red-400 hover:text-red-300 text-xs"
-                              >
-                                ×
-                              </button>
+                            <div key={option.number} className="bg-slate-900/50 rounded-lg border border-slate-700 overflow-hidden">
+                              {/* Row 1: Keywords */}
+                              <div className="p-2 bg-slate-800/50 border-b border-slate-700">
+                                <div className="flex items-start gap-4">
+                                  {/* Option Number */}
+                                  <span className="w-6 h-6 flex items-center justify-center bg-purple-600 rounded text-white text-xs font-bold">{option.number}</span>
+
+                                  {/* Primary Keywords */}
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wide">Primary</span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      {(option.primaryKeywords || []).map((kw, kwIdx) => {
+                                        const sharedWith = isSharedKeyword(kw);
+                                        const isShared = sharedWith && sharedWith.length > 1;
+                                        return (
+                                          <span
+                                            key={kwIdx}
+                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
+                                              isShared
+                                                ? 'bg-orange-600/30 border border-orange-500 text-orange-300'
+                                                : 'bg-emerald-600/30 border border-emerald-500 text-emerald-300'
+                                            }`}
+                                            title={isShared ? `⚠️ Shared across: ${sharedWith.join(', ')} - requires category keyword in article` : undefined}
+                                          >
+                                            {isShared && <span className="text-orange-400">⚠️</span>}
+                                            {kw}
+                                            <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'primary')} className={`${isShared ? 'text-orange-400' : 'text-emerald-400'} hover:text-red-400`}>×</button>
+                                          </span>
+                                        );
+                                      })}
+                                      <input
+                                        type="text"
+                                        className="w-20 bg-slate-900 border border-emerald-500/30 rounded px-1.5 py-0.5 text-emerald-300 text-xs placeholder-emerald-700"
+                                        placeholder="+ add"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                            handleAddKeyword(category.id, option.number, e.currentTarget.value, 'primary');
+                                            e.currentTarget.value = '';
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Secondary Keywords */}
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="text-[10px] text-amber-400 font-semibold uppercase tracking-wide">Secondary</span>
+                                      <label className="flex items-center gap-1 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={option.useSecondaryKeywords !== false}
+                                          onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { useSecondaryKeywords: e.target.checked })}
+                                          className="w-3 h-3 rounded border-amber-500 text-amber-500 focus:ring-amber-500 bg-slate-900"
+                                        />
+                                        <span className="text-[9px] text-amber-400/70">ON</span>
+                                      </label>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      {/* Auto-add category name as first secondary keyword (shown as locked) */}
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/20 border border-amber-500/50 rounded text-amber-300/70 text-xs italic">
+                                        {category.name.toLowerCase()}
+                                        <svg className="w-2.5 h-2.5 text-amber-500/50" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                                      </span>
+                                      {(option.secondaryKeywords || []).map((kw, kwIdx) => (
+                                        <span key={kwIdx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/30 border border-amber-500 rounded text-amber-300 text-xs">
+                                          {kw}
+                                          <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'secondary')} className="text-amber-400 hover:text-red-400">×</button>
+                                        </span>
+                                      ))}
+                                      <input
+                                        type="text"
+                                        className="w-20 bg-slate-900 border border-amber-500/30 rounded px-1.5 py-0.5 text-amber-300 text-xs placeholder-amber-700"
+                                        placeholder="+ add"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                            handleAddKeyword(category.id, option.number, e.currentTarget.value, 'secondary');
+                                            e.currentTarget.value = '';
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Delete Option */}
+                                  <button
+                                    onClick={() => handleRemovePlaceholderOption(category.id, option.number)}
+                                    className="p-1 text-red-400 hover:text-red-300 hover:bg-red-600/20 rounded transition"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Prompt Text */}
+                              <div className="p-2">
+                                <input
+                                  type="text"
+                                  value={option.text}
+                                  onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { text: e.target.value })}
+                                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm"
+                                  placeholder={`Prompt text for option ${option.number}...`}
+                                />
+                              </div>
                             </div>
                           ))}
                           <button
                             onClick={() => handleAddPlaceholderOption(category.id)}
-                            className="text-xs text-purple-400 hover:text-purple-300"
+                            className="w-full py-2 border-2 border-dashed border-purple-500/30 rounded-lg text-purple-400 hover:border-purple-500 hover:text-purple-300 text-xs transition"
                           >
                             + Add Option
                           </button>
@@ -2911,7 +3500,32 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                       ))}
                     </select>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {!isPromptPlanningSession ? (
+                      <button
+                        onClick={startPromptPlanningSession}
+                        disabled={consultantLoading}
+                        className="px-2 py-1 bg-purple-600/50 hover:bg-purple-600 disabled:opacity-50 rounded text-white text-xs transition flex items-center gap-1"
+                        title="Start a guided prompt planning session"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        Prompt Planning
+                      </button>
+                    ) : (
+                      <button
+                        onClick={endPromptPlanningSession}
+                        disabled={consultantLoading}
+                        className="px-2 py-1 bg-amber-600/50 hover:bg-amber-600 disabled:opacity-50 rounded text-white text-xs transition flex items-center gap-1 animate-pulse"
+                        title="End session and export prompts"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        End & Export
+                      </button>
+                    )}
                     <button
                       onClick={() => handleSyncConsultantToWorker()}
                       className="px-2 py-1 bg-emerald-600/50 hover:bg-emerald-600 rounded text-white text-xs transition flex items-center gap-1"
@@ -2931,19 +3545,78 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                   </div>
                 </div>
 
-                {/* Context info panel */}
-                <div className="px-3 py-2 bg-indigo-900/10 border-b border-indigo-500/20 text-xs text-indigo-300/70">
-                  <strong>Context:</strong> {settings.reference_images.length} ref images, {logoImages.length} logo, {actionShots.length} action shots, {availableImages.length} bank images •
-                  This AI can see your images and help dial in your style.
+                {/* Context info panel - Enhanced visibility */}
+                <div className="px-3 py-2 bg-indigo-900/20 border-b border-indigo-500/20 text-xs">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3 text-indigo-300/80">
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                        <strong>AI Sees:</strong>
+                      </span>
+                      {consultantContext.workflow && (
+                        <span title="Workflow info">📁 {consultantContext.workflow.name}</span>
+                      )}
+                      {consultantContext.articles.length > 0 && (
+                        <span title="Articles">📝 {consultantContext.articles.length} articles</span>
+                      )}
+                      {consultantContext.websites.length > 0 && (
+                        <span title="Websites">🌐 {consultantContext.websites.length} sites</span>
+                      )}
+                      <span title="Reference images">📷 {settings.reference_images.length}</span>
+                      <span title="Image bank">🏦 {availableImages.length}</span>
+                      <span title="Avatars">👥 {settings.audience_avatars.length}</span>
+                      {tags.length > 0 && <span title="Tags">🏷️ {tags.length}</span>}
+                    </div>
+                    <button
+                      onClick={() => fetchConsultantContext()}
+                      disabled={fetchingContext}
+                      className="px-2 py-0.5 bg-indigo-600/30 hover:bg-indigo-600/50 rounded text-indigo-300 transition flex items-center gap-1"
+                      title="Refresh context data"
+                    >
+                      <svg className={`w-3 h-3 ${fetchingContext ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {fetchingContext ? 'Loading...' : 'Refresh'}
+                    </button>
+                  </div>
+                  <div className="mt-1 text-indigo-400/60">
+                    Full context: workflow details, all articles, prompts, placeholders, image bank, branding, and settings
+                  </div>
                 </div>
+
+                {/* Prompt Planning Session Banner */}
+                {isPromptPlanningSession && (
+                  <div className="px-3 py-2 bg-purple-900/40 border-b border-purple-500/50 text-xs text-purple-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span>
+                      <strong>PROMPT PLANNING SESSION</strong> - Building your image prompt library
+                    </div>
+                    <span className="text-purple-300/70">Click "End & Export" when ready</span>
+                  </div>
+                )}
 
                 {/* Chat messages */}
                 <div ref={consultantChatRef} className="h-72 overflow-y-auto p-4 space-y-3">
                   {settings.consultant_chat_history.length === 0 ? (
-                    <div className="text-center text-indigo-300/50 py-8 space-y-2">
-                      <p className="text-lg">🎨 Image Style Consultant</p>
-                      <p className="text-sm">Discuss your brand, show reference images, and dial in the perfect style.</p>
-                      <p className="text-xs text-indigo-400/50">This chat automatically sees your uploaded images for context.</p>
+                    <div className="text-center text-indigo-300/50 py-6 space-y-3">
+                      <p className="text-lg">🎨 Full-Context Consultant</p>
+                      <p className="text-sm">I can see everything in your system and answer any question.</p>
+                      <div className="text-xs text-indigo-400/60 space-y-1">
+                        <p>Ask me about:</p>
+                        <p>• Image prompts, variations, and style strategy</p>
+                        <p>• Your articles, keywords, and content planning</p>
+                        <p>• Which images would work best for specific content</p>
+                        <p>• SEO optimization and brand consistency</p>
+                      </div>
+                      <div className="pt-2">
+                        <button
+                          onClick={startPromptPlanningSession}
+                          disabled={consultantLoading}
+                          className="px-4 py-2 bg-purple-600/50 hover:bg-purple-600 rounded-lg text-white text-sm transition"
+                        >
+                          Or start a Prompt Planning Session
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     settings.consultant_chat_history.filter(m => m.role !== 'system').map((msg, idx) => (
@@ -2990,13 +3663,18 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   </button>
                   <input ref={consultantFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'consultant')} className="hidden" />
-                  <input
-                    type="text"
+                  <textarea
                     value={consultantInput}
-                    onChange={(e) => setConsultantInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendConsultantChat()}
-                    placeholder="Discuss image style, branding, composition..."
-                    className="flex-1 bg-slate-900 border border-indigo-500/50 rounded px-3 py-2 text-white text-sm"
+                    onChange={(e) => {
+                      setConsultantInput(e.target.value);
+                      // Auto-resize textarea
+                      e.target.style.height = 'auto';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendConsultantChat())}
+                    placeholder="Discuss image style, branding, composition, SEO strategy..."
+                    rows={1}
+                    className="flex-1 bg-slate-900 border border-indigo-500/50 rounded px-3 py-2 text-white text-sm resize-none overflow-hidden min-h-[38px] max-h-[200px]"
                   />
                   <button
                     onClick={handleSendConsultantChat}
@@ -3477,7 +4155,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                         />
                         {/* Hover overlay with actions */}
                         <div className="absolute inset-0 top-6 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded-b flex flex-col items-center justify-center p-1 gap-1">
-                          <span className="text-[10px] text-white font-semibold">{img.variation}</span>
+                          <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
+                          {img.avatarTag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatarTag}</span>}
                           <div className="flex gap-1 flex-wrap justify-center">
                             <button onClick={() => setPreviewImage(img)} className="px-2 py-0.5 bg-blue-600/80 rounded text-white text-[10px]">Expand</button>
                             <button onClick={() => handleDownloadImage(img)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Download</button>
@@ -3524,7 +4203,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
                         <img src={img.url} alt={img.variation} className="w-full h-24 object-cover rounded border border-purple-500/30 opacity-70" />
                         <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-purple-600/90 rounded text-[9px] text-white">USED</div>
                         <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
-                          <span className="text-[10px] text-white font-semibold">{img.variation}</span>
+                          <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
+                          {img.avatarTag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatarTag}</span>}
                           {img.usedOn && <a href={img.usedOn} target="_blank" rel="noopener noreferrer" className="text-[9px] text-brand-cyan underline">View Page</a>}
                           <button onClick={() => handleRestoreFromUsed(img.id)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Restore</button>
                         </div>
@@ -3538,141 +4218,363 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             )}
           </div>
 
-          {/* Variation Order for Page Integration (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-orange-500/50 overflow-hidden">
-            <button onClick={() => setIsOrderOpen(!isOrderOpen)} className="w-full flex items-center justify-between p-3 text-orange-400 hover:bg-slate-800/50 transition">
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-                Variation Order ({settings.manual_variation_order?.length || 0} set)
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isOrderOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {isOrderOpen && (
-              <div className="p-4 border-t border-orange-500/30 space-y-3">
-                <p className="text-xs text-brand-gold/70">Click variations in the order you want them used on pages. Each page gets unique variations.</p>
-
-                <div className="flex items-center gap-3 mb-2">
-                  <label className="text-xs text-brand-gold/70">Mode:</label>
-                  <select
-                    value={settings.variation_order_mode || 'sequential'}
-                    onChange={(e) => updateSettings({ variation_order_mode: e.target.value as any })}
-                    className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs"
-                  >
-                    <option value="sequential">Sequential (1, 2, 3...)</option>
-                    <option value="random">Random (no duplicates)</option>
-                    <option value="manual">Manual Order Below</option>
-                  </select>
-                  {settings.variation_order_mode === 'manual' && (
-                    <button onClick={clearVariationOrder} className="text-xs text-red-400 hover:text-red-300">Clear Order</button>
+          {/* ═══════════════════════════════════════════════════════════════════
+              UNIFIED IMAGE INTEGRATION SETTINGS DASHBOARD
+              All page integration, smart matching, and ordering in ONE place
+          ═══════════════════════════════════════════════════════════════════ */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/30 rounded-xl border-2 border-purple-500/50 overflow-hidden shadow-lg shadow-purple-500/10">
+            {/* Dashboard Header */}
+            <div className="bg-gradient-to-r from-purple-900/50 to-indigo-900/50 px-5 py-4 border-b border-purple-500/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-600/30 rounded-lg">
+                    <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Image Integration Settings</h2>
+                    <p className="text-xs text-purple-300/70">Configure how images are selected and published to pages</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 bg-purple-600/40 text-purple-200 text-xs rounded-full font-medium border border-purple-500/30">
+                    {settings.integration_mode === 'bank' ? '📦 Bank Mode' : '⚡ Live Mode'}
+                  </span>
+                  {settings.smart_matching_enabled && (
+                    <span className="px-2.5 py-1 bg-emerald-600/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-500/30">
+                      🎯 Smart Match ON
+                    </span>
                   )}
                 </div>
-
-                {settings.variation_order_mode === 'manual' && (
-                  <div className="flex flex-wrap gap-2">
-                    {activeAvatar?.variations.map((v) => {
-                      const orderNum = getVariationOrderNumber(v.id);
-                      return (
-                        <button
-                          key={v.id}
-                          onClick={() => handleSetVariationOrder(v.id)}
-                          className={`relative px-3 py-1.5 rounded text-xs font-medium transition ${orderNum ? 'bg-orange-500 text-slate-900' : 'bg-slate-800 text-brand-gold border border-brand-gold/50 hover:bg-slate-700'}`}
-                        >
-                          {orderNum && <span className="absolute -top-2 -left-2 w-5 h-5 bg-orange-700 text-white rounded-full text-[10px] flex items-center justify-center">{orderNum}</span>}
-                          {v.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {settings.manual_variation_order && settings.manual_variation_order.length > 0 && settings.variation_order_mode === 'manual' && (
-                  <div className="text-xs text-orange-300 bg-orange-900/30 p-2 rounded">
-                    Order: {settings.manual_variation_order.map((id, idx) => {
-                      const v = activeAvatar?.variations.find(v => v.id === id);
-                      return v ? `${idx + 1}. ${v.name}` : '';
-                    }).filter(Boolean).join(' → ')}
-                  </div>
-                )}
               </div>
-            )}
-          </div>
-
-          {/* Page Integration Controls */}
-          <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50">
-            <h3 className="text-brand-gold font-semibold mb-3">Page Integration</h3>
-            <div className="flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="integration_mode" checked={settings.integration_mode === 'bank'} onChange={() => updateSettings({ integration_mode: 'bank' })} className="accent-brand-gold" />
-                <span className="text-sm text-white">Pull from Bank</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="integration_mode" checked={settings.integration_mode === 'live'} onChange={() => updateSettings({ integration_mode: 'live' })} className="accent-brand-gold" />
-                <span className="text-sm text-white">Generate Live</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer ml-4">
-                <input type="checkbox" checked={settings.fallback_to_live} onChange={(e) => updateSettings({ fallback_to_live: e.target.checked })} className="w-4 h-4 rounded border-brand-gold text-brand-gold focus:ring-brand-gold bg-slate-900" />
-                <span className="text-sm text-brand-gold/70">Generate if bank empty</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Smart Content Matching (Phase 2 - Future Feature) */}
-          <div className={`bg-slate-900 p-4 rounded-lg border ${settings.smart_matching_enabled ? 'border-purple-500' : 'border-slate-700'} transition-colors`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <h3 className={`font-semibold ${settings.smart_matching_enabled ? 'text-purple-400' : 'text-slate-500'}`}>
-                  Smart Content Matching
-                </h3>
-                <span className="px-2 py-0.5 bg-purple-600/30 text-purple-300 text-[10px] rounded font-medium">BETA</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.smart_matching_enabled}
-                  onChange={(e) => updateSettings({ smart_matching_enabled: e.target.checked })}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-              </label>
             </div>
 
-            {settings.smart_matching_enabled ? (
-              <div className="space-y-3">
-                <p className="text-xs text-purple-300/70">
-                  AI analyzes article text and automatically matches or generates images based on surrounding content.
-                  Images placed next to text about "cleaning the sink" will show sink cleaning.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'bank_first' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'bank_first'} onChange={() => updateSettings({ smart_matching_mode: 'bank_first' })} className="hidden" />
-                    <span className="text-xs font-medium">Bank First</span>
+            <div className="p-5 space-y-5">
+              {/* ─────────────────────────────────────────────────────
+                  SECTION 1: Image Source Mode
+              ───────────────────────────────────────────────────── */}
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-brand-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  <h3 className="text-brand-gold font-semibold">Image Source</h3>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'bank' ? 'bg-brand-gold/20 border-2 border-brand-gold' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
+                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'bank'} onChange={() => updateSettings({ integration_mode: 'bank' })} className="hidden" />
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'bank' ? 'bg-brand-gold text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                    </div>
+                    <div>
+                      <span className={`font-medium ${settings.integration_mode === 'bank' ? 'text-brand-gold' : 'text-white'}`}>Pull from Bank</span>
+                      <p className="text-[10px] text-slate-400">Use pre-generated images</p>
+                    </div>
                   </label>
-                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'generate_first' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'generate_first'} onChange={() => updateSettings({ smart_matching_mode: 'generate_first' })} className="hidden" />
-                    <span className="text-xs font-medium">Generate First</span>
-                  </label>
-                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'bank_only' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'bank_only'} onChange={() => updateSettings({ smart_matching_mode: 'bank_only' })} className="hidden" />
-                    <span className="text-xs font-medium">Bank Only</span>
-                  </label>
-                  <label className={`flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition ${settings.smart_matching_mode === 'generate_only' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                    <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === 'generate_only'} onChange={() => updateSettings({ smart_matching_mode: 'generate_only' })} className="hidden" />
-                    <span className="text-xs font-medium">Generate Only</span>
+
+                  <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'live' ? 'bg-brand-cyan/20 border-2 border-brand-cyan' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
+                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'live'} onChange={() => updateSettings({ integration_mode: 'live' })} className="hidden" />
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'live' ? 'bg-brand-cyan text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    </div>
+                    <div>
+                      <span className={`font-medium ${settings.integration_mode === 'live' ? 'text-brand-cyan' : 'text-white'}`}>Generate Live</span>
+                      <p className="text-[10px] text-slate-400">Create fresh images on-the-fly</p>
+                    </div>
                   </label>
                 </div>
-                <div className="text-[10px] text-slate-500 space-y-1">
-                  <p><strong>Bank First:</strong> Search bank for matching image → Generate if no match</p>
-                  <p><strong>Generate First:</strong> Always generate fresh → Save to bank for future</p>
-                  <p><strong>Bank Only:</strong> Only use existing bank images → Skip if no match</p>
-                  <p><strong>Generate Only:</strong> Always generate new → Don't use bank</p>
+
+                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-900/50 rounded">
+                  <input type="checkbox" checked={settings.fallback_to_live} onChange={(e) => updateSettings({ fallback_to_live: e.target.checked })} className="w-4 h-4 rounded border-amber-500 text-amber-500 focus:ring-amber-500 bg-slate-900" />
+                  <span className="text-sm text-amber-400">Fallback: Generate if bank is empty or no match</span>
+                </label>
+              </div>
+
+              {/* ─────────────────────────────────────────────────────
+                  SECTION 2: Smart Content Matching
+              ───────────────────────────────────────────────────── */}
+              <div className={`rounded-lg p-4 border transition-all ${settings.smart_matching_enabled ? 'bg-purple-900/20 border-purple-500' : 'bg-slate-800/30 border-slate-700'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <svg className={`w-5 h-5 ${settings.smart_matching_enabled ? 'text-purple-400' : 'text-slate-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    <h3 className={`font-semibold ${settings.smart_matching_enabled ? 'text-purple-400' : 'text-slate-500'}`}>Smart Content Matching</h3>
+                    <span className="px-2 py-0.5 bg-purple-600/30 text-purple-300 text-[10px] rounded font-medium">BETA</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" checked={settings.smart_matching_enabled} onChange={(e) => updateSettings({ smart_matching_enabled: e.target.checked })} className="sr-only peer" />
+                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  </label>
+                </div>
+
+                {settings.smart_matching_enabled ? (
+                  <div className="space-y-4">
+                    <p className="text-xs text-purple-300/70">
+                      AI analyzes article text and matches images based on keywords. Define keywords in each placeholder option above.
+                    </p>
+
+                    {/* Matching Strategy */}
+                    <div>
+                      <label className="text-xs text-purple-400 mb-2 block font-medium">Matching Strategy:</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { value: 'bank_first', label: 'Bank First', desc: 'Search bank → Generate if no match' },
+                          { value: 'generate_first', label: 'Generate First', desc: 'Always fresh → Save to bank' },
+                          { value: 'bank_only', label: 'Bank Only', desc: 'Only use existing bank images' },
+                          { value: 'generate_only', label: 'Generate Only', desc: 'Always new → Skip bank' }
+                        ].map(opt => (
+                          <label key={opt.value} className={`flex flex-col p-2 rounded cursor-pointer transition ${settings.smart_matching_mode === opt.value ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                            <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === opt.value} onChange={() => updateSettings({ smart_matching_mode: opt.value as any })} className="hidden" />
+                            <span className="text-xs font-medium">{opt.label}</span>
+                            <span className="text-[9px] opacity-70">{opt.desc}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Category Matching Rules */}
+                    {activeAvatar?.placeholderCategories && activeAvatar.placeholderCategories.length > 0 && (
+                      <div className="bg-slate-800/50 rounded-lg p-3 border border-purple-500/20">
+                        <label className="text-xs text-purple-400 mb-3 block font-medium flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
+                          Category Matching Rules:
+                        </label>
+                        <div className="space-y-2">
+                          {activeAvatar.placeholderCategories.map(cat => (
+                            <div key={cat.id} className="flex items-center gap-3 text-xs bg-slate-900/50 p-2 rounded">
+                              <span className="text-white font-medium w-32 truncate">{cat.name}</span>
+                              <div className="flex-1 flex items-center gap-4">
+                                <label className={`flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded transition ${!cat.isRandomized ? 'bg-purple-600/30 border border-purple-500' : 'hover:bg-slate-800'}`}>
+                                  <input
+                                    type="radio"
+                                    name={`cat-match-${cat.id}`}
+                                    checked={!cat.isRandomized}
+                                    onChange={() => {
+                                      const updatedCats = activeAvatar.placeholderCategories?.map(c =>
+                                        c.id === cat.id ? { ...c, isRandomized: false } : c
+                                      );
+                                      handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCats });
+                                    }}
+                                    className="accent-purple-500"
+                                  />
+                                  <span className="text-purple-300">🎯 Match Keywords</span>
+                                </label>
+                                <label className={`flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded transition ${cat.isRandomized === true ? 'bg-amber-600/30 border border-amber-500' : 'hover:bg-slate-800'}`}>
+                                  <input
+                                    type="radio"
+                                    name={`cat-match-${cat.id}`}
+                                    checked={cat.isRandomized === true}
+                                    onChange={() => {
+                                      const updatedCats = activeAvatar.placeholderCategories?.map(c =>
+                                        c.id === cat.id ? { ...c, isRandomized: true } : c
+                                      );
+                                      handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCats });
+                                    }}
+                                    className="accent-amber-500"
+                                  />
+                                  <span className="text-amber-300">🎲 Randomize</span>
+                                </label>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-3">
+                          <strong className="text-purple-400">Match Keywords:</strong> Uses keyword field in placeholder options to match article content<br/>
+                          <strong className="text-amber-400">Randomize:</strong> Picks any option randomly (ideal for Gender/Age categories)
+                        </p>
+                      </div>
+                    )}
+
+                    {/* B-Roll Configuration */}
+                    <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+                      <label className="text-xs text-slate-400 mb-2 block font-medium flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" /></svg>
+                        B-Roll Settings (Coming Soon):
+                      </label>
+                      <div className="flex items-center gap-3 text-xs opacity-50">
+                        <label className="flex items-center gap-2 cursor-not-allowed">
+                          <input type="checkbox" disabled className="accent-purple-500" />
+                          <span className="text-white">Include 1 B-Roll per page</span>
+                        </label>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-2">
+                        B-Roll images show general scenes (cleaning supplies, branded vehicles, etc.)
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    Enable Smart Content Matching to have AI automatically select images based on article content for optimal SEO.
+                  </p>
+                )}
+              </div>
+
+              {/* ─────────────────────────────────────────────────────
+                  SECTION 3: Matching Rules (Numbered)
+              ───────────────────────────────────────────────────── */}
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-emerald-500/30">
+                <div className="flex items-center gap-2 mb-4">
+                  <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                  </svg>
+                  <h3 className="text-emerald-400 font-semibold">Smart Matching Rules</h3>
+                </div>
+
+                {/* Numbered Rules List */}
+                <div className="space-y-2">
+                  {/* Rule 1 */}
+                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-emerald-500">
+                    <span className="w-6 h-6 flex items-center justify-center bg-emerald-600 rounded-full text-white text-xs font-bold shrink-0">1</span>
+                    <div className="flex-1">
+                      <p className="text-sm text-white">Always try to match <span className="text-emerald-400 font-semibold">Primary Keywords</span> first</p>
+                      <p className="text-xs text-slate-400 mt-1">Search for primary keywords within the word range around image placement</p>
+                    </div>
+                  </div>
+
+                  {/* Rule 2 */}
+                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-amber-500">
+                    <span className="w-6 h-6 flex items-center justify-center bg-amber-600 rounded-full text-white text-xs font-bold shrink-0">2</span>
+                    <div className="flex-1">
+                      <p className="text-sm text-white">If no primary match, fall back to <span className="text-amber-400 font-semibold">Secondary Keywords</span></p>
+                      <p className="text-xs text-slate-400 mt-1">Only if secondary keywords are enabled for that option</p>
+                    </div>
+                  </div>
+
+                  {/* Rule 3 */}
+                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-red-500">
+                    <span className="w-6 h-6 flex items-center justify-center bg-red-600 rounded-full text-white text-xs font-bold shrink-0">3</span>
+                    <div className="flex-1">
+                      <p className="text-sm text-white">Never use the same <span className="text-red-400 font-semibold">Primary Keyword</span> twice on a page</p>
+                      <p className="text-xs text-slate-400 mt-1">Each primary keyword can only appear once per article (no duplicate stove images)</p>
+                    </div>
+                  </div>
+
+                  {/* Rule 4 */}
+                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-purple-500">
+                    <span className="w-6 h-6 flex items-center justify-center bg-purple-600 rounded-full text-white text-xs font-bold shrink-0">4</span>
+                    <div className="flex-1">
+                      <p className="text-sm text-white">Secondary keyword matches must have <span className="text-purple-400 font-semibold">different primaries</span></p>
+                      <p className="text-xs text-slate-400 mt-1">If "kitchen" matches twice, each must be a different primary (stove, then sink)</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Editable Parameters */}
+                <div className="mt-4 pt-4 border-t border-slate-700">
+                  <label className="text-xs text-slate-400 mb-2 block">Matching Parameters:</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] text-emerald-400 block mb-1">Word Range Around Placement</label>
+                      <input
+                        type="text"
+                        value={settings.placement_rule || '50-75'}
+                        onChange={(e) => updateSettings({ placement_rule: e.target.value })}
+                        className="w-full bg-slate-900 border border-emerald-500/30 rounded px-2 py-1.5 text-emerald-300 text-sm font-mono"
+                        placeholder="50-75"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-emerald-400 block mb-1">Max Words Between Images</label>
+                      <input
+                        type="text"
+                        value={settings.smart_matching_rule || '300'}
+                        onChange={(e) => updateSettings({ smart_matching_rule: e.target.value })}
+                        className="w-full bg-slate-900 border border-emerald-500/30 rounded px-2 py-1.5 text-emerald-300 text-sm font-mono"
+                        placeholder="300"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Plurals Toggle */}
+                  <div className="mt-3 flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-cyan-500/30">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">📝</span>
+                      <div>
+                        <span className="text-sm text-white font-medium">Auto-Match Plurals</span>
+                        <p className="text-[10px] text-slate-400">counter → counters, sink → sinks, countertop → countertops</p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.match_plurals !== false}
+                        onChange={(e) => updateSettings({ match_plurals: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
+                    </label>
+                  </div>
                 </div>
               </div>
-            ) : (
-              <p className="text-xs text-slate-500">
-                Enable to have AI automatically match images to article content for optimal SEO.
-                Images will be selected or generated based on the text they appear next to.
-              </p>
-            )}
+
+              {/* ─────────────────────────────────────────────────────
+                  SECTION 4: Variation Order
+              ───────────────────────────────────────────────────── */}
+              <div className="bg-slate-800/50 rounded-lg border border-orange-500/30 overflow-hidden">
+                <button onClick={() => setIsOrderOpen(!isOrderOpen)} className="w-full flex items-center justify-between p-4 text-orange-400 hover:bg-slate-800/80 transition">
+                  <span className="flex items-center gap-2 font-semibold">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                    Variation Order
+                    <span className="text-xs text-orange-300/70 font-normal ml-2">
+                      ({settings.variation_order_mode === 'manual' ? `${settings.manual_variation_order?.length || 0} set` : settings.variation_order_mode})
+                    </span>
+                  </span>
+                  <svg className={`w-5 h-5 transition-transform ${isOrderOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                </button>
+                {isOrderOpen && (
+                  <div className="p-4 border-t border-orange-500/30 space-y-3 bg-slate-900/50">
+                    <p className="text-xs text-brand-gold/70">Define the order variations are used across pages. Each page gets unique variations.</p>
+
+                    <div className="flex items-center gap-3 mb-2">
+                      <label className="text-xs text-brand-gold/70">Mode:</label>
+                      <select
+                        value={settings.variation_order_mode || 'sequential'}
+                        onChange={(e) => updateSettings({ variation_order_mode: e.target.value as any })}
+                        className="bg-slate-800 border border-brand-gold/50 rounded px-3 py-1.5 text-white text-xs"
+                      >
+                        <option value="sequential">Sequential (1, 2, 3...)</option>
+                        <option value="random">Random (no duplicates)</option>
+                        <option value="manual">Manual Order Below</option>
+                      </select>
+                      {settings.variation_order_mode === 'manual' && (
+                        <button onClick={clearVariationOrder} className="text-xs text-red-400 hover:text-red-300">Clear Order</button>
+                      )}
+                    </div>
+
+                    {settings.variation_order_mode === 'manual' && (
+                      <div className="flex flex-wrap gap-2">
+                        {activeAvatar?.variations.map((v) => {
+                          const orderNum = getVariationOrderNumber(v.id);
+                          return (
+                            <button
+                              key={v.id}
+                              onClick={() => handleSetVariationOrder(v.id)}
+                              className={`relative px-3 py-1.5 rounded text-xs font-medium transition ${orderNum ? 'bg-orange-500 text-slate-900' : 'bg-slate-800 text-brand-gold border border-brand-gold/50 hover:bg-slate-700'}`}
+                            >
+                              {orderNum && <span className="absolute -top-2 -left-2 w-5 h-5 bg-orange-700 text-white rounded-full text-[10px] flex items-center justify-center">{orderNum}</span>}
+                              {v.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {settings.manual_variation_order && settings.manual_variation_order.length > 0 && settings.variation_order_mode === 'manual' && (
+                      <div className="text-xs text-orange-300 bg-orange-900/30 p-2 rounded border border-orange-500/30">
+                        Order: {settings.manual_variation_order.map((id, idx) => {
+                          const v = activeAvatar?.variations.find(v => v.id === id);
+                          return v ? `${idx + 1}. ${v.name}` : '';
+                        }).filter(Boolean).join(' → ')}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
       {saving && (

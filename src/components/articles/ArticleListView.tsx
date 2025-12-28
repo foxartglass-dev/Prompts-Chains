@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
 
+interface ArticleImage {
+  id: string;
+  url: string;
+  prompt: string;
+  placement: string;
+  wpMediaId?: number;
+  keywords?: string[];
+  createdAt: string;
+  pushedToWp?: boolean;
+}
+
 interface Article {
   id: number;
   workflow_id: number | null;
@@ -27,6 +38,7 @@ interface Article {
   wp_app_password?: string;
   selected_meta_title?: string | null;
   selected_meta_description?: string | null;
+  images?: ArticleImage[];
 }
 
 interface ArticleListViewProps {
@@ -51,6 +63,12 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   // Meta selection
   const [selectedTitleIndex, setSelectedTitleIndex] = useState<number | null>(null);
   const [selectedDescIndex, setSelectedDescIndex] = useState<number | null>(null);
+
+  // Image management
+  const [showImages, setShowImages] = useState(false);
+  const [pushingImages, setPushingImages] = useState(false);
+  const [pushingMeta, setPushingMeta] = useState(false);
+  const [regeneratingImage, setRegeneratingImage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchArticles();
@@ -231,6 +249,112 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     setSelectedArticle(null);
     setIsEditing(false);
     setError(null);
+    setShowImages(false);
+  };
+
+  // Push all images to WordPress media library
+  const pushImagesToWordPress = async () => {
+    if (!selectedArticle || !selectedArticle.images || selectedArticle.images.length === 0) return;
+
+    setPushingImages(true);
+    try {
+      const res = await fetch(`/api/articles/${selectedArticle.id}/push-images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wpUrl: selectedArticle.wp_url,
+          wpUser: selectedArticle.wp_user,
+          wpPassword: selectedArticle.wp_app_password
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert(`Successfully pushed ${data.pushed} images to WordPress!`);
+        fetchArticleDetails(selectedArticle.id);
+      } else {
+        setError(data.error || 'Failed to push images');
+      }
+    } catch (err) {
+      setError('Failed to push images to WordPress');
+    } finally {
+      setPushingImages(false);
+    }
+  };
+
+  // Push meta title and description to WordPress
+  const pushMetaToWordPress = async () => {
+    if (!selectedArticle) return;
+
+    const metaTitle = selectedTitleIndex !== null && selectedArticle.meta_titles
+      ? selectedArticle.meta_titles[selectedTitleIndex]
+      : null;
+    const metaDesc = selectedDescIndex !== null && selectedArticle.meta_descriptions
+      ? selectedArticle.meta_descriptions[selectedDescIndex]
+      : null;
+
+    if (!metaTitle && !metaDesc) {
+      setError('Please select a meta title and/or description first');
+      return;
+    }
+
+    setPushingMeta(true);
+    try {
+      const res = await fetch(`/api/articles/${selectedArticle.id}/push-meta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wpUrl: selectedArticle.wp_url,
+          wpUser: selectedArticle.wp_user,
+          wpPassword: selectedArticle.wp_app_password,
+          wpPostId: selectedArticle.wp_post_id,
+          metaTitle,
+          metaDescription: metaDesc
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert('Meta data pushed to WordPress!');
+      } else {
+        setError(data.error || 'Failed to push meta');
+      }
+    } catch (err) {
+      setError('Failed to push meta to WordPress');
+    } finally {
+      setPushingMeta(false);
+    }
+  };
+
+  // Regenerate a single image
+  const regenerateImage = async (imageId: string) => {
+    if (!selectedArticle) return;
+
+    const image = selectedArticle.images?.find(i => i.id === imageId);
+    if (!image) return;
+
+    setRegeneratingImage(imageId);
+    try {
+      const res = await fetch(`/api/articles/${selectedArticle.id}/regenerate-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageId,
+          prompt: image.prompt
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        fetchArticleDetails(selectedArticle.id);
+      } else {
+        setError(data.error || 'Failed to regenerate image');
+      }
+    } catch (err) {
+      setError('Failed to regenerate image');
+    } finally {
+      setRegeneratingImage(null);
+    }
   };
 
   if (loading) {
@@ -457,6 +581,26 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                 >
                   {publishing ? 'Publishing...' : 'Publish to WP'}
                 </button>
+                {selectedArticle.wp_post_id && (
+                  <button
+                    onClick={pushMetaToWordPress}
+                    disabled={pushingMeta}
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
+                    title="Push selected meta title and description to WordPress"
+                  >
+                    {pushingMeta ? 'Pushing...' : 'Push Meta'}
+                  </button>
+                )}
+                {selectedArticle.images && selectedArticle.images.length > 0 && (
+                  <button
+                    onClick={pushImagesToWordPress}
+                    disabled={pushingImages}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
+                    title="Push all images to WordPress media library"
+                  >
+                    {pushingImages ? 'Pushing...' : `Push ${selectedArticle.images.length} Images`}
+                  </button>
+                )}
                 {selectedArticle.wp_post_url && (
                   <a
                     href={selectedArticle.wp_post_url}
@@ -580,6 +724,104 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                   </div>
                 </div>
               )}
+
+              {/* Article Images */}
+              <div className="mt-6">
+                <div className="flex items-center justify-between mb-2">
+                  <button
+                    onClick={() => setShowImages(!showImages)}
+                    className="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white transition"
+                  >
+                    <svg className={`w-4 h-4 transition-transform ${showImages ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    Article Images
+                    {selectedArticle.images && selectedArticle.images.length > 0 && (
+                      <span className="bg-amber-600/30 text-amber-400 px-2 py-0.5 rounded text-xs">
+                        {selectedArticle.images.length}
+                      </span>
+                    )}
+                  </button>
+                  {selectedArticle.images && selectedArticle.images.length > 0 && showImages && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={pushImagesToWordPress}
+                        disabled={pushingImages}
+                        className="px-2 py-1 bg-amber-600 hover:bg-amber-700 rounded text-white text-xs transition disabled:opacity-50"
+                      >
+                        {pushingImages ? 'Pushing...' : 'Push All to WP'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {showImages && (
+                  <div className="bg-slate-800/50 rounded-lg p-4">
+                    {selectedArticle.images && selectedArticle.images.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {selectedArticle.images.map((image) => (
+                          <div key={image.id} className="relative group bg-slate-900 rounded-lg overflow-hidden border border-slate-700">
+                            <img
+                              src={image.url}
+                              alt={image.placement || 'Article image'}
+                              className="w-full aspect-square object-cover"
+                            />
+                            {/* Overlay with info */}
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
+                              <p className="text-xs text-white truncate">{image.placement || 'No placement'}</p>
+                              {image.pushedToWp && (
+                                <span className="text-xs text-green-400">✓ In WordPress</span>
+                              )}
+                            </div>
+                            {/* Action buttons */}
+                            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => regenerateImage(image.id)}
+                                disabled={regeneratingImage === image.id}
+                                className="p-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs disabled:opacity-50"
+                                title="Regenerate image"
+                              >
+                                {regeneratingImage === image.id ? (
+                                  <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                                )}
+                              </button>
+                              <a
+                                href={image.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 bg-slate-600 hover:bg-slate-500 rounded text-white text-xs"
+                                title="View full size"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </a>
+                            </div>
+                            {/* Status badge */}
+                            {image.pushedToWp && (
+                              <div className="absolute top-2 left-2">
+                                <span className="px-1.5 py-0.5 bg-green-600 rounded text-white text-[10px]">WP</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 text-center py-8">
+                        No images generated for this article yet.
+                        <br />
+                        <span className="text-xs">Generate images from the Image Creation section.</span>
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

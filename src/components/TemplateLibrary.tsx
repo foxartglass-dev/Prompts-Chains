@@ -59,7 +59,9 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     placeholders: true,
     tags: true,
     snippets: true,
-    settings: true
+    settings: true,
+    imageCreation: true,
+    sitePlanning: true
   });
 
   useEffect(() => {
@@ -455,6 +457,8 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                         { key: 'tags', label: 'Tags', desc: 'Audience tags (B, E, G, etc.)' },
                         { key: 'snippets', label: 'Tagged Snippets', desc: 'Large reusable text blocks' },
                         { key: 'settings', label: 'Settings', desc: 'Model, provider, output settings' },
+                        { key: 'imageCreation', label: 'Image Creation', desc: 'Image settings, avatars, bank & prompts' },
+                        { key: 'sitePlanning', label: 'Site Planning', desc: 'Site structure and page hierarchy' },
                       ].map(({ key, label, desc }) => (
                         <label
                           key={key}

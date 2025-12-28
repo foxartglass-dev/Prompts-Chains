@@ -99,10 +99,29 @@ router.post('/generate', async (req, res) => {
       generateParams.quality = quality;
     }
 
+    // Only add response_format for models that support it (not gpt-image-1.5)
+    if (!selectedModel.startsWith('gpt-image')) {
+      generateParams.response_format = 'url';
+    }
+
     const response = await openai.images.generate(generateParams);
 
-    const imageUrl = response.data[0].url;
+    // Handle both URL and base64 response formats
+    // gpt-image-1.5 returns base64, DALL-E returns URL
+    let imageUrl;
     const revisedPrompt = response.data[0].revised_prompt;
+
+    if (response.data[0].b64_json) {
+      imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
+      console.log('[Image Generation] Got base64 image, converted to data URL');
+    } else if (response.data[0].url) {
+      imageUrl = response.data[0].url;
+    }
+
+    if (!imageUrl) {
+      console.error('[Image Generation] No image data in response');
+      return res.status(500).json({ error: 'OpenAI returned no image data' });
+    }
 
     res.json({
       success: true,
@@ -233,12 +252,29 @@ Generate an image that matches the described style exactly while depicting the c
       generateParams.quality = 'high';
     }
 
+    // Only add response_format for models that support it (not gpt-image-1.5)
+    if (!selectedModel.startsWith('gpt-image')) {
+      generateParams.response_format = 'url';
+    }
+
     const response = await openai.images.generate(generateParams);
+
+    // Handle both URL and base64 response formats
+    let imageUrl;
+    if (response.data[0].b64_json) {
+      imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
+    } else if (response.data[0].url) {
+      imageUrl = response.data[0].url;
+    }
+
+    if (!imageUrl) {
+      return res.status(500).json({ error: 'OpenAI returned no image data' });
+    }
 
     res.json({
       success: true,
       image: {
-        url: response.data[0].url,
+        url: imageUrl,
         prompt: stylePrompt,
         revisedPrompt: response.data[0].revised_prompt,
         model: selectedModel,
@@ -659,6 +695,10 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           // Smart Content Matching defaults
           smart_matching_enabled: false,
           smart_matching_mode: 'bank_first',
+          // Algorithm rules (editable)
+          placement_rule: 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
+          smart_matching_rule: 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
+          match_plurals: true, // Default ON - auto-match counter/counters
           // Image quality default
           image_quality: 'low'
         },
@@ -694,6 +734,10 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         // Smart Content Matching
         smart_matching_enabled: results[0].smart_matching_enabled ?? false,
         smart_matching_mode: results[0].smart_matching_mode || 'bank_first',
+        // Algorithm rules (editable)
+        placement_rule: results[0].placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
+        smart_matching_rule: results[0].smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.',
+        match_plurals: results[0].match_plurals !== false, // Default ON
         // Image quality
         image_quality: results[0].image_quality || 'low'
       }
@@ -739,7 +783,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       manual_variation_order,
       // Smart Content Matching (may not exist in DB yet)
       smart_matching_enabled,
-      smart_matching_mode
+      smart_matching_mode,
+      // Algorithm rules (editable)
+      placement_rule,
+      smart_matching_rule,
+      match_plurals
     } = req.body;
 
     // Check if settings exist
@@ -832,20 +880,23 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       }
     };
 
-    // Try to update smart_matching columns (silently fail if they don't exist)
+    // Try to update smart_matching columns and algorithm rules (silently fail if they don't exist)
     const tryUpdateSmartMatching = async () => {
       try {
         await sql`
           UPDATE image_creation_settings
           SET
             smart_matching_enabled = COALESCE(${smart_matching_enabled}, smart_matching_enabled),
-            smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode)
+            smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode),
+            placement_rule = COALESCE(${placement_rule}, placement_rule),
+            smart_matching_rule = COALESCE(${smart_matching_rule}, smart_matching_rule),
+            match_plurals = COALESCE(${match_plurals}, match_plurals)
           WHERE workflow_id = ${workflowId}
         `;
         return true;
       } catch (err) {
-        if (err.message?.includes('smart_matching')) {
-          console.log('[Image Creation API] smart_matching columns not available yet (run migration 006)');
+        if (err.message?.includes('smart_matching') || err.message?.includes('placement_rule') || err.message?.includes('match_plurals')) {
+          console.log('[Image Creation API] smart_matching/algorithm columns not available yet (run migration)');
           return false;
         }
         throw err;

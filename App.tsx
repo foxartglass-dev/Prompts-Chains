@@ -22,6 +22,9 @@ import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components
 import WordPressSettings from './src/components/WordPressSettings';
 import ArticlesPage from './src/pages/ArticlesPage';
 import ImageCreationSection from './src/components/ImageCreationSection';
+import SitePlanningSection from './src/components/SitePlanningSection';
+// VibeCoder Notepad - temporarily disabled, component available at src/components/VibeCoderNotepad.tsx
+// import { VibeCoderToggle } from './src/components/VibeCoderNotepad';
 
 // Types for workflow
 interface WorkflowItem {
@@ -2913,6 +2916,18 @@ const App: React.FC = () => {
                         />
                     )}
 
+                    {/* 8. Site Planning Section */}
+                    {renderSection('8. Site Planning', 'sitePlanning',
+                        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                        </svg>,
+                        <SitePlanningSection
+                            workflowId={currentWorkflowId}
+                            websiteId={currentProject?.website_id || undefined}
+                            showNotification={showNotification}
+                        />
+                    )}
+
                     <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan">
                         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5`}><Icon type="info" className="h-6 w-6"/><span className="ml-3">Processing Log</span></h2>
                         <div className="p-5 pt-0 border-t border-brand-cyan/30">
@@ -3112,6 +3127,8 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* VibeCoder Notepad - Enable when ready: <VibeCoderToggle /> */}
         </div>
     );
 };

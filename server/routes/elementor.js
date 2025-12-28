@@ -388,15 +388,250 @@ router.post('/publish', async (req, res) => {
 
           console.log('[Image Bank] Available images after filter:', availableImages.length);
 
-          // Sort by variation order
-          if (variationOrderMode === 'manual' && manualOrder.length > 0) {
-            availableImages = availableImages.sort((a, b) => {
-              const aIdx = manualOrder.indexOf(a.variationId);
-              const bIdx = manualOrder.indexOf(b.variationId);
-              return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+          // ═══════════════════════════════════════════════════════════════
+          // SMART CONTENT MATCHING - Match images to article content
+          // Rules:
+          // 1. Always try primary keywords first
+          // 2. Fall back to secondary keywords if enabled
+          // 3. Never duplicate primary keywords on the same page
+          // 4. Secondary matches must have different primaries
+          // ═══════════════════════════════════════════════════════════════
+          const smartMatchingEnabled = config.smart_matching_enabled || false;
+          const smartMatchingMode = config.smart_matching_mode || 'bank_first';
+          const matchPlurals = config.match_plurals !== false; // Default ON
+          const usedPrimaryKeywords = new Set(); // Track used primary keywords (Rule 3)
+
+          // Helper: Generate plural forms of a word
+          const getPluralForms = (word) => {
+            if (!matchPlurals) return [word];
+            const forms = [word];
+            const w = word.toLowerCase().trim();
+            // Add common plural forms
+            if (w.endsWith('s') || w.endsWith('x') || w.endsWith('ch') || w.endsWith('sh')) {
+              forms.push(w + 'es'); // box → boxes, dish → dishes
+            } else if (w.endsWith('y') && !['a','e','i','o','u'].includes(w[w.length-2])) {
+              forms.push(w.slice(0, -1) + 'ies'); // city → cities
+            } else {
+              forms.push(w + 's'); // counter → counters
+            }
+            // Also check if word is already plural, add singular
+            if (w.endsWith('ies')) {
+              forms.push(w.slice(0, -3) + 'y'); // cities → city
+            } else if (w.endsWith('es')) {
+              forms.push(w.slice(0, -2)); // boxes → box
+            } else if (w.endsWith('s') && w.length > 2) {
+              forms.push(w.slice(0, -1)); // counters → counter
+            }
+            return [...new Set(forms)]; // Remove duplicates
+          };
+
+          if (smartMatchingEnabled && targetAvatar?.placeholderCategories?.length > 0) {
+            console.log('[Smart Matching] Enabled, mode:', smartMatchingMode, ', plurals:', matchPlurals);
+
+            // Normalize article content for keyword matching
+            const articleText = (cleanedContent || contentHtml || '').toLowerCase();
+
+            // ═══════════════════════════════════════════════════════════════
+            // DISAMBIGUATION: Detect keywords that exist in multiple categories
+            // e.g., "sink" in both Kitchen and Bathroom = ambiguous
+            // ═══════════════════════════════════════════════════════════════
+            const keywordToCategoriesMap = new Map(); // keyword → Set of category names
+
+            // Build the map of all primary keywords and their categories
+            targetAvatar.placeholderCategories.forEach(cat => {
+              if (cat.isRandomized) return;
+              cat.options?.forEach(opt => {
+                (opt.primaryKeywords || []).forEach(kw => {
+                  const kwLower = kw.toLowerCase().trim();
+                  if (!kwLower) return;
+                  // Add all plural forms too
+                  const forms = getPluralForms(kwLower);
+                  forms.forEach(form => {
+                    if (!keywordToCategoriesMap.has(form)) {
+                      keywordToCategoriesMap.set(form, new Set());
+                    }
+                    keywordToCategoriesMap.get(form).add(cat.name.toLowerCase());
+                  });
+                });
+              });
             });
-          } else if (variationOrderMode === 'random') {
-            availableImages = availableImages.sort(() => Math.random() - 0.5);
+
+            // Identify ambiguous keywords (exist in 2+ categories)
+            const ambiguousKeywords = new Set();
+            keywordToCategoriesMap.forEach((categories, keyword) => {
+              if (categories.size > 1) {
+                ambiguousKeywords.add(keyword);
+                console.log('[Smart Matching] AMBIGUOUS keyword:', keyword, '→ exists in:', [...categories].join(', '));
+              }
+            });
+
+            // Helper: Check if category keyword is present in article
+            const categoryKeywordInArticle = (categoryName) => {
+              const catKeyword = categoryName.toLowerCase().replace(/_/g, ' ');
+              const forms = getPluralForms(catKeyword);
+              return forms.some(form => articleText.includes(form));
+            };
+
+            // Score each image based on keyword matches
+            availableImages = availableImages.map(img => {
+              let primaryScore = 0;
+              let secondaryScore = 0;
+              const matchedPrimary = [];
+              const matchedSecondary = [];
+
+              // Parse image variation string to extract placeholder codes
+              // Format: "I3 · (H) · G2" or "I3-(H)-G2"
+              const variationStr = img.variation || img.shortLabel || '';
+              const parts = variationStr.split(/[·\-\s]+/).filter(Boolean);
+
+              // For each placeholder category
+              targetAvatar.placeholderCategories.forEach((cat, catIdx) => {
+                // Skip randomized categories - they don't need matching
+                if (cat.isRandomized) {
+                  return;
+                }
+
+                // Find the code for this category in the image variation
+                const catInitial = cat.name.charAt(0).toUpperCase();
+                const matchingPart = parts.find(p => {
+                  const partMatch = p.match(/^([A-Z])(\d+)$/i);
+                  return partMatch && partMatch[1].toUpperCase() === catInitial;
+                });
+
+                if (matchingPart) {
+                  const optionNum = parseInt(matchingPart.slice(1));
+                  const option = cat.options?.find(o => o.number === optionNum);
+
+                  if (option) {
+                    // Check PRIMARY keywords first (Rule 1)
+                    const primaryKeywords = option.primaryKeywords || [];
+                    for (const kw of primaryKeywords) {
+                      const kwLower = kw.toLowerCase().trim();
+                      if (!kwLower) continue;
+
+                      // Check keyword and its plural forms
+                      const forms = getPluralForms(kwLower);
+                      let foundForm = null;
+                      for (const form of forms) {
+                        if (articleText.includes(form)) {
+                          foundForm = form;
+                          break;
+                        }
+                      }
+
+                      if (foundForm) {
+                        // DISAMBIGUATION: If keyword is ambiguous, require category keyword too
+                        const isAmbiguous = forms.some(f => ambiguousKeywords.has(f));
+
+                        if (isAmbiguous) {
+                          // Ambiguous keyword - require category name to also be present
+                          if (categoryKeywordInArticle(cat.name)) {
+                            primaryScore += 10;
+                            matchedPrimary.push(kwLower);
+                            console.log('[Smart Matching] Image', img.id, 'PRIMARY match:', kwLower, '(disambiguated by:', cat.name, ')');
+                          } else {
+                            console.log('[Smart Matching] Image', img.id, 'SKIPPED ambiguous keyword:', kwLower, '(need', cat.name, 'in article)');
+                          }
+                        } else {
+                          // Unique keyword - safe to use
+                          primaryScore += 10;
+                          matchedPrimary.push(kwLower);
+                          console.log('[Smart Matching] Image', img.id, 'PRIMARY match:', kwLower, '(found as:', foundForm, ')');
+                        }
+                      }
+                    }
+
+                    // Check SECONDARY keywords if enabled (Rule 2)
+                    if (option.useSecondaryKeywords !== false) {
+                      // Auto-include category name as secondary keyword
+                      const categoryKeyword = cat.name.toLowerCase().replace(/_/g, ' ');
+                      const secondaryKeywords = [categoryKeyword, ...(option.secondaryKeywords || [])];
+
+                      for (const kw of secondaryKeywords) {
+                        const kwLower = kw.toLowerCase().trim();
+                        if (!kwLower || matchedPrimary.includes(kwLower)) continue;
+
+                        // Check keyword and its plural forms
+                        const forms = getPluralForms(kwLower);
+                        for (const form of forms) {
+                          if (articleText.includes(form)) {
+                            secondaryScore += 1; // Secondary matches worth less
+                            matchedSecondary.push(kwLower); // Store original keyword
+                            console.log('[Smart Matching] Image', img.id, 'SECONDARY match:', kwLower, '(found as:', form, ')');
+                            break; // Only count once per keyword
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              });
+
+              // Store the primary keywords for deduplication check
+              return {
+                ...img,
+                primaryScore,
+                secondaryScore,
+                matchScore: primaryScore + secondaryScore,
+                matchedPrimary,
+                matchedSecondary
+              };
+            });
+
+            // Sort: Primary score first, then secondary score
+            availableImages.sort((a, b) => {
+              // First by primary score (highest first)
+              if (b.primaryScore !== a.primaryScore) {
+                return b.primaryScore - a.primaryScore;
+              }
+              // Then by secondary score
+              if (b.secondaryScore !== a.secondaryScore) {
+                return b.secondaryScore - a.secondaryScore;
+              }
+              return 0;
+            });
+
+            // Apply Rule 3 & 4: Filter out duplicates
+            const selectedImages = [];
+            const usedPrimaries = new Set();
+
+            for (const img of availableImages) {
+              // Check if any of this image's primary keywords are already used (Rule 3)
+              const hasDuplicatePrimary = img.matchedPrimary?.some(kw => usedPrimaries.has(kw));
+
+              if (!hasDuplicatePrimary) {
+                selectedImages.push(img);
+                // Mark these primary keywords as used
+                img.matchedPrimary?.forEach(kw => usedPrimaries.add(kw));
+              } else {
+                console.log('[Smart Matching] Skipping image', img.id, '- duplicate primary keyword');
+              }
+            }
+
+            availableImages = selectedImages;
+
+            console.log('[Smart Matching] Final ranked images:', availableImages.slice(0, 5).map(img => ({
+              id: img.id,
+              variation: img.variation,
+              primaryScore: img.primaryScore,
+              secondaryScore: img.secondaryScore,
+              primary: img.matchedPrimary,
+              secondary: img.matchedSecondary
+            })));
+          }
+
+          // Sort by variation order (if not using smart matching or as tiebreaker)
+          // Apply variation order sorting only if NOT using smart matching
+          if (!smartMatchingEnabled) {
+            if (variationOrderMode === 'manual' && manualOrder.length > 0) {
+              availableImages = availableImages.sort((a, b) => {
+                const aIdx = manualOrder.indexOf(a.variationId);
+                const bIdx = manualOrder.indexOf(b.variationId);
+                return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+              });
+            } else if (variationOrderMode === 'random') {
+              availableImages = availableImages.sort(() => Math.random() - 0.5);
+            }
           }
 
           // === IMAGE SELECTION LOGIC ===

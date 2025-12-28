@@ -44,6 +44,7 @@ async function generateWithOpenAI(prompt, options, apiKey) {
 
   console.log(`[Image Generator] OpenAI gpt-image-1.5, quality: ${quality}, size: ${finalSize}`);
 
+  // gpt-image-1.5 doesn't support response_format - it always returns base64
   const response = await openai.images.generate({
     model: 'gpt-image-1.5',
     prompt: prompt,
@@ -52,8 +53,21 @@ async function generateWithOpenAI(prompt, options, apiKey) {
     quality: quality
   });
 
-  const imageUrl = response.data[0].url;
+  // gpt-image-1.5 returns base64 data, convert to data URL
+  let imageUrl;
   const revisedPrompt = response.data[0].revised_prompt;
+
+  if (response.data[0].b64_json) {
+    imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
+    console.log('[Image Generator] Got base64 image, converted to data URL');
+  } else if (response.data[0].url) {
+    imageUrl = response.data[0].url;
+  }
+
+  if (!imageUrl) {
+    console.error('[Image Generator] No image data in response:', JSON.stringify(response.data[0]).substring(0, 200));
+    throw new Error('OpenAI returned no image data');
+  }
   const [w, h] = finalSize.split('x').map(Number);
 
   return {
