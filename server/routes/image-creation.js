@@ -821,91 +821,186 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
     console.log('[Image Creation API] Existing record:', existing.length > 0 ? existing[0].id : 'none');
 
-    // Helper function to save core settings (without smart_matching columns that may not exist)
+    // Helper function to save core settings
+    // Uses fallback logic if newer columns (live_prompt_mode, etc.) don't exist in the database
     const saveCoreSettings = async (isInsert) => {
       if (isInsert) {
-        const result = await sql`
-          INSERT INTO image_creation_settings (
-            workflow_id,
-            enabled,
-            prompt_assistant_model,
-            image_generation_model,
-            image_quality,
-            reference_images,
-            logo_images,
-            audience_avatars,
-            image_bank,
-            image_categories,
-            auto_tag_enabled,
-            chat_history,
-            consultant_chat_history,
-            consultant_model,
-            worker_chat_history,
-            worker_model,
-            integration_mode,
-            fallback_to_live,
-            image_order,
-            variation_order_mode,
-            manual_variation_order,
-            live_prompt_mode,
-            smart_prompt_guidance
-          ) VALUES (
-            ${workflowId},
-            ${enabled ?? false},
-            ${prompt_assistant_model ?? 'gpt-4o'},
-            ${image_generation_model ?? 'flux-1.1-pro'},
-            ${image_quality ?? 'low'},
-            ${JSON.stringify(reference_images ?? [])},
-            ${JSON.stringify(logo_images ?? [])},
-            ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
-            ${JSON.stringify(image_bank ?? [])},
-            ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
-            ${auto_tag_enabled ?? true},
-            ${JSON.stringify(chat_history ?? [])},
-            ${JSON.stringify(consultant_chat_history ?? [])},
-            ${consultant_model ?? 'gpt-4o'},
-            ${JSON.stringify(worker_chat_history ?? [])},
-            ${worker_model ?? 'gpt-4o-mini'},
-            ${integration_mode ?? 'bank'},
-            ${fallback_to_live ?? true},
-            ${JSON.stringify(image_order ?? [])},
-            ${variation_order_mode ?? 'sequential'},
-            ${JSON.stringify(manual_variation_order ?? [])},
-            ${live_prompt_mode ?? 'smart_prompt'},
-            ${smart_prompt_guidance ?? ''}
-          )
-          RETURNING id
-        `;
-        return result[0].id;
+        // Try INSERT with all columns first, fallback to basic columns if newer ones don't exist
+        try {
+          const result = await sql`
+            INSERT INTO image_creation_settings (
+              workflow_id,
+              enabled,
+              prompt_assistant_model,
+              image_generation_model,
+              image_quality,
+              reference_images,
+              logo_images,
+              audience_avatars,
+              image_bank,
+              image_categories,
+              auto_tag_enabled,
+              chat_history,
+              consultant_chat_history,
+              consultant_model,
+              worker_chat_history,
+              worker_model,
+              integration_mode,
+              fallback_to_live,
+              image_order,
+              variation_order_mode,
+              manual_variation_order,
+              live_prompt_mode,
+              smart_prompt_guidance
+            ) VALUES (
+              ${workflowId},
+              ${enabled ?? false},
+              ${prompt_assistant_model ?? 'gpt-4o'},
+              ${image_generation_model ?? 'flux-1.1-pro'},
+              ${image_quality ?? 'low'},
+              ${JSON.stringify(reference_images ?? [])},
+              ${JSON.stringify(logo_images ?? [])},
+              ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
+              ${JSON.stringify(image_bank ?? [])},
+              ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
+              ${auto_tag_enabled ?? true},
+              ${JSON.stringify(chat_history ?? [])},
+              ${JSON.stringify(consultant_chat_history ?? [])},
+              ${consultant_model ?? 'gpt-4o'},
+              ${JSON.stringify(worker_chat_history ?? [])},
+              ${worker_model ?? 'gpt-4o-mini'},
+              ${integration_mode ?? 'bank'},
+              ${fallback_to_live ?? true},
+              ${JSON.stringify(image_order ?? [])},
+              ${variation_order_mode ?? 'sequential'},
+              ${JSON.stringify(manual_variation_order ?? [])},
+              ${live_prompt_mode ?? 'smart_prompt'},
+              ${smart_prompt_guidance ?? ''}
+            )
+            RETURNING id
+          `;
+          return result[0].id;
+        } catch (insertErr) {
+          // If it failed due to missing column, try without live_prompt_mode columns
+          if (insertErr.message?.includes('live_prompt_mode') || insertErr.message?.includes('smart_prompt_guidance')) {
+            console.log('[Image Creation API] Falling back to INSERT without live_prompt columns');
+            const result = await sql`
+              INSERT INTO image_creation_settings (
+                workflow_id,
+                enabled,
+                prompt_assistant_model,
+                image_generation_model,
+                image_quality,
+                reference_images,
+                logo_images,
+                audience_avatars,
+                image_bank,
+                image_categories,
+                auto_tag_enabled,
+                chat_history,
+                consultant_chat_history,
+                consultant_model,
+                worker_chat_history,
+                worker_model,
+                integration_mode,
+                fallback_to_live,
+                image_order,
+                variation_order_mode,
+                manual_variation_order
+              ) VALUES (
+                ${workflowId},
+                ${enabled ?? false},
+                ${prompt_assistant_model ?? 'gpt-4o'},
+                ${image_generation_model ?? 'flux-1.1-pro'},
+                ${image_quality ?? 'low'},
+                ${JSON.stringify(reference_images ?? [])},
+                ${JSON.stringify(logo_images ?? [])},
+                ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
+                ${JSON.stringify(image_bank ?? [])},
+                ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
+                ${auto_tag_enabled ?? true},
+                ${JSON.stringify(chat_history ?? [])},
+                ${JSON.stringify(consultant_chat_history ?? [])},
+                ${consultant_model ?? 'gpt-4o'},
+                ${JSON.stringify(worker_chat_history ?? [])},
+                ${worker_model ?? 'gpt-4o-mini'},
+                ${integration_mode ?? 'bank'},
+                ${fallback_to_live ?? true},
+                ${JSON.stringify(image_order ?? [])},
+                ${variation_order_mode ?? 'sequential'},
+                ${JSON.stringify(manual_variation_order ?? [])}
+              )
+              RETURNING id
+            `;
+            return result[0].id;
+          }
+          throw insertErr;
+        }
       } else {
-        await sql`
-          UPDATE image_creation_settings
-          SET
-            enabled = COALESCE(${enabled}, enabled),
-            prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
-            image_generation_model = COALESCE(${image_generation_model}, image_generation_model),
-            image_quality = COALESCE(${image_quality}, image_quality),
-            reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
-            logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
-            audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
-            image_bank = COALESCE(${image_bank ? JSON.stringify(image_bank) : null}::jsonb, image_bank),
-            image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
-            auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
-            chat_history = COALESCE(${chat_history ? JSON.stringify(chat_history) : null}::jsonb, chat_history),
-            consultant_chat_history = COALESCE(${consultant_chat_history ? JSON.stringify(consultant_chat_history) : null}::jsonb, consultant_chat_history),
-            consultant_model = COALESCE(${consultant_model}, consultant_model),
-            worker_chat_history = COALESCE(${worker_chat_history ? JSON.stringify(worker_chat_history) : null}::jsonb, worker_chat_history),
-            worker_model = COALESCE(${worker_model}, worker_model),
-            integration_mode = COALESCE(${integration_mode}, integration_mode),
-            fallback_to_live = COALESCE(${fallback_to_live}, fallback_to_live),
-            image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
-            variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
-            manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
-            live_prompt_mode = COALESCE(${live_prompt_mode}, live_prompt_mode),
-            smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
-            updated_at = CURRENT_TIMESTAMP
-          WHERE workflow_id = ${workflowId}
-        `;
+        // Try UPDATE with all columns first, fallback if columns don't exist
+        try {
+          await sql`
+            UPDATE image_creation_settings
+            SET
+              enabled = COALESCE(${enabled}, enabled),
+              prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
+              image_generation_model = COALESCE(${image_generation_model}, image_generation_model),
+              image_quality = COALESCE(${image_quality}, image_quality),
+              reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
+              logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
+              audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
+              image_bank = COALESCE(${image_bank ? JSON.stringify(image_bank) : null}::jsonb, image_bank),
+              image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
+              auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
+              chat_history = COALESCE(${chat_history ? JSON.stringify(chat_history) : null}::jsonb, chat_history),
+              consultant_chat_history = COALESCE(${consultant_chat_history ? JSON.stringify(consultant_chat_history) : null}::jsonb, consultant_chat_history),
+              consultant_model = COALESCE(${consultant_model}, consultant_model),
+              worker_chat_history = COALESCE(${worker_chat_history ? JSON.stringify(worker_chat_history) : null}::jsonb, worker_chat_history),
+              worker_model = COALESCE(${worker_model}, worker_model),
+              integration_mode = COALESCE(${integration_mode}, integration_mode),
+              fallback_to_live = COALESCE(${fallback_to_live}, fallback_to_live),
+              image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
+              variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
+              manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+              live_prompt_mode = COALESCE(${live_prompt_mode}, live_prompt_mode),
+              smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
+              updated_at = CURRENT_TIMESTAMP
+            WHERE workflow_id = ${workflowId}
+          `;
+        } catch (updateErr) {
+          // If it failed due to missing column, try without live_prompt_mode columns
+          if (updateErr.message?.includes('live_prompt_mode') || updateErr.message?.includes('smart_prompt_guidance')) {
+            console.log('[Image Creation API] Falling back to UPDATE without live_prompt columns');
+            await sql`
+              UPDATE image_creation_settings
+              SET
+                enabled = COALESCE(${enabled}, enabled),
+                prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
+                image_generation_model = COALESCE(${image_generation_model}, image_generation_model),
+                image_quality = COALESCE(${image_quality}, image_quality),
+                reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
+                logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
+                audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
+                image_bank = COALESCE(${image_bank ? JSON.stringify(image_bank) : null}::jsonb, image_bank),
+                image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
+                auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
+                chat_history = COALESCE(${chat_history ? JSON.stringify(chat_history) : null}::jsonb, chat_history),
+                consultant_chat_history = COALESCE(${consultant_chat_history ? JSON.stringify(consultant_chat_history) : null}::jsonb, consultant_chat_history),
+                consultant_model = COALESCE(${consultant_model}, consultant_model),
+                worker_chat_history = COALESCE(${worker_chat_history ? JSON.stringify(worker_chat_history) : null}::jsonb, worker_chat_history),
+                worker_model = COALESCE(${worker_model}, worker_model),
+                integration_mode = COALESCE(${integration_mode}, integration_mode),
+                fallback_to_live = COALESCE(${fallback_to_live}, fallback_to_live),
+                image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
+                variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
+                manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+                updated_at = CURRENT_TIMESTAMP
+              WHERE workflow_id = ${workflowId}
+            `;
+          } else {
+            throw updateErr;
+          }
+        }
         return null;
       }
     };
