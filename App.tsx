@@ -1164,8 +1164,9 @@ const App: React.FC = () => {
                             console.error('Failed to save article:', saveError);
                         }
 
-                        // Auto-publish to WordPress if master wpPublishMode is not 'off' and articlePublishMode is 'wordpress'
-                        if (currentProject.state.wpPublishMode !== 'off' && currentProject.state.articlePublishMode === 'wordpress') {
+                        // Auto-publish to WordPress if articlePublishMode is 'wordpress'
+                        // (Image toggle is independent - only controls images, not article publishing)
+                        if (currentProject.state.articlePublishMode === 'wordpress') {
                             const { url, user, password } = currentProject.state.wpCredentials;
                             if (url && user && password) {
                                 addLog(`[${itemLabel}] Auto-publishing to WordPress...`, LogStatus.WORKING, item.id);
@@ -1193,8 +1194,12 @@ const App: React.FC = () => {
                                     });
                                     const title = wpTitle.trim() || metaTitles[0] || item.name;
 
-                                    // Publish via Elementor (with Image Bank integration)
-                                    addLog(`[${itemLabel}] Preparing images from Image Bank...`, LogStatus.WORKING, item.id);
+                                    // Publish via Elementor (with Image Bank integration if enabled)
+                                    // Image toggle (wpPublishMode): 'off' = no images, 'draft'/'wordpress' = include images
+                                    const includeImages = currentProject.state.wpPublishMode !== 'off';
+                                    if (includeImages) {
+                                        addLog(`[${itemLabel}] Preparing images from Image Bank...`, LogStatus.WORKING, item.id);
+                                    }
                                     const publishResponse = await fetch('/api/elementor/publish', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
@@ -1206,11 +1211,12 @@ const App: React.FC = () => {
                                             content: finalOutput,
                                             status: 'draft',
                                             includeStatsBar: false,
-                                            // Image Bank integration
+                                            // Image Bank integration - only if Image toggle is not 'off'
                                             workflowId: currentWorkflowId,
                                             keyword: item.name, // Contains tag like "Standard Cleaning(H)"
-                                            useImageBank: true,
-                                            maxImages: 4,
+                                            useImageBank: includeImages,
+                                            generateImages: includeImages && currentProject.state.wpPublishMode === 'wordpress', // Only generate live if WordPress mode
+                                            maxImages: includeImages ? 4 : 0,
                                         }),
                                     });
                                     const publishData = await publishResponse.json();
@@ -1232,8 +1238,9 @@ const App: React.FC = () => {
                                                 : r
                                         ));
 
-                                        // Auto-push SEO meta if master wpPublishMode is not 'off', metaPublishMode is 'wordpress' and we have meta data
-                                        if (currentProject.state.wpPublishMode !== 'off' && currentProject.state.metaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
+                                        // Auto-push SEO meta if metaPublishMode is 'wordpress' and we have meta data
+                                        // (Image toggle is independent - only controls images, not meta publishing)
+                                        if (currentProject.state.metaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
                                             addLog(`[${itemLabel}] Auto-pushing SEO meta...`, LogStatus.WORKING, item.id);
                                             try {
                                                 const seoResponse = await fetch('/api/seo/push-direct', {
