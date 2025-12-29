@@ -45,7 +45,8 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json({ limit: '50mb' }));  // Increased for base64 image data
+app.use(express.json({ limit: '100mb' }));  // Increased for base64 image data
+app.use(express.urlencoded({ limit: '100mb', extended: true }));  // Also increase for form data
 
 // Serve uploaded files statically
 const uploadsPath = join(__dirname, '..', 'uploads');

@@ -438,6 +438,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [modelFilter, setModelFilter] = useState<string>('all');
   const [showArchived, setShowArchived] = useState<boolean>(false);
   const [bankFullscreen, setBankFullscreen] = useState<boolean>(false);
+  const [bankViewMode, setBankViewMode] = useState<'compact' | 'gallery'>('compact'); // compact = grid, gallery = large cards
 
   // Image title editing
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
@@ -452,6 +453,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [autoTagging, setAutoTagging] = useState(false);
   const [showPromptGuide, setShowPromptGuide] = useState(false);
   const [selectedCombinations, setSelectedCombinations] = useState<Set<string>>(new Set()); // For advanced mode batch
+
+  // Category-based filtering for batch generation (Advanced mode)
+  // Maps category ID to Set of selected option numbers
+  const [selectedOptionsPerCategory, setSelectedOptionsPerCategory] = useState<Map<string, Set<number>>>(new Map());
+  const [categoryFiltersOpen, setCategoryFiltersOpen] = useState<Set<string>>(new Set());
 
   // Extended context for Consultant Chat (articles, workflow info, etc.)
   const [consultantContext, setConsultantContext] = useState<{
@@ -680,11 +686,53 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       setSaving(true);
       try {
         console.log('[Image Creation] Saving settings to workflow:', workflowId);
+
+        // PRE-SAVE CHECK: Calculate payload size and warn if too large
+        const payloadJson = JSON.stringify(newSettings);
+        const payloadSizeMB = new Blob([payloadJson]).size / (1024 * 1024);
+
+        // Warn at 50MB, block at 90MB (server limit is 100MB)
+        if (payloadSizeMB > 90) {
+          showNotification(`⚠️ CANNOT SAVE: Payload is ${payloadSizeMB.toFixed(1)}MB (limit: 100MB). Delete some images from the Image Bank NOW to avoid losing work!`, 'error');
+          setSaving(false);
+          return;
+        } else if (payloadSizeMB > 50) {
+          showNotification(`⚠️ WARNING: Payload is ${payloadSizeMB.toFixed(1)}MB. Consider deleting unused images from the Image Bank to prevent save failures.`, 'warning');
+        } else if (payloadSizeMB > 30) {
+          console.log(`[Image Creation] Payload size: ${payloadSizeMB.toFixed(1)}MB - getting large`);
+        }
+
         const res = await fetch(`/api/image-creation/settings/${workflowId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newSettings)
+          body: payloadJson
         });
+
+        // Check for HTTP errors BEFORE trying to parse JSON
+        if (!res.ok) {
+          // Handle specific HTTP error codes with helpful messages
+          let errorMsg = '';
+          switch (res.status) {
+            case 413:
+              errorMsg = `Payload too large (${res.status}): Your image bank has too many images. Try deleting some images from the bank to reduce the save size.`;
+              break;
+            case 500:
+              errorMsg = `Server error (${res.status}): Database may be full or unavailable. Check your Neon dashboard.`;
+              break;
+            case 502:
+            case 503:
+            case 504:
+              errorMsg = `Server unavailable (${res.status}): Railway may be restarting. Try again in a moment.`;
+              break;
+            default:
+              errorMsg = `HTTP Error ${res.status}: ${res.statusText}`;
+          }
+          console.error('[Image Creation] Save failed with HTTP', res.status);
+          showNotification(errorMsg, 'error');
+          setSaving(false);
+          return;
+        }
+
         const data = await res.json();
         if (data.success) {
           onSettingsChange?.(newSettings);
@@ -697,7 +745,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         }
       } catch (error) {
         console.error('Failed to save settings:', error);
-        showNotification('Failed to save Image Creation settings', 'error');
+        showNotification('Failed to save Image Creation settings: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
       }
       setSaving(false);
     };
@@ -738,6 +786,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const uniqueVariations = [...new Set(settings.image_bank.map(img => img.variation))];
   // Get unique models for filtering
   const uniqueModels = [...new Set(settings.image_bank.map(img => img.model).filter(Boolean))];
+
+  // Calculate payload size for warning indicator
+  const payloadSizeMB = useMemo(() => {
+    try {
+      const size = new Blob([JSON.stringify(settings)]).size / (1024 * 1024);
+      return size;
+    } catch {
+      return 0;
+    }
+  }, [settings]);
 
   // Filter and sort bank images
   const getFilteredBankImages = (includeUsed: boolean) => {
@@ -827,7 +885,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         id: `combo-${idx}`,
         label,
         shortLabel,
-        replacements
+        replacements,
+        options: combo // Include the options array for filtering
       };
     });
   }, [activeAvatar?.placeholderCategories]);
@@ -860,6 +919,90 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       return newSet;
     });
   };
+
+  // Toggle category filter dropdown open/closed
+  const toggleCategoryFilter = (categoryId: string) => {
+    setCategoryFiltersOpen(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(categoryId)) {
+        newSet.delete(categoryId);
+      } else {
+        newSet.add(categoryId);
+      }
+      return newSet;
+    });
+  };
+
+  // Toggle a specific option within a category
+  const toggleCategoryOption = (categoryId: string, optionNumber: number) => {
+    setSelectedOptionsPerCategory(prev => {
+      const newMap = new Map(prev);
+      const currentSet = newMap.get(categoryId) || new Set<number>();
+      const newSet = new Set(currentSet);
+      if (newSet.has(optionNumber)) {
+        newSet.delete(optionNumber);
+      } else {
+        newSet.add(optionNumber);
+      }
+      newMap.set(categoryId, newSet);
+      return newMap;
+    });
+  };
+
+  // Select all options in a category
+  const selectAllCategoryOptions = (categoryId: string, options: { number: number }[]) => {
+    setSelectedOptionsPerCategory(prev => {
+      const newMap = new Map(prev);
+      newMap.set(categoryId, new Set(options.map(o => o.number)));
+      return newMap;
+    });
+  };
+
+  // Clear all options in a category
+  const clearCategoryOptions = (categoryId: string) => {
+    setSelectedOptionsPerCategory(prev => {
+      const newMap = new Map(prev);
+      newMap.set(categoryId, new Set());
+      return newMap;
+    });
+  };
+
+  // Get count of selected options for a category
+  const getSelectedCountForCategory = (categoryId: string): number => {
+    return selectedOptionsPerCategory.get(categoryId)?.size || 0;
+  };
+
+  // Check if an option is selected
+  const isOptionSelected = (categoryId: string, optionNumber: number): boolean => {
+    return selectedOptionsPerCategory.get(categoryId)?.has(optionNumber) || false;
+  };
+
+  // Compute filtered combinations based on selected options per category
+  const filteredCombinations = useMemo(() => {
+    if (!activeAvatar?.placeholderCategories || activeAvatar.placeholderCategories.length === 0) {
+      return placeholderCombinations;
+    }
+
+    // Check if any category has selections
+    const hasAnySelection = Array.from(selectedOptionsPerCategory.values()).some(set => set.size > 0);
+    if (!hasAnySelection) {
+      // No filters applied, return all
+      return placeholderCombinations;
+    }
+
+    // Filter combinations where each option in the combo is selected (or category has no filter)
+    return placeholderCombinations.filter(combo => {
+      const categories = activeAvatar.placeholderCategories || [];
+      return categories.every((cat, idx) => {
+        const selectedOptions = selectedOptionsPerCategory.get(cat.id);
+        // If no selections for this category, include all
+        if (!selectedOptions || selectedOptions.size === 0) return true;
+        // Check if the combo's option for this category is selected
+        const comboOption = combo.options[idx];
+        return comboOption && selectedOptions.has(comboOption.number);
+      });
+    });
+  }, [placeholderCombinations, selectedOptionsPerCategory, activeAvatar?.placeholderCategories]);
 
   // Insert variation placeholder into main prompt at cursor
   const insertVariationPlaceholder = () => {
@@ -3873,35 +4016,128 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
                 </div>
 
-                {/* Advanced Mode: Show placeholder combinations */}
+                {/* Advanced Mode: Category-based filtering */}
                 {activeAvatar?.placeholderMode === 'advanced' ? (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs text-brand-gold/70">
-                        Select Combinations ({placeholderCombinations.length} possible):
-                      </label>
-                      <button onClick={selectAllCombinations} className="text-xs text-brand-cyan hover:text-brand-cyan-light">Select All</button>
-                    </div>
-                    <div className="max-h-48 overflow-y-auto space-y-1 bg-slate-800/50 p-2 rounded">
-                      {placeholderCombinations.map((combo) => (
-                        <label
-                          key={combo.id}
-                          className={`flex items-center gap-2 px-3 py-2 rounded text-xs cursor-pointer transition ${
-                            selectedCombinations.has(combo.id)
-                              ? 'bg-green-500 text-slate-900'
-                              : 'bg-slate-700 text-brand-gold hover:bg-slate-600'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedCombinations.has(combo.id)}
-                            onChange={() => toggleCombinationSelection(combo.id)}
-                            className="hidden"
-                          />
-                          <span className="font-mono text-[10px] text-purple-300 mr-2">{combo.shortLabel}</span>
-                          <span className="truncate">{combo.label}</span>
+                  <div className="space-y-3">
+                    {/* Category Filter Dropdowns */}
+                    {activeAvatar?.placeholderCategories && activeAvatar.placeholderCategories.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs text-brand-gold/70 font-medium">Filter by Category:</label>
+                          <span className="text-xs text-green-400">
+                            {filteredCombinations.length} of {placeholderCombinations.length} combinations
+                          </span>
+                        </div>
+
+                        {/* Category filter rows */}
+                        <div className="space-y-1">
+                          {activeAvatar.placeholderCategories.map((category) => (
+                            <div key={category.id} className="bg-slate-800/50 rounded border border-purple-500/30">
+                              {/* Category header - clickable to expand */}
+                              <button
+                                onClick={() => toggleCategoryFilter(category.id)}
+                                className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-700/50 transition"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <svg className={`w-4 h-4 text-purple-400 transition-transform ${categoryFiltersOpen.has(category.id) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                                  </svg>
+                                  <span className="text-sm text-white font-medium">{category.name}</span>
+                                  <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
+                                </span>
+                                <span className="text-xs px-2 py-0.5 rounded bg-purple-600/50 text-purple-200">
+                                  {getSelectedCountForCategory(category.id) || 'All'} / {category.options.length}
+                                </span>
+                              </button>
+
+                              {/* Expanded options */}
+                              {categoryFiltersOpen.has(category.id) && (
+                                <div className="px-3 pb-3 pt-1 border-t border-purple-500/20">
+                                  <div className="flex gap-2 mb-2">
+                                    <button
+                                      onClick={() => selectAllCategoryOptions(category.id, category.options)}
+                                      className="text-[10px] text-brand-cyan hover:text-brand-cyan-light"
+                                    >
+                                      Select All
+                                    </button>
+                                    <button
+                                      onClick={() => clearCategoryOptions(category.id)}
+                                      className="text-[10px] text-red-400 hover:text-red-300"
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {category.options.map((option) => (
+                                      <label
+                                        key={option.number}
+                                        className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer transition ${
+                                          isOptionSelected(category.id, option.number)
+                                            ? 'bg-green-500 text-slate-900 font-medium'
+                                            : 'bg-slate-700 text-brand-gold hover:bg-slate-600 border border-slate-600'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isOptionSelected(category.id, option.number)}
+                                          onChange={() => toggleCategoryOption(category.id, option.number)}
+                                          className="hidden"
+                                        />
+                                        <span className="font-mono text-[9px] opacity-70">#{option.number}</span>
+                                        <span className="truncate max-w-[150px]" title={option.text}>
+                                          {option.text.substring(0, 25)}{option.text.length > 25 ? '...' : ''}
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Select from filtered combinations */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs text-brand-gold/70">
+                          Select Combinations ({filteredCombinations.length} shown):
                         </label>
-                      ))}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedCombinations(new Set(filteredCombinations.map(c => c.id)))}
+                            className="text-xs text-brand-cyan hover:text-brand-cyan-light"
+                          >
+                            Select Filtered
+                          </button>
+                          <button onClick={selectAllCombinations} className="text-xs text-green-400 hover:text-green-300">Select All ({placeholderCombinations.length})</button>
+                        </div>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-1 bg-slate-800/50 p-2 rounded">
+                        {filteredCombinations.map((combo) => (
+                          <label
+                            key={combo.id}
+                            className={`flex items-center gap-2 px-3 py-2 rounded text-xs cursor-pointer transition ${
+                              selectedCombinations.has(combo.id)
+                                ? 'bg-green-500 text-slate-900'
+                                : 'bg-slate-700 text-brand-gold hover:bg-slate-600'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedCombinations.has(combo.id)}
+                              onChange={() => toggleCombinationSelection(combo.id)}
+                              className="hidden"
+                            />
+                            <span className="font-mono text-[10px] text-purple-300 mr-2">{combo.shortLabel}</span>
+                            <span className="truncate">{combo.label}</span>
+                          </label>
+                        ))}
+                        {filteredCombinations.length === 0 && (
+                          <p className="text-xs text-brand-gold/50 italic text-center py-2">No combinations match the current filters</p>
+                        )}
+                      </div>
                     </div>
                     {placeholderCombinations.length === 0 && (
                       <p className="text-xs text-brand-gold/50 italic">Add placeholder categories above to generate combinations</p>
@@ -3945,6 +4181,15 @@ Start by introducing yourself and asking about their business in a friendly way.
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                 Image Bank ({availableImages.length} available)
+                {/* Storage size indicator */}
+                <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
+                  payloadSizeMB > 70 ? 'bg-red-600 text-white animate-pulse' :
+                  payloadSizeMB > 50 ? 'bg-amber-600 text-white' :
+                  payloadSizeMB > 30 ? 'bg-yellow-600 text-white' :
+                  'bg-slate-700 text-slate-300'
+                }`}>
+                  {payloadSizeMB.toFixed(1)}MB / 100MB
+                </span>
               </span>
               <svg className={`w-5 h-5 transition-transform ${isBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
             </button>
@@ -4682,14 +4927,24 @@ Start by introducing yourself and asking about their business in a friendly way.
       {bankFullscreen && (
         <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30 bg-slate-900">
-            <h2 className="text-xl font-bold text-brand-cyan flex items-center gap-2">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-              Image Bank ({availableImages.length} {showArchived ? 'archived' : 'available'})
-            </h2>
-            <div className="flex items-center gap-4">
-              {/* Filters in fullscreen */}
-              <div className="flex gap-3 flex-wrap">
+          <div className="flex flex-col border-b border-brand-cyan/30 bg-slate-900">
+            {/* Top row - Title and Close */}
+            <div className="flex items-center justify-between p-4 pb-2">
+              <h2 className="text-xl font-bold text-brand-cyan flex items-center gap-2">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                Image Bank ({availableImages.length} {showArchived ? 'archived' : 'available'})
+              </h2>
+              <button
+                onClick={() => setBankFullscreen(false)}
+                className="p-2 hover:bg-slate-800 rounded-full text-white transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            {/* Second row - Filters, View Toggle, and Actions */}
+            <div className="flex items-center justify-between px-4 pb-3 gap-4 flex-wrap">
+              {/* Left: Filters */}
+              <div className="flex gap-2 flex-wrap items-center">
                 <select value={modelFilter} onChange={(e) => setModelFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm">
                   <option value="all">All Models</option>
                   {uniqueModels.map(m => (<option key={m} value={m}>{m}</option>))}
@@ -4705,73 +4960,173 @@ Start by introducing yourself and asking about their business in a friendly way.
                   {showArchived ? 'Viewing Archive' : 'View Archive'}
                 </button>
               </div>
-              <button
-                onClick={() => setBankFullscreen(false)}
-                className="p-2 hover:bg-slate-800 rounded-full text-white transition"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+              {/* Center: View Toggle - Simple icons */}
+              <div className="flex items-center bg-slate-800 rounded-lg p-1 border border-brand-cyan/30 gap-1">
+                <button
+                  onClick={() => setBankViewMode('compact')}
+                  className={`p-2 rounded transition ${
+                    bankViewMode === 'compact' ? 'bg-brand-cyan text-slate-900' : 'text-white/70 hover:text-white hover:bg-slate-700'
+                  }`}
+                  title="Compact View (6 columns)"
+                >
+                  {/* Grid icon - small squares */}
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setBankViewMode('gallery')}
+                  className={`p-2 rounded transition ${
+                    bankViewMode === 'gallery' ? 'bg-brand-cyan text-slate-900' : 'text-white/70 hover:text-white hover:bg-slate-700'
+                  }`}
+                  title="Gallery View (Full Size)"
+                >
+                  {/* Large rectangle icon - landscape */}
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                  </svg>
+                </button>
+              </div>
+              {/* Right: Actions (duplicated from footer) */}
+              <div className="flex gap-2 items-center">
+                {selectedForDownload.size > 0 && (
+                  <>
+                    <button onClick={handleBulkDownload} className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-sm transition flex items-center gap-1.5">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                      Download Selected
+                    </button>
+                    <button onClick={clearDownloadSelection} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm transition">Clear Selection</button>
+                  </>
+                )}
+                <button onClick={selectAllForDownload} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm transition">Select All</button>
+              </div>
             </div>
           </div>
           {/* Image Grid - fullscreen */}
           <div className="flex-1 overflow-auto p-6">
             {availableImages.length > 0 ? (
-              <div className="grid grid-cols-6 gap-4">
-                {availableImages.map((img) => (
-                  <div key={img.id} className={`relative group cursor-pointer bg-slate-900 rounded-lg overflow-hidden border border-brand-cyan/30 ${selectedForDownload.has(img.id) ? 'ring-2 ring-brand-cyan' : ''}`}>
-                    {/* Header with model and timestamp */}
-                    <div className="p-2 bg-slate-800/80 border-b border-brand-cyan/20">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-xs text-white font-medium truncate">{img.title || img.variation}</span>
-                        {img.model && (
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
-                            img.model === 'seedream-4' ? 'bg-green-600/80 text-white' :
-                            img.model === 'ideogram-v3-turbo' ? 'bg-purple-600/80 text-white' :
-                            img.model === 'flux-1.1-pro' ? 'bg-blue-600/80 text-white' :
-                            img.model.startsWith('gpt') ? 'bg-emerald-600/80 text-white' :
-                            'bg-slate-600/80 text-white'
+              bankViewMode === 'compact' ? (
+                /* COMPACT VIEW - Small thumbnails, more images visible */
+                <div className="grid grid-cols-6 gap-4">
+                  {availableImages.map((img) => (
+                    <div key={img.id} className={`relative group cursor-pointer bg-slate-900 rounded-lg overflow-hidden border border-brand-cyan/30 ${selectedForDownload.has(img.id) ? 'ring-2 ring-brand-cyan' : ''}`}>
+                      {/* Header with model and timestamp */}
+                      <div className="p-2 bg-slate-800/80 border-b border-brand-cyan/20">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-xs text-white font-medium truncate">{img.title || img.variation}</span>
+                          {img.model && (
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
+                              img.model === 'seedream-4' ? 'bg-green-600/80 text-white' :
+                              img.model === 'ideogram-v3-turbo' ? 'bg-purple-600/80 text-white' :
+                              img.model === 'flux-1.1-pro' ? 'bg-blue-600/80 text-white' :
+                              img.model.startsWith('gpt') ? 'bg-emerald-600/80 text-white' :
+                              'bg-slate-600/80 text-white'
+                            }`}>
+                              {img.model.replace('-1.1-pro', '').replace('-v3-turbo', ' v3').replace('-4', ' 4').replace('gpt-image-', 'GPT ')}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-brand-gold/50">
+                          {new Date(img.createdAt).toLocaleDateString()} {new Date(img.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </div>
+                      </div>
+                      {/* Image - fixed height, cropped */}
+                      <img
+                        src={img.url}
+                        alt={img.title || img.variation}
+                        className="w-full h-40 object-cover"
+                        onClick={() => setPreviewImage(img)}
+                      />
+                      {/* Actions overlay */}
+                      <div className="absolute inset-0 top-12 bg-black/70 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-2 p-2">
+                        <div className="flex gap-2 flex-wrap justify-center">
+                          <button onClick={() => setPreviewImage(img)} className="px-3 py-1 bg-blue-600 rounded text-white text-xs">View</button>
+                          <button onClick={() => handleDownloadImage(img)} className="px-3 py-1 bg-brand-cyan rounded text-slate-900 text-xs font-medium">Download</button>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => handleArchiveImage(img.id)} className="px-3 py-1 bg-amber-600 rounded text-white text-xs">
+                            {img.archived ? 'Restore' : 'Archive'}
+                          </button>
+                          <button onClick={() => handleRemoveFromBank(img.id)} className="px-3 py-1 bg-red-600 rounded text-white text-xs">Delete</button>
+                        </div>
+                      </div>
+                      {/* Selection checkbox */}
+                      <div className="absolute top-12 left-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedForDownload.has(img.id)}
+                          onChange={() => toggleDownloadSelection(img.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-5 h-5 rounded border-2 border-brand-cyan text-brand-cyan focus:ring-brand-cyan bg-slate-900/80"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* GALLERY VIEW - Full-size images with stable aspect ratio containers */
+                <div className="grid grid-cols-3 gap-6">
+                  {availableImages.map((img) => (
+                    <div key={img.id} className={`relative group cursor-pointer bg-slate-900 rounded-xl overflow-hidden border-2 ${selectedForDownload.has(img.id) ? 'border-brand-cyan ring-2 ring-brand-cyan/50' : 'border-brand-cyan/30'}`}>
+                      {/* Selection checkbox - prominent */}
+                      <div className="absolute top-3 left-3 z-20">
+                        <input
+                          type="checkbox"
+                          checked={selectedForDownload.has(img.id)}
+                          onChange={() => toggleDownloadSelection(img.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-6 h-6 rounded border-2 border-brand-cyan text-brand-cyan focus:ring-brand-cyan bg-slate-900/90 cursor-pointer"
+                        />
+                      </div>
+                      {/* Model badge - top right */}
+                      {img.model && (
+                        <div className="absolute top-3 right-3 z-20">
+                          <span className={`text-xs px-2 py-1 rounded font-medium ${
+                            img.model === 'seedream-4' ? 'bg-green-600 text-white' :
+                            img.model === 'ideogram-v3-turbo' ? 'bg-purple-600 text-white' :
+                            img.model === 'flux-1.1-pro' ? 'bg-blue-600 text-white' :
+                            img.model.startsWith('gpt') ? 'bg-emerald-600 text-white' :
+                            'bg-slate-600 text-white'
                           }`}>
                             {img.model.replace('-1.1-pro', '').replace('-v3-turbo', ' v3').replace('-4', ' 4').replace('gpt-image-', 'GPT ')}
                           </span>
-                        )}
+                        </div>
+                      )}
+                      {/* Image container - fixed aspect ratio to prevent jitter */}
+                      <div className="relative bg-slate-950 aspect-[3/4] flex items-center justify-center" onClick={() => setPreviewImage(img)}>
+                        <img
+                          src={img.url}
+                          alt={img.title || img.variation}
+                          className="max-w-full max-h-full object-contain"
+                        />
                       </div>
-                      <div className="text-[10px] text-brand-gold/50">
-                        {new Date(img.createdAt).toLocaleDateString()} {new Date(img.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      {/* Info bar at bottom */}
+                      <div className="p-3 bg-slate-800/95 border-t border-brand-cyan/20">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-white font-medium truncate">{img.title || img.variation}</p>
+                            <p className="text-xs text-brand-gold/60">
+                              {new Date(img.createdAt).toLocaleDateString()} {new Date(img.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              {img.avatarTag && <span className="ml-2 text-brand-cyan">• Tag: {img.avatarTag}</span>}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => setPreviewImage(img)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs transition">View</button>
+                            <button onClick={() => handleDownloadImage(img)} className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 text-xs font-medium transition">Download</button>
+                            <button onClick={() => handleArchiveImage(img.id)} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-xs transition">
+                              {img.archived ? 'Restore' : 'Archive'}
+                            </button>
+                            <button onClick={() => handleRemoveFromBank(img.id)} className="px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-white text-xs transition">Delete</button>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    {/* Image */}
-                    <img
-                      src={img.url}
-                      alt={img.title || img.variation}
-                      className="w-full h-40 object-cover"
-                      onClick={() => setPreviewImage(img)}
-                    />
-                    {/* Actions overlay */}
-                    <div className="absolute inset-0 top-12 bg-black/70 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-2 p-2">
-                      <div className="flex gap-2 flex-wrap justify-center">
-                        <button onClick={() => setPreviewImage(img)} className="px-3 py-1 bg-blue-600 rounded text-white text-xs">View</button>
-                        <button onClick={() => handleDownloadImage(img)} className="px-3 py-1 bg-brand-cyan rounded text-slate-900 text-xs font-medium">Download</button>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleArchiveImage(img.id)} className="px-3 py-1 bg-amber-600 rounded text-white text-xs">
-                          {img.archived ? 'Restore' : 'Archive'}
-                        </button>
-                        <button onClick={() => handleRemoveFromBank(img.id)} className="px-3 py-1 bg-red-600 rounded text-white text-xs">Delete</button>
-                      </div>
-                    </div>
-                    {/* Selection checkbox */}
-                    <div className="absolute top-12 left-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedForDownload.has(img.id)}
-                        onChange={() => toggleDownloadSelection(img.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-5 h-5 rounded border-2 border-brand-cyan text-brand-cyan focus:ring-brand-cyan bg-slate-900/80"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )
             ) : (
               <div className="flex items-center justify-center h-full">
                 <p className="text-brand-gold/50 text-lg">{showArchived ? 'No archived images.' : 'No available images.'}</p>
@@ -4802,41 +5157,83 @@ Start by introducing yourself and asking about their business in a friendly way.
       {/* Image Preview Modal */}
       {previewImage && (
         <div
-          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4"
           onClick={() => setPreviewImage(null)}
         >
-          <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={(e) => e.stopPropagation()}>
+          {/* Fixed container to prevent flickering */}
+          <div className="relative w-full max-w-4xl flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
             {/* Close button */}
             <button
               onClick={() => setPreviewImage(null)}
-              className="absolute -top-10 right-0 text-white hover:text-brand-cyan transition p-2"
+              className="absolute -top-2 right-0 text-white hover:text-brand-cyan transition p-2 z-10"
             >
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
 
-            {/* Image */}
-            <img
-              src={previewImage.url}
-              alt={previewImage.variation}
-              className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
-            />
+            {/* Image container with fixed aspect ratio behavior */}
+            <div className="w-full flex items-center justify-center" style={{ minHeight: '60vh', maxHeight: '75vh' }}>
+              <img
+                src={previewImage.url}
+                alt={previewImage.variation}
+                className="max-w-full max-h-[75vh] object-contain rounded-lg"
+                style={{ margin: '0 auto' }}
+              />
+            </div>
+
+            {/* Navigation arrows - together at bottom */}
+            <div className="flex items-center justify-center gap-4 mt-4">
+              <button
+                onClick={() => {
+                  const currentIndex = availableImages.findIndex(img => img.id === previewImage.id);
+                  const prevIndex = currentIndex > 0 ? currentIndex - 1 : availableImages.length - 1;
+                  setPreviewImage(availableImages[prevIndex]);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition"
+                title="Previous image"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                <span className="text-sm">Previous</span>
+              </button>
+
+              <span className="text-white/50 text-sm">
+                {availableImages.findIndex(img => img.id === previewImage.id) + 1} / {availableImages.length}
+              </span>
+
+              <button
+                onClick={() => {
+                  const currentIndex = availableImages.findIndex(img => img.id === previewImage.id);
+                  const nextIndex = currentIndex < availableImages.length - 1 ? currentIndex + 1 : 0;
+                  setPreviewImage(availableImages[nextIndex]);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition"
+                title="Next image"
+              >
+                <span className="text-sm">Next</span>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
 
             {/* Info and actions bar */}
-            <div className="mt-4 bg-slate-900 rounded-lg p-4 flex items-center justify-between">
-              <div className="text-white">
-                <p className="font-semibold">{previewImage.variation}</p>
+            <div className="mt-4 w-full bg-slate-900 rounded-lg p-4 flex items-center justify-between">
+              <div className="text-white min-w-0 flex-1">
+                <p className="font-semibold">{previewImage.title || previewImage.variation}</p>
                 <p className="text-xs text-brand-gold/70 mt-1">
                   {previewImage.orientation} • {new Date(previewImage.createdAt).toLocaleDateString()}
+                  {previewImage.model && <span className="ml-2">• {previewImage.model}</span>}
                 </p>
                 {previewImage.prompt && (
-                  <p className="text-xs text-gray-400 mt-2 max-w-xl truncate" title={previewImage.prompt}>
+                  <p className="text-xs text-gray-400 mt-2 truncate" title={previewImage.prompt}>
                     Prompt: {previewImage.prompt.substring(0, 100)}...
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0 ml-4">
                 <button
                   onClick={() => handleDownloadImage(previewImage)}
                   className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-sm transition flex items-center gap-2"

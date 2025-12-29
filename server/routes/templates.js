@@ -396,7 +396,7 @@ router.post('/:id/apply/:workflowId', requireDb, async (req, res) => {
       newState = { ...newState, ...templateData.settings };
     }
 
-    // Update workflow
+    // Update workflow state
     const result = await sql`
       UPDATE workflows
       SET state = ${JSON.stringify(newState)},
@@ -404,6 +404,185 @@ router.post('/:id/apply/:workflowId', requireDb, async (req, res) => {
       WHERE id = ${workflowId}
       RETURNING *
     `;
+
+    // Apply Image Creation settings if included
+    if (includes.imageCreation && templateData.imageCreation) {
+      try {
+        const img = templateData.imageCreation;
+        // Check if settings already exist for this workflow
+        const existingSettings = await sql`
+          SELECT id FROM image_creation_settings WHERE workflow_id = ${workflowId}
+        `;
+
+        if (existingSettings.length > 0) {
+          // Update existing settings
+          if (merge) {
+            // Merge: Combine arrays (image_bank, reference_images, etc.)
+            const current = await sql`SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
+            const currentSettings = current[0];
+            await sql`
+              UPDATE image_creation_settings
+              SET
+                enabled = COALESCE(${img.enabled}, enabled),
+                prompt_assistant_model = COALESCE(${img.prompt_assistant_model}, prompt_assistant_model),
+                image_generation_model = COALESCE(${img.image_generation_model}, image_generation_model),
+                image_quality = COALESCE(${img.image_quality}, image_quality),
+                reference_images = ${JSON.stringify([...(currentSettings.reference_images || []), ...(img.reference_images || [])])},
+                logo_images = ${JSON.stringify([...(currentSettings.logo_images || []), ...(img.logo_images || [])])},
+                audience_avatars = ${JSON.stringify([...(currentSettings.audience_avatars || []), ...(img.audience_avatars || [])])},
+                image_bank = ${JSON.stringify([...(currentSettings.image_bank || []), ...(img.image_bank || [])])},
+                image_categories = ${JSON.stringify([...new Set([...(currentSettings.image_categories || []), ...(img.image_categories || [])])])},
+                auto_tag_enabled = COALESCE(${img.auto_tag_enabled}, auto_tag_enabled),
+                smart_matching_enabled = COALESCE(${img.smart_matching_enabled}, smart_matching_enabled),
+                fallback_to_live = COALESCE(${img.fallback_to_live}, fallback_to_live),
+                variation_order_mode = COALESCE(${img.variation_order_mode}, variation_order_mode),
+                updated_at = CURRENT_TIMESTAMP
+              WHERE workflow_id = ${workflowId}
+            `;
+          } else {
+            // Replace: Overwrite all settings
+            await sql`
+              UPDATE image_creation_settings
+              SET
+                enabled = ${img.enabled ?? false},
+                prompt_assistant_model = ${img.prompt_assistant_model || 'gpt-4o'},
+                image_generation_model = ${img.image_generation_model || 'gpt-image-1.5'},
+                image_quality = ${img.image_quality || 'low'},
+                reference_images = ${JSON.stringify(img.reference_images || [])},
+                logo_images = ${JSON.stringify(img.logo_images || [])},
+                audience_avatars = ${JSON.stringify(img.audience_avatars || [])},
+                image_bank = ${JSON.stringify(img.image_bank || [])},
+                image_categories = ${JSON.stringify(img.image_categories || [])},
+                auto_tag_enabled = ${img.auto_tag_enabled ?? true},
+                smart_matching_enabled = ${img.smart_matching_enabled ?? true},
+                fallback_to_live = ${img.fallback_to_live ?? true},
+                variation_order_mode = ${img.variation_order_mode || 'sequential'},
+                updated_at = CURRENT_TIMESTAMP
+              WHERE workflow_id = ${workflowId}
+            `;
+          }
+        } else {
+          // Insert new settings
+          await sql`
+            INSERT INTO image_creation_settings (
+              workflow_id, enabled, prompt_assistant_model, image_generation_model,
+              image_quality, reference_images, logo_images, audience_avatars,
+              image_bank, image_categories, auto_tag_enabled, smart_matching_enabled,
+              fallback_to_live, variation_order_mode
+            ) VALUES (
+              ${workflowId},
+              ${img.enabled ?? false},
+              ${img.prompt_assistant_model || 'gpt-4o'},
+              ${img.image_generation_model || 'gpt-image-1.5'},
+              ${img.image_quality || 'low'},
+              ${JSON.stringify(img.reference_images || [])},
+              ${JSON.stringify(img.logo_images || [])},
+              ${JSON.stringify(img.audience_avatars || [])},
+              ${JSON.stringify(img.image_bank || [])},
+              ${JSON.stringify(img.image_categories || [])},
+              ${img.auto_tag_enabled ?? true},
+              ${img.smart_matching_enabled ?? true},
+              ${img.fallback_to_live ?? true},
+              ${img.variation_order_mode || 'sequential'}
+            )
+          `;
+        }
+        console.log('[Templates] Applied image creation settings to workflow:', workflowId);
+      } catch (imgErr) {
+        console.error('[Templates] Failed to apply image creation settings:', imgErr.message);
+      }
+    }
+
+    // Apply Site Planning if included
+    if (includes.sitePlanning && templateData.sitePlanning) {
+      try {
+        const sitePlanData = templateData.sitePlanning;
+
+        if (!merge) {
+          // Replace mode: Delete existing site plan for this workflow
+          const existingPlans = await sql`
+            SELECT id FROM site_plans WHERE workflow_id = ${workflowId}
+          `;
+          for (const plan of existingPlans) {
+            await sql`DELETE FROM site_plan_nodes WHERE site_plan_id = ${plan.id}`;
+            await sql`DELETE FROM site_plans WHERE id = ${plan.id}`;
+          }
+        }
+
+        // Get the workflow's website_id for the site plan
+        const workflowData = result[0];
+        const websiteId = workflowData.website_id;
+
+        // Create new site plan
+        const planInfo = sitePlanData.plan || {};
+        const newPlan = await sql`
+          INSERT INTO site_plans (website_id, workflow_id, name, description, auto_sync_check)
+          VALUES (
+            ${websiteId},
+            ${workflowId},
+            ${planInfo.name || 'Site Structure'},
+            ${planInfo.description || ''},
+            ${planInfo.auto_sync_check ?? true}
+          )
+          RETURNING *
+        `;
+        const sitePlanId = newPlan[0].id;
+
+        // Create nodes with proper parent relationships
+        const nodes = sitePlanData.nodes || [];
+        const slugToIdMap = {}; // Map slug -> new node ID for parent lookups
+
+        // First pass: Create all nodes without parent_id
+        for (const node of nodes) {
+          const newNode = await sql`
+            INSERT INTO site_plan_nodes (
+              site_plan_id, title, slug, page_type, target_keyword,
+              meta_title, meta_description, content_brief, sort_order,
+              depth, is_pillar_page, is_in_menu, menu_order
+            ) VALUES (
+              ${sitePlanId},
+              ${node.title},
+              ${node.slug || ''},
+              ${node.page_type || 'page'},
+              ${node.target_keyword || ''},
+              ${node.meta_title || ''},
+              ${node.meta_description || ''},
+              ${node.content_brief || ''},
+              ${node.sort_order || 0},
+              ${node.depth || 0},
+              ${node.is_pillar_page ?? false},
+              ${node.is_in_menu ?? true},
+              ${node.menu_order || null}
+            )
+            RETURNING *
+          `;
+          slugToIdMap[node.slug] = newNode[0].id;
+        }
+
+        // Second pass: Update parent_id based on parent_slug
+        for (const node of nodes) {
+          if (node.parent_slug && slugToIdMap[node.parent_slug] && slugToIdMap[node.slug]) {
+            await sql`
+              UPDATE site_plan_nodes
+              SET parent_id = ${slugToIdMap[node.parent_slug]}
+              WHERE id = ${slugToIdMap[node.slug]}
+            `;
+          }
+        }
+
+        // Update site plan metadata
+        const maxDepth = Math.max(0, ...nodes.map(n => n.depth || 0));
+        await sql`
+          UPDATE site_plans
+          SET total_pages = ${nodes.length}, max_depth = ${maxDepth}
+          WHERE id = ${sitePlanId}
+        `;
+
+        console.log('[Templates] Applied site planning to workflow:', workflowId, '- Created', nodes.length, 'nodes');
+      } catch (siteErr) {
+        console.error('[Templates] Failed to apply site planning:', siteErr.message);
+      }
+    }
 
     res.json({ workflow: result[0] });
   } catch (error) {
