@@ -4905,41 +4905,83 @@ Start by introducing yourself and asking about their business in a friendly way.
       {/* Image Preview Modal */}
       {previewImage && (
         <div
-          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4"
           onClick={() => setPreviewImage(null)}
         >
-          <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={(e) => e.stopPropagation()}>
+          {/* Fixed container to prevent flickering */}
+          <div className="relative w-full max-w-4xl flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
             {/* Close button */}
             <button
               onClick={() => setPreviewImage(null)}
-              className="absolute -top-10 right-0 text-white hover:text-brand-cyan transition p-2"
+              className="absolute -top-2 right-0 text-white hover:text-brand-cyan transition p-2 z-10"
             >
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
 
-            {/* Image */}
-            <img
-              src={previewImage.url}
-              alt={previewImage.variation}
-              className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
-            />
+            {/* Image container with fixed aspect ratio behavior */}
+            <div className="w-full flex items-center justify-center" style={{ minHeight: '60vh', maxHeight: '75vh' }}>
+              <img
+                src={previewImage.url}
+                alt={previewImage.variation}
+                className="max-w-full max-h-[75vh] object-contain rounded-lg"
+                style={{ margin: '0 auto' }}
+              />
+            </div>
+
+            {/* Navigation arrows - together at bottom */}
+            <div className="flex items-center justify-center gap-4 mt-4">
+              <button
+                onClick={() => {
+                  const currentIndex = availableImages.findIndex(img => img.id === previewImage.id);
+                  const prevIndex = currentIndex > 0 ? currentIndex - 1 : availableImages.length - 1;
+                  setPreviewImage(availableImages[prevIndex]);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition"
+                title="Previous image"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                <span className="text-sm">Previous</span>
+              </button>
+
+              <span className="text-white/50 text-sm">
+                {availableImages.findIndex(img => img.id === previewImage.id) + 1} / {availableImages.length}
+              </span>
+
+              <button
+                onClick={() => {
+                  const currentIndex = availableImages.findIndex(img => img.id === previewImage.id);
+                  const nextIndex = currentIndex < availableImages.length - 1 ? currentIndex + 1 : 0;
+                  setPreviewImage(availableImages[nextIndex]);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition"
+                title="Next image"
+              >
+                <span className="text-sm">Next</span>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
 
             {/* Info and actions bar */}
-            <div className="mt-4 bg-slate-900 rounded-lg p-4 flex items-center justify-between">
-              <div className="text-white">
-                <p className="font-semibold">{previewImage.variation}</p>
+            <div className="mt-4 w-full bg-slate-900 rounded-lg p-4 flex items-center justify-between">
+              <div className="text-white min-w-0 flex-1">
+                <p className="font-semibold">{previewImage.title || previewImage.variation}</p>
                 <p className="text-xs text-brand-gold/70 mt-1">
                   {previewImage.orientation} • {new Date(previewImage.createdAt).toLocaleDateString()}
+                  {previewImage.model && <span className="ml-2">• {previewImage.model}</span>}
                 </p>
                 {previewImage.prompt && (
-                  <p className="text-xs text-gray-400 mt-2 max-w-xl truncate" title={previewImage.prompt}>
+                  <p className="text-xs text-gray-400 mt-2 truncate" title={previewImage.prompt}>
                     Prompt: {previewImage.prompt.substring(0, 100)}...
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0 ml-4">
                 <button
                   onClick={() => handleDownloadImage(previewImage)}
                   className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-sm transition flex items-center gap-2"
