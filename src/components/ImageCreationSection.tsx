@@ -691,6 +691,32 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newSettings)
         });
+
+        // Check for HTTP errors BEFORE trying to parse JSON
+        if (!res.ok) {
+          // Handle specific HTTP error codes with helpful messages
+          let errorMsg = '';
+          switch (res.status) {
+            case 413:
+              errorMsg = `Payload too large (${res.status}): Your image bank has too many images. Try deleting some images from the bank to reduce the save size.`;
+              break;
+            case 500:
+              errorMsg = `Server error (${res.status}): Database may be full or unavailable. Check your Neon dashboard.`;
+              break;
+            case 502:
+            case 503:
+            case 504:
+              errorMsg = `Server unavailable (${res.status}): Railway may be restarting. Try again in a moment.`;
+              break;
+            default:
+              errorMsg = `HTTP Error ${res.status}: ${res.statusText}`;
+          }
+          console.error('[Image Creation] Save failed with HTTP', res.status);
+          showNotification(errorMsg, 'error');
+          setSaving(false);
+          return;
+        }
+
         const data = await res.json();
         if (data.success) {
           onSettingsChange?.(newSettings);
@@ -703,7 +729,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         }
       } catch (error) {
         console.error('Failed to save settings:', error);
-        showNotification('Failed to save Image Creation settings', 'error');
+        showNotification('Failed to save Image Creation settings: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
       }
       setSaving(false);
     };
