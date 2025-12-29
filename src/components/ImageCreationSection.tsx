@@ -4899,27 +4899,34 @@ Start by introducing yourself and asking about their business in a friendly way.
                   {showArchived ? 'Viewing Archive' : 'View Archive'}
                 </button>
               </div>
-              {/* Center: View Toggle */}
-              <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-brand-cyan/30">
+              {/* Center: View Toggle - Simple icons */}
+              <div className="flex items-center bg-slate-800 rounded-lg p-1 border border-brand-cyan/30 gap-1">
                 <button
                   onClick={() => setBankViewMode('compact')}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1.5 ${
-                    bankViewMode === 'compact' ? 'bg-brand-cyan text-slate-900' : 'text-white/70 hover:text-white'
+                  className={`p-2 rounded transition ${
+                    bankViewMode === 'compact' ? 'bg-brand-cyan text-slate-900' : 'text-white/70 hover:text-white hover:bg-slate-700'
                   }`}
-                  title="Compact Grid View"
+                  title="Compact View (6 columns)"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
-                  Compact
+                  {/* Grid icon - small squares */}
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <rect x="14" y="14" width="7" height="7" rx="1" />
+                  </svg>
                 </button>
                 <button
                   onClick={() => setBankViewMode('gallery')}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1.5 ${
-                    bankViewMode === 'gallery' ? 'bg-brand-cyan text-slate-900' : 'text-white/70 hover:text-white'
+                  className={`p-2 rounded transition ${
+                    bankViewMode === 'gallery' ? 'bg-brand-cyan text-slate-900' : 'text-white/70 hover:text-white hover:bg-slate-700'
                   }`}
-                  title="Gallery View - Full Size Images"
+                  title="Gallery View (Full Size)"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  Gallery
+                  {/* Large rectangle icon - landscape */}
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                  </svg>
                 </button>
               </div>
               {/* Right: Actions (duplicated from footer) */}
@@ -4999,7 +5006,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   ))}
                 </div>
               ) : (
-                /* GALLERY VIEW - Full-size images, fewer per row */
+                /* GALLERY VIEW - Full-size images with stable aspect ratio containers */
                 <div className="grid grid-cols-3 gap-6">
                   {availableImages.map((img) => (
                     <div key={img.id} className={`relative group cursor-pointer bg-slate-900 rounded-xl overflow-hidden border-2 ${selectedForDownload.has(img.id) ? 'border-brand-cyan ring-2 ring-brand-cyan/50' : 'border-brand-cyan/30'}`}>
@@ -5027,13 +5034,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                           </span>
                         </div>
                       )}
-                      {/* Image - FULL SIZE, no cropping */}
-                      <img
-                        src={img.url}
-                        alt={img.title || img.variation}
-                        className="w-full h-auto object-contain bg-slate-950"
-                        onClick={() => setPreviewImage(img)}
-                      />
+                      {/* Image container - fixed aspect ratio to prevent jitter */}
+                      <div className="relative bg-slate-950 aspect-[3/4] flex items-center justify-center" onClick={() => setPreviewImage(img)}>
+                        <img
+                          src={img.url}
+                          alt={img.title || img.variation}
+                          className="max-w-full max-h-full object-contain"
+                        />
+                      </div>
                       {/* Info bar at bottom */}
                       <div className="p-3 bg-slate-800/95 border-t border-brand-cyan/20">
                         <div className="flex items-center justify-between gap-3">
