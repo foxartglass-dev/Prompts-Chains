@@ -783,6 +783,8 @@ router.post('/publish', async (req, res) => {
             // Body images: quarter-size (~200-250px) for word wrap around text
             const imageData = {
               url: img.url,
+              wpUrl: img.wpUrl, // WordPress Media Library URL (permanent, preferred)
+              wpMediaId: img.wpMediaId, // WordPress Media ID for proper linking
               alt: img.variation || 'Article image',
               width: isHero
                 ? (img.orientation === 'vertical' ? 400 : 450)  // Hero: fills 50% column
@@ -793,6 +795,15 @@ router.post('/publish', async (req, res) => {
               side: isHero ? heroImageSide : bodySide,
               orientation: img.orientation // Pass through for debugging
             };
+
+            // Log hero image details for debugging
+            if (isHero) {
+              console.log('[Image Bank] HERO IMAGE SELECTED:');
+              console.log('  - Variation:', img.variation);
+              console.log('  - URL:', img.url?.substring(0, 60) + '...');
+              console.log('  - wpUrl:', img.wpUrl?.substring(0, 60) + '...');
+              console.log('  - Orientation:', img.orientation);
+            }
 
             if (isHero && chunked.intro) {
               chunked.intro.imageData = imageData;
@@ -806,6 +817,11 @@ router.post('/publish', async (req, res) => {
           });
 
           imagesFromBank = imagesToUse.length;
+
+          console.log('╠══════════════════════════════════════════════════════════════╣');
+          console.log(`║ IMAGES SELECTED FROM BANK: ${String(imagesFromBank).padEnd(3)}                             ║`);
+          console.log(`║ (Hero: 1, Body: ${String(imagesFromBank - 1).padEnd(2)})                                       ║`);
+          console.log('╚══════════════════════════════════════════════════════════════╝');
 
           // Mark images as used
           if (imagesToUse.length > 0) {
