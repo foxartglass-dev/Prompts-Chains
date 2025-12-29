@@ -766,17 +766,17 @@ router.post('/publish', async (req, res) => {
             const bodyImageCount = imagePlacementIndices.filter((idx, i) => i < imgIdx && idx > 0).length;
             const bodySide = bodyImageCount % 2 === 0 ? bodyStartSide : (bodyStartSide === 'left' ? 'right' : 'left');
 
-            // Hero image: vertical (tall) for side-by-side with intro text
-            // Body images: dimensions based on orientation for word wrap
+            // Hero image: matches text column (50% width via Elementor flex)
+            // Body images: quarter-size (~200-250px) for word wrap around text
             const imageData = {
               url: img.url,
               alt: img.variation || 'Article image',
               width: isHero
-                ? (img.orientation === 'vertical' ? 400 : 500)  // Hero: narrower for side-by-side
-                : (img.orientation === 'landscape' ? 450 : 300), // Body: sized for word wrap
+                ? (img.orientation === 'vertical' ? 400 : 450)  // Hero: fills 50% column
+                : 200, // Body: quarter-size for word wrap (max ~25% of 800px content)
               height: isHero
-                ? (img.orientation === 'vertical' ? 600 : 400)  // Hero: taller
-                : (img.orientation === 'landscape' ? 300 : 400), // Body: for word wrap
+                ? (img.orientation === 'vertical' ? 500 : 350)  // Hero: matches text height
+                : (img.orientation === 'landscape' ? 150 : 250), // Body: proportional height
               side: isHero ? heroImageSide : bodySide,
               orientation: img.orientation // Pass through for debugging
             };
