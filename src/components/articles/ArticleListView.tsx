@@ -121,6 +121,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       if (res.ok) {
         const data = await res.json();
         const article = data.article;
+
+        // Map database field names to our interface
+        // DB uses 'generated_images', interface uses 'images'
+        if (article.generated_images && !article.images) {
+          article.images = article.generated_images;
+        }
+
         setSelectedArticle(article);
         setEditContent(article.final_content || '');
 
@@ -542,7 +549,24 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
               <div>
-                <h3 className="text-lg font-semibold text-white">{selectedArticle.keyword}</h3>
+                <div className="flex items-center gap-3">
+                  <h3 className="text-lg font-semibold text-white">{selectedArticle.keyword}</h3>
+                  {/* WordPress Page Link */}
+                  {selectedArticle.wp_post_url && (
+                    <a
+                      href={selectedArticle.wp_post_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-white text-xs font-medium flex items-center gap-1 transition"
+                      title="View on WordPress"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      View Page
+                    </a>
+                  )}
+                </div>
                 {/* Page Title - show selected or first meta title */}
                 {(selectedArticle.selected_meta_title || (selectedArticle.meta_titles && selectedArticle.meta_titles.length > 0)) && (
                   <p className="text-sm text-brand-gold mt-0.5 truncate max-w-xl" title={selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0]}>
