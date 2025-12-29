@@ -4088,9 +4088,9 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
                 </div>
 
-                {/* Image Grid */}
+                {/* Image Grid - with max height to prevent overflow */}
                 {availableImages.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-4 gap-3 max-h-[400px] overflow-y-auto pr-1">
                     {availableImages.map((img) => (
                       <div key={img.id} className={`relative group cursor-pointer ${selectedForDownload.has(img.id) ? 'ring-2 ring-brand-cyan' : ''}`}>
                         {/* Title label at top with model badge */}
@@ -4214,7 +4214,7 @@ Start by introducing yourself and asking about their business in a friendly way.
             {isUsedOpen && (
               <div className="p-4 border-t border-purple-500/30 space-y-3">
                 {usedImages.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-4 gap-3 max-h-[300px] overflow-y-auto pr-1">
                     {usedImages.map((img) => (
                       <div key={img.id} className="relative group">
                         <img src={img.url} alt={img.variation} className="w-full h-24 object-cover rounded border border-purple-500/30 opacity-70" />
