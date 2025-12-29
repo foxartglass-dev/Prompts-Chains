@@ -378,16 +378,29 @@ router.post('/publish', async (req, res) => {
     }
 
     // Step 2b: Try to get images from Image Bank if in bank mode
+    console.log('[Image Bank] Checking conditions: effectiveUseBank=', effectiveUseBank, 'workflowId=', workflowId, 'dbEnabled=', isDatabaseEnabled());
     if (effectiveUseBank && workflowId && isDatabaseEnabled()) {
       try {
         const bankImages = await sql`
           SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
         `;
 
-        if (bankImages.length > 0 && bankImages[0].enabled) {
+        // Note: We don't check 'enabled' here - if integration_mode is 'bank', user wants bank
+        if (bankImages.length > 0) {
           const config = bankImages[0];
           const imageBank = config.image_bank || [];
           const avatars = config.audience_avatars || [];
+
+          console.log('╔══════════════════════════════════════════════════════════════╗');
+          console.log('║              IMAGE BANK SELECTION STARTING                    ║');
+          console.log('╠══════════════════════════════════════════════════════════════╣');
+          console.log(`║ Bank size: ${String(imageBank.length).padEnd(5)} images                                  ║`);
+          console.log(`║ Avatars configured: ${String(avatars.length).padEnd(3)}                                   ║`);
+
+          if (imageBank.length === 0) {
+            console.log('║ ⚠️  WARNING: Image Bank is EMPTY - no images to select!       ║');
+            console.log('╚══════════════════════════════════════════════════════════════╝');
+          }
           const variationOrderMode = config.variation_order_mode || 'sequential';
           const manualOrder = config.manual_variation_order || [];
 
@@ -406,9 +419,15 @@ router.post('/publish', async (req, res) => {
           console.log('[Image Bank] Target avatar:', targetAvatar?.name, targetAvatar?.tag);
 
           // Get available images from bank matching the tag
+          // IMPORTANT: Only use images that have been uploaded to WordPress (have wpUrl)
           let availableImages = imageBank.filter(img => {
             if (img.used) {
               console.log('[Image Bank] Skipping used image:', img.id);
+              return false;
+            }
+            // Skip images without WordPress URL - base64 data URLs won't work
+            if (!img.wpUrl) {
+              console.log('[Image Bank] ⚠️ Skipping image without wpUrl:', img.id, '- needs WordPress upload');
               return false;
             }
             // If article has a tag and image has a tag, they must match
@@ -427,7 +446,13 @@ router.post('/publish', async (req, res) => {
             return true;
           });
 
+          // Count images missing wpUrl for warning
+          const missingWpUrl = imageBank.filter(img => !img.used && !img.wpUrl).length;
           console.log('[Image Bank] Available images after filter:', availableImages.length);
+          if (missingWpUrl > 0) {
+            console.log(`[Image Bank] ⚠️ WARNING: ${missingWpUrl} images skipped - missing WordPress URL!`);
+            console.log('[Image Bank] → These images need to be uploaded to WordPress Media Library first');
+          }
 
           // ═══════════════════════════════════════════════════════════════
           // SMART CONTENT MATCHING - Match images to article content
@@ -766,20 +791,31 @@ router.post('/publish', async (req, res) => {
             const bodyImageCount = imagePlacementIndices.filter((idx, i) => i < imgIdx && idx > 0).length;
             const bodySide = bodyImageCount % 2 === 0 ? bodyStartSide : (bodyStartSide === 'left' ? 'right' : 'left');
 
-            // Hero image: vertical (tall) for side-by-side with intro text
-            // Body images: dimensions based on orientation for word wrap
+            // Hero image: matches text column (50% width via Elementor flex)
+            // Body images: quarter-size (~200-250px) for word wrap around text
             const imageData = {
               url: img.url,
+              wpUrl: img.wpUrl, // WordPress Media Library URL (permanent, preferred)
+              wpMediaId: img.wpMediaId, // WordPress Media ID for proper linking
               alt: img.variation || 'Article image',
               width: isHero
-                ? (img.orientation === 'vertical' ? 400 : 500)  // Hero: narrower for side-by-side
-                : (img.orientation === 'landscape' ? 450 : 300), // Body: sized for word wrap
+                ? (img.orientation === 'vertical' ? 400 : 450)  // Hero: fills 50% column
+                : 200, // Body: quarter-size for word wrap (max ~25% of 800px content)
               height: isHero
-                ? (img.orientation === 'vertical' ? 600 : 400)  // Hero: taller
-                : (img.orientation === 'landscape' ? 300 : 400), // Body: for word wrap
+                ? (img.orientation === 'vertical' ? 500 : 350)  // Hero: matches text height
+                : (img.orientation === 'landscape' ? 150 : 250), // Body: proportional height
               side: isHero ? heroImageSide : bodySide,
               orientation: img.orientation // Pass through for debugging
             };
+
+            // Log hero image details for debugging
+            if (isHero) {
+              console.log('[Image Bank] HERO IMAGE SELECTED:');
+              console.log('  - Variation:', img.variation);
+              console.log('  - URL:', img.url?.substring(0, 60) + '...');
+              console.log('  - wpUrl:', img.wpUrl?.substring(0, 60) + '...');
+              console.log('  - Orientation:', img.orientation);
+            }
 
             if (isHero && chunked.intro) {
               chunked.intro.imageData = imageData;
@@ -793,6 +829,11 @@ router.post('/publish', async (req, res) => {
           });
 
           imagesFromBank = imagesToUse.length;
+
+          console.log('╠══════════════════════════════════════════════════════════════╣');
+          console.log(`║ IMAGES SELECTED FROM BANK: ${String(imagesFromBank).padEnd(3)}                             ║`);
+          console.log(`║ (Hero: 1, Body: ${String(imagesFromBank - 1).padEnd(2)})                                       ║`);
+          console.log('╚══════════════════════════════════════════════════════════════╝');
 
           // Mark images as used
           if (imagesToUse.length > 0) {

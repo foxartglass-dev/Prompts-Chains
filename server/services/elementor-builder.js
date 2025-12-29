@@ -56,13 +56,21 @@ function buildTextEditorWidget(content, imageData = null, imageAlignment = 'left
   let htmlContent = content;
 
   // If we have image data, embed it at the start with the appropriate alignment
+  // Uses inline styles to ensure word wrap works regardless of theme CSS
   if (imageData && (imageData.wpUrl || imageData.url)) {
     // Prefer WordPress URL (permanent) over Replicate URL (temporary)
     const imageUrl = imageData.wpUrl || imageData.url;
     const imageId = imageData.wpMediaId || imageData.id || '';
     // Use imageSide from pipeline if alignment not explicitly set
-    const imgClass = (imageData.side || imageAlignment) === 'left' ? 'alignleft' : 'alignright';
-    const imgTag = `<img class="${imgClass} wp-image-${imageId}" src="${imageUrl}" alt="${imageData.alt || ''}" width="${imageData.width || 400}" height="${imageData.height || 600}" />`;
+    const side = imageData.side || imageAlignment;
+    const imgClass = side === 'left' ? 'alignleft' : 'alignright';
+
+    // Inline styles ensure word wrap works across all themes
+    const floatStyle = side === 'left'
+      ? 'float: left; margin: 0 20px 15px 0;'
+      : 'float: right; margin: 0 0 15px 20px;';
+
+    const imgTag = `<img class="${imgClass} wp-image-${imageId}" style="${floatStyle} max-width: 200px; height: auto;" src="${imageUrl}" alt="${imageData.alt || ''}" width="${imageData.width || 200}" height="${imageData.height || 250}" />`;
 
     // Insert image at the beginning of content
     htmlContent = imgTag + htmlContent;
@@ -165,7 +173,8 @@ function buildContainer(elements, options = {}) {
     contentWidth = 'boxed',
     boxedWidth = 1140,
     alignItems = 'flex-start', // flex-start, center, flex-end, stretch
-    verticalAlign = 'flex-start' // For child alignment
+    verticalAlign = 'flex-start', // For child alignment
+    width = null // Percentage width for flex children (e.g., '50' for 50%)
   } = options;
 
   const settings = {
@@ -182,6 +191,12 @@ function buildContainer(elements, options = {}) {
   }
   if (verticalAlign !== 'flex-start') {
     settings.flex_justify_content = verticalAlign;
+  }
+
+  // Set percentage width for flex children (used in hero 50/50 layout)
+  if (width) {
+    settings._flex_size = 'custom';
+    settings._flex_size_custom = { unit: '%', size: parseInt(width) };
   }
 
   return {
@@ -218,7 +233,8 @@ function buildHeroSection(title, introChunk, options = {}) {
   const textContainer = buildContainer(textElements, {
     isInner: true,
     direction: 'column',
-    contentWidth: 'full'
+    contentWidth: 'full',
+    width: '50' // 50% width for equal split
   });
 
   // Image side: Hero image (if available)
@@ -247,7 +263,8 @@ function buildHeroSection(title, introChunk, options = {}) {
     isInner: true,
     direction: 'column',
     contentWidth: 'full',
-    verticalAlign: 'stretch' // Image container stretches to match text
+    verticalAlign: 'stretch', // Image container stretches to match text
+    width: '50' // 50% width for equal split
   });
 
   // Arrange containers based on heroImageSide
