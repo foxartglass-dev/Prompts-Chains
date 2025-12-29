@@ -686,10 +686,26 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       setSaving(true);
       try {
         console.log('[Image Creation] Saving settings to workflow:', workflowId);
+
+        // PRE-SAVE CHECK: Calculate payload size and warn if too large
+        const payloadJson = JSON.stringify(newSettings);
+        const payloadSizeMB = new Blob([payloadJson]).size / (1024 * 1024);
+
+        // Warn at 50MB, block at 90MB (server limit is 100MB)
+        if (payloadSizeMB > 90) {
+          showNotification(`⚠️ CANNOT SAVE: Payload is ${payloadSizeMB.toFixed(1)}MB (limit: 100MB). Delete some images from the Image Bank NOW to avoid losing work!`, 'error');
+          setSaving(false);
+          return;
+        } else if (payloadSizeMB > 50) {
+          showNotification(`⚠️ WARNING: Payload is ${payloadSizeMB.toFixed(1)}MB. Consider deleting unused images from the Image Bank to prevent save failures.`, 'warning');
+        } else if (payloadSizeMB > 30) {
+          console.log(`[Image Creation] Payload size: ${payloadSizeMB.toFixed(1)}MB - getting large`);
+        }
+
         const res = await fetch(`/api/image-creation/settings/${workflowId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newSettings)
+          body: payloadJson
         });
 
         // Check for HTTP errors BEFORE trying to parse JSON
@@ -770,6 +786,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const uniqueVariations = [...new Set(settings.image_bank.map(img => img.variation))];
   // Get unique models for filtering
   const uniqueModels = [...new Set(settings.image_bank.map(img => img.model).filter(Boolean))];
+
+  // Calculate payload size for warning indicator
+  const payloadSizeMB = useMemo(() => {
+    try {
+      const size = new Blob([JSON.stringify(settings)]).size / (1024 * 1024);
+      return size;
+    } catch {
+      return 0;
+    }
+  }, [settings]);
 
   // Filter and sort bank images
   const getFilteredBankImages = (includeUsed: boolean) => {
@@ -4155,6 +4181,15 @@ Start by introducing yourself and asking about their business in a friendly way.
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                 Image Bank ({availableImages.length} available)
+                {/* Storage size indicator */}
+                <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
+                  payloadSizeMB > 70 ? 'bg-red-600 text-white animate-pulse' :
+                  payloadSizeMB > 50 ? 'bg-amber-600 text-white' :
+                  payloadSizeMB > 30 ? 'bg-yellow-600 text-white' :
+                  'bg-slate-700 text-slate-300'
+                }`}>
+                  {payloadSizeMB.toFixed(1)}MB / 100MB
+                </span>
               </span>
               <svg className={`w-5 h-5 transition-transform ${isBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
             </button>
