@@ -454,6 +454,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [showPromptGuide, setShowPromptGuide] = useState(false);
   const [selectedCombinations, setSelectedCombinations] = useState<Set<string>>(new Set()); // For advanced mode batch
 
+  // Category-based filtering for batch generation (Advanced mode)
+  // Maps category ID to Set of selected option numbers
+  const [selectedOptionsPerCategory, setSelectedOptionsPerCategory] = useState<Map<string, Set<number>>>(new Map());
+  const [categoryFiltersOpen, setCategoryFiltersOpen] = useState<Set<string>>(new Set());
+
   // Extended context for Consultant Chat (articles, workflow info, etc.)
   const [consultantContext, setConsultantContext] = useState<{
     articles: any[];
@@ -828,7 +833,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         id: `combo-${idx}`,
         label,
         shortLabel,
-        replacements
+        replacements,
+        options: combo // Include the options array for filtering
       };
     });
   }, [activeAvatar?.placeholderCategories]);
@@ -861,6 +867,90 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       return newSet;
     });
   };
+
+  // Toggle category filter dropdown open/closed
+  const toggleCategoryFilter = (categoryId: string) => {
+    setCategoryFiltersOpen(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(categoryId)) {
+        newSet.delete(categoryId);
+      } else {
+        newSet.add(categoryId);
+      }
+      return newSet;
+    });
+  };
+
+  // Toggle a specific option within a category
+  const toggleCategoryOption = (categoryId: string, optionNumber: number) => {
+    setSelectedOptionsPerCategory(prev => {
+      const newMap = new Map(prev);
+      const currentSet = newMap.get(categoryId) || new Set<number>();
+      const newSet = new Set(currentSet);
+      if (newSet.has(optionNumber)) {
+        newSet.delete(optionNumber);
+      } else {
+        newSet.add(optionNumber);
+      }
+      newMap.set(categoryId, newSet);
+      return newMap;
+    });
+  };
+
+  // Select all options in a category
+  const selectAllCategoryOptions = (categoryId: string, options: { number: number }[]) => {
+    setSelectedOptionsPerCategory(prev => {
+      const newMap = new Map(prev);
+      newMap.set(categoryId, new Set(options.map(o => o.number)));
+      return newMap;
+    });
+  };
+
+  // Clear all options in a category
+  const clearCategoryOptions = (categoryId: string) => {
+    setSelectedOptionsPerCategory(prev => {
+      const newMap = new Map(prev);
+      newMap.set(categoryId, new Set());
+      return newMap;
+    });
+  };
+
+  // Get count of selected options for a category
+  const getSelectedCountForCategory = (categoryId: string): number => {
+    return selectedOptionsPerCategory.get(categoryId)?.size || 0;
+  };
+
+  // Check if an option is selected
+  const isOptionSelected = (categoryId: string, optionNumber: number): boolean => {
+    return selectedOptionsPerCategory.get(categoryId)?.has(optionNumber) || false;
+  };
+
+  // Compute filtered combinations based on selected options per category
+  const filteredCombinations = useMemo(() => {
+    if (!activeAvatar?.placeholderCategories || activeAvatar.placeholderCategories.length === 0) {
+      return placeholderCombinations;
+    }
+
+    // Check if any category has selections
+    const hasAnySelection = Array.from(selectedOptionsPerCategory.values()).some(set => set.size > 0);
+    if (!hasAnySelection) {
+      // No filters applied, return all
+      return placeholderCombinations;
+    }
+
+    // Filter combinations where each option in the combo is selected (or category has no filter)
+    return placeholderCombinations.filter(combo => {
+      const categories = activeAvatar.placeholderCategories || [];
+      return categories.every((cat, idx) => {
+        const selectedOptions = selectedOptionsPerCategory.get(cat.id);
+        // If no selections for this category, include all
+        if (!selectedOptions || selectedOptions.size === 0) return true;
+        // Check if the combo's option for this category is selected
+        const comboOption = combo.options[idx];
+        return comboOption && selectedOptions.has(comboOption.number);
+      });
+    });
+  }, [placeholderCombinations, selectedOptionsPerCategory, activeAvatar?.placeholderCategories]);
 
   // Insert variation placeholder into main prompt at cursor
   const insertVariationPlaceholder = () => {
@@ -3874,35 +3964,128 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
                 </div>
 
-                {/* Advanced Mode: Show placeholder combinations */}
+                {/* Advanced Mode: Category-based filtering */}
                 {activeAvatar?.placeholderMode === 'advanced' ? (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs text-brand-gold/70">
-                        Select Combinations ({placeholderCombinations.length} possible):
-                      </label>
-                      <button onClick={selectAllCombinations} className="text-xs text-brand-cyan hover:text-brand-cyan-light">Select All</button>
-                    </div>
-                    <div className="max-h-48 overflow-y-auto space-y-1 bg-slate-800/50 p-2 rounded">
-                      {placeholderCombinations.map((combo) => (
-                        <label
-                          key={combo.id}
-                          className={`flex items-center gap-2 px-3 py-2 rounded text-xs cursor-pointer transition ${
-                            selectedCombinations.has(combo.id)
-                              ? 'bg-green-500 text-slate-900'
-                              : 'bg-slate-700 text-brand-gold hover:bg-slate-600'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedCombinations.has(combo.id)}
-                            onChange={() => toggleCombinationSelection(combo.id)}
-                            className="hidden"
-                          />
-                          <span className="font-mono text-[10px] text-purple-300 mr-2">{combo.shortLabel}</span>
-                          <span className="truncate">{combo.label}</span>
+                  <div className="space-y-3">
+                    {/* Category Filter Dropdowns */}
+                    {activeAvatar?.placeholderCategories && activeAvatar.placeholderCategories.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs text-brand-gold/70 font-medium">Filter by Category:</label>
+                          <span className="text-xs text-green-400">
+                            {filteredCombinations.length} of {placeholderCombinations.length} combinations
+                          </span>
+                        </div>
+
+                        {/* Category filter rows */}
+                        <div className="space-y-1">
+                          {activeAvatar.placeholderCategories.map((category) => (
+                            <div key={category.id} className="bg-slate-800/50 rounded border border-purple-500/30">
+                              {/* Category header - clickable to expand */}
+                              <button
+                                onClick={() => toggleCategoryFilter(category.id)}
+                                className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-700/50 transition"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <svg className={`w-4 h-4 text-purple-400 transition-transform ${categoryFiltersOpen.has(category.id) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                                  </svg>
+                                  <span className="text-sm text-white font-medium">{category.name}</span>
+                                  <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
+                                </span>
+                                <span className="text-xs px-2 py-0.5 rounded bg-purple-600/50 text-purple-200">
+                                  {getSelectedCountForCategory(category.id) || 'All'} / {category.options.length}
+                                </span>
+                              </button>
+
+                              {/* Expanded options */}
+                              {categoryFiltersOpen.has(category.id) && (
+                                <div className="px-3 pb-3 pt-1 border-t border-purple-500/20">
+                                  <div className="flex gap-2 mb-2">
+                                    <button
+                                      onClick={() => selectAllCategoryOptions(category.id, category.options)}
+                                      className="text-[10px] text-brand-cyan hover:text-brand-cyan-light"
+                                    >
+                                      Select All
+                                    </button>
+                                    <button
+                                      onClick={() => clearCategoryOptions(category.id)}
+                                      className="text-[10px] text-red-400 hover:text-red-300"
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {category.options.map((option) => (
+                                      <label
+                                        key={option.number}
+                                        className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer transition ${
+                                          isOptionSelected(category.id, option.number)
+                                            ? 'bg-green-500 text-slate-900 font-medium'
+                                            : 'bg-slate-700 text-brand-gold hover:bg-slate-600 border border-slate-600'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isOptionSelected(category.id, option.number)}
+                                          onChange={() => toggleCategoryOption(category.id, option.number)}
+                                          className="hidden"
+                                        />
+                                        <span className="font-mono text-[9px] opacity-70">#{option.number}</span>
+                                        <span className="truncate max-w-[150px]" title={option.text}>
+                                          {option.text.substring(0, 25)}{option.text.length > 25 ? '...' : ''}
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Select from filtered combinations */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs text-brand-gold/70">
+                          Select Combinations ({filteredCombinations.length} shown):
                         </label>
-                      ))}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedCombinations(new Set(filteredCombinations.map(c => c.id)))}
+                            className="text-xs text-brand-cyan hover:text-brand-cyan-light"
+                          >
+                            Select Filtered
+                          </button>
+                          <button onClick={selectAllCombinations} className="text-xs text-green-400 hover:text-green-300">Select All ({placeholderCombinations.length})</button>
+                        </div>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-1 bg-slate-800/50 p-2 rounded">
+                        {filteredCombinations.map((combo) => (
+                          <label
+                            key={combo.id}
+                            className={`flex items-center gap-2 px-3 py-2 rounded text-xs cursor-pointer transition ${
+                              selectedCombinations.has(combo.id)
+                                ? 'bg-green-500 text-slate-900'
+                                : 'bg-slate-700 text-brand-gold hover:bg-slate-600'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedCombinations.has(combo.id)}
+                              onChange={() => toggleCombinationSelection(combo.id)}
+                              className="hidden"
+                            />
+                            <span className="font-mono text-[10px] text-purple-300 mr-2">{combo.shortLabel}</span>
+                            <span className="truncate">{combo.label}</span>
+                          </label>
+                        ))}
+                        {filteredCombinations.length === 0 && (
+                          <p className="text-xs text-brand-gold/50 italic text-center py-2">No combinations match the current filters</p>
+                        )}
+                      </div>
                     </div>
                     {placeholderCombinations.length === 0 && (
                       <p className="text-xs text-brand-gold/50 italic">Add placeholder categories above to generate combinations</p>
