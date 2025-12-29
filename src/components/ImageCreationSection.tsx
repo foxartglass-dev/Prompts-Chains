@@ -438,6 +438,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [modelFilter, setModelFilter] = useState<string>('all');
   const [showArchived, setShowArchived] = useState<boolean>(false);
   const [bankFullscreen, setBankFullscreen] = useState<boolean>(false);
+  const [bankViewMode, setBankViewMode] = useState<'compact' | 'gallery'>('compact'); // compact = grid, gallery = large cards
 
   // Image title editing
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
@@ -4682,14 +4683,24 @@ Start by introducing yourself and asking about their business in a friendly way.
       {bankFullscreen && (
         <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30 bg-slate-900">
-            <h2 className="text-xl font-bold text-brand-cyan flex items-center gap-2">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-              Image Bank ({availableImages.length} {showArchived ? 'archived' : 'available'})
-            </h2>
-            <div className="flex items-center gap-4">
-              {/* Filters in fullscreen */}
-              <div className="flex gap-3 flex-wrap">
+          <div className="flex flex-col border-b border-brand-cyan/30 bg-slate-900">
+            {/* Top row - Title and Close */}
+            <div className="flex items-center justify-between p-4 pb-2">
+              <h2 className="text-xl font-bold text-brand-cyan flex items-center gap-2">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                Image Bank ({availableImages.length} {showArchived ? 'archived' : 'available'})
+              </h2>
+              <button
+                onClick={() => setBankFullscreen(false)}
+                className="p-2 hover:bg-slate-800 rounded-full text-white transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            {/* Second row - Filters, View Toggle, and Actions */}
+            <div className="flex items-center justify-between px-4 pb-3 gap-4 flex-wrap">
+              {/* Left: Filters */}
+              <div className="flex gap-2 flex-wrap items-center">
                 <select value={modelFilter} onChange={(e) => setModelFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm">
                   <option value="all">All Models</option>
                   {uniqueModels.map(m => (<option key={m} value={m}>{m}</option>))}
@@ -4705,73 +4716,165 @@ Start by introducing yourself and asking about their business in a friendly way.
                   {showArchived ? 'Viewing Archive' : 'View Archive'}
                 </button>
               </div>
-              <button
-                onClick={() => setBankFullscreen(false)}
-                className="p-2 hover:bg-slate-800 rounded-full text-white transition"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+              {/* Center: View Toggle */}
+              <div className="flex items-center bg-slate-800 rounded-lg p-0.5 border border-brand-cyan/30">
+                <button
+                  onClick={() => setBankViewMode('compact')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1.5 ${
+                    bankViewMode === 'compact' ? 'bg-brand-cyan text-slate-900' : 'text-white/70 hover:text-white'
+                  }`}
+                  title="Compact Grid View"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                  Compact
+                </button>
+                <button
+                  onClick={() => setBankViewMode('gallery')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1.5 ${
+                    bankViewMode === 'gallery' ? 'bg-brand-cyan text-slate-900' : 'text-white/70 hover:text-white'
+                  }`}
+                  title="Gallery View - Full Size Images"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  Gallery
+                </button>
+              </div>
+              {/* Right: Actions (duplicated from footer) */}
+              <div className="flex gap-2 items-center">
+                {selectedForDownload.size > 0 && (
+                  <>
+                    <button onClick={handleBulkDownload} className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-sm transition flex items-center gap-1.5">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                      Download Selected
+                    </button>
+                    <button onClick={clearDownloadSelection} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm transition">Clear Selection</button>
+                  </>
+                )}
+                <button onClick={selectAllForDownload} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm transition">Select All</button>
+              </div>
             </div>
           </div>
           {/* Image Grid - fullscreen */}
           <div className="flex-1 overflow-auto p-6">
             {availableImages.length > 0 ? (
-              <div className="grid grid-cols-6 gap-4">
-                {availableImages.map((img) => (
-                  <div key={img.id} className={`relative group cursor-pointer bg-slate-900 rounded-lg overflow-hidden border border-brand-cyan/30 ${selectedForDownload.has(img.id) ? 'ring-2 ring-brand-cyan' : ''}`}>
-                    {/* Header with model and timestamp */}
-                    <div className="p-2 bg-slate-800/80 border-b border-brand-cyan/20">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-xs text-white font-medium truncate">{img.title || img.variation}</span>
-                        {img.model && (
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
-                            img.model === 'seedream-4' ? 'bg-green-600/80 text-white' :
-                            img.model === 'ideogram-v3-turbo' ? 'bg-purple-600/80 text-white' :
-                            img.model === 'flux-1.1-pro' ? 'bg-blue-600/80 text-white' :
-                            img.model.startsWith('gpt') ? 'bg-emerald-600/80 text-white' :
-                            'bg-slate-600/80 text-white'
+              bankViewMode === 'compact' ? (
+                /* COMPACT VIEW - Small thumbnails, more images visible */
+                <div className="grid grid-cols-6 gap-4">
+                  {availableImages.map((img) => (
+                    <div key={img.id} className={`relative group cursor-pointer bg-slate-900 rounded-lg overflow-hidden border border-brand-cyan/30 ${selectedForDownload.has(img.id) ? 'ring-2 ring-brand-cyan' : ''}`}>
+                      {/* Header with model and timestamp */}
+                      <div className="p-2 bg-slate-800/80 border-b border-brand-cyan/20">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-xs text-white font-medium truncate">{img.title || img.variation}</span>
+                          {img.model && (
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
+                              img.model === 'seedream-4' ? 'bg-green-600/80 text-white' :
+                              img.model === 'ideogram-v3-turbo' ? 'bg-purple-600/80 text-white' :
+                              img.model === 'flux-1.1-pro' ? 'bg-blue-600/80 text-white' :
+                              img.model.startsWith('gpt') ? 'bg-emerald-600/80 text-white' :
+                              'bg-slate-600/80 text-white'
+                            }`}>
+                              {img.model.replace('-1.1-pro', '').replace('-v3-turbo', ' v3').replace('-4', ' 4').replace('gpt-image-', 'GPT ')}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-brand-gold/50">
+                          {new Date(img.createdAt).toLocaleDateString()} {new Date(img.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </div>
+                      </div>
+                      {/* Image - fixed height, cropped */}
+                      <img
+                        src={img.url}
+                        alt={img.title || img.variation}
+                        className="w-full h-40 object-cover"
+                        onClick={() => setPreviewImage(img)}
+                      />
+                      {/* Actions overlay */}
+                      <div className="absolute inset-0 top-12 bg-black/70 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-2 p-2">
+                        <div className="flex gap-2 flex-wrap justify-center">
+                          <button onClick={() => setPreviewImage(img)} className="px-3 py-1 bg-blue-600 rounded text-white text-xs">View</button>
+                          <button onClick={() => handleDownloadImage(img)} className="px-3 py-1 bg-brand-cyan rounded text-slate-900 text-xs font-medium">Download</button>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => handleArchiveImage(img.id)} className="px-3 py-1 bg-amber-600 rounded text-white text-xs">
+                            {img.archived ? 'Restore' : 'Archive'}
+                          </button>
+                          <button onClick={() => handleRemoveFromBank(img.id)} className="px-3 py-1 bg-red-600 rounded text-white text-xs">Delete</button>
+                        </div>
+                      </div>
+                      {/* Selection checkbox */}
+                      <div className="absolute top-12 left-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedForDownload.has(img.id)}
+                          onChange={() => toggleDownloadSelection(img.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-5 h-5 rounded border-2 border-brand-cyan text-brand-cyan focus:ring-brand-cyan bg-slate-900/80"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* GALLERY VIEW - Full-size images, fewer per row */
+                <div className="grid grid-cols-3 gap-6">
+                  {availableImages.map((img) => (
+                    <div key={img.id} className={`relative group cursor-pointer bg-slate-900 rounded-xl overflow-hidden border-2 ${selectedForDownload.has(img.id) ? 'border-brand-cyan ring-2 ring-brand-cyan/50' : 'border-brand-cyan/30'}`}>
+                      {/* Selection checkbox - prominent */}
+                      <div className="absolute top-3 left-3 z-20">
+                        <input
+                          type="checkbox"
+                          checked={selectedForDownload.has(img.id)}
+                          onChange={() => toggleDownloadSelection(img.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-6 h-6 rounded border-2 border-brand-cyan text-brand-cyan focus:ring-brand-cyan bg-slate-900/90 cursor-pointer"
+                        />
+                      </div>
+                      {/* Model badge - top right */}
+                      {img.model && (
+                        <div className="absolute top-3 right-3 z-20">
+                          <span className={`text-xs px-2 py-1 rounded font-medium ${
+                            img.model === 'seedream-4' ? 'bg-green-600 text-white' :
+                            img.model === 'ideogram-v3-turbo' ? 'bg-purple-600 text-white' :
+                            img.model === 'flux-1.1-pro' ? 'bg-blue-600 text-white' :
+                            img.model.startsWith('gpt') ? 'bg-emerald-600 text-white' :
+                            'bg-slate-600 text-white'
                           }`}>
                             {img.model.replace('-1.1-pro', '').replace('-v3-turbo', ' v3').replace('-4', ' 4').replace('gpt-image-', 'GPT ')}
                           </span>
-                        )}
-                      </div>
-                      <div className="text-[10px] text-brand-gold/50">
-                        {new Date(img.createdAt).toLocaleDateString()} {new Date(img.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </div>
-                    </div>
-                    {/* Image */}
-                    <img
-                      src={img.url}
-                      alt={img.title || img.variation}
-                      className="w-full h-40 object-cover"
-                      onClick={() => setPreviewImage(img)}
-                    />
-                    {/* Actions overlay */}
-                    <div className="absolute inset-0 top-12 bg-black/70 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-2 p-2">
-                      <div className="flex gap-2 flex-wrap justify-center">
-                        <button onClick={() => setPreviewImage(img)} className="px-3 py-1 bg-blue-600 rounded text-white text-xs">View</button>
-                        <button onClick={() => handleDownloadImage(img)} className="px-3 py-1 bg-brand-cyan rounded text-slate-900 text-xs font-medium">Download</button>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleArchiveImage(img.id)} className="px-3 py-1 bg-amber-600 rounded text-white text-xs">
-                          {img.archived ? 'Restore' : 'Archive'}
-                        </button>
-                        <button onClick={() => handleRemoveFromBank(img.id)} className="px-3 py-1 bg-red-600 rounded text-white text-xs">Delete</button>
-                      </div>
-                    </div>
-                    {/* Selection checkbox */}
-                    <div className="absolute top-12 left-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedForDownload.has(img.id)}
-                        onChange={() => toggleDownloadSelection(img.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-5 h-5 rounded border-2 border-brand-cyan text-brand-cyan focus:ring-brand-cyan bg-slate-900/80"
+                        </div>
+                      )}
+                      {/* Image - FULL SIZE, no cropping */}
+                      <img
+                        src={img.url}
+                        alt={img.title || img.variation}
+                        className="w-full h-auto object-contain bg-slate-950"
+                        onClick={() => setPreviewImage(img)}
                       />
+                      {/* Info bar at bottom */}
+                      <div className="p-3 bg-slate-800/95 border-t border-brand-cyan/20">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-white font-medium truncate">{img.title || img.variation}</p>
+                            <p className="text-xs text-brand-gold/60">
+                              {new Date(img.createdAt).toLocaleDateString()} {new Date(img.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              {img.avatarTag && <span className="ml-2 text-brand-cyan">• Tag: {img.avatarTag}</span>}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => setPreviewImage(img)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs transition">View</button>
+                            <button onClick={() => handleDownloadImage(img)} className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 text-xs font-medium transition">Download</button>
+                            <button onClick={() => handleArchiveImage(img.id)} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-xs transition">
+                              {img.archived ? 'Restore' : 'Archive'}
+                            </button>
+                            <button onClick={() => handleRemoveFromBank(img.id)} className="px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-white text-xs transition">Delete</button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )
             ) : (
               <div className="flex items-center justify-center h-full">
                 <p className="text-brand-gold/50 text-lg">{showArchived ? 'No archived images.' : 'No available images.'}</p>
