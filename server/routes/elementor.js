@@ -23,6 +23,7 @@ const router = express.Router();
 /**
  * Clean content before processing
  * - Remove markdown # at start of text (H1)
+ * - Remove AI outline markers (H1:, ## Intro, etc.)
  * - Remove stray dashes/em-dashes at end of paragraphs
  * - Normalize line endings
  * - Ensure proper H2 title separation
@@ -35,6 +36,16 @@ function cleanContent(content) {
   // Normalize line endings (Windows \r\n -> Unix \n)
   cleaned = cleaned.replace(/\r\n/g, '\n');
   cleaned = cleaned.replace(/\r/g, '\n');
+
+  // Remove AI outline markers that shouldn't appear in final content
+  // Pattern: "H1:" followed by text (AI title suggestion)
+  cleaned = cleaned.replace(/^H1:\s*.+$/gim, '');
+  // Pattern: "## Intro" or "## Introduction" outline markers
+  cleaned = cleaned.replace(/^##\s*(Intro|Introduction)\s*(Paragraph)?\s*(Outline)?:?\s*$/gim, '');
+  // Pattern: Lines that are just outline labels like "Service Page Article", "Service Page Outline"
+  cleaned = cleaned.replace(/^(Service Page|Page)\s*(Article|Outline|Content)?\s*:?\s*$/gim, '');
+  // Pattern: Lines starting with bullet markers followed by outline text
+  cleaned = cleaned.replace(/^[-*]\s*\*\*[^*]+\*\*:\s*.+$/gm, '');
 
   // Remove markdown # at the very start (but not ## which is H2)
   cleaned = cleaned.replace(/^#\s+/gm, '');
@@ -55,8 +66,11 @@ function cleanContent(content) {
   // Don't capture the character after - just ensure separation
   cleaned = cleaned.replace(/^(##\s+.+)$/gm, '$1\n');
 
-  // Remove any double newlines that might have been created
+  // Remove any triple+ newlines that might have been created
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+  // Remove empty lines at the very start
+  cleaned = cleaned.replace(/^\n+/, '');
 
   return cleaned.trim();
 }
