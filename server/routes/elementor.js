@@ -378,16 +378,29 @@ router.post('/publish', async (req, res) => {
     }
 
     // Step 2b: Try to get images from Image Bank if in bank mode
+    console.log('[Image Bank] Checking conditions: effectiveUseBank=', effectiveUseBank, 'workflowId=', workflowId, 'dbEnabled=', isDatabaseEnabled());
     if (effectiveUseBank && workflowId && isDatabaseEnabled()) {
       try {
         const bankImages = await sql`
           SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
         `;
 
-        if (bankImages.length > 0 && bankImages[0].enabled) {
+        // Note: We don't check 'enabled' here - if integration_mode is 'bank', user wants bank
+        if (bankImages.length > 0) {
           const config = bankImages[0];
           const imageBank = config.image_bank || [];
           const avatars = config.audience_avatars || [];
+
+          console.log('╔══════════════════════════════════════════════════════════════╗');
+          console.log('║              IMAGE BANK SELECTION STARTING                    ║');
+          console.log('╠══════════════════════════════════════════════════════════════╣');
+          console.log(`║ Bank size: ${String(imageBank.length).padEnd(5)} images                                  ║`);
+          console.log(`║ Avatars configured: ${String(avatars.length).padEnd(3)}                                   ║`);
+
+          if (imageBank.length === 0) {
+            console.log('║ ⚠️  WARNING: Image Bank is EMPTY - no images to select!       ║');
+            console.log('╚══════════════════════════════════════════════════════════════╝');
+          }
           const variationOrderMode = config.variation_order_mode || 'sequential';
           const manualOrder = config.manual_variation_order || [];
 
