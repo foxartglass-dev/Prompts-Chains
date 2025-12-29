@@ -1515,14 +1515,14 @@ const App: React.FC = () => {
     }
     
     const renderSection = (title: React.ReactNode, id: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen = false, rightContent?: React.ReactNode) => (
-      <div className="bg-card rounded-xl shadow-glow-cyan card-3d hover:shadow-card-hover border-2 border-brand-cyan">
+      <div className="bg-card rounded-xl shadow-glow-cyan card-3d hover:shadow-card-hover border-2 border-brand-cyan relative z-0">
         <h2 className={`text-xl font-bold flex items-center text-brand-cyan py-2 px-4 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
           {icon}
           <span className="ml-3 shrink-0">{title}</span>
           {rightContent && <div className="ml-4 flex-1 flex items-center justify-end gap-3" onClick={e => e.stopPropagation()}>{rightContent}</div>}
            <svg className={`w-5 h-5 ml-3 shrink-0 transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </h2>
-        <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? 'max-h-[5000px]' : 'max-h-0 overflow-hidden'}`}>
+        <div className={`transition-all duration-300 ease-in-out overflow-hidden ${openSections.has(id) ? 'max-h-[5000px]' : 'max-h-0'}`}>
             <div className="p-5 pt-0 border-t border-brand-cyan/30">{children}</div>
         </div>
       </div>
@@ -2955,10 +2955,10 @@ const App: React.FC = () => {
                         />
                     )}
 
-                    <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan">
+                    <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan relative z-10">
                         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5`}><Icon type="info" className="h-6 w-6"/><span className="ml-3">Processing Log</span></h2>
                         <div className="p-5 pt-0 border-t border-brand-cyan/30">
-                            <div ref={logContainerRef} className="h-96 bg-slate-900/70 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">
+                            <div ref={logContainerRef} className="h-96 bg-slate-900 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">
                                 {logs.map(log => (<div key={log.id} className={`flex items-start ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400 animate-pulse'}[log.status]}`}>{{ [LogStatus.INFO]: <Icon type="info" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-4 w-4 mr-2 flex-shrink-0 animate-spin"/>}[log.status]}<span className="flex-1"><span className="text-gray-500 mr-2">{log.timestamp}</span>{log.message}</span></div>))}
                                 {logs.length === 0 && <div className="text-gray-500">Logs will appear here once processing starts.</div>}
                             </div>
