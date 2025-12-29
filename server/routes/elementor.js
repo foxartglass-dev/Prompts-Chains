@@ -419,9 +419,15 @@ router.post('/publish', async (req, res) => {
           console.log('[Image Bank] Target avatar:', targetAvatar?.name, targetAvatar?.tag);
 
           // Get available images from bank matching the tag
+          // IMPORTANT: Only use images that have been uploaded to WordPress (have wpUrl)
           let availableImages = imageBank.filter(img => {
             if (img.used) {
               console.log('[Image Bank] Skipping used image:', img.id);
+              return false;
+            }
+            // Skip images without WordPress URL - base64 data URLs won't work
+            if (!img.wpUrl) {
+              console.log('[Image Bank] ⚠️ Skipping image without wpUrl:', img.id, '- needs WordPress upload');
               return false;
             }
             // If article has a tag and image has a tag, they must match
@@ -440,7 +446,13 @@ router.post('/publish', async (req, res) => {
             return true;
           });
 
+          // Count images missing wpUrl for warning
+          const missingWpUrl = imageBank.filter(img => !img.used && !img.wpUrl).length;
           console.log('[Image Bank] Available images after filter:', availableImages.length);
+          if (missingWpUrl > 0) {
+            console.log(`[Image Bank] ⚠️ WARNING: ${missingWpUrl} images skipped - missing WordPress URL!`);
+            console.log('[Image Bank] → These images need to be uploaded to WordPress Media Library first');
+          }
 
           // ═══════════════════════════════════════════════════════════════
           // SMART CONTENT MATCHING - Match images to article content
