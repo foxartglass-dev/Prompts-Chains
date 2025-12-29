@@ -126,6 +126,46 @@ const App: React.FC = () => {
     });
     const [pinEnabled, setPinEnabled] = useState<boolean | null>(null);
 
+    // Console Error Logger - captures errors for easy copy/paste debugging
+    const [consoleErrors, setConsoleErrors] = useState<Array<{id: number, time: string, message: string}>>([]);
+    const [showErrorLog, setShowErrorLog] = useState(false);
+
+    // Intercept console.error to capture errors
+    useEffect(() => {
+      const originalError = console.error;
+      let errorId = 0;
+
+      console.error = (...args) => {
+        // Call original
+        originalError.apply(console, args);
+
+        // Capture the error
+        const message = args.map(arg =>
+          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+        ).join(' ');
+
+        // Skip browser extension errors
+        if (message.includes('runtime.lastError') || message.includes('extension')) return;
+
+        setConsoleErrors(prev => {
+          const newErrors = [...prev, {
+            id: ++errorId,
+            time: new Date().toLocaleTimeString(),
+            message: message.substring(0, 500) // Limit length
+          }];
+          // Keep only last 10 errors
+          return newErrors.slice(-10);
+        });
+
+        // Auto-show panel when new error arrives
+        setShowErrorLog(true);
+      };
+
+      return () => {
+        console.error = originalError;
+      };
+    }, []);
+
     // UI State for notifications
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
 
@@ -1550,6 +1590,57 @@ const App: React.FC = () => {
                 <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-xl shadow-card-lg text-white transition-all duration-300 border ${notification.type === 'success' ? 'bg-green-600/90 border-green-500' : notification.type === 'info' ? 'bg-brand-cyan/90 border-brand-cyan-light' : 'bg-red-600/90 border-red-500'}`}>
                     {notification.message}
                 </div>
+            )}
+
+            {/* Console Error Log Panel - for easy copy/paste debugging */}
+            {consoleErrors.length > 0 && (
+              <div className={`fixed top-0 left-0 right-0 z-[100] transition-transform duration-300 ${showErrorLog ? 'translate-y-0' : '-translate-y-full'}`}>
+                <div className="bg-red-900/95 border-b-2 border-red-500 shadow-lg">
+                  <div className="flex items-center justify-between px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-red-300 font-bold text-sm">⚠️ Console Errors ({consoleErrors.length})</span>
+                      <button
+                        onClick={() => {
+                          const errorText = consoleErrors.map(e => `[${e.time}] ${e.message}`).join('\n\n');
+                          navigator.clipboard.writeText(errorText);
+                          alert('Errors copied to clipboard!');
+                        }}
+                        className="px-2 py-1 bg-red-700 hover:bg-red-600 rounded text-white text-xs"
+                      >
+                        📋 Copy All
+                      </button>
+                      <button
+                        onClick={() => setConsoleErrors([])}
+                        className="px-2 py-1 bg-red-700 hover:bg-red-600 rounded text-white text-xs"
+                      >
+                        🗑️ Clear
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => setShowErrorLog(false)}
+                      className="text-red-300 hover:text-white text-xl font-bold px-2"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="max-h-40 overflow-y-auto px-4 pb-3">
+                    {consoleErrors.map(err => (
+                      <div key={err.id} className="text-xs font-mono bg-red-950 rounded px-2 py-1 mb-1 text-red-200">
+                        <span className="text-red-400">[{err.time}]</span> {err.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Toggle button when hidden */}
+              </div>
+            )}
+            {consoleErrors.length > 0 && !showErrorLog && (
+              <button
+                onClick={() => setShowErrorLog(true)}
+                className="fixed top-2 left-2 z-[100] px-3 py-1 bg-red-600 hover:bg-red-500 rounded-full text-white text-xs font-bold animate-pulse"
+              >
+                ⚠️ {consoleErrors.length} Errors
+              </button>
             )}
             <ProjectTracker isOpen={isTrackerOpen} onClose={() => setIsTrackerOpen(false)} />
             <AgencyManager isOpen={isAgencyOpen} onClose={() => setIsAgencyOpen(false)} />
