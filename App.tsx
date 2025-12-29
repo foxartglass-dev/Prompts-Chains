@@ -1522,7 +1522,7 @@ const App: React.FC = () => {
           {rightContent && <div className="ml-4 flex-1 flex items-center justify-end gap-3" onClick={e => e.stopPropagation()}>{rightContent}</div>}
            <svg className={`w-5 h-5 ml-3 shrink-0 transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </h2>
-        <div className={`transition-all duration-300 ease-in-out overflow-hidden ${openSections.has(id) ? 'max-h-[5000px]' : 'max-h-0'}`}>
+        <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? '' : 'max-h-0 overflow-hidden'}`}>
             <div className="p-5 pt-0 border-t border-brand-cyan/30">{children}</div>
         </div>
       </div>
