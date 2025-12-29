@@ -45,15 +45,58 @@ function buildHeadingWidget(text, tag = 'h2', options = {}) {
 }
 
 /**
+ * Convert plain text content to HTML with proper paragraph tags
+ * Preserves line breaks and creates proper HTML structure
+ * @param {string} content - Plain text or mixed content
+ * @param {boolean} isFAQ - Whether this is FAQ content needing special formatting
+ * @returns {string} HTML formatted content
+ */
+function contentToHtml(content, isFAQ = false) {
+  if (!content) return '';
+
+  let html = content;
+
+  // If content doesn't already have HTML paragraph tags, convert newlines
+  if (!html.includes('<p>') && !html.includes('<p ')) {
+    // Split by double newlines (paragraph breaks)
+    const paragraphs = html.split(/\n\n+/);
+
+    if (isFAQ) {
+      // FAQ special handling: single newlines become <br>, double become new paragraph
+      html = paragraphs.map(para => {
+        // Convert single newlines within paragraph to <br>
+        const withBreaks = para.split('\n').map(line => line.trim()).filter(line => line).join('<br>\n');
+        return `<p>${withBreaks}</p>`;
+      }).join('\n');
+    } else {
+      // Regular content: each paragraph gets <p> tags
+      html = paragraphs.map(para => {
+        const trimmed = para.trim();
+        if (!trimmed) return '';
+        // Check if already wrapped in a block element
+        if (trimmed.startsWith('<')) return trimmed;
+        return `<p>${trimmed}</p>`;
+      }).filter(p => p).join('\n');
+    }
+  }
+
+  return html;
+}
+
+/**
  * Build an Elementor text-editor widget
  * Optionally embeds an image with text wrapping
  * @param {string} content - HTML content
  * @param {Object} imageData - Optional image data { url, id, alt, width, height }
  * @param {string} imageAlignment - 'left' or 'right'
+ * @param {Object} options - Additional options { isFAQ: boolean }
  * @returns {Object} Elementor widget object
  */
-function buildTextEditorWidget(content, imageData = null, imageAlignment = 'left') {
-  let htmlContent = content;
+function buildTextEditorWidget(content, imageData = null, imageAlignment = 'left', options = {}) {
+  const { isFAQ = false } = options;
+
+  // Convert content to proper HTML
+  let htmlContent = contentToHtml(content, isFAQ);
 
   // If we have image data, embed it at the start with the appropriate alignment
   // Uses inline styles to ensure word wrap works regardless of theme CSS
@@ -297,10 +340,12 @@ function buildContentSection(chunk) {
   }
 
   // Add text content with optional embedded image
+  // Pass isFAQ flag for special FAQ formatting
   elements.push(buildTextEditorWidget(
     chunk.content,
     chunk.imageData,
-    chunk.imageAlignment
+    chunk.imageAlignment,
+    { isFAQ: chunk.isFAQ || false }
   ));
 
   return buildContainer(elements, {
@@ -459,7 +504,8 @@ export {
   buildImageWidget,
   buildButtonWidget,
   buildContainer,
-  generateElementId
+  generateElementId,
+  contentToHtml
 };
 
 export default buildElementorPage;

@@ -22,8 +22,9 @@ const router = express.Router();
 
 /**
  * Clean content before processing
- * - Remove markdown # at start of text
- * - Remove stray dashes (keep keyword dashes like "move-in")
+ * - Remove markdown # at start of text (H1)
+ * - Remove stray dashes/em-dashes at end of paragraphs
+ * - Normalize line endings
  * - Ensure proper H2 title separation
  */
 function cleanContent(content) {
@@ -31,18 +32,31 @@ function cleanContent(content) {
 
   let cleaned = content;
 
+  // Normalize line endings (Windows \r\n -> Unix \n)
+  cleaned = cleaned.replace(/\r\n/g, '\n');
+  cleaned = cleaned.replace(/\r/g, '\n');
+
   // Remove markdown # at the very start (but not ## which is H2)
   cleaned = cleaned.replace(/^#\s+/gm, '');
 
-  // Remove stray dashes at end of sentences/paragraphs (not within words)
-  // Keep dashes in compound words like "move-in", "full-time"
-  cleaned = cleaned.replace(/\s+[-–—]\s*$/gm, ''); // End of line dashes
+  // Remove trailing dashes/em-dashes at end of paragraphs
+  // These often appear at the end of AI-generated content
+  // Match: text followed by space(s), dash/em-dash, optional space, then end of line or before next paragraph
+  cleaned = cleaned.replace(/\s*[-–—]+\s*$/gm, ''); // End of line dashes
+  cleaned = cleaned.replace(/\s*[-–—]+\s*(?=\n)/g, ''); // Dashes before newline
   cleaned = cleaned.replace(/\s+[-–—]\s+(?=[A-Z])/g, '. '); // Mid-sentence break dashes before capital
 
   // Ensure H2 titles are on their own line (not run-on with body text)
-  // If H2 is followed by text without line break, add one
+  // If HTML H2 is followed by text without line break, add one
   cleaned = cleaned.replace(/(<\/h2>)([^\n<])/g, '$1\n$2');
-  cleaned = cleaned.replace(/(##\s+[^\n]+)([^\n#])/g, '$1\n$2');
+
+  // For markdown H2: ensure there's a newline after the heading
+  // Match ## followed by heading text, ensure newline follows
+  // Don't capture the character after - just ensure separation
+  cleaned = cleaned.replace(/^(##\s+.+)$/gm, '$1\n');
+
+  // Remove any double newlines that might have been created
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
   return cleaned.trim();
 }

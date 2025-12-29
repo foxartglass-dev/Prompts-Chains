@@ -25,9 +25,12 @@ function countWords(text) {
  * @returns {{ intro: string, remaining: string }}
  */
 function extractIntro(content) {
+  // Normalize line endings first
+  const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
   // Find the first H2 (either HTML or markdown style)
-  const h2HtmlMatch = content.match(/<h2[^>]*>/i);
-  const h2MdMatch = content.match(/^##\s+/m);
+  const h2HtmlMatch = normalizedContent.match(/<h2[^>]*>/i);
+  const h2MdMatch = normalizedContent.match(/^##\s+/m);
 
   let firstH2Index = -1;
 
@@ -41,11 +44,11 @@ function extractIntro(content) {
 
   if (firstH2Index === -1) {
     // No H2 found, return empty intro
-    return { intro: '', remaining: content };
+    return { intro: '', remaining: normalizedContent };
   }
 
-  const intro = content.substring(0, firstH2Index).trim();
-  const remaining = content.substring(firstH2Index).trim();
+  const intro = normalizedContent.substring(0, firstH2Index).trim();
+  const remaining = normalizedContent.substring(firstH2Index).trim();
 
   return { intro, remaining };
 }
@@ -58,19 +61,23 @@ function extractIntro(content) {
 function splitByH2(content) {
   const sections = [];
 
+  // Normalize line endings first
+  let normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
   // Pattern to match H2 in both HTML and markdown formats
   // HTML: <h2>Title</h2> or <h2 class="...">Title</h2>
-  // Markdown: ## Title
-  const h2Pattern = /(?:<h2[^>]*>(.*?)<\/h2>|^##\s*(.+)$)/gim;
+  // Markdown: ## Title (captures everything after ## until newline)
+  // Using [\s\S] approach to handle the full line properly
+  const h2Pattern = /(?:<h2[^>]*>([\s\S]*?)<\/h2>|^##\s*([^\n]+))/gim;
 
   let lastIndex = 0;
   let match;
   let currentHeading = null;
 
-  while ((match = h2Pattern.exec(content)) !== null) {
+  while ((match = h2Pattern.exec(normalizedContent)) !== null) {
     // If we had a previous heading, save its content
     if (currentHeading !== null) {
-      const sectionContent = content.substring(lastIndex, match.index).trim();
+      const sectionContent = normalizedContent.substring(lastIndex, match.index).trim();
       if (sectionContent) {
         sections.push({
           heading: currentHeading,
@@ -80,13 +87,14 @@ function splitByH2(content) {
     }
 
     // Get the heading text (from either HTML or markdown capture group)
+    // Trim to remove any trailing whitespace or newlines
     currentHeading = (match[1] || match[2] || '').trim();
     lastIndex = match.index + match[0].length;
   }
 
   // Don't forget the last section
   if (currentHeading !== null) {
-    const sectionContent = content.substring(lastIndex).trim();
+    const sectionContent = normalizedContent.substring(lastIndex).trim();
     if (sectionContent) {
       sections.push({
         heading: currentHeading,
@@ -201,8 +209,16 @@ function chunkContent(content, options = {}) {
   let imageAlignment = 'left'; // Start with left, will alternate
 
   for (const section of sections) {
+    // Check if this is an FAQ section and format it specially
+    let sectionContent = section.content;
+    const isFaq = isFAQSection(section.heading);
+
+    if (isFaq) {
+      sectionContent = formatFAQContent(sectionContent);
+    }
+
     // Split section if too long
-    const sectionChunks = splitLongSection(section.content, maxWords);
+    const sectionChunks = splitLongSection(sectionContent, maxWords);
 
     // First chunk of section gets the heading
     sectionChunks.forEach((chunkContent, index) => {
@@ -211,7 +227,8 @@ function chunkContent(content, options = {}) {
         content: chunkContent,
         wordCount: countWords(chunkContent),
         imageData: null, // Placeholder for image - will be filled by image generation
-        imageAlignment: alternateImageSide ? imageAlignment : 'left'
+        imageAlignment: alternateImageSide ? imageAlignment : 'left',
+        isFAQ: isFaq // Mark FAQ chunks for special rendering
       });
 
       // Alternate sides for next chunk
@@ -264,13 +281,95 @@ function extractTitle(content) {
   return null;
 }
 
+/**
+ * Format FAQ content with proper Q&A spacing
+ * Detects question/answer pairs and formats them:
+ * - Question on its own line
+ * - Answer directly below (no blank line)
+ * - One blank line between Q&A pairs
+ *
+ * @param {string} content - Raw FAQ content
+ * @returns {string} Formatted FAQ content
+ */
+function formatFAQContent(content) {
+  if (!content) return content;
+
+  // Split content into sentences/segments
+  // Questions typically start with ** or are marked somehow, and end with ?
+  // Pattern: **Question here?** Answer here.
+
+  // First, let's handle the common format: **Question?** Answer
+  // Also handle: "Question?" Answer format
+
+  let formatted = content;
+
+  // Pattern 1: **Question?** followed by Answer (bold markdown questions)
+  // Split at each question mark followed by ** (end of bold question)
+  formatted = formatted.replace(/\*\*([^*]+\?)\*\*\s*/g, (match, question) => {
+    return `<strong>${question.trim()}</strong>\n`;
+  });
+
+  // Pattern 2: Find question marks followed by text that looks like an answer
+  // This handles cases like: "Does daily janitorial service include kitchen?** Yes—counters..."
+  // We want to put a newline after each answer (before next question)
+
+  // Split by question patterns - look for text ending in ? followed by answer text
+  const qaPattern = /([^?]+\?)\s*([^?]+?)(?=\s*[A-Z*"][^?]*\?|$)/g;
+
+  // Actually, let's be more careful. The FAQ content typically has:
+  // **Question?** Answer text. **Next Question?** Next answer.
+
+  // First clean up any existing formatting issues
+  formatted = formatted.replace(/\*\*\s*\*\*/g, ''); // Remove empty bold markers
+
+  // Split on the pattern where one Q&A ends and another begins
+  // Look for: period/text followed by ** (start of next bold question)
+  formatted = formatted.replace(/([.!])\s*(\*\*[A-Z])/g, '$1\n\n$2');
+
+  // Also handle: answer ending followed by start of unbolded question with capital letter
+  // Pattern: period followed by capital letter starting a question (likely ends with ?)
+  formatted = formatted.replace(/([.!])\s+([A-Z][^.?!]*\?)/g, '$1\n\n$2');
+
+  // Ensure questions are separated from their answers by newline only (no double newline)
+  // Pattern: question mark (possibly with **) followed by answer
+  formatted = formatted.replace(/(\?)\s*(\*\*\s*)?(?=\s*[A-Z])/g, '$1\n');
+
+  // Clean up: ensure no more than 2 consecutive newlines
+  formatted = formatted.replace(/\n{3,}/g, '\n\n');
+
+  // Trim each line
+  formatted = formatted.split('\n').map(line => line.trim()).join('\n');
+
+  // Remove empty lines at start/end
+  formatted = formatted.trim();
+
+  return formatted;
+}
+
+/**
+ * Check if a section is an FAQ section based on heading
+ * @param {string} heading - Section heading
+ * @returns {boolean}
+ */
+function isFAQSection(heading) {
+  if (!heading) return false;
+  const headingLower = heading.toLowerCase();
+  return headingLower.includes('faq') ||
+         headingLower.includes('frequently asked') ||
+         headingLower.includes('questions') ||
+         headingLower === 'q&a' ||
+         headingLower === 'qa';
+}
+
 export {
   chunkContent,
   countWords,
   extractTitle,
   extractIntro,
   splitByH2,
-  splitLongSection
+  splitLongSection,
+  formatFAQContent,
+  isFAQSection
 };
 
 export default chunkContent;
