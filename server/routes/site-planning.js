@@ -709,6 +709,350 @@ router.post('/sync-check/:planId', requireDb, async (req, res) => {
 });
 
 // ============================================
+// HIERARCHICAL PUSH TO WORDPRESS
+// ============================================
+
+/**
+ * POST /api/site-planning/push-hierarchy/:planId
+ * Push all pages in hierarchical order - parents first, then children
+ * This ensures parent pages exist before children reference them
+ */
+router.post('/push-hierarchy/:planId', requireDb, async (req, res) => {
+  try {
+    const { planId } = req.params;
+    const {
+      status = 'draft',           // 'draft' or 'publish'
+      nodeIds,                     // Optional: specific nodes to push (if not provided, push all)
+      dripFeed = false,           // Whether to schedule posts over time
+      dripIntervalHours = 24      // Hours between each post if drip feeding
+    } = req.body;
+
+    console.log(`[Site Planning] Starting hierarchical push for plan ${planId}`);
+
+    // Get plan with website credentials
+    const plans = await sql`
+      SELECT sp.*, w.wp_url, w.wp_user, w.wp_app_password, w.name as website_name
+      FROM site_plans sp
+      JOIN websites w ON sp.website_id = w.id
+      WHERE sp.id = ${planId}
+    `;
+
+    if (plans.length === 0) {
+      return res.status(404).json({ error: 'Site plan not found or no website linked' });
+    }
+
+    const plan = plans[0];
+
+    if (!plan.wp_url || !plan.wp_user || !plan.wp_app_password) {
+      return res.status(400).json({ error: 'WordPress credentials not configured for this website' });
+    }
+
+    // Import WordPress publisher
+    const { createElementorPage } = await import('../services/wordpress-publisher.js');
+    const { getElementorMetaFields } = await import('../services/elementor-builder.js');
+
+    const wpCredentials = {
+      url: plan.wp_url,
+      user: plan.wp_user,
+      password: plan.wp_app_password
+    };
+
+    // Get nodes to push - ordered by depth so parents come first
+    let nodes;
+    if (nodeIds && nodeIds.length > 0) {
+      nodes = await sql`
+        SELECT * FROM site_plan_nodes
+        WHERE site_plan_id = ${planId} AND id = ANY(${nodeIds})
+        ORDER BY depth ASC, sort_order ASC, title ASC
+      `;
+    } else {
+      nodes = await sql`
+        SELECT * FROM site_plan_nodes
+        WHERE site_plan_id = ${planId} AND (wp_page_id IS NULL OR wp_page_id = 0)
+        ORDER BY depth ASC, sort_order ASC, title ASC
+      `;
+    }
+
+    if (nodes.length === 0) {
+      return res.json({ success: true, message: 'No pages to push', pushed: [] });
+    }
+
+    console.log(`[Site Planning] Pushing ${nodes.length} nodes in hierarchical order`);
+
+    // Track mapping from our node IDs to WordPress page IDs
+    const nodeToWpId = {};
+
+    // First, load any existing WP IDs from nodes that are already pushed
+    const existingNodes = await sql`
+      SELECT id, wp_page_id FROM site_plan_nodes
+      WHERE site_plan_id = ${planId} AND wp_page_id IS NOT NULL AND wp_page_id > 0
+    `;
+    existingNodes.forEach(n => { nodeToWpId[n.id] = n.wp_page_id; });
+
+    const results = [];
+    let publishDate = new Date();
+
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+
+      try {
+        // Determine parent WordPress ID
+        let parentWpId = null;
+        if (node.parent_id) {
+          parentWpId = nodeToWpId[node.parent_id];
+          if (!parentWpId) {
+            // Try to fetch from database in case it was pushed earlier
+            const parentNode = await sql`
+              SELECT wp_page_id FROM site_plan_nodes WHERE id = ${node.parent_id}
+            `;
+            if (parentNode.length > 0 && parentNode[0].wp_page_id) {
+              parentWpId = parentNode[0].wp_page_id;
+              nodeToWpId[node.parent_id] = parentWpId;
+            }
+          }
+        }
+
+        // Calculate publish date for drip feed
+        let pageStatus = status;
+        let scheduledDate = null;
+        if (dripFeed && status === 'publish') {
+          scheduledDate = new Date(publishDate.getTime() + (i * dripIntervalHours * 60 * 60 * 1000));
+          pageStatus = 'future';
+        }
+
+        // Build basic Elementor meta (placeholder page - content comes from articles)
+        const elementorMeta = getElementorMetaFields([]);
+
+        // Create the page with hierarchy
+        const pageResult = await createElementorPage(wpCredentials, {
+          title: node.title,
+          slug: node.slug || node.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          elementorMeta,
+          status: pageStatus,
+          publishDate: scheduledDate?.toISOString(),
+          parent: parentWpId,
+          menuOrder: node.sort_order || 0
+        });
+
+        // Store the WordPress ID in our mapping
+        nodeToWpId[node.id] = pageResult.id;
+
+        // Update the node in database with WordPress info
+        await sql`
+          UPDATE site_plan_nodes
+          SET wp_page_id = ${pageResult.id},
+              wp_post_url = ${pageResult.link},
+              status = 'built',
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${node.id}
+        `;
+
+        results.push({
+          nodeId: node.id,
+          title: node.title,
+          success: true,
+          wpPageId: pageResult.id,
+          wpUrl: pageResult.link,
+          parentWpId: parentWpId,
+          depth: node.depth,
+          scheduledFor: scheduledDate
+        });
+
+        console.log(`[Site Planning] ✓ Pushed "${node.title}" (depth ${node.depth}) → WP ID ${pageResult.id}${parentWpId ? ` (parent: ${parentWpId})` : ''}`);
+
+      } catch (nodeError) {
+        console.error(`[Site Planning] ✗ Failed to push "${node.title}":`, nodeError.message);
+        results.push({
+          nodeId: node.id,
+          title: node.title,
+          success: false,
+          error: nodeError.message
+        });
+      }
+    }
+
+    // Update plan stats
+    await updatePlanStats(planId);
+
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+
+    res.json({
+      success: true,
+      message: `Pushed ${successCount} pages${failCount > 0 ? `, ${failCount} failed` : ''}`,
+      pushed: results,
+      summary: {
+        total: nodes.length,
+        success: successCount,
+        failed: failCount,
+        dripFeed: dripFeed,
+        dripIntervalHours: dripFeed ? dripIntervalHours : null
+      }
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error in hierarchical push:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-planning/link-article/:nodeId
+ * Link a site plan node to an existing article
+ */
+router.post('/link-article/:nodeId', requireDb, async (req, res) => {
+  try {
+    const { nodeId } = req.params;
+    const { articleId } = req.body;
+
+    // Update the node
+    await sql`
+      UPDATE site_plan_nodes
+      SET assigned_article_id = ${articleId},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${nodeId}
+    `;
+
+    // Also update the article with the target keyword from the node
+    const node = await sql`SELECT target_keyword FROM site_plan_nodes WHERE id = ${nodeId}`;
+    if (node.length > 0 && node[0].target_keyword) {
+      await sql`
+        UPDATE articles
+        SET keyword = ${node[0].target_keyword}
+        WHERE id = ${articleId} AND (keyword IS NULL OR keyword = '')
+      `;
+    }
+
+    res.json({ success: true, message: 'Article linked to site plan node' });
+
+  } catch (error) {
+    console.error('[Site Planning] Error linking article:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-planning/push-with-content/:nodeId
+ * Push a single node with its linked article content
+ */
+router.post('/push-with-content/:nodeId', requireDb, async (req, res) => {
+  try {
+    const { nodeId } = req.params;
+    const { status = 'draft' } = req.body;
+
+    // Get node with article and website info
+    const nodes = await sql`
+      SELECT
+        spn.*,
+        a.content, a.keyword, a.generated_images,
+        w.wp_url, w.wp_user, w.wp_app_password
+      FROM site_plan_nodes spn
+      JOIN site_plans sp ON spn.site_plan_id = sp.id
+      JOIN websites w ON sp.website_id = w.id
+      LEFT JOIN articles a ON spn.assigned_article_id = a.id
+      WHERE spn.id = ${nodeId}
+    `;
+
+    if (nodes.length === 0) {
+      return res.status(404).json({ error: 'Node not found' });
+    }
+
+    const node = nodes[0];
+
+    if (!node.wp_url || !node.wp_user || !node.wp_app_password) {
+      return res.status(400).json({ error: 'WordPress credentials not configured' });
+    }
+
+    // Import services
+    const { createElementorPage, updatePage } = await import('../services/wordpress-publisher.js');
+    const buildElementorPage = (await import('../services/elementor-builder.js')).default;
+    const { getElementorMetaFields } = await import('../services/elementor-builder.js');
+    const chunkContent = (await import('../services/content-chunker.js')).default;
+
+    const wpCredentials = {
+      url: node.wp_url,
+      user: node.wp_user,
+      password: node.wp_app_password
+    };
+
+    // Get parent WordPress ID if this is a child page
+    let parentWpId = null;
+    if (node.parent_id) {
+      const parentNode = await sql`
+        SELECT wp_page_id FROM site_plan_nodes WHERE id = ${node.parent_id}
+      `;
+      if (parentNode.length > 0 && parentNode[0].wp_page_id) {
+        parentWpId = parentNode[0].wp_page_id;
+      }
+    }
+
+    // Build page content
+    let elementorData = [];
+    let elementorMeta = {};
+
+    if (node.content) {
+      // Chunk and build Elementor structure from article content
+      const chunked = chunkContent(node.content, { maxWordsPerChunk: 300 });
+      elementorData = buildElementorPage(chunked, {
+        templateId: 'classic_blog'
+      });
+      elementorMeta = getElementorMetaFields(elementorData);
+    } else {
+      // Placeholder page
+      elementorMeta = getElementorMetaFields([]);
+    }
+
+    let pageResult;
+
+    if (node.wp_page_id) {
+      // Update existing page
+      pageResult = await updatePage(wpCredentials, node.wp_page_id, {
+        title: node.title,
+        status,
+        parent: parentWpId,
+        meta: elementorMeta
+      });
+      pageResult.id = node.wp_page_id;
+    } else {
+      // Create new page with hierarchy
+      pageResult = await createElementorPage(wpCredentials, {
+        title: node.title,
+        slug: node.slug,
+        elementorMeta,
+        status,
+        parent: parentWpId,
+        menuOrder: node.sort_order || 0
+      });
+    }
+
+    // Update node
+    await sql`
+      UPDATE site_plan_nodes
+      SET wp_page_id = ${pageResult.id},
+          wp_post_url = ${pageResult.link || node.wp_post_url},
+          status = ${status === 'publish' ? 'published' : 'built'},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${nodeId}
+    `;
+
+    res.json({
+      success: true,
+      page: {
+        id: pageResult.id,
+        url: pageResult.link,
+        title: node.title,
+        parent: parentWpId,
+        hasContent: !!node.content
+      }
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error pushing with content:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // HELPER FUNCTIONS
 // ============================================
 

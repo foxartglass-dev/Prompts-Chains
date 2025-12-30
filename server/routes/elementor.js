@@ -282,6 +282,9 @@ router.post('/publish', async (req, res) => {
       workflowId, // NEW: For Image Bank integration
       // Push tracking (manual vs auto)
       isManualPush = false,
+      // Hierarchy support (optional)
+      parentPageId,    // WordPress page ID of parent page
+      menuOrder,       // Sort order within parent (0, 1, 2...)
       // Image options
       useImageBank = true, // NEW: Pull from Image Bank by tag
       generateImages = false, // Fallback to live generation
@@ -1088,13 +1091,15 @@ router.post('/publish', async (req, res) => {
     // Step 6: Get Elementor meta fields
     const elementorMeta = getElementorMetaFields(elementorData);
 
-    // Step 7: Create WordPress page
+    // Step 7: Create WordPress page (with optional hierarchy)
     const pageResult = await createElementorPage(wpCredentials, {
       title: pageTitle,
       slug,
       elementorMeta,
       status,
-      publishDate
+      publishDate,
+      parent: parentPageId,    // Optional: WordPress ID of parent page
+      menuOrder: menuOrder     // Optional: sort order within parent
     });
 
     // Step 8: Update article in database if articleId provided
@@ -1202,7 +1207,10 @@ router.post('/publish-article/:id', requireDb, async (req, res) => {
       ctaUrl = '#',
       includeStatsBar = false,
       status = 'draft',
-      publishDate
+      publishDate,
+      // Hierarchy support - optional parent page
+      parentPageId,    // WordPress page ID of parent (for manual hierarchy)
+      menuOrder        // Sort order within parent
     } = req.body;
 
     // Fetch article with website credentials
@@ -1260,12 +1268,14 @@ router.post('/publish-article/:id', requireDb, async (req, res) => {
     // Get Elementor meta fields
     const elementorMeta = getElementorMetaFields(elementorData);
 
-    // Create WordPress page
+    // Create WordPress page (with optional hierarchy)
     const pageResult = await createElementorPage(wpCredentials, {
       title: pageTitle,
       elementorMeta,
       status,
-      publishDate
+      publishDate,
+      parent: parentPageId,    // Optional: set parent for hierarchy
+      menuOrder: menuOrder     // Optional: sort order within parent
     });
 
     // Update article in database
@@ -1286,6 +1296,7 @@ router.post('/publish-article/:id', requireDb, async (req, res) => {
         id: article.id,
         keyword: article.keyword
       },
+      parentPageId: parentPageId || null,  // Echo back for confirmation
       chunks: chunked.chunkCount,
       wordCount: chunked.totalWords
     });

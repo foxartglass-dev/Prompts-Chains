@@ -107,6 +107,8 @@ async function uploadMedia(wpCredentials, imageData, filename, options = {}) {
  * @param {string} pageData.status - 'draft', 'publish', or 'future'
  * @param {string} pageData.publishDate - ISO date for scheduled publishing
  * @param {number} pageData.featuredImage - Media ID for featured image
+ * @param {number} pageData.parent - Parent page WordPress ID for hierarchy (optional)
+ * @param {number} pageData.menuOrder - Menu order/sort position (optional)
  * @returns {Promise<Object>} Created page data
  */
 async function createElementorPage(wpCredentials, pageData) {
@@ -118,7 +120,9 @@ async function createElementorPage(wpCredentials, pageData) {
     elementorMeta,
     status = 'draft',
     publishDate,
-    featuredImage
+    featuredImage,
+    parent,      // WordPress page ID of parent page for hierarchy
+    menuOrder    // Sort order within parent
   } = pageData;
 
   const endpoint = `${url.replace(/\/$/, '')}/wp-json/wp/v2/pages`;
@@ -134,6 +138,16 @@ async function createElementorPage(wpCredentials, pageData) {
   // Add slug if provided
   if (slug) {
     body.slug = slug;
+  }
+
+  // Add parent page for hierarchy (critical for site structure)
+  if (parent) {
+    body.parent = parent;
+  }
+
+  // Add menu order for sorting within siblings
+  if (menuOrder !== undefined) {
+    body.menu_order = menuOrder;
   }
 
   // Add scheduled date if publishing in future
@@ -169,7 +183,9 @@ async function createElementorPage(wpCredentials, pageData) {
       link: pageResult.link,
       editLink: `${url.replace(/\/$/, '')}/wp-admin/post.php?post=${pageResult.id}&action=elementor`,
       status: pageResult.status,
-      slug: pageResult.slug
+      slug: pageResult.slug,
+      parent: pageResult.parent || 0,
+      menuOrder: pageResult.menu_order || 0
     };
   } catch (error) {
     console.error('Page creation error:', error);
