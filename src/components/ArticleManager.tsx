@@ -1577,61 +1577,78 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                       </button>
                     </div>
                     <div className="flex gap-3">
-                      {/* Show Save Selection only in Draft mode when user has made a selection OR meta options exist */}
+                      {/* Save Selection button - shown in Draft mode when meta options exist */}
+                      {/* Button lights up (enables) only when BOTH title AND description are selected */}
                       {selectedArticle.workflow_state?.metaPublishMode !== 'wordpress' &&
-                        (selectedTitleIndex !== null || selectedDescIndex !== null ||
-                        (selectedArticle.meta_titles?.length > 0 || selectedArticle.meta_descriptions?.length > 0)) && (
+                        (selectedArticle.meta_titles?.length > 0 || selectedArticle.meta_descriptions?.length > 0) && (
                         <button
                           onClick={saveMetaSelection}
-                          disabled={saving || (selectedTitleIndex === null && selectedDescIndex === null)}
-                          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-white transition disabled:opacity-50"
+                          disabled={saving || selectedTitleIndex === null || selectedDescIndex === null}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                            selectedTitleIndex !== null && selectedDescIndex !== null
+                              ? 'bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 shadow-glow-cyan'
+                              : 'bg-gray-700 text-gray-400 cursor-not-allowed opacity-50'
+                          }`}
                         >
                           {saving ? 'Saving...' : 'Save Selection'}
                         </button>
                       )}
 
-                      {/* Show Push button when: article is published to WP AND (selection made OR meta already selected OR has meta options) */}
-                      {selectedArticle.wp_post_id && (
-                        (selectedTitleIndex !== null || selectedDescIndex !== null ||
-                         selectedArticle.meta_seo_status === 'selected' || selectedArticle.meta_seo_status === 'pushed' ||
-                         selectedArticle.selected_meta_title || selectedArticle.selected_meta_description) && (
-                          <button
-                            onClick={pushToSeo}
-                            disabled={pushingSeo}
-                            className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 rounded-lg text-sm text-white font-medium transition disabled:opacity-50 flex items-center gap-2"
-                            title={selectedArticle.meta_push_auto_at
-                              ? `Auto-pushed: ${new Date(selectedArticle.meta_push_auto_at).toLocaleString()}`
-                              : selectedArticle.meta_push_manual_count
-                                ? `Manually pushed ${selectedArticle.meta_push_manual_count} time(s)`
-                                : 'Not yet pushed'}
-                          >
-                            {pushingSeo ? (
-                              <>
-                                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Pushing...
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                </svg>
-                                Push to {localSeoPlugin === 'none' ? 'WordPress' : localSeoPlugin.charAt(0).toUpperCase() + localSeoPlugin.slice(1)}
-                                {(selectedArticle.meta_push_auto_at || selectedArticle.meta_push_manual_count > 0 || selectedArticle.meta_seo_status === 'pushed') && (
-                                  <span className="px-1.5 py-0.5 bg-slate-800 rounded text-yellow-400 text-[11px] font-semibold tracking-wide">
-                                    {selectedArticle.meta_push_auto_at
-                                      ? 'A1'
-                                      : selectedArticle.meta_push_manual_count > 0
-                                        ? `M${selectedArticle.meta_push_manual_count}`
-                                        : 'A1'}
-                                  </span>
-                                )}
-                              </>
-                            )}
-                          </button>
-                        )
+                      {/* Push to WordPress - shows as TEXT until saved, then becomes BUTTON */}
+                      {selectedArticle.wp_post_id && (selectedArticle.meta_titles?.length > 0 || selectedArticle.meta_descriptions?.length > 0) && (
+                        <>
+                          {/* Show as non-clickable TEXT when meta not yet saved (status is pending/null) */}
+                          {(!selectedArticle.meta_seo_status || selectedArticle.meta_seo_status === 'pending') &&
+                           !selectedArticle.selected_meta_title && !selectedArticle.selected_meta_description && (
+                            <span className="px-4 py-2 text-sm text-gray-500 flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                              </svg>
+                              Push to {localSeoPlugin === 'none' ? 'WordPress' : localSeoPlugin.charAt(0).toUpperCase() + localSeoPlugin.slice(1)}
+                            </span>
+                          )}
+
+                          {/* Show as clickable BUTTON when meta has been saved (status is selected/pushed OR has saved selections) */}
+                          {(selectedArticle.meta_seo_status === 'selected' || selectedArticle.meta_seo_status === 'pushed' ||
+                            selectedArticle.selected_meta_title || selectedArticle.selected_meta_description) && (
+                            <button
+                              onClick={pushToSeo}
+                              disabled={pushingSeo}
+                              className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 rounded-lg text-sm text-white font-medium transition disabled:opacity-50 flex items-center gap-2"
+                              title={selectedArticle.meta_push_auto_at
+                                ? `Auto-pushed: ${new Date(selectedArticle.meta_push_auto_at).toLocaleString()}`
+                                : selectedArticle.meta_push_manual_count
+                                  ? `Manually pushed ${selectedArticle.meta_push_manual_count} time(s)`
+                                  : 'Not yet pushed'}
+                            >
+                              {pushingSeo ? (
+                                <>
+                                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Pushing...
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                  </svg>
+                                  Push to {localSeoPlugin === 'none' ? 'WordPress' : localSeoPlugin.charAt(0).toUpperCase() + localSeoPlugin.slice(1)}
+                                  {(selectedArticle.meta_push_auto_at || selectedArticle.meta_push_manual_count > 0 || selectedArticle.meta_seo_status === 'pushed') && (
+                                    <span className="px-1.5 py-0.5 bg-slate-800 rounded text-yellow-400 text-[11px] font-semibold tracking-wide">
+                                      {selectedArticle.meta_push_auto_at
+                                        ? 'A1'
+                                        : selectedArticle.meta_push_manual_count > 0
+                                          ? `M${selectedArticle.meta_push_manual_count}`
+                                          : 'A1'}
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </>
                       )}
 
                       {/* Show warning when not published to WP yet */}
