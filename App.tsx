@@ -807,12 +807,26 @@ const App: React.FC = () => {
         if (file) {
             setFileName(file.name);
             const text = await file.text();
-            try {
-                const parsedItems = parseCsv(text);
+
+            // Check if it's a .txt file - use simple line-by-line parsing
+            if (file.name.toLowerCase().endsWith('.txt')) {
+                const itemNames = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                const parsedItems: WorkflowItem[] = itemNames.map((itemName, index) => {
+                    const tagMatch = itemName.match(/\(([^)]+)\)/);
+                    const tag = tagMatch ? tagMatch[1] : null;
+                    return { id: index, name: itemName.trim(), tag };
+                });
                 loadItems(parsedItems);
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error parsing CSV.';
-                addLog(`Error parsing CSV: ${errorMessage}`, LogStatus.ERROR);
+                addLog(`Loaded ${parsedItems.length} items from text file`, LogStatus.SUCCESS);
+            } else {
+                // CSV parsing
+                try {
+                    const parsedItems = parseCsv(text);
+                    loadItems(parsedItems);
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : 'Unknown error parsing CSV.';
+                    addLog(`Error parsing CSV: ${errorMessage}`, LogStatus.ERROR);
+                }
             }
         }
     };
@@ -2382,8 +2396,8 @@ const App: React.FC = () => {
                                             Add Items from Text
                                         </button>
                                         <label htmlFor="file-upload" className="cursor-pointer text-xs text-center text-brand-gold hover:text-brand-gold-light transition">
-                                            {fileName ? `File: ${fileName}` : 'Or, upload CSV'}
-                                            <input id="file-upload" type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+                                            {fileName ? `File: ${fileName}` : 'Or, upload TXT file'}
+                                            <input id="file-upload" type="file" accept=".txt,.csv" onChange={handleFileChange} className="hidden" />
                                         </label>
                                     </div>
                                 </div>
