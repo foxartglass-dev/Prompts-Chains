@@ -494,6 +494,153 @@ async function setup() {
     console.log('  ✓ All indexes created');
 
     console.log('');
+
+    // ================================
+    // SITE PLANNING TABLES
+    // ================================
+    console.log('🗺️  Creating Site Planning tables...\n');
+
+    // Site Plans
+    await sql`
+      CREATE TABLE IF NOT EXISTS site_plans (
+        id SERIAL PRIMARY KEY,
+        website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
+        workflow_id INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
+        name VARCHAR(255) DEFAULT 'Site Structure',
+        description TEXT,
+        total_pages INTEGER DEFAULT 0,
+        max_depth INTEGER DEFAULT 0,
+        sync_status VARCHAR(20) DEFAULT 'unknown',
+        last_sync_check TIMESTAMP,
+        auto_sync_check BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ site_plans');
+
+    // Site Plan Nodes
+    await sql`
+      CREATE TABLE IF NOT EXISTS site_plan_nodes (
+        id SERIAL PRIMARY KEY,
+        site_plan_id INTEGER REFERENCES site_plans(id) ON DELETE CASCADE,
+        parent_id INTEGER REFERENCES site_plan_nodes(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        slug VARCHAR(255),
+        page_type VARCHAR(50) DEFAULT 'page',
+        status VARCHAR(20) DEFAULT 'planned',
+        target_keyword VARCHAR(255),
+        meta_title VARCHAR(255),
+        meta_description TEXT,
+        content_brief TEXT,
+        assigned_article_id INTEGER REFERENCES articles(id) ON DELETE SET NULL,
+        is_pillar_page BOOLEAN DEFAULT false,
+        is_in_menu BOOLEAN DEFAULT true,
+        menu_order INTEGER DEFAULT 0,
+        sort_order INTEGER DEFAULT 0,
+        depth INTEGER DEFAULT 0,
+        wp_page_id INTEGER,
+        wp_post_url VARCHAR(500),
+        built_at TIMESTAMP,
+        published_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ site_plan_nodes');
+
+    await sql`CREATE INDEX IF NOT EXISTS idx_site_plans_website ON site_plans(website_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_site_plans_workflow ON site_plans(workflow_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_site_plan_nodes_plan ON site_plan_nodes(site_plan_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_site_plan_nodes_parent ON site_plan_nodes(parent_id)`;
+    console.log('  ✓ site planning indexes');
+
+    console.log('');
+
+    // ================================
+    // LOCAL VIKING INTEGRATION
+    // ================================
+    console.log('🛡️  Creating Local Viking tables...\n');
+
+    // Add Local Viking columns to websites table
+    const hasLocalVikingApiKey = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'websites' AND column_name = 'local_viking_api_key'
+    `;
+    if (hasLocalVikingApiKey.length === 0) {
+      await sql`ALTER TABLE websites ADD COLUMN local_viking_api_key VARCHAR(255)`;
+      await sql`ALTER TABLE websites ADD COLUMN local_viking_location_id VARCHAR(255)`;
+      console.log('  ✓ Added Local Viking columns to websites');
+    } else {
+      console.log('  - Local Viking website columns already exist');
+    }
+
+    // Rank Snapshots - Store GeoGrid scan results over time
+    await sql`
+      CREATE TABLE IF NOT EXISTS rank_snapshots (
+        id SERIAL PRIMARY KEY,
+        website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
+        keyword VARCHAR(255) NOT NULL,
+        grid_size INTEGER DEFAULT 7,
+        scan_id VARCHAR(255),
+        average_rank DECIMAL(5,2),
+        best_rank INTEGER,
+        top_3_count INTEGER DEFAULT 0,
+        sheep_score DECIMAL(5,2) DEFAULT 0,
+        grid_data JSONB DEFAULT '[]',
+        analysis JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ rank_snapshots');
+
+    // GBP Post Templates - Templates for rinse and repeat
+    await sql`
+      CREATE TABLE IF NOT EXISTS gbp_post_templates (
+        id SERIAL PRIMARY KEY,
+        website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        call_to_action VARCHAR(50) DEFAULT 'LEARN_MORE',
+        cta_url VARCHAR(500),
+        image_url TEXT,
+        rotation_day INTEGER,
+        is_active BOOLEAN DEFAULT true,
+        times_posted INTEGER DEFAULT 0,
+        last_posted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(website_id, name)
+      )
+    `;
+    console.log('  ✓ gbp_post_templates');
+
+    // GBP Post History - Track all posts made
+    await sql`
+      CREATE TABLE IF NOT EXISTS gbp_post_history (
+        id SERIAL PRIMARY KEY,
+        website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
+        post_id VARCHAR(255),
+        template_id INTEGER REFERENCES gbp_post_templates(id) ON DELETE SET NULL,
+        content TEXT,
+        call_to_action VARCHAR(50),
+        cta_url VARCHAR(500),
+        image_url TEXT,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ gbp_post_history');
+
+    // Indexes for Local Viking tables
+    await sql`CREATE INDEX IF NOT EXISTS idx_rank_snapshots_website ON rank_snapshots(website_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rank_snapshots_keyword ON rank_snapshots(website_id, keyword)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_rank_snapshots_date ON rank_snapshots(created_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_gbp_templates_website ON gbp_post_templates(website_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_gbp_history_website ON gbp_post_history(website_id)`;
+    console.log('  ✓ Local Viking indexes');
+
+    console.log('');
     console.log('================================');
     console.log('✅ Database setup complete!');
     console.log('================================');
