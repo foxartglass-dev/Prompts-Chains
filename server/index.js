@@ -23,6 +23,7 @@ import wpBrowserRouter from './routes/wp-browser.js';
 import imageVersionsRouter from './routes/image-versions.js';
 import imageCreationRouter from './routes/image-creation.js';
 import sitePlanningRouter from './routes/site-planning.js';
+import promptEngineeringRouter from './routes/prompt-engineering.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
 dotenv.config();
@@ -185,6 +186,7 @@ app.use('/api/wp-browser', wpBrowserRouter);
 app.use('/api/image-versions', imageVersionsRouter);
 app.use('/api/image-creation', imageCreationRouter);
 app.use('/api/site-planning', sitePlanningRouter);
+app.use('/api/prompt-engineering', promptEngineeringRouter);
 
 // Database status endpoint
 app.get('/api/db/status', async (req, res) => {

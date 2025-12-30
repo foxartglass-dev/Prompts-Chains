@@ -259,6 +259,115 @@ async function setup() {
     console.log('');
 
     // ================================
+    // PROMPT ENGINEERING SYSTEM
+    // ================================
+    console.log('🧠 Creating Prompt Engineering tables...\n');
+
+    // Prompt Engineering Playbook - Master knowledge base for new agents
+    await sql`
+      CREATE TABLE IF NOT EXISTS prompt_engineering_playbook (
+        id SERIAL PRIMARY KEY,
+        category VARCHAR(100) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        priority INTEGER DEFAULT 0,
+        applicable_to JSONB DEFAULT '["all"]',
+        created_by VARCHAR(100) DEFAULT 'system',
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ prompt_engineering_playbook');
+
+    // Prompt Tricks Library - Specific techniques that work
+    await sql`
+      CREATE TABLE IF NOT EXISTS prompt_tricks (
+        id SERIAL PRIMARY KEY,
+        problem VARCHAR(255) NOT NULL,
+        solution_prompt TEXT NOT NULL,
+        explanation TEXT,
+        example_before TEXT,
+        example_after TEXT,
+        success_rate INTEGER DEFAULT 0,
+        times_used INTEGER DEFAULT 0,
+        tags JSONB DEFAULT '[]',
+        discovered_by VARCHAR(100) DEFAULT 'agent',
+        avatar_id INTEGER,
+        is_verified BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ prompt_tricks');
+
+    // Avatar Reference Photos - Real crew photos for context
+    await sql`
+      CREATE TABLE IF NOT EXISTS avatar_reference_photos (
+        id SERIAL PRIMARY KEY,
+        avatar_id INTEGER NOT NULL,
+        workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE,
+        image_url TEXT NOT NULL,
+        image_type VARCHAR(50) DEFAULT 'general',
+        description TEXT,
+        ai_analysis TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ avatar_reference_photos');
+
+    // Avatar Research - Web research findings
+    await sql`
+      CREATE TABLE IF NOT EXISTS avatar_research (
+        id SERIAL PRIMARY KEY,
+        avatar_id INTEGER NOT NULL,
+        workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE,
+        research_query TEXT,
+        findings JSONB NOT NULL DEFAULT '{}',
+        sources JSONB DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ avatar_research');
+
+    // Prompt Generation History - Track results and critiques
+    await sql`
+      CREATE TABLE IF NOT EXISTS prompt_generation_history (
+        id SERIAL PRIMARY KEY,
+        workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE,
+        avatar_id INTEGER,
+        prompt_used TEXT NOT NULL,
+        generated_image_url TEXT,
+        ai_critique TEXT,
+        rating INTEGER,
+        what_worked TEXT,
+        what_to_improve TEXT,
+        adjusted_prompt TEXT,
+        model_used VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ prompt_generation_history');
+
+    // Agent Handoff Documents - Knowledge transfer between sessions
+    await sql`
+      CREATE TABLE IF NOT EXISTS agent_handoffs (
+        id SERIAL PRIMARY KEY,
+        workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE,
+        avatar_id INTEGER,
+        session_summary TEXT,
+        key_learnings JSONB DEFAULT '[]',
+        unresolved_issues JSONB DEFAULT '[]',
+        recommendations JSONB DEFAULT '[]',
+        tricks_discovered JSONB DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ agent_handoffs');
+
+    console.log('');
+
+    // ================================
     // INDEXES
     // ================================
     console.log('📊 Creating indexes...\n');
