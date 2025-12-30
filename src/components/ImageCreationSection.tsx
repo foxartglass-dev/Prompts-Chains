@@ -16,6 +16,32 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import FeedbackPopup from './FeedbackPopup';
+
+// Types for Feedback System
+interface GeneratedImage {
+  url: string;
+  prompt?: string;
+  position?: string;
+}
+
+interface FeedbackRequest {
+  id: number;
+  workflow_id: number;
+  avatar_id?: number;
+  article_id?: number;
+  run_type: string;
+  generated_images: GeneratedImage[];
+  prompts_used: string[];
+  created_at: string;
+}
+
+interface AIQuestion {
+  id: number;
+  question: string;
+  context?: string;
+  options: string[];
+}
 
 // Types
 interface ReferenceImage {
@@ -481,6 +507,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [fetchingContext, setFetchingContext] = useState(false);
   const [avatarsCollapsed, setAvatarsCollapsed] = useState(false);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
+
+  // Feedback popup state
+  const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
+  const [pendingFeedbackRequest, setPendingFeedbackRequest] = useState<FeedbackRequest | null>(null);
+  const [pendingQuestions, setPendingQuestions] = useState<AIQuestion[]>([]);
+  const [recentGenerations, setRecentGenerations] = useState<FeedbackRequest[]>([]);
+  const [feedbackGlowDismissed, setFeedbackGlowDismissed] = useState(false);
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2076,6 +2109,9 @@ Start by introducing yourself and asking about their business in a friendly way.
         setGenerationProgress('');
         log(`Image generated successfully for "${variation.name}"!`, LogStatus.SUCCESS);
         showNotification('Image generated and added to bank!', 'success');
+
+        // Create feedback request for later review
+        createFeedbackRequest([{ url: data.image.url, prompt: fullPrompt }], 'single');
       } else {
         const errorMsg = data.error || 'Generation failed - no image returned';
         setGenerationProgress('');
@@ -2178,6 +2214,10 @@ Start by introducing yourself and asking about their business in a friendly way.
           setGenerationProgress('');
           log(`Batch complete: ${successCount} generated, ${failCount} failed`, LogStatus.SUCCESS);
           showNotification(`Generated ${successCount} images!`, 'success');
+
+          // Create feedback request for later review
+          const feedbackImages = data.images.map((img: any) => ({ url: img.url, prompt: img.prompt }));
+          createFeedbackRequest(feedbackImages, 'batch');
         } else {
           setGenerationProgress('');
           log('Batch generation failed - no images returned', LogStatus.ERROR);
@@ -2197,6 +2237,102 @@ Start by introducing yourself and asking about their business in a friendly way.
     }
 
     setGenerating(false);
+  };
+
+  // ========== FEEDBACK SYSTEM ==========
+
+  /**
+   * Create a feedback request after image generation
+   */
+  const createFeedbackRequest = async (images: { url: string; prompt: string }[], runType: string) => {
+    try {
+      const res = await fetch('/api/feedback/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflow_id: workflowId || 1,
+          avatar_id: activeAvatar?.id ? parseInt(activeAvatar.id) : null,
+          run_type: runType,
+          generated_images: images.map(img => ({ url: img.url, prompt: img.prompt })),
+          prompts_used: images.map(img => img.prompt)
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Store the feedback request for later review
+        const newRequest = data.data.feedbackRequest;
+        if (newRequest) {
+          setRecentGenerations(prev => [newRequest, ...prev].slice(0, 10)); // Keep last 10
+          setPendingFeedbackRequest(newRequest);
+          setPendingQuestions(data.data.pendingQuestions || []);
+          setFeedbackGlowDismissed(false); // Reset glow for new generations
+        }
+        log('Feedback request created - click "Review" when ready to critique', LogStatus.INFO);
+      }
+    } catch (error) {
+      console.error('[Feedback] Failed to create request:', error);
+    }
+  };
+
+  /**
+   * Handle feedback submission
+   */
+  const handleFeedbackSubmit = async (feedback: {
+    rating: string;
+    quick_tags: string[];
+    detailed_feedback: string;
+    questions_answered: { questionId: number; answer: string }[];
+  }) => {
+    if (!pendingFeedbackRequest) return;
+
+    try {
+      const res = await fetch(`/api/feedback/submit/${pendingFeedbackRequest.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(feedback)
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        log(`Feedback submitted: ${feedback.rating} rating`, LogStatus.SUCCESS);
+        showNotification('Thanks! Your feedback helps AI improve.', 'success');
+        setShowFeedbackPopup(false);
+        setPendingFeedbackRequest(null);
+        // Remove from recent generations
+        setRecentGenerations(prev => prev.filter(r => r.id !== pendingFeedbackRequest.id));
+      }
+    } catch (error) {
+      console.error('[Feedback] Submit error:', error);
+      showNotification('Failed to submit feedback', 'error');
+    }
+  };
+
+  /**
+   * Skip feedback for this run
+   */
+  const handleFeedbackSkip = async () => {
+    if (!pendingFeedbackRequest) {
+      setShowFeedbackPopup(false);
+      return;
+    }
+
+    try {
+      await fetch(`/api/feedback/skip/${pendingFeedbackRequest.id}`, { method: 'POST' });
+      setShowFeedbackPopup(false);
+      setPendingFeedbackRequest(null);
+      setRecentGenerations(prev => prev.filter(r => r.id !== pendingFeedbackRequest.id));
+    } catch (error) {
+      console.error('[Feedback] Skip error:', error);
+    }
+  };
+
+  /**
+   * Open feedback for a specific generation
+   */
+  const openFeedbackForGeneration = (request: FeedbackRequest) => {
+    setPendingFeedbackRequest(request);
+    setShowFeedbackPopup(true);
   };
 
   // Bank Management
@@ -5396,6 +5532,61 @@ Start by introducing yourself and asking about their business in a friendly way.
           </div>
         </div>
       )}
+
+      {/* Floating Review Button - Shows when there are pending feedback requests */}
+      {recentGenerations.length > 0 && !showFeedbackPopup && (
+        <div className="fixed right-6 z-40" style={{ top: '140px' }}>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => openFeedbackForGeneration(recentGenerations[0])}
+              className={`bg-slate-800 hover:bg-slate-700 border-2 border-cyan-500 text-white px-4 py-2 rounded-lg shadow-xl flex items-center gap-2 transition-all ${!feedbackGlowDismissed ? 'animate-pulse' : ''}`}
+              style={!feedbackGlowDismissed ? {
+                boxShadow: '0 0 20px rgba(6, 182, 212, 0.5), 0 0 40px rgba(6, 182, 212, 0.3)'
+              } : {}}
+            >
+              <span className="text-lg">🎯</span>
+              <span className="font-semibold">Review Images</span>
+              <span className="bg-cyan-500 text-slate-900 text-xs font-bold px-2 py-0.5 rounded">{recentGenerations.length}</span>
+            </button>
+            {!feedbackGlowDismissed && (
+              <button
+                onClick={() => setFeedbackGlowDismissed(true)}
+                className="bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white p-1.5 rounded transition"
+                title="Dismiss glow (I'll review later)"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Popup */}
+      <FeedbackPopup
+        isOpen={showFeedbackPopup}
+        onClose={() => setShowFeedbackPopup(false)}
+        feedbackRequest={pendingFeedbackRequest}
+        pendingQuestions={pendingQuestions}
+        avatarName={activeAvatar?.name}
+        onSubmit={handleFeedbackSubmit}
+        onSkip={handleFeedbackSkip}
+        onNeverAskAgain={async () => {
+          try {
+            await fetch(`/api/feedback/settings/${workflowId || 1}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ never_ask_again: true })
+            });
+            setShowFeedbackPopup(false);
+            setRecentGenerations([]);
+            showNotification('Feedback disabled. You can re-enable in settings.', 'info');
+          } catch (error) {
+            console.error('[Feedback] Never ask error:', error);
+          }
+        }}
+      />
     </div>
   );
 };
