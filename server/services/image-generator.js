@@ -638,14 +638,10 @@ export function estimateCost(imageCount, quality = 'low', model = DEFAULT_MODEL)
   };
 }
 
-export {
-  generateImage,
-  generateBatchImages,
-  generateArticleImages,
-  estimateCost,
-  calculateHeroSize
-};
+// Export calculateHeroSize (not exported inline like the others)
+export { calculateHeroSize };
 
+// Default export for convenience
 export default {
   generateImage,
   generateBatchImages,
