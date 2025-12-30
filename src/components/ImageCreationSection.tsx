@@ -301,8 +301,17 @@ interface ImageCreationSettings {
   matching_rule_3: string; // No duplicate primaries rule
   matching_rule_4: string; // Different primaries for secondary matches rule
   // Generate Live prompt mode
-  live_prompt_mode: 'main_prompt' | 'smart_prompt'; // main_prompt = use avatar's mainPrompt, smart_prompt = GPT-4o auto-generates
+  live_prompt_mode: 'main_prompt' | 'guided_gpt' | 'smart_prompt'; // main_prompt = avatar template, guided_gpt = GPT-4o with guardrails, smart_prompt = legacy
   smart_prompt_guidance: string; // Guidance/guardrails for GPT-4o when using smart_prompt mode
+  // Guided GPT mode settings
+  guided_model: 'gpt-4o' | 'gpt-4o-mini' | 'gpt-4-turbo'; // Model for guided mode
+  guided_guardrails: {
+    instructions: string; // Main guardrails
+    uniformDescription: string; // Worker appearance
+    stylePreferences: string; // Visual style
+    avoidList: string; // Things to avoid
+    defaultSubject: string; // Default subject if no match
+  } | null;
 }
 
 enum LogStatus {
@@ -355,9 +364,12 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   matching_rule_2: 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.',
   matching_rule_3: 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).',
   matching_rule_4: 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
-  // Generate Live prompt mode - default to smart_prompt (GPT-4o) for backwards compatibility
+  // Generate Live prompt mode - default to smart_prompt for backwards compatibility
   live_prompt_mode: 'smart_prompt',
-  smart_prompt_guidance: '' // Empty by default - user can add guardrails
+  smart_prompt_guidance: '', // Empty by default - user can add guardrails
+  // Guided GPT mode settings
+  guided_model: 'gpt-4o',
+  guided_guardrails: null
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -4552,7 +4564,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                 {settings.integration_mode === 'live' && (
                   <div className="bg-brand-cyan/10 rounded-lg p-3 border border-brand-cyan/30 mb-3">
                     <label className="text-xs text-brand-cyan mb-2 block font-medium">Prompt Source for Generate Live:</label>
-                    <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div className="grid grid-cols-3 gap-2 mb-2">
                       <button
                         type="button"
                         onClick={() => updateSettings({ live_prompt_mode: 'main_prompt' })}
@@ -4563,7 +4575,19 @@ Start by introducing yourself and asking about their business in a friendly way.
                         }`}
                       >
                         Main Prompt
-                        <span className="block text-[10px] opacity-70 mt-0.5">Use your avatar template</span>
+                        <span className="block text-[10px] opacity-70 mt-0.5">Avatar template</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateSettings({ live_prompt_mode: 'guided_gpt' })}
+                        className={`p-2 rounded text-xs font-medium transition-all ${
+                          settings.live_prompt_mode === 'guided_gpt'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        Guided GPT
+                        <span className="block text-[10px] opacity-70 mt-0.5">GPT + guardrails</span>
                       </button>
                       <button
                         type="button"
@@ -4574,19 +4598,90 @@ Start by introducing yourself and asking about their business in a friendly way.
                             : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                         }`}
                       >
-                        Smart Prompt (GPT-4o)
-                        <span className="block text-[10px] opacity-70 mt-0.5">AI reads article content</span>
+                        Smart Prompt
+                        <span className="block text-[10px] opacity-70 mt-0.5">Legacy GPT-4o-mini</span>
                       </button>
                     </div>
                     {settings.live_prompt_mode === 'main_prompt' && (
                       <p className="text-[10px] text-brand-gold/70 bg-brand-gold/10 p-2 rounded">
-                        Will use your Main Prompt from the selected Audience Avatar, filling in placeholders like {'{Item_Cleaning}'} based on article keywords.
+                        Uses your Main Prompt from the Audience Avatar. Placeholders like {'{Item_Cleaning}'} are filled based on article keywords around each image position.
                       </p>
+                    )}
+                    {settings.live_prompt_mode === 'guided_gpt' && (
+                      <div className="space-y-3 mt-2">
+                        <p className="text-[10px] text-emerald-300/70 bg-emerald-500/10 p-2 rounded">
+                          GPT-4o reads your article and creates prompts following your guardrails. Easier to set up than Main Prompt, more control than Smart Prompt.
+                        </p>
+                        {/* Model selector */}
+                        <div>
+                          <label className="text-[10px] text-emerald-400 mb-1 block">GPT Model:</label>
+                          <select
+                            value={settings.guided_model || 'gpt-4o'}
+                            onChange={(e) => updateSettings({ guided_model: e.target.value as any })}
+                            className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white"
+                          >
+                            <option value="gpt-4o">GPT-4o (Smartest - Recommended)</option>
+                            <option value="gpt-4o-mini">GPT-4o Mini (Faster, Cheaper)</option>
+                            <option value="gpt-4-turbo">GPT-4 Turbo (Very Capable)</option>
+                          </select>
+                        </div>
+                        {/* Guardrails */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] text-emerald-400 mb-1 block">Guardrails / Instructions:</label>
+                          <textarea
+                            value={settings.guided_guardrails?.instructions || ''}
+                            onChange={(e) => updateSettings({
+                              guided_guardrails: { ...settings.guided_guardrails, instructions: e.target.value } as any
+                            })}
+                            placeholder="e.g., Always show professional cleaners in uniform. Focus on the specific task being discussed. Use natural lighting. Modern residential settings."
+                            className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
+                            rows={3}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-emerald-400/70 mb-1 block">Uniform/Appearance:</label>
+                            <input
+                              type="text"
+                              value={settings.guided_guardrails?.uniformDescription || ''}
+                              onChange={(e) => updateSettings({
+                                guided_guardrails: { ...settings.guided_guardrails, uniformDescription: e.target.value } as any
+                              })}
+                              placeholder="e.g., Blue polo shirt, khaki pants"
+                              className="w-full p-1.5 text-xs bg-slate-900 border border-emerald-500/20 rounded text-white placeholder-slate-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-emerald-400/70 mb-1 block">Default Subject:</label>
+                            <input
+                              type="text"
+                              value={settings.guided_guardrails?.defaultSubject || ''}
+                              onChange={(e) => updateSettings({
+                                guided_guardrails: { ...settings.guided_guardrails, defaultSubject: e.target.value } as any
+                              })}
+                              placeholder="e.g., Professional cleaner in their 30s"
+                              className="w-full p-1.5 text-xs bg-slate-900 border border-emerald-500/20 rounded text-white placeholder-slate-500"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-red-400/70 mb-1 block">Avoid (things NOT to show):</label>
+                          <input
+                            type="text"
+                            value={settings.guided_guardrails?.avoidList || ''}
+                            onChange={(e) => updateSettings({
+                              guided_guardrails: { ...settings.guided_guardrails, avoidList: e.target.value } as any
+                            })}
+                            placeholder="e.g., No cartoon style, no stock photo feel, no text"
+                            className="w-full p-1.5 text-xs bg-slate-900 border border-red-500/20 rounded text-white placeholder-slate-500"
+                          />
+                        </div>
+                      </div>
                     )}
                     {settings.live_prompt_mode === 'smart_prompt' && (
                       <div className="space-y-2">
                         <p className="text-[10px] text-purple-300/70 bg-purple-500/10 p-2 rounded">
-                          GPT-4o-mini reads your article and creates prompts automatically based on the content. Add guidance below to influence the style.
+                          Legacy mode: GPT-4o-mini reads your article and creates prompts automatically. Less control than Guided GPT.
                         </p>
                         <div>
                           <label className="text-[10px] text-purple-400 mb-1 block">Guidance / Guardrails (optional):</label>
