@@ -50,6 +50,23 @@ interface SheepOpportunity {
   parentPage?: string;
 }
 
+// Race Tracker data for Red Light Green Light visualization
+interface RaceEntry {
+  keyword: string;
+  currentRank: number;
+  previousRank: number;
+  weekAgoRank: number;
+  twoWeeksAgoRank: number;
+  movement: number;          // Change from previous
+  weeklyMovement: number;    // Change from week ago
+  twoWeekMovement: number;   // Change from 2 weeks ago
+  growthRate: number;        // Recent velocity
+  zone: 'green' | 'yellow' | 'red' | 'gray';
+  lastScanned: string;
+}
+
+type SortMode = 'rank' | 'growth' | 'movement' | 'twoWeek';
+
 interface Props {
   websiteId?: number;
   showNotification: (message: string, type: 'success' | 'info' | 'error') => void;
@@ -79,7 +96,12 @@ const LocalVikingSection: React.FC<Props> = ({ websiteId, showNotification }) =>
   const [credits, setCredits] = useState<{ remaining: number; total: number } | null>(null);
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'overview' | 'heatmap' | 'sheep' | 'templates' | 'automation'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'race' | 'heatmap' | 'sheep' | 'templates' | 'automation'>('overview');
+
+  // Race tracker state
+  const [raceData, setRaceData] = useState<RaceEntry[]>([]);
+  const [raceSortMode, setRaceSortMode] = useState<SortMode>('rank');
+  const [raceSortAsc, setRaceSortAsc] = useState(true);
 
   // Rank data
   const [snapshots, setSnapshots] = useState<RankSnapshot[]>([]);
@@ -205,6 +227,99 @@ const LocalVikingSection: React.FC<Props> = ({ websiteId, showNotification }) =>
     setLoadingSheep(false);
   }, [websiteId, isConnected]);
 
+  // Compute race tracker data from snapshots
+  const computeRaceData = useCallback(() => {
+    if (snapshots.length === 0) {
+      setRaceData([]);
+      return;
+    }
+
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+    // Group snapshots by keyword
+    const byKeyword: { [key: string]: RankSnapshot[] } = {};
+    for (const snap of snapshots) {
+      if (!byKeyword[snap.keyword]) {
+        byKeyword[snap.keyword] = [];
+      }
+      byKeyword[snap.keyword].push(snap);
+    }
+
+    const entries: RaceEntry[] = [];
+
+    for (const keyword of Object.keys(byKeyword)) {
+      const kwSnapshots = byKeyword[keyword].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      if (kwSnapshots.length === 0) continue;
+
+      const current = kwSnapshots[0];
+      const previous = kwSnapshots[1];
+      const weekAgo = kwSnapshots.find(s => new Date(s.created_at) <= oneWeekAgo);
+      const twoWeeksAgoSnap = kwSnapshots.find(s => new Date(s.created_at) <= twoWeeksAgo);
+
+      const currentRank = current.best_rank || 20;
+      const previousRank = previous?.best_rank || currentRank;
+      const weekAgoRank = weekAgo?.best_rank || currentRank;
+      const twoWeeksAgoRank = twoWeeksAgoSnap?.best_rank || currentRank;
+
+      // Calculate movements (positive = improving, negative = declining)
+      const movement = previousRank - currentRank;
+      const weeklyMovement = weekAgoRank - currentRank;
+      const twoWeekMovement = twoWeeksAgoRank - currentRank;
+
+      // Calculate growth rate (velocity of recent change)
+      const growthRate = kwSnapshots.length >= 2
+        ? weeklyMovement / Math.max(1, 7) // positions per day
+        : 0;
+
+      // Determine zone
+      let zone: 'green' | 'yellow' | 'red' | 'gray' = 'gray';
+      if (currentRank <= 3) zone = 'green';
+      else if (currentRank <= 10) zone = 'yellow';
+      else if (currentRank <= 20) zone = 'red';
+
+      entries.push({
+        keyword,
+        currentRank,
+        previousRank,
+        weekAgoRank,
+        twoWeeksAgoRank,
+        movement,
+        weeklyMovement,
+        twoWeekMovement,
+        growthRate,
+        zone,
+        lastScanned: current.created_at
+      });
+    }
+
+    setRaceData(entries);
+  }, [snapshots]);
+
+  // Sort race data
+  const sortedRaceData = [...raceData].sort((a, b) => {
+    let comparison = 0;
+    switch (raceSortMode) {
+      case 'rank':
+        comparison = a.currentRank - b.currentRank;
+        break;
+      case 'growth':
+        comparison = b.growthRate - a.growthRate; // Higher growth = better
+        break;
+      case 'movement':
+        comparison = b.weeklyMovement - a.weeklyMovement; // Bigger movement = better
+        break;
+      case 'twoWeek':
+        comparison = b.twoWeekMovement - a.twoWeekMovement;
+        break;
+    }
+    return raceSortAsc ? comparison : -comparison;
+  });
+
   // Load templates
   const loadTemplates = useCallback(async () => {
     if (!websiteId) return;
@@ -323,6 +438,13 @@ const LocalVikingSection: React.FC<Props> = ({ websiteId, showNotification }) =>
     }
   }, [activeTab, isConnected, loadSheepAnalysis]);
 
+  // Compute race data when viewing race tab or when snapshots change
+  useEffect(() => {
+    if (activeTab === 'race' && snapshots.length > 0) {
+      computeRaceData();
+    }
+  }, [activeTab, snapshots, computeRaceData]);
+
   // Get latest snapshot for selected keyword
   const currentSnapshot = snapshots.find(s => s.keyword === selectedKeyword);
 
@@ -396,6 +518,7 @@ const LocalVikingSection: React.FC<Props> = ({ websiteId, showNotification }) =>
       <div className="flex gap-1 bg-slate-800 rounded-lg p-1">
         {[
           { id: 'overview', label: 'Overview' },
+          { id: 'race', label: 'Race Tracker', icon: '🏁' },
           { id: 'heatmap', label: 'Heat Map' },
           { id: 'sheep', label: 'Sheep Analysis' },
           { id: 'templates', label: 'GBP Templates' },
@@ -520,6 +643,222 @@ const LocalVikingSection: React.FC<Props> = ({ websiteId, showNotification }) =>
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Race Tracker Tab - Red Light Green Light Visualization */}
+        {activeTab === 'race' && (
+          <div className="p-4 space-y-4">
+            {/* Header with stats */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-white font-medium flex items-center gap-2">
+                  <span>🏁</span> Keyword Race Tracker
+                </h4>
+                <p className="text-sm text-gray-400">Red Light Green Light - Watch your keywords race to #1</p>
+              </div>
+              <button
+                onClick={() => {
+                  loadSnapshots();
+                  computeRaceData();
+                }}
+                className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 text-sm font-medium"
+              >
+                Refresh Data
+              </button>
+            </div>
+
+            {/* Zone Summary */}
+            <div className="grid grid-cols-4 gap-3">
+              <div className="bg-green-900/30 border border-green-700 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-green-400">
+                  {raceData.filter(r => r.zone === 'green').length}
+                </div>
+                <div className="text-xs text-green-300">In Map Pack (1-3)</div>
+              </div>
+              <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-yellow-400">
+                  {raceData.filter(r => r.zone === 'yellow').length}
+                </div>
+                <div className="text-xs text-yellow-300">Sheep Zone (4-10)</div>
+              </div>
+              <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-red-400">
+                  {raceData.filter(r => r.zone === 'red').length}
+                </div>
+                <div className="text-xs text-red-300">Needs Work (11-20)</div>
+              </div>
+              <div className="bg-slate-800 border border-slate-600 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-white">
+                  {raceData.filter(r => r.weeklyMovement > 0).length}
+                </div>
+                <div className="text-xs text-gray-400">Moving Up This Week</div>
+              </div>
+            </div>
+
+            {/* Sort Controls */}
+            <div className="flex items-center gap-2 flex-wrap bg-slate-800 rounded-lg p-2">
+              <span className="text-gray-400 text-sm">Sort by:</span>
+              {[
+                { mode: 'rank' as SortMode, label: 'Closest to #1' },
+                { mode: 'growth' as SortMode, label: 'Fastest Growing' },
+                { mode: 'movement' as SortMode, label: 'Weekly Movement' },
+                { mode: 'twoWeek' as SortMode, label: '2-Week Trend' },
+              ].map((sort) => (
+                <button
+                  key={sort.mode}
+                  onClick={() => {
+                    if (raceSortMode === sort.mode) {
+                      setRaceSortAsc(!raceSortAsc);
+                    } else {
+                      setRaceSortMode(sort.mode);
+                      setRaceSortAsc(true);
+                    }
+                  }}
+                  className={`px-3 py-1 rounded text-sm transition ${
+                    raceSortMode === sort.mode
+                      ? 'bg-brand-cyan text-slate-900 font-medium'
+                      : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                  }`}
+                >
+                  {sort.label}
+                  {raceSortMode === sort.mode && (
+                    <span className="ml-1">{raceSortAsc ? '↑' : '↓'}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Race Track Visualization */}
+            {raceData.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <p>No race data yet.</p>
+                <p className="text-sm mt-2">Run keyword scans to start tracking the race!</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {/* Track Header */}
+                <div className="flex items-center text-xs text-gray-500 px-2 mb-2">
+                  <div className="w-48">Keyword</div>
+                  <div className="flex-1 flex items-center justify-between px-4">
+                    <span>#1</span>
+                    <span>#3</span>
+                    <span>#5</span>
+                    <span>#10</span>
+                    <span>#15</span>
+                    <span>#20+</span>
+                  </div>
+                  <div className="w-32 text-right">Movement</div>
+                </div>
+
+                {/* Race Lanes */}
+                {sortedRaceData.map((entry, index) => {
+                  // Calculate position percentage (capped at 20)
+                  const cappedRank = Math.min(entry.currentRank, 20);
+                  const positionPercent = ((20 - cappedRank) / 19) * 100;
+
+                  // Determine colors
+                  const zoneColors = {
+                    green: { bg: 'bg-green-500', border: 'border-green-400', text: 'text-green-400' },
+                    yellow: { bg: 'bg-yellow-500', border: 'border-yellow-400', text: 'text-yellow-400' },
+                    red: { bg: 'bg-red-500', border: 'border-red-400', text: 'text-red-400' },
+                    gray: { bg: 'bg-gray-500', border: 'border-gray-400', text: 'text-gray-400' },
+                  };
+                  const colors = zoneColors[entry.zone];
+
+                  return (
+                    <div
+                      key={entry.keyword}
+                      className={`flex items-center p-2 rounded-lg ${
+                        entry.zone === 'yellow' ? 'bg-yellow-900/20 border border-yellow-700/50' : 'bg-slate-800'
+                      } hover:bg-slate-700 transition group`}
+                    >
+                      {/* Keyword name */}
+                      <div className="w-48 pr-4">
+                        <div className={`font-medium truncate ${colors.text}`}>
+                          {entry.keyword}
+                        </div>
+                        <div className="text-xs text-gray-500 truncate">
+                          Last scan: {new Date(entry.lastScanned).toLocaleDateString()}
+                        </div>
+                      </div>
+
+                      {/* Race Track */}
+                      <div className="flex-1 relative h-8 bg-slate-900 rounded-full overflow-hidden">
+                        {/* Goal line at #3 */}
+                        <div className="absolute top-0 bottom-0 left-[85%] w-0.5 bg-green-500/50 z-10"></div>
+
+                        {/* Sheep zone indicator (positions 4-10) */}
+                        <div
+                          className="absolute top-0 bottom-0 bg-yellow-500/10"
+                          style={{ left: '50%', width: '35%' }}
+                        ></div>
+
+                        {/* Runner dot */}
+                        <div
+                          className={`absolute top-1 bottom-1 w-6 rounded-full ${colors.bg} flex items-center justify-center text-xs font-bold text-white shadow-lg transition-all duration-500`}
+                          style={{ left: `calc(${positionPercent}% - 12px)` }}
+                        >
+                          {entry.currentRank}
+                        </div>
+
+                        {/* Previous position ghost */}
+                        {entry.movement !== 0 && (
+                          <div
+                            className="absolute top-1 bottom-1 w-6 rounded-full bg-gray-600/40 flex items-center justify-center text-xs text-gray-500"
+                            style={{ left: `calc(${((20 - Math.min(entry.previousRank, 20)) / 19) * 100}% - 12px)` }}
+                          >
+                            {entry.previousRank}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Movement indicator */}
+                      <div className="w-32 text-right pl-4">
+                        <div className="flex items-center justify-end gap-2">
+                          {/* Weekly movement */}
+                          <div className={`text-sm font-medium ${
+                            entry.weeklyMovement > 0 ? 'text-green-400' :
+                            entry.weeklyMovement < 0 ? 'text-red-400' : 'text-gray-500'
+                          }`}>
+                            {entry.weeklyMovement > 0 && '+'}
+                            {entry.weeklyMovement} /wk
+                          </div>
+                        </div>
+                        <div className={`text-xs ${
+                          entry.twoWeekMovement > 0 ? 'text-green-300' :
+                          entry.twoWeekMovement < 0 ? 'text-red-300' : 'text-gray-600'
+                        }`}>
+                          {entry.twoWeekMovement > 0 && '+'}
+                          {entry.twoWeekMovement} /2wk
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Legend */}
+            <div className="flex items-center gap-6 text-xs text-gray-500 pt-4 border-t border-slate-700">
+              <span>Legend:</span>
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                Map Pack (1-3)
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
+                Sheep Zone (4-10) - PUSH THESE!
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                Needs Work (11-20)
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded-full bg-gray-500"></span>
+                Not Ranking
+              </span>
             </div>
           </div>
         )}
