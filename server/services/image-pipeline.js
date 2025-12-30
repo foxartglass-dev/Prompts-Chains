@@ -7,57 +7,79 @@
  *
  * Generate Live Modes:
  * - main_prompt: Uses avatar's mainPrompt with placeholders filled via smart matching
+ * - guided_gpt: Uses GPT-4o with guardrails/instructions to generate contextual prompts
  * - smart_prompt: Uses GPT-4o-mini to analyze article content (legacy behavior)
  */
 
 import chunkContent, { extractTitle, countWords } from './content-chunker.js';
-import { generatePromptsForArticle, extractStyleDNA, buildFluxPrompt } from './image-prompt-generator.js';
+import { generatePromptsForArticle, extractStyleDNA, buildFluxPrompt, generateGuidedPrompt } from './image-prompt-generator.js';
 import { generateArticleImages, generateImage, estimateCost } from './image-generator.js';
 import { uploadMedia } from './wordpress-publisher.js';
 
 /**
- * Smart Content Matching for Generate Live
- * Matches article content to placeholder options based on keywords
- *
- * @param {string} content - Article content to analyze
- * @param {object} avatar - Audience avatar with placeholderCategories
- * @param {number} wordRange - How many words around placement to search (default 75)
- * @param {boolean} matchPlurals - Whether to match plural forms (default true)
- * @returns {object} Matched replacements for placeholders
+ * Helper: Generate plural forms of a word
  */
-function smartMatchPlaceholders(content, avatar, wordRange = 75, matchPlurals = true) {
+function getPluralForms(word, matchPlurals = true) {
+  if (!matchPlurals) return [word];
+  const forms = [word];
+  const w = word.toLowerCase().trim();
+  // Add common plural forms
+  if (w.endsWith('s') || w.endsWith('x') || w.endsWith('ch') || w.endsWith('sh')) {
+    forms.push(w + 'es'); // box → boxes, dish → dishes
+  } else if (w.endsWith('y') && !['a','e','i','o','u'].includes(w[w.length-2])) {
+    forms.push(w.slice(0, -1) + 'ies'); // city → cities
+  } else {
+    forms.push(w + 's'); // counter → counters
+  }
+  // Also check if word is already plural, add singular
+  if (w.endsWith('ies')) {
+    forms.push(w.slice(0, -3) + 'y'); // cities → city
+  } else if (w.endsWith('es')) {
+    forms.push(w.slice(0, -2)); // boxes → box
+  } else if (w.endsWith('s') && w.length > 2) {
+    forms.push(w.slice(0, -1)); // counters → counter
+  }
+  return [...new Set(forms)]; // Remove duplicates
+}
+
+/**
+ * Extract local content around a position in the article
+ * @param {string} fullContent - Full article content
+ * @param {number} position - Approximate word position in article
+ * @param {number} wordRange - How many words before and after to include
+ * @returns {string} Local content excerpt
+ */
+function extractLocalContent(fullContent, position, wordRange = 75) {
+  // Strip HTML tags for word counting
+  const textOnly = fullContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = textOnly.split(/\s+/);
+
+  const startWord = Math.max(0, position - wordRange);
+  const endWord = Math.min(words.length, position + wordRange);
+
+  return words.slice(startWord, endWord).join(' ');
+}
+
+/**
+ * Smart Content Matching for a single image position
+ * Matches LOCAL content around image position to placeholder options
+ *
+ * @param {string} localContent - Content around the image position
+ * @param {object} avatar - Audience avatar with placeholderCategories
+ * @param {Set} usedPrimaries - Set of already-used primary keywords (shared across positions)
+ * @param {boolean} matchPlurals - Whether to match plural forms
+ * @param {number} positionIndex - Which image position (0=hero, 1=first inline, etc)
+ * @returns {object} { replacements, matchedPrimaries: [] }
+ */
+function smartMatchForPosition(localContent, avatar, usedPrimaries, matchPlurals = true, positionIndex = 0) {
   if (!avatar?.placeholderCategories?.length) {
-    console.log('[Smart Match] No placeholder categories found in avatar');
-    return {};
+    console.log(`[Smart Match #${positionIndex}] No placeholder categories found in avatar`);
+    return { replacements: {}, matchedPrimaries: [] };
   }
 
-  const contentLower = content.toLowerCase();
-  const usedPrimaries = new Set(); // Track used primary keywords (no duplicates)
+  const contentLower = localContent.toLowerCase();
   const replacements = {};
-
-  // Helper: Generate plural forms of a word
-  const getPluralForms = (word) => {
-    if (!matchPlurals) return [word];
-    const forms = [word];
-    const w = word.toLowerCase().trim();
-    // Add common plural forms
-    if (w.endsWith('s') || w.endsWith('x') || w.endsWith('ch') || w.endsWith('sh')) {
-      forms.push(w + 'es'); // box → boxes, dish → dishes
-    } else if (w.endsWith('y') && !['a','e','i','o','u'].includes(w[w.length-2])) {
-      forms.push(w.slice(0, -1) + 'ies'); // city → cities
-    } else {
-      forms.push(w + 's'); // counter → counters
-    }
-    // Also check if word is already plural, add singular
-    if (w.endsWith('ies')) {
-      forms.push(w.slice(0, -3) + 'y'); // cities → city
-    } else if (w.endsWith('es')) {
-      forms.push(w.slice(0, -2)); // boxes → box
-    } else if (w.endsWith('s') && w.length > 2) {
-      forms.push(w.slice(0, -1)); // counters → counter
-    }
-    return [...new Set(forms)]; // Remove duplicates
-  };
+  const newlyMatchedPrimaries = [];
 
   // Process each placeholder category
   for (const category of avatar.placeholderCategories) {
@@ -66,7 +88,7 @@ function smartMatchPlaceholders(content, avatar, wordRange = 75, matchPlurals = 
       const randomOption = category.options?.[Math.floor(Math.random() * (category.options?.length || 1))];
       if (randomOption) {
         replacements[category.placeholder] = randomOption.text;
-        console.log(`[Smart Match] ${category.name}: Random selection → "${randomOption.text}"`);
+        console.log(`[Smart Match #${positionIndex}] ${category.name}: Random → "${randomOption.text}"`);
       }
       continue;
     }
@@ -74,7 +96,7 @@ function smartMatchPlaceholders(content, avatar, wordRange = 75, matchPlurals = 
     let bestMatch = null;
     let bestScore = 0;
 
-    // Score each option based on keyword matches
+    // Score each option based on keyword matches in LOCAL content
     for (const option of category.options || []) {
       let score = 0;
       const matchedPrimary = [];
@@ -85,11 +107,11 @@ function smartMatchPlaceholders(content, avatar, wordRange = 75, matchPlurals = 
         const kwLower = kw.toLowerCase().trim();
         if (!kwLower) continue;
 
-        // Check if already used (Rule 3: no duplicate primaries)
+        // Check if already used by previous image (Rule 3: no duplicate primaries across page)
         if (usedPrimaries.has(kwLower)) continue;
 
         // Check keyword and its plural forms
-        const forms = getPluralForms(kwLower);
+        const forms = getPluralForms(kwLower, matchPlurals);
         for (const form of forms) {
           if (contentLower.includes(form)) {
             score += 10;
@@ -109,7 +131,7 @@ function smartMatchPlaceholders(content, avatar, wordRange = 75, matchPlurals = 
           const kwLower = kw.toLowerCase().trim();
           if (!kwLower || matchedPrimary.includes(kwLower)) continue;
 
-          const forms = getPluralForms(kwLower);
+          const forms = getPluralForms(kwLower, matchPlurals);
           for (const form of forms) {
             if (contentLower.includes(form)) {
               score += 1; // Secondary matches worth less
@@ -134,16 +156,26 @@ function smartMatchPlaceholders(content, avatar, wordRange = 75, matchPlurals = 
     // Use best match or fall back to first option
     if (bestMatch) {
       replacements[category.placeholder] = bestMatch.option.text;
-      // Mark primaries as used
-      bestMatch.matchedPrimary.forEach(kw => usedPrimaries.add(kw));
-      console.log(`[Smart Match] ${category.name}: "${bestMatch.option.text}" (score: ${bestMatch.score}, primary: ${bestMatch.matchedPrimary.join(', ')}, secondary: ${bestMatch.matchedSecondary.join(', ')})`);
+      // Track primaries matched at this position
+      newlyMatchedPrimaries.push(...bestMatch.matchedPrimary);
+      console.log(`[Smart Match #${positionIndex}] ${category.name}: "${bestMatch.option.text}" (score: ${bestMatch.score}, primary: ${bestMatch.matchedPrimary.join(', ')}, secondary: ${bestMatch.matchedSecondary.join(', ')})`);
     } else if (category.options?.length > 0) {
       // Fallback to first option
       replacements[category.placeholder] = category.options[0].text;
-      console.log(`[Smart Match] ${category.name}: Fallback to first option → "${category.options[0].text}"`);
+      console.log(`[Smart Match #${positionIndex}] ${category.name}: Fallback → "${category.options[0].text}"`);
     }
   }
 
+  return { replacements, matchedPrimaries: newlyMatchedPrimaries };
+}
+
+/**
+ * Legacy: Smart Content Matching for entire article (deprecated - use smartMatchForPosition)
+ * Kept for backwards compatibility
+ */
+function smartMatchPlaceholders(content, avatar, wordRange = 75, matchPlurals = true) {
+  const usedPrimaries = new Set();
+  const { replacements } = smartMatchForPosition(content, avatar, usedPrimaries, matchPlurals, 0);
   return replacements;
 }
 
@@ -195,10 +227,15 @@ export async function processArticleWithImages(content, options = {}) {
     quality = 'low', // low for websites, medium, high for print
 
     // Generate Live Prompt Mode Options
-    livePromptMode = 'smart_prompt', // 'main_prompt' or 'smart_prompt'
+    livePromptMode = 'smart_prompt', // 'main_prompt', 'guided_gpt', or 'smart_prompt'
     targetAvatar = null, // Audience avatar with mainPrompt and placeholderCategories
     smartPromptGuidance = '', // Optional guidance for smart_prompt mode
     matchPlurals = true, // Whether to match plural forms in smart matching
+    heroImageSide = 'right', // Hero image side - inline images will alternate starting from opposite
+
+    // Guided GPT Mode Options
+    guidedGuardrails = null, // { instructions, uniformDescription, stylePreferences, avoidList, defaultSubject }
+    guidedModel = 'gpt-4o', // GPT model for guided mode: gpt-4o, gpt-4o-mini, gpt-4-turbo
 
     // Callbacks
     onProgress = null
@@ -248,51 +285,73 @@ export async function processArticleWithImages(content, options = {}) {
 
     if (useMainPromptMode) {
       // MAIN_PROMPT MODE: Use avatar's mainPrompt with smart-matched placeholders
-      progress('smart_matching', { message: 'Smart matching content to placeholders...' });
+      // KEY FIX: Match EACH image position to LOCAL content (75 words around it)
+      progress('smart_matching', { message: 'Smart matching content to placeholders per image position...' });
 
       console.log('\n╔══════════════════════════════════════════════════════════════╗');
-      console.log('║          GENERATE LIVE: MAIN PROMPT MODE                     ║');
+      console.log('║     GENERATE LIVE: MAIN PROMPT MODE (Per-Position Matching)  ║');
       console.log('╠══════════════════════════════════════════════════════════════╣');
       console.log(`║ Avatar: ${(targetAvatar.name || 'Unknown').padEnd(52)} ║`);
       console.log(`║ Main Prompt: ${targetAvatar.mainPrompt?.substring(0, 47).padEnd(47)}... ║`);
+      console.log(`║ Hero Side: ${heroImageSide.padEnd(10)} | Inline starts: ${(heroImageSide === 'right' ? 'left' : 'right').padEnd(25)} ║`);
+      console.log('╚══════════════════════════════════════════════════════════════╝');
 
-      // Smart match content to placeholders
-      const replacements = smartMatchPlaceholders(content, targetAvatar, 75, matchPlurals);
-
-      // Build the final prompt
-      const finalPrompt = buildPromptWithReplacements(targetAvatar.mainPrompt, replacements);
-
-      console.log('╠──────────────────────────────────────────────────────────────╣');
-      console.log('║ REPLACEMENTS:                                                ║');
-      Object.entries(replacements).forEach(([placeholder, value]) => {
-        console.log(`║   ${placeholder.padEnd(20)} → ${value.substring(0, 35).padEnd(35)} ║`);
-      });
-      console.log('╠──────────────────────────────────────────────────────────────╣');
-      console.log(`║ FINAL PROMPT: ${finalPrompt.substring(0, 45).padEnd(45)}... ║`);
-      console.log('╚══════════════════════════════════════════════════════════════╝\n');
-
-      // Apply the same prompt to all image positions (hero and inline)
-      // The prompt is based on smart matching, same for all images in this article
+      // Shared state across all image positions
+      const usedPrimaries = new Set(); // Rule 3: No duplicate primaries across page
+      const allReplacements = []; // Track replacements for each position
       let imageCount = 0;
+      let cumulativeWordPosition = 0; // Track position in article
 
-      // Hero image
+      // Calculate inline image starting side (opposite of hero)
+      const inlineStartSide = heroImageSide === 'right' ? 'left' : 'right';
+
+      // HERO IMAGE - Match against intro content
       if (chunks.intro && imageCount < maxImages) {
-        chunks.intro.imagePrompt = finalPrompt;
+        const heroWordPosition = Math.floor((chunks.intro.wordCount || 100) / 2);
+        const heroLocalContent = extractLocalContent(content, heroWordPosition, 75);
+
+        console.log(`\n[Hero Image] Position ${heroWordPosition} words, local content: ${heroLocalContent.substring(0, 80)}...`);
+
+        const { replacements, matchedPrimaries } = smartMatchForPosition(
+          heroLocalContent,
+          targetAvatar,
+          usedPrimaries,
+          matchPlurals,
+          0 // Position index 0 = hero
+        );
+
+        // Mark primaries as used for next images
+        matchedPrimaries.forEach(kw => usedPrimaries.add(kw));
+
+        const heroPrompt = buildPromptWithReplacements(targetAvatar.mainPrompt, replacements);
+        allReplacements.push({ position: 'hero', replacements, prompt: heroPrompt });
+
+        chunks.intro.imagePrompt = heroPrompt;
         chunks.intro.extractedAction = {
           action: 'Smart matched from main prompt',
           mood: 'professional',
           subjects: Object.values(replacements),
-          setting: keyword || 'service context'
+          setting: keyword || 'service context',
+          matchedKeywords: matchedPrimaries
         };
+        chunks.intro.imageSide = heroImageSide;
+
+        cumulativeWordPosition = chunks.intro.wordCount || 100;
         imageCount++;
+
+        console.log(`[Hero] Prompt: ${heroPrompt.substring(0, 100)}...`);
       }
 
-      // Inline images - use same prompt but alternate sides
+      // INLINE IMAGES - Match each against LOCAL content around its position
+      let inlineImageIndex = 0;
       for (let i = 0; i < chunks.chunks.length && imageCount < maxImages; i++) {
         const chunk = chunks.chunks[i];
 
         // Skip very short chunks
-        if (chunk.wordCount < 50) continue;
+        if (chunk.wordCount < 50) {
+          cumulativeWordPosition += chunk.wordCount || 0;
+          continue;
+        }
 
         // Only add image to every other eligible chunk
         const remainingSlots = maxImages - imageCount;
@@ -300,24 +359,171 @@ export async function processArticleWithImages(content, options = {}) {
         const shouldAddImage = remainingSlots >= remainingChunks || i % 2 === 0;
 
         if (shouldAddImage) {
-          chunk.imagePrompt = finalPrompt;
+          // Calculate word position for this chunk (middle of chunk)
+          const chunkMiddle = cumulativeWordPosition + Math.floor((chunk.wordCount || 100) / 2);
+          const localContent = extractLocalContent(content, chunkMiddle, 75);
+
+          console.log(`\n[Image #${imageCount}] Section "${chunk.heading || 'Untitled'}" at word ${chunkMiddle}`);
+          console.log(`[Image #${imageCount}] Local: ${localContent.substring(0, 80)}...`);
+
+          const { replacements, matchedPrimaries } = smartMatchForPosition(
+            localContent,
+            targetAvatar,
+            usedPrimaries,
+            matchPlurals,
+            imageCount // Position index
+          );
+
+          // Mark primaries as used for next images
+          matchedPrimaries.forEach(kw => usedPrimaries.add(kw));
+
+          const imagePrompt = buildPromptWithReplacements(targetAvatar.mainPrompt, replacements);
+          allReplacements.push({ position: `inline-${i}`, heading: chunk.heading, replacements, prompt: imagePrompt });
+
+          chunk.imagePrompt = imagePrompt;
           chunk.extractedAction = {
             action: 'Smart matched from main prompt',
             mood: 'professional',
             subjects: Object.values(replacements),
-            setting: chunk.heading || 'service section'
+            setting: chunk.heading || 'service section',
+            matchedKeywords: matchedPrimaries
           };
-          chunk.imageSide = imageCount % 2 === 0 ? 'left' : 'right';
+
+          // Alternate sides starting from opposite of hero
+          chunk.imageSide = inlineImageIndex % 2 === 0 ? inlineStartSide : heroImageSide;
+          inlineImageIndex++;
           imageCount++;
+
+          console.log(`[Image #${imageCount - 1}] Side: ${chunk.imageSide} | Prompt: ${imagePrompt.substring(0, 80)}...`);
         }
+
+        cumulativeWordPosition += chunk.wordCount || 0;
+      }
+
+      // Summary log
+      console.log('\n╔══════════════════════════════════════════════════════════════╗');
+      console.log('║                   SMART MATCHING SUMMARY                     ║');
+      console.log('╠══════════════════════════════════════════════════════════════╣');
+      console.log(`║ Total Images: ${String(imageCount).padEnd(3)} | Used Primaries: ${Array.from(usedPrimaries).slice(0, 3).join(', ').padEnd(30)} ║`);
+      allReplacements.forEach((r, idx) => {
+        const values = Object.values(r.replacements).join(', ').substring(0, 50);
+        console.log(`║ #${idx}: ${values.padEnd(56)} ║`);
+      });
+      console.log('╚══════════════════════════════════════════════════════════════╝\n');
+
+      const promptCount = countPromptsInChunks(chunks);
+      progress('prompts_generated', {
+        message: `Generated ${promptCount} unique image prompts using main prompt mode`,
+        count: promptCount,
+        mode: 'main_prompt',
+        replacements: allReplacements
+      });
+
+    } else if (livePromptMode === 'guided_gpt' && openaiApiKey) {
+      // GUIDED GPT MODE: Use GPT-4o with guardrails to generate contextual prompts
+      progress('guided_prompts', { message: `Generating prompts with ${guidedModel} + guardrails...` });
+
+      console.log('\n╔══════════════════════════════════════════════════════════════╗');
+      console.log('║        GENERATE LIVE: GUIDED GPT MODE                        ║');
+      console.log('╠══════════════════════════════════════════════════════════════╣');
+      console.log(`║ Model: ${guidedModel.padEnd(53)} ║`);
+      console.log(`║ Avatar: ${(targetAvatar?.name || 'Default').padEnd(52)} ║`);
+      if (guidedGuardrails?.instructions) {
+        console.log(`║ Instructions: ${guidedGuardrails.instructions.substring(0, 45).padEnd(45)}... ║`);
+      }
+      console.log('╚══════════════════════════════════════════════════════════════╝');
+
+      const guardrails = guidedGuardrails || targetAvatar?.guardrails || {};
+      let imageCount = 0;
+      let cumulativeWordPosition = 0;
+      const inlineStartSide = heroImageSide === 'right' ? 'left' : 'right';
+      const generatedPrompts = [];
+
+      // HERO IMAGE
+      if (chunks.intro && imageCount < maxImages) {
+        const heroContent = chunks.intro.content || '';
+
+        const result = await generateGuidedPrompt(
+          heroContent,
+          {
+            articleTitle: pageTitle,
+            keyword,
+            imageType: 'hero',
+            businessType: targetAvatar?.businessType || ''
+          },
+          guardrails,
+          openaiApiKey,
+          { guidedModel }
+        );
+
+        chunks.intro.imagePrompt = result.prompt;
+        chunks.intro.extractedAction = {
+          action: result.action,
+          mood: result.mood,
+          subjects: result.subjects || [],
+          setting: result.setting
+        };
+        chunks.intro.imageSide = heroImageSide;
+        generatedPrompts.push({ position: 'hero', prompt: result.prompt });
+
+        cumulativeWordPosition = chunks.intro.wordCount || 100;
+        imageCount++;
+        console.log(`[Guided GPT] Hero: ${result.prompt.substring(0, 80)}...`);
+      }
+
+      // INLINE IMAGES
+      let inlineImageIndex = 0;
+      for (let i = 0; i < chunks.chunks.length && imageCount < maxImages; i++) {
+        const chunk = chunks.chunks[i];
+
+        if (chunk.wordCount < 50) {
+          cumulativeWordPosition += chunk.wordCount || 0;
+          continue;
+        }
+
+        const remainingSlots = maxImages - imageCount;
+        const remainingChunks = chunks.chunks.length - i;
+        const shouldAddImage = remainingSlots >= remainingChunks || i % 2 === 0;
+
+        if (shouldAddImage) {
+          const result = await generateGuidedPrompt(
+            chunk.content || '',
+            {
+              articleTitle: pageTitle,
+              keyword,
+              imageType: 'inline',
+              businessType: targetAvatar?.businessType || ''
+            },
+            guardrails,
+            openaiApiKey,
+            { guidedModel }
+          );
+
+          chunk.imagePrompt = result.prompt;
+          chunk.extractedAction = {
+            action: result.action,
+            mood: result.mood,
+            subjects: result.subjects || [],
+            setting: result.setting
+          };
+          chunk.imageSide = inlineImageIndex % 2 === 0 ? inlineStartSide : heroImageSide;
+          generatedPrompts.push({ position: `inline-${i}`, heading: chunk.heading, prompt: result.prompt });
+
+          inlineImageIndex++;
+          imageCount++;
+          console.log(`[Guided GPT] #${imageCount}: ${result.prompt.substring(0, 80)}...`);
+        }
+
+        cumulativeWordPosition += chunk.wordCount || 0;
       }
 
       const promptCount = countPromptsInChunks(chunks);
       progress('prompts_generated', {
-        message: `Generated ${promptCount} image prompts using main prompt mode`,
+        message: `Generated ${promptCount} unique image prompts using guided GPT mode`,
         count: promptCount,
-        mode: 'main_prompt',
-        replacements
+        mode: 'guided_gpt',
+        model: guidedModel,
+        prompts: generatedPrompts
       });
 
     } else if (!openaiApiKey) {

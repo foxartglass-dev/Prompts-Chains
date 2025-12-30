@@ -12,6 +12,7 @@ const __dirname = path.dirname(__filename);
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-4o-mini';
+const MODEL_SMART = 'gpt-4o'; // Smarter model for guided mode
 
 /**
  * Convert a local file path to base64 data URL
@@ -50,9 +51,14 @@ function isLocalPath(url) {
 }
 
 /**
- * Call OpenAI GPT-4o-mini API
+ * Call OpenAI GPT API
+ * @param {Array} messages - Chat messages
+ * @param {string} apiKey - OpenAI API key
+ * @param {object} options - Options including model, temperature, maxTokens
  */
 async function callGPT(messages, apiKey, options = {}) {
+  const model = options.model || MODEL; // Default to gpt-4o-mini
+
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
     headers: {
@@ -60,7 +66,7 @@ async function callGPT(messages, apiKey, options = {}) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       messages,
       temperature: options.temperature || 0.7,
       max_tokens: options.maxTokens || 1000
@@ -259,6 +265,136 @@ Respond in this exact JSON format:
 }
 
 /**
+ * GUIDED GPT MODE: Generate a complete image prompt with guardrails
+ * Uses GPT-4o (smarter model) with user-provided guardrails/instructions
+ *
+ * @param {string} sectionContent - Text content of the section
+ * @param {object} context - Additional context
+ * @param {object} guardrails - User-defined guardrails and instructions
+ * @param {string} apiKey - OpenAI API key
+ * @returns {Promise<{prompt: string, action: string, mood: string}>}
+ */
+export async function generateGuidedPrompt(sectionContent, context = {}, guardrails = {}, apiKey, options = {}) {
+  if (!sectionContent) {
+    throw new Error('Section content is required');
+  }
+
+  const {
+    articleTitle = '',
+    keyword = '',
+    imageType = 'inline',
+    businessType = ''
+  } = context;
+
+  const {
+    instructions = '',      // Main guardrails: "Always show professional cleaners in uniform..."
+    uniformDescription = '', // "Blue polo shirt with company logo, khaki pants"
+    stylePreferences = '',   // "Photorealistic, warm lighting, modern interiors"
+    avoidList = '',         // "No cartoon style, no stock photo feel"
+    defaultSubject = ''     // "Professional house cleaner in their 30s"
+  } = guardrails;
+
+  // Model selection - default to GPT-4o for best results
+  const guidedModel = options.guidedModel || 'gpt-4o';
+
+  // Build guardrails section
+  let guardrailsSection = '';
+  if (instructions) {
+    guardrailsSection += `\n## CRITICAL INSTRUCTIONS (MUST FOLLOW):\n${instructions}\n`;
+  }
+  if (uniformDescription) {
+    guardrailsSection += `\n## UNIFORM/APPEARANCE:\n${uniformDescription}\n`;
+  }
+  if (stylePreferences) {
+    guardrailsSection += `\n## STYLE PREFERENCES:\n${stylePreferences}\n`;
+  }
+  if (avoidList) {
+    guardrailsSection += `\n## AVOID:\n${avoidList}\n`;
+  }
+  if (defaultSubject) {
+    guardrailsSection += `\n## DEFAULT SUBJECT:\n${defaultSubject}\n`;
+  }
+
+  const systemPrompt = `You are an expert image prompt engineer for AI image generation (FLUX, DALL-E, GPT Image).
+Your task is to create detailed, photorealistic image prompts based on article content.
+
+${guardrailsSection || 'No specific guardrails provided - use professional judgment.'}
+
+IMPORTANT RULES:
+1. ALWAYS follow the guardrails/instructions above
+2. Create prompts that are LITERAL and SPECIFIC - describe exactly what should appear
+3. Focus on ACTIONS being performed related to the text content
+4. Include specific details about people, objects, settings, and lighting
+5. Match the content's context - what task/service is being discussed?
+6. Output ONLY the image prompt - no explanation or JSON`;
+
+  const userPrompt = `Create a photorealistic image prompt for this section.
+
+${articleTitle ? `Article: "${articleTitle}"` : ''}
+${keyword ? `Topic: "${keyword}"` : ''}
+${businessType ? `Business: "${businessType}"` : ''}
+Image Type: ${imageType === 'hero' ? 'HERO IMAGE (capture the overall theme, professional and aspirational)' : 'INLINE IMAGE (specific task shown in the section)'}
+
+SECTION CONTENT:
+"""
+${sectionContent.substring(0, 1200)}
+"""
+
+Generate a detailed image prompt (30-60 words) that:
+1. Shows the specific task/action discussed in this section
+2. Follows ALL guardrails provided
+3. Is optimized for photorealistic AI image generation
+
+Output the prompt only, nothing else:`;
+
+  try {
+    console.log(`[Guided GPT] Generating prompt for "${imageType}" with ${guidedModel}`);
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ];
+
+    // Use selected model (configurable)
+    const rawResponse = await callGPT(messages, apiKey, {
+      model: guidedModel,
+      temperature: 0.6,
+      maxTokens: 500
+    });
+
+    // Clean up the response - remove any quotes or prefixes
+    let prompt = rawResponse.trim()
+      .replace(/^["']|["']$/g, '') // Remove surrounding quotes
+      .replace(/^(prompt:|image prompt:|here is.*?:)/i, '') // Remove prefixes
+      .trim();
+
+    console.log(`[Guided GPT] Generated: ${prompt.substring(0, 100)}...`);
+
+    return {
+      prompt,
+      action: 'Guided GPT generated prompt',
+      mood: 'professional',
+      subjects: [],
+      setting: keyword || businessType || 'professional setting'
+    };
+  } catch (error) {
+    console.error('[Guided GPT] Error:', error);
+    // Fallback to a simple prompt
+    const fallback = defaultSubject
+      ? `${defaultSubject} ${keyword ? `performing ${keyword} service` : 'at work'}, professional photography, natural lighting`
+      : `Professional service provider ${keyword ? `performing ${keyword}` : 'at work'}, photorealistic, high quality`;
+
+    return {
+      prompt: fallback,
+      action: 'Fallback prompt (Guided GPT failed)',
+      mood: 'professional',
+      subjects: [],
+      setting: 'professional environment'
+    };
+  }
+}
+
+/**
  * Build a FLUX-optimized prompt from Style DNA and action
  *
  * @param {object} styleDNA - Style DNA object with styleTemplate
@@ -437,8 +573,17 @@ Respond in JSON format:
   return { raw: response };
 }
 
+// Available GPT models for guided mode
+export const GUIDED_GPT_MODELS = [
+  { id: 'gpt-4o', name: 'GPT-4o (Smartest, Recommended)', description: 'Best at following complex instructions' },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Fast)', description: 'Faster and cheaper, good for simple guardrails' },
+  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Very capable, good balance of speed and quality' }
+];
+
 export default {
   extractStyleDNA,
+  generateGuidedPrompt,
+  GUIDED_GPT_MODELS,
   extractAction,
   buildFluxPrompt,
   generatePromptsForArticle,

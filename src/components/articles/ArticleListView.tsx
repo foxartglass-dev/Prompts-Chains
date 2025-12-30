@@ -88,6 +88,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   // Image management
   const [showImages, setShowImages] = useState(false);
   const [showImageReport, setShowImageReport] = useState(false);
+  const [expandedPrompts, setExpandedPrompts] = useState<Set<number>>(new Set());
   const [pushingImages, setPushingImages] = useState(false);
   const [pushingMeta, setPushingMeta] = useState(false);
   const [regeneratingImage, setRegeneratingImage] = useState<string | null>(null);
@@ -984,10 +985,45 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                                   </div>
                                 )}
 
-                                {/* Prompt (truncated) */}
-                                {img.prompt && (
-                                  <div className="mt-1 text-xs text-gray-400 truncate" title={img.prompt}>
-                                    <span className="text-gray-500">Prompt:</span> {img.prompt}
+                                {/* Matched Keywords */}
+                                {img.matchedKeywords && img.matchedKeywords.length > 0 && (
+                                  <div className="mt-1">
+                                    <span className="text-[10px] text-gray-500">Matched:</span>
+                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                      {img.matchedKeywords.map((kw: string, kwIdx: number) => (
+                                        <span key={kwIdx} className="text-[10px] bg-emerald-900/30 text-emerald-400 px-1.5 py-0.5 rounded">
+                                          {kw}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Prompt (expandable) */}
+                                {img.prompt && img.prompt !== 'N/A' && (
+                                  <div className="mt-2">
+                                    <button
+                                      onClick={() => {
+                                        const newSet = new Set(expandedPrompts);
+                                        if (newSet.has(idx)) {
+                                          newSet.delete(idx);
+                                        } else {
+                                          newSet.add(idx);
+                                        }
+                                        setExpandedPrompts(newSet);
+                                      }}
+                                      className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                                    >
+                                      <svg className={`w-3 h-3 transition-transform ${expandedPrompts.has(idx) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                                      </svg>
+                                      View Prompt
+                                    </button>
+                                    {expandedPrompts.has(idx) && (
+                                      <div className="mt-1 p-2 bg-slate-900/50 rounded text-[11px] text-gray-300 whitespace-pre-wrap break-words">
+                                        {img.prompt}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
 

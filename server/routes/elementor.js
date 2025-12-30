@@ -894,6 +894,8 @@ router.post('/publish', async (req, res) => {
     let targetAvatar = null;
     let smartPromptGuidance = '';
     let matchPlurals = true;
+    let guidedGuardrails = null;
+    let guidedModel = 'gpt-4o';
 
     if (workflowId && isDatabaseEnabled()) {
       try {
@@ -912,11 +914,19 @@ router.post('/publish', async (req, res) => {
           const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
           targetAvatar = articleTag ? avatars.find(a => a.tag === articleTag) : avatars[0];
 
+          // Get guided GPT settings if in guided mode
+          guidedGuardrails = targetAvatar?.guardrails || config.guided_guardrails || null;
+          guidedModel = config.guided_model || 'gpt-4o';
+
           console.log('[Elementor Publish] Generate Live settings:');
           console.log('  - Prompt mode:', livePromptMode);
           console.log('  - Target avatar:', targetAvatar?.name || 'None');
           if (livePromptMode === 'main_prompt' && targetAvatar?.mainPrompt) {
             console.log('  - Main prompt:', targetAvatar.mainPrompt.substring(0, 50) + '...');
+          }
+          if (livePromptMode === 'guided_gpt') {
+            console.log('  - Guided model:', guidedModel);
+            console.log('  - Has guardrails:', !!guidedGuardrails?.instructions);
           }
         }
       } catch (err) {
@@ -946,7 +956,11 @@ router.post('/publish', async (req, res) => {
         livePromptMode,
         targetAvatar,
         smartPromptGuidance,
-        matchPlurals
+        matchPlurals,
+        heroImageSide, // Pass hero side for proper alternation
+        // Guided GPT mode options
+        guidedGuardrails,
+        guidedModel
       });
 
       // Merge pipeline images with bank images
@@ -1026,7 +1040,8 @@ router.post('/publish', async (req, res) => {
           action: heroAction.action || 'N/A',
           mood: heroAction.mood || 'N/A',
           setting: heroAction.setting || 'N/A',
-          prompt: pipelineResult.chunks.intro.imagePrompt?.substring(0, 200) || 'N/A'
+          prompt: pipelineResult.chunks.intro.imagePrompt || 'N/A', // Full prompt, no truncation
+          matchedKeywords: heroAction.matchedKeywords || []
         });
       }
 
@@ -1039,10 +1054,11 @@ router.post('/publish', async (req, res) => {
             type: 'inline',
             heading: chunk.heading || `Section ${idx + 1}`,
             wordCount: chunk.wordCount || 0,
-            side: chunk.imageData.side || 'N/A',
+            side: chunk.imageSide || chunk.imageData.side || 'N/A',
             action: action.action || 'N/A',
             mood: action.mood || 'N/A',
-            prompt: chunk.imagePrompt?.substring(0, 200) || 'N/A'
+            prompt: chunk.imagePrompt || 'N/A', // Full prompt, no truncation
+            matchedKeywords: action.matchedKeywords || []
           });
         }
       });
