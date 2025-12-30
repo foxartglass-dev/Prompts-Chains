@@ -140,8 +140,11 @@ interface PromptProblemArea {
   name: string; // e.g., "Logo Visibility"
   context: string; // Why this is a problem, detailed explanation
   priority: 'high' | 'medium' | 'low';
+  status: 'active' | 'solved'; // active = still working on it, solved = cracked it!
   prompts: PromptSolution[];
   isExpanded?: boolean; // UI state for expand/collapse
+  solvedPromptId?: string; // Which prompt finally solved it
+  solvedNotes?: string; // Notes on the solution
   createdAt: string;
   updatedAt: string;
 }
@@ -1268,6 +1271,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       name: 'New Problem Area',
       context: '',
       priority: 'high',
+      status: 'active',
       prompts: [],
       isExpanded: true,
       createdAt: new Date().toISOString(),
@@ -3200,17 +3204,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                       key={area.id}
                       onClick={() => setActiveProblemAreaId(activeProblemAreaId === area.id ? null : area.id)}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
-                        activeProblemAreaId === area.id
-                          ? 'bg-orange-500 text-slate-900'
-                          : 'bg-slate-800 text-orange-400 hover:bg-slate-700'
+                        area.status === 'solved'
+                          ? activeProblemAreaId === area.id
+                            ? 'bg-green-500 text-slate-900'
+                            : 'bg-green-900/50 text-green-400 hover:bg-green-900/70 border border-green-500/50'
+                          : activeProblemAreaId === area.id
+                            ? 'bg-orange-500 text-slate-900'
+                            : 'bg-slate-800 text-orange-400 hover:bg-slate-700'
                       }`}
                     >
-                      <span className={`w-2 h-2 rounded-full ${
-                        area.priority === 'high' ? 'bg-red-500' :
-                        area.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
-                      }`} />
+                      {area.status === 'solved' ? (
+                        <span className="text-green-300">✓</span>
+                      ) : (
+                        <span className={`w-2 h-2 rounded-full ${
+                          area.priority === 'high' ? 'bg-red-500' :
+                          area.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                        }`} />
+                      )}
                       {area.name}
-                      <span className="text-xs opacity-70">({area.prompts.length})</span>
+                      {area.status === 'solved' ? (
+                        <span className="text-xs opacity-70">SOLVED</span>
+                      ) : (
+                        <span className="text-xs opacity-70">({area.prompts.length})</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -3240,20 +3256,50 @@ Start by introducing yourself and asking about their business in a friendly way.
                           />
                         </div>
                         <div className="flex flex-col gap-1">
-                          <select
-                            value={area.priority}
-                            onChange={(e) => handleUpdateProblemArea(area.id, { priority: e.target.value as 'high' | 'medium' | 'low' })}
-                            className="bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-xs text-white"
-                          >
-                            <option value="high">🔴 High</option>
-                            <option value="medium">🟡 Medium</option>
-                            <option value="low">🟢 Low</option>
-                          </select>
+                          {area.status === 'solved' ? (
+                            <div className="bg-green-900/50 border border-green-500 rounded px-2 py-1 text-xs text-green-300 text-center">
+                              ✓ SOLVED
+                            </div>
+                          ) : (
+                            <>
+                              <select
+                                value={area.priority}
+                                onChange={(e) => handleUpdateProblemArea(area.id, { priority: e.target.value as 'high' | 'medium' | 'low' })}
+                                className="bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-xs text-white"
+                              >
+                                <option value="high">🔴 High</option>
+                                <option value="medium">🟡 Medium</option>
+                                <option value="low">🟢 Low</option>
+                              </select>
+                              <button
+                                onClick={() => {
+                                  const workingPrompt = area.prompts.find(p => p.status === 'working');
+                                  handleUpdateProblemArea(area.id, {
+                                    status: 'solved',
+                                    solvedPromptId: workingPrompt?.id
+                                  });
+                                  log(`Problem area "${area.name}" marked as SOLVED!`, LogStatus.SUCCESS);
+                                }}
+                                disabled={!area.prompts.some(p => p.status === 'working')}
+                                className={`text-xs transition px-2 py-1 rounded ${
+                                  area.prompts.some(p => p.status === 'working')
+                                    ? 'bg-green-600 hover:bg-green-500 text-white'
+                                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                }`}
+                                title={area.prompts.some(p => p.status === 'working') ? 'Mark as solved' : 'Need at least one working prompt'}
+                              >
+                                ✓ Solved
+                              </button>
+                            </>
+                          )}
                           <button
-                            onClick={() => handleRemoveProblemArea(area.id)}
+                            onClick={() => area.status === 'solved'
+                              ? handleUpdateProblemArea(area.id, { status: 'active' })
+                              : handleRemoveProblemArea(area.id)
+                            }
                             className="text-xs text-red-400 hover:text-red-300 transition"
                           >
-                            Delete
+                            {area.status === 'solved' ? 'Reopen' : 'Delete'}
                           </button>
                         </div>
                       </div>

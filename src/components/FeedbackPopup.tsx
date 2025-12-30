@@ -108,6 +108,8 @@ export default function FeedbackPopup({
   const [questionAnswers, setQuestionAnswers] = useState<Record<number, string>>({});
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showPrompts, setShowPrompts] = useState(false);
+  const [promptPanelWidth, setPromptPanelWidth] = useState<'narrow' | 'normal' | 'wide'>('normal');
 
   // Reset state when popup opens with new request
   useEffect(() => {
@@ -225,7 +227,19 @@ export default function FeedbackPopup({
           <div className="p-6 overflow-y-auto max-h-[60vh]">
             {/* Generated Images */}
             <div className="mb-6">
-              <h3 className="text-sm font-medium text-slate-400 mb-3">Generated Images:</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-slate-400">Generated Images:</h3>
+                <button
+                  onClick={() => setShowPrompts(!showPrompts)}
+                  className={`text-xs px-3 py-1 rounded-lg transition ${
+                    showPrompts
+                      ? 'bg-purple-500 text-white'
+                      : 'bg-purple-900/50 text-purple-300 hover:bg-purple-900'
+                  }`}
+                >
+                  📝 {showPrompts ? 'Hide' : 'View'} Prompts
+                </button>
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {images.map((img, idx) => (
                   <div
@@ -250,6 +264,65 @@ export default function FeedbackPopup({
                 ))}
               </div>
             </div>
+
+            {/* Prompts Panel (Floating, Resizable) */}
+            {showPrompts && feedbackRequest.prompts_used && feedbackRequest.prompts_used.length > 0 && (
+              <div className={`mb-6 bg-purple-900/30 border border-purple-500/50 rounded-lg overflow-hidden ${
+                promptPanelWidth === 'narrow' ? 'max-w-md' :
+                promptPanelWidth === 'wide' ? 'max-w-none' : 'max-w-2xl'
+              }`}>
+                <div className="flex items-center justify-between px-3 py-2 bg-purple-900/50 border-b border-purple-500/30">
+                  <span className="text-sm font-medium text-purple-300">📝 Prompts Used ({feedbackRequest.prompts_used.length})</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPromptPanelWidth('narrow')}
+                      className={`px-2 py-0.5 rounded text-xs ${promptPanelWidth === 'narrow' ? 'bg-purple-500 text-white' : 'text-purple-400 hover:bg-purple-800'}`}
+                    >
+                      Narrow
+                    </button>
+                    <button
+                      onClick={() => setPromptPanelWidth('normal')}
+                      className={`px-2 py-0.5 rounded text-xs ${promptPanelWidth === 'normal' ? 'bg-purple-500 text-white' : 'text-purple-400 hover:bg-purple-800'}`}
+                    >
+                      Normal
+                    </button>
+                    <button
+                      onClick={() => setPromptPanelWidth('wide')}
+                      className={`px-2 py-0.5 rounded text-xs ${promptPanelWidth === 'wide' ? 'bg-purple-500 text-white' : 'text-purple-400 hover:bg-purple-800'}`}
+                    >
+                      Wide
+                    </button>
+                    <button
+                      onClick={() => setShowPrompts(false)}
+                      className="ml-2 text-purple-400 hover:text-white"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+                <div className="p-3 space-y-3 max-h-64 overflow-y-auto">
+                  {feedbackRequest.prompts_used.map((prompt, idx) => (
+                    <div key={idx} className="bg-slate-900/50 rounded p-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-purple-400 font-medium">Prompt #{idx + 1}</span>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(prompt)}
+                          className="text-xs text-purple-400 hover:text-purple-300"
+                        >
+                          📋 Copy
+                        </button>
+                      </div>
+                      <p className="text-xs text-white font-mono whitespace-pre-wrap leading-relaxed select-all">
+                        {prompt}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-3 py-2 bg-purple-900/30 border-t border-purple-500/30 text-xs text-purple-400">
+                  💡 Tip: Look for patterns in prompts that produced good vs bad results
+                </div>
+              </div>
+            )}
 
             {/* Rating */}
             <div className="mb-6">
