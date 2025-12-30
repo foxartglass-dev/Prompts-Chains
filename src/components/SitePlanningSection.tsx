@@ -87,6 +87,10 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
 
+  // Push to WordPress state
+  const [pushing, setPushing] = useState(false);
+  const [pushResult, setPushResult] = useState<any>(null);
+
   // Load plan and nodes
   const loadPlan = useCallback(async () => {
     if (!workflowId && !websiteId) {
@@ -268,6 +272,32 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
       showNotification('Failed to check sync', 'error');
     }
     setSyncing(false);
+  };
+
+  // Push hierarchy to WordPress
+  const pushToWordPress = async (status: 'draft' | 'publish' = 'draft') => {
+    if (!plan) return;
+
+    setPushing(true);
+    setPushResult(null);
+    try {
+      const res = await fetch(`/api/site-planning/push-hierarchy/${plan.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPushResult(data);
+        showNotification(`Pushed ${data.pushed?.length || 0} pages to WordPress!`, 'success');
+        loadNodes(plan.id);
+      } else {
+        showNotification(data.error || 'Push failed', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to push to WordPress', 'error');
+    }
+    setPushing(false);
   };
 
   // Toggle node expansion
@@ -459,6 +489,49 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
             </span>
           )}
 
+          {/* Push to WordPress button */}
+          <div className="relative group">
+            <button
+              onClick={() => pushToWordPress('draft')}
+              disabled={pushing || flatNodes.filter(n => !n.wp_page_id).length === 0}
+              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white text-sm transition disabled:opacity-50 flex items-center gap-1"
+            >
+              {pushing ? (
+                <>
+                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Pushing...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Push to WP
+                </>
+              )}
+            </button>
+            {/* Dropdown for publish option */}
+            <div className="absolute right-0 mt-1 w-40 bg-slate-800 border border-slate-600 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+              <button
+                onClick={() => pushToWordPress('draft')}
+                disabled={pushing}
+                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-700 rounded-t-lg"
+              >
+                Push as Drafts
+              </button>
+              <button
+                onClick={() => pushToWordPress('publish')}
+                disabled={pushing}
+                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-700 rounded-b-lg border-t border-slate-700"
+              >
+                Push & Publish
+              </button>
+            </div>
+          </div>
+
           {/* Check sync button */}
           <button
             onClick={checkSync}
@@ -506,6 +579,25 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
               <span className="text-blue-400">{syncResult.extraInWP?.length || 0}</span>
               <span className="text-gray-400 ml-1">Extra in WP</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Push result */}
+      {pushResult && (
+        <div className="mb-4 p-3 bg-slate-800 rounded-lg border border-green-700/50">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-green-400">Push Complete</span>
+            <button onClick={() => setPushResult(null)} className="text-gray-400 hover:text-white">&times;</button>
+          </div>
+          <div className="text-sm">
+            <span className="text-green-400">{pushResult.pushed?.length || 0}</span>
+            <span className="text-gray-400 ml-1">pages pushed to WordPress</span>
+            {pushResult.errors?.length > 0 && (
+              <div className="mt-2 text-orange-400">
+                {pushResult.errors.length} errors occurred
+              </div>
+            )}
           </div>
         </div>
       )}

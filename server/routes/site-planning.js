@@ -355,8 +355,8 @@ router.put('/nodes/:nodeId', requireDb, async (req, res) => {
         wp_page_id = COALESCE(${wpPageId}, wp_page_id),
         wp_post_url = COALESCE(${wpPostUrl}, wp_post_url),
         updated_at = CURRENT_TIMESTAMP,
-        built_at = ${wpPageId ? 'CURRENT_TIMESTAMP' : null},
-        published_at = ${status === 'published' ? 'CURRENT_TIMESTAMP' : null}
+        built_at = CASE WHEN ${wpPageId}::INTEGER IS NOT NULL THEN CURRENT_TIMESTAMP ELSE built_at END,
+        published_at = CASE WHEN ${status} = 'published' THEN CURRENT_TIMESTAMP ELSE published_at END
       WHERE id = ${nodeId}
       RETURNING *
     `;
