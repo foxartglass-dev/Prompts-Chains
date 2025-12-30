@@ -1053,8 +1053,698 @@ router.post('/push-with-content/:nodeId', requireDb, async (req, res) => {
 });
 
 // ============================================
+// TAB-BASED HIERARCHY IMPORT
+// ============================================
+
+/**
+ * POST /api/site-planning/import-hierarchy
+ * Import site structure from tab-indented text
+ * Each tab level = one depth level in hierarchy
+ */
+router.post('/import-hierarchy', requireDb, async (req, res) => {
+  try {
+    const { sitePlanId, text, mode = 'merge', audienceTag } = req.body;
+
+    if (!sitePlanId || !text) {
+      return res.status(400).json({ error: 'sitePlanId and text are required' });
+    }
+
+    // Parse the tab-indented text
+    const lines = text.split('\n').filter(line => line.trim());
+    const parsedNodes = [];
+
+    for (const line of lines) {
+      // Count leading tabs (or 2-space groups)
+      const tabMatch = line.match(/^(\t*)/);
+      const spaceMatch = line.match(/^( *)/);
+
+      let depth = 0;
+      if (tabMatch && tabMatch[1]) {
+        depth = tabMatch[1].length;
+      } else if (spaceMatch && spaceMatch[1]) {
+        depth = Math.floor(spaceMatch[1].length / 2);
+      }
+
+      const title = line.trim();
+      if (!title) continue;
+
+      // Check for audience tag suffix (e.g., "Deep Cleaning [H]")
+      let extractedTag = null;
+      let cleanTitle = title;
+      const tagMatch = title.match(/\s*\[([A-Z]+)\]\s*$/i);
+      if (tagMatch) {
+        extractedTag = tagMatch[1].toUpperCase();
+        cleanTitle = title.replace(/\s*\[[A-Z]+\]\s*$/i, '').trim();
+      }
+
+      parsedNodes.push({
+        title: cleanTitle,
+        depth,
+        audienceTag: extractedTag || audienceTag,
+        slug: cleanTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+      });
+    }
+
+    // Get existing nodes for conflict detection
+    const existingNodes = await sql`
+      SELECT id, title, slug, parent_id, depth
+      FROM site_plan_nodes
+      WHERE site_plan_id = ${sitePlanId}
+    `;
+
+    const existingByTitle = {};
+    const existingBySlug = {};
+    existingNodes.forEach(n => {
+      existingByTitle[n.title.toLowerCase()] = n;
+      existingBySlug[n.slug] = n;
+    });
+
+    // Detect conflicts
+    const conflicts = [];
+    const toCreate = [];
+    const toUpdate = [];
+
+    // Track parents by depth for hierarchy building
+    const parentStack = [null]; // Index = depth, value = parent node ID or pending title
+
+    for (let i = 0; i < parsedNodes.length; i++) {
+      const node = parsedNodes[i];
+      const existing = existingByTitle[node.title.toLowerCase()] || existingBySlug[node.slug];
+
+      // Determine parent
+      const parentDepth = node.depth - 1;
+      let parentRef = parentDepth >= 0 ? parentStack[parentDepth] : null;
+
+      if (existing) {
+        // Check if there's a conflict (different parent)
+        if (mode === 'merge') {
+          // Check if existing has different parent
+          const existingParentTitle = existing.parent_id ?
+            existingNodes.find(n => n.id === existing.parent_id)?.title : null;
+
+          // Find expected parent title
+          let expectedParentTitle = null;
+          for (let j = i - 1; j >= 0; j--) {
+            if (parsedNodes[j].depth === parentDepth) {
+              expectedParentTitle = parsedNodes[j].title;
+              break;
+            }
+          }
+
+          if (existingParentTitle?.toLowerCase() !== expectedParentTitle?.toLowerCase()) {
+            conflicts.push({
+              title: node.title,
+              existingParent: existingParentTitle,
+              importParent: expectedParentTitle,
+              existingId: existing.id,
+              action: 'skip' // Default action
+            });
+          }
+        }
+      } else {
+        toCreate.push({
+          ...node,
+          parentRef,
+          index: i
+        });
+      }
+
+      // Update parent stack
+      parentStack[node.depth] = node.title;
+      // Clear deeper levels
+      for (let d = node.depth + 1; d < parentStack.length; d++) {
+        parentStack[d] = undefined;
+      }
+    }
+
+    // If there are conflicts and mode is 'preview', return them
+    if (conflicts.length > 0 && mode === 'preview') {
+      return res.json({
+        success: true,
+        preview: true,
+        parsed: parsedNodes.length,
+        conflicts,
+        toCreate: toCreate.length,
+        existing: existingNodes.length
+      });
+    }
+
+    // If mode is 'replace', clear all existing nodes first
+    if (mode === 'replace') {
+      await sql`DELETE FROM site_plan_nodes WHERE site_plan_id = ${sitePlanId}`;
+    }
+
+    // Create nodes in order, tracking IDs for parent references
+    const createdMap = {}; // title -> id
+    let created = 0;
+
+    // First, map existing nodes
+    existingNodes.forEach(n => {
+      createdMap[n.title.toLowerCase()] = n.id;
+    });
+
+    for (const nodeData of parsedNodes) {
+      // Skip if already exists in merge mode
+      if (mode === 'merge' && createdMap[nodeData.title.toLowerCase()]) {
+        continue;
+      }
+
+      // Find parent ID
+      let parentId = null;
+      if (nodeData.depth > 0) {
+        // Look for parent in previous nodes at depth - 1
+        for (let j = parsedNodes.indexOf(nodeData) - 1; j >= 0; j--) {
+          if (parsedNodes[j].depth === nodeData.depth - 1) {
+            parentId = createdMap[parsedNodes[j].title.toLowerCase()];
+            break;
+          }
+        }
+      }
+
+      // Determine page type based on depth and content
+      let pageType = 'page';
+      if (nodeData.depth === 0) {
+        pageType = 'category';
+      } else if (nodeData.depth === 1) {
+        pageType = 'service';
+      }
+
+      const result = await sql`
+        INSERT INTO site_plan_nodes (
+          site_plan_id, parent_id, title, slug, page_type,
+          depth, sort_order, content_brief
+        ) VALUES (
+          ${sitePlanId}, ${parentId}, ${nodeData.title}, ${nodeData.slug}, ${pageType},
+          ${nodeData.depth}, ${created}, ${nodeData.audienceTag ? `Audience: ${nodeData.audienceTag}` : null}
+        )
+        RETURNING *
+      `;
+
+      createdMap[nodeData.title.toLowerCase()] = result[0].id;
+      created++;
+    }
+
+    // Update plan stats
+    await updatePlanStats(sitePlanId);
+
+    res.json({
+      success: true,
+      created,
+      total: parsedNodes.length,
+      conflicts: conflicts.length,
+      mode
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error importing hierarchy:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// MULTI-LOCATION SUPPORT
+// ============================================
+
+/**
+ * POST /api/site-planning/add-location/:planId
+ * Add a new location to the site structure
+ * This duplicates the existing structure under a new location landing page
+ */
+router.post('/add-location/:planId', requireDb, async (req, res) => {
+  try {
+    const { planId } = req.params;
+    const { locationName, duplicateFrom } = req.body;
+
+    if (!locationName) {
+      return res.status(400).json({ error: 'locationName is required' });
+    }
+
+    // Get plan
+    const plans = await sql`SELECT * FROM site_plans WHERE id = ${planId}`;
+    if (plans.length === 0) {
+      return res.status(404).json({ error: 'Site plan not found' });
+    }
+
+    // Get current location count
+    const locationNodes = await sql`
+      SELECT * FROM site_plan_nodes
+      WHERE site_plan_id = ${planId}
+        AND page_type = 'location'
+        AND parent_id IS NULL
+    `;
+
+    const isFirstExpansion = locationNodes.length === 0;
+
+    // Get all root level nodes (to be duplicated or shifted)
+    const rootNodes = await sql`
+      SELECT * FROM site_plan_nodes
+      WHERE site_plan_id = ${planId}
+        AND parent_id IS NULL
+      ORDER BY sort_order
+    `;
+
+    // Get the homepage
+    const homepage = rootNodes.find(n => n.slug === '' || n.slug === 'home' || n.title.toLowerCase() === 'homepage');
+
+    if (isFirstExpansion) {
+      // FIRST EXPANSION: Convert from single-location to multi-location structure
+
+      // 1. Find category/service nodes at root level (not About, Contact, etc.)
+      const businessNodes = rootNodes.filter(n =>
+        n.page_type === 'category' ||
+        n.page_type === 'service' ||
+        (n.title.toLowerCase() !== 'about' &&
+         n.title.toLowerCase() !== 'contact' &&
+         n.title.toLowerCase() !== 'homepage' &&
+         !n.title.toLowerCase().includes('about') &&
+         !n.title.toLowerCase().includes('contact'))
+      );
+
+      // 2. Create Location 1 landing page (for existing structure)
+      const location1 = await sql`
+        INSERT INTO site_plan_nodes (
+          site_plan_id, parent_id, title, slug, page_type,
+          depth, sort_order, is_pillar_page
+        ) VALUES (
+          ${planId}, NULL, 'Location 1', 'location-1', 'location',
+          0, 0, true
+        )
+        RETURNING *
+      `;
+
+      // 3. Move business nodes under Location 1
+      for (const node of businessNodes) {
+        await sql`
+          UPDATE site_plan_nodes
+          SET parent_id = ${location1[0].id}, depth = depth + 1
+          WHERE id = ${node.id}
+        `;
+        // Also update all children's depths
+        await updateChildrenDepths(node.id, 1);
+      }
+
+      // 4. Create Location 2 (the new one)
+      const location2 = await sql`
+        INSERT INTO site_plan_nodes (
+          site_plan_id, parent_id, title, slug, page_type,
+          depth, sort_order, is_pillar_page
+        ) VALUES (
+          ${planId}, NULL, ${locationName}, ${locationName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}, 'location',
+          0, 1, true
+        )
+        RETURNING *
+      `;
+
+      // 5. Duplicate the business structure under Location 2
+      const duplicated = await duplicateSubtree(planId, location1[0].id, location2[0].id);
+
+      await updatePlanStats(planId);
+
+      res.json({
+        success: true,
+        message: 'Expanded to multi-location structure',
+        firstExpansion: true,
+        location1: location1[0],
+        location2: location2[0],
+        duplicatedNodes: duplicated
+      });
+
+    } else {
+      // SUBSEQUENT EXPANSION: Add another location
+
+      // 1. Determine which location to duplicate from
+      let sourceLocationId = duplicateFrom;
+      if (!sourceLocationId) {
+        // Default to first location
+        sourceLocationId = locationNodes[0].id;
+      }
+
+      // 2. Create new location landing page
+      const newLocation = await sql`
+        INSERT INTO site_plan_nodes (
+          site_plan_id, parent_id, title, slug, page_type,
+          depth, sort_order, is_pillar_page
+        ) VALUES (
+          ${planId}, NULL, ${locationName}, ${locationName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}, 'location',
+          0, ${locationNodes.length}, true
+        )
+        RETURNING *
+      `;
+
+      // 3. Duplicate the structure from source location
+      const duplicated = await duplicateSubtree(planId, sourceLocationId, newLocation[0].id);
+
+      await updatePlanStats(planId);
+
+      res.json({
+        success: true,
+        message: `Added location: ${locationName}`,
+        firstExpansion: false,
+        newLocation: newLocation[0],
+        duplicatedFrom: sourceLocationId,
+        duplicatedNodes: duplicated
+      });
+    }
+
+  } catch (error) {
+    console.error('[Site Planning] Error adding location:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/site-planning/locations/:planId
+ * Get all locations in a plan
+ */
+router.get('/locations/:planId', requireDb, async (req, res) => {
+  try {
+    const { planId } = req.params;
+
+    const locations = await sql`
+      SELECT spn.*,
+        (SELECT COUNT(*) FROM site_plan_nodes WHERE parent_id = spn.id) as child_count
+      FROM site_plan_nodes spn
+      WHERE spn.site_plan_id = ${planId}
+        AND spn.page_type = 'location'
+        AND spn.parent_id IS NULL
+      ORDER BY spn.sort_order
+    `;
+
+    res.json({
+      success: true,
+      locations,
+      isMultiLocation: locations.length > 0
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error getting locations:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-planning/bulk-edit/:planId
+ * Bulk edit nodes (for editing duplicated location structure)
+ */
+router.post('/bulk-edit/:planId', requireDb, async (req, res) => {
+  try {
+    const { planId } = req.params;
+    const { edits } = req.body;
+
+    if (!Array.isArray(edits)) {
+      return res.status(400).json({ error: 'edits must be an array' });
+    }
+
+    const results = [];
+
+    for (const edit of edits) {
+      if (!edit.nodeId) continue;
+
+      const updates = {};
+      if (edit.title) updates.title = edit.title;
+      if (edit.slug) updates.slug = edit.slug;
+      if (edit.targetKeyword) updates.target_keyword = edit.targetKeyword;
+
+      if (Object.keys(updates).length === 0) continue;
+
+      const result = await sql`
+        UPDATE site_plan_nodes
+        SET
+          title = COALESCE(${edit.title}, title),
+          slug = COALESCE(${edit.slug}, slug),
+          target_keyword = COALESCE(${edit.targetKeyword}, target_keyword),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${edit.nodeId} AND site_plan_id = ${planId}
+        RETURNING *
+      `;
+
+      if (result.length > 0) {
+        results.push(result[0]);
+      }
+    }
+
+    res.json({
+      success: true,
+      updated: results.length
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error bulk editing:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// NEIGHBORHOOD PAGES (GAP ANALYSIS)
+// ============================================
+
+/**
+ * POST /api/site-planning/analyze-gaps/:planId
+ * Analyze heat map data to find geographic gaps and suggest neighborhood pages
+ */
+router.post('/analyze-gaps/:planId', requireDb, async (req, res) => {
+  try {
+    const { planId } = req.params;
+    const { websiteId, threshold = 15 } = req.body;
+
+    // Get plan
+    const plans = await sql`
+      SELECT sp.*, w.id as website_id
+      FROM site_plans sp
+      LEFT JOIN websites w ON sp.website_id = w.id
+      WHERE sp.id = ${planId}
+    `;
+
+    if (plans.length === 0) {
+      return res.status(404).json({ error: 'Site plan not found' });
+    }
+
+    const plan = plans[0];
+    const targetWebsiteId = websiteId || plan.website_id;
+
+    if (!targetWebsiteId) {
+      return res.status(400).json({ error: 'No website associated with this plan' });
+    }
+
+    // Get recent GeoGrid scans from local_viking_scans table
+    const scans = await sql`
+      SELECT * FROM local_viking_scans
+      WHERE website_id = ${targetWebsiteId}
+        AND created_at > NOW() - INTERVAL '30 days'
+      ORDER BY created_at DESC
+      LIMIT 10
+    `;
+
+    if (scans.length === 0) {
+      return res.json({
+        success: true,
+        gaps: [],
+        message: 'No recent scan data available. Run a GeoGrid scan first.'
+      });
+    }
+
+    // Analyze grid data for gaps (positions > threshold)
+    const gaps = [];
+    const seen = new Set();
+
+    for (const scan of scans) {
+      if (!scan.grid_data) continue;
+
+      let gridData;
+      try {
+        gridData = typeof scan.grid_data === 'string' ? JSON.parse(scan.grid_data) : scan.grid_data;
+      } catch (e) {
+        continue;
+      }
+
+      // Find cells where rank > threshold (gaps)
+      if (Array.isArray(gridData)) {
+        for (const cell of gridData) {
+          if (cell.rank && cell.rank > threshold) {
+            const key = `${cell.lat?.toFixed(3)},${cell.lng?.toFixed(3)}`;
+            if (!seen.has(key) && cell.lat && cell.lng) {
+              gaps.push({
+                lat: cell.lat,
+                lng: cell.lng,
+                rank: cell.rank,
+                keyword: scan.keyword,
+                scanDate: scan.created_at
+              });
+              seen.add(key);
+            }
+          }
+        }
+      }
+    }
+
+    // Sort gaps by rank (worst first)
+    gaps.sort((a, b) => b.rank - a.rank);
+
+    // Limit to top 20 gaps
+    const topGaps = gaps.slice(0, 20);
+
+    res.json({
+      success: true,
+      gaps: topGaps,
+      total: gaps.length,
+      threshold,
+      scansAnalyzed: scans.length
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error analyzing gaps:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-planning/create-neighborhood/:planId
+ * Create a neighborhood page for a gap area
+ */
+router.post('/create-neighborhood/:planId', requireDb, async (req, res) => {
+  try {
+    const { planId } = req.params;
+    const { name, lat, lng, landmark, keywords } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+
+    // Check if Neighborhoods parent exists, create if not
+    let neighborhoodsParent = await sql`
+      SELECT * FROM site_plan_nodes
+      WHERE site_plan_id = ${planId}
+        AND (slug = 'neighborhoods' OR slug = 'service-areas' OR slug = 'areas-we-serve')
+        AND parent_id IS NULL
+      LIMIT 1
+    `;
+
+    if (neighborhoodsParent.length === 0) {
+      // Create the Neighborhoods parent node
+      const created = await sql`
+        INSERT INTO site_plan_nodes (
+          site_plan_id, parent_id, title, slug, page_type,
+          depth, sort_order, is_pillar_page
+        ) VALUES (
+          ${planId}, NULL, 'Neighborhoods', 'neighborhoods', 'category',
+          0, 99, true
+        )
+        RETURNING *
+      `;
+      neighborhoodsParent = created;
+    }
+
+    const parentId = neighborhoodsParent[0].id;
+
+    // Create the neighborhood page
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    const contentBrief = [
+      landmark ? `Featured landmark: ${landmark}` : null,
+      lat && lng ? `Coordinates: ${lat}, ${lng}` : null,
+      keywords?.length ? `Target keywords: ${keywords.join(', ')}` : null
+    ].filter(Boolean).join('\n');
+
+    const result = await sql`
+      INSERT INTO site_plan_nodes (
+        site_plan_id, parent_id, title, slug, page_type,
+        target_keyword, depth, sort_order, content_brief
+      ) VALUES (
+        ${planId}, ${parentId}, ${name}, ${slug}, 'location',
+        ${keywords?.[0] || name}, 1, 0, ${contentBrief || null}
+      )
+      RETURNING *
+    `;
+
+    await updatePlanStats(planId);
+
+    res.json({
+      success: true,
+      node: result[0],
+      parentId
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error creating neighborhood:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-planning/suggest-landmarks
+ * Query for landmark suggestions in a geographic area
+ * Note: This is a placeholder - in production would use Google Places API
+ */
+router.post('/suggest-landmarks', requireDb, async (req, res) => {
+  try {
+    const { lat, lng, radius = 2 } = req.body;
+
+    if (!lat || !lng) {
+      return res.status(400).json({ error: 'lat and lng are required' });
+    }
+
+    // In production, this would call Google Places API
+    // For now, return a placeholder response
+    res.json({
+      success: true,
+      suggestions: [
+        {
+          name: 'Area near coordinates',
+          type: 'neighborhood',
+          distance: 0,
+          relevance: 'high',
+          note: 'Google Places API integration needed for actual landmarks'
+        }
+      ],
+      message: 'Landmark suggestions require Google Places API integration'
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error suggesting landmarks:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+/**
+ * Duplicate a subtree under a new parent
+ */
+async function duplicateSubtree(planId, sourceParentId, newParentId) {
+  const children = await sql`
+    SELECT * FROM site_plan_nodes
+    WHERE site_plan_id = ${planId} AND parent_id = ${sourceParentId}
+    ORDER BY sort_order
+  `;
+
+  const duplicated = [];
+
+  for (const child of children) {
+    // Create copy under new parent
+    const copy = await sql`
+      INSERT INTO site_plan_nodes (
+        site_plan_id, parent_id, title, slug, page_type,
+        target_keyword, meta_title, meta_description, content_brief,
+        is_pillar_page, is_in_menu, sort_order, depth
+      ) VALUES (
+        ${planId}, ${newParentId}, ${child.title}, ${child.slug}, ${child.page_type},
+        ${child.target_keyword}, ${child.meta_title}, ${child.meta_description}, ${child.content_brief},
+        ${child.is_pillar_page}, ${child.is_in_menu}, ${child.sort_order}, ${child.depth}
+      )
+      RETURNING *
+    `;
+
+    duplicated.push(copy[0]);
+
+    // Recursively duplicate children
+    const childDups = await duplicateSubtree(planId, child.id, copy[0].id);
+    duplicated.push(...childDups);
+  }
+
+  return duplicated;
+}
 
 async function updatePlanStats(planId) {
   const stats = await sql`

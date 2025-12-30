@@ -83,6 +83,29 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
   const [showImportModal, setShowImportModal] = useState(false);
   const [importData, setImportData] = useState('');
 
+  // Tab-based import state
+  const [showTabImportModal, setShowTabImportModal] = useState(false);
+  const [tabImportText, setTabImportText] = useState('');
+  const [tabImportMode, setTabImportMode] = useState<'merge' | 'replace' | 'preview'>('merge');
+  const [tabImportResult, setTabImportResult] = useState<any>(null);
+  const [tabImporting, setTabImporting] = useState(false);
+
+  // Multi-location state
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [newLocationName, setNewLocationName] = useState('');
+  const [locations, setLocations] = useState<any[]>([]);
+  const [addingLocation, setAddingLocation] = useState(false);
+
+  // Bulk edit state
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [bulkEditLocation, setBulkEditLocation] = useState<any>(null);
+  const [bulkEditNodes, setBulkEditNodes] = useState<any[]>([]);
+
+  // Gap analysis state
+  const [showGapModal, setShowGapModal] = useState(false);
+  const [gaps, setGaps] = useState<any[]>([]);
+  const [analyzingGaps, setAnalyzingGaps] = useState(false);
+
   // Sync state
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
@@ -249,6 +272,217 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
       }
     } catch (error) {
       showNotification('Failed to import', 'error');
+    }
+  };
+
+  // Load locations for multi-location support
+  const loadLocations = useCallback(async () => {
+    if (!plan) return;
+    try {
+      const res = await fetch(`/api/site-planning/locations/${plan.id}`);
+      const data = await res.json();
+      if (data.success) {
+        setLocations(data.locations);
+      }
+    } catch (error) {
+      console.error('Failed to load locations:', error);
+    }
+  }, [plan]);
+
+  useEffect(() => {
+    if (plan) {
+      loadLocations();
+    }
+  }, [plan, loadLocations]);
+
+  // Tab-based hierarchy import
+  const importTabHierarchy = async (mode: 'merge' | 'replace' | 'preview' = 'merge') => {
+    if (!plan || !tabImportText.trim()) return;
+
+    setTabImporting(true);
+    try {
+      const res = await fetch('/api/site-planning/import-hierarchy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sitePlanId: plan.id,
+          text: tabImportText,
+          mode,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        if (data.preview) {
+          setTabImportResult(data);
+        } else {
+          showNotification(`Imported ${data.created} pages!`, 'success');
+          setShowTabImportModal(false);
+          setTabImportText('');
+          setTabImportResult(null);
+          loadNodes(plan.id);
+        }
+      } else {
+        showNotification(data.error || 'Import failed', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to import hierarchy', 'error');
+    }
+    setTabImporting(false);
+  };
+
+  // Add a new location
+  const addLocation = async () => {
+    if (!plan || !newLocationName.trim()) return;
+
+    setAddingLocation(true);
+    try {
+      const res = await fetch(`/api/site-planning/add-location/${plan.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locationName: newLocationName.trim(),
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        showNotification(data.message, 'success');
+        setShowLocationModal(false);
+        setNewLocationName('');
+        loadNodes(plan.id);
+        loadLocations();
+      } else {
+        showNotification(data.error || 'Failed to add location', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to add location', 'error');
+    }
+    setAddingLocation(false);
+  };
+
+  // Load nodes for bulk editing a location
+  const loadLocationForEdit = async (location: any) => {
+    if (!plan) return;
+
+    try {
+      const res = await fetch(`/api/site-planning/nodes/${plan.id}`);
+      const data = await res.json();
+      if (data.success) {
+        // Find all nodes under this location
+        const locationNodes = data.flatNodes.filter((n: any) => {
+          let current = n;
+          while (current) {
+            if (current.id === location.id) return true;
+            current = data.flatNodes.find((p: any) => p.id === current.parent_id);
+          }
+          return false;
+        });
+        setBulkEditNodes(locationNodes.map((n: any) => ({
+          ...n,
+          newTitle: n.title,
+          newSlug: n.slug,
+          sameAsOriginal: true,
+        })));
+        setBulkEditLocation(location);
+        setShowBulkEditModal(true);
+      }
+    } catch (error) {
+      showNotification('Failed to load location data', 'error');
+    }
+  };
+
+  // Save bulk edits
+  const saveBulkEdits = async () => {
+    if (!plan) return;
+
+    const edits = bulkEditNodes
+      .filter(n => !n.sameAsOriginal)
+      .map(n => ({
+        nodeId: n.id,
+        title: n.newTitle,
+        slug: n.newSlug,
+      }));
+
+    if (edits.length === 0) {
+      showNotification('No changes to save', 'info');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/site-planning/bulk-edit/${plan.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edits }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        showNotification(`Updated ${data.updated} pages`, 'success');
+        setShowBulkEditModal(false);
+        loadNodes(plan.id);
+      } else {
+        showNotification(data.error || 'Failed to save edits', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to save bulk edits', 'error');
+    }
+  };
+
+  // Analyze gaps from heat map
+  const analyzeGaps = async () => {
+    if (!plan) return;
+
+    setAnalyzingGaps(true);
+    try {
+      const res = await fetch(`/api/site-planning/analyze-gaps/${plan.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threshold: 15 }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setGaps(data.gaps);
+        if (data.gaps.length === 0) {
+          showNotification(data.message || 'No gaps found', 'info');
+        }
+      } else {
+        showNotification(data.error || 'Analysis failed', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to analyze gaps', 'error');
+    }
+    setAnalyzingGaps(false);
+  };
+
+  // Create neighborhood page from gap
+  const createNeighborhoodPage = async (gap: any, name: string) => {
+    if (!plan || !name.trim()) return;
+
+    try {
+      const res = await fetch(`/api/site-planning/create-neighborhood/${plan.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          lat: gap.lat,
+          lng: gap.lng,
+          keywords: [gap.keyword],
+        }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        showNotification(`Created neighborhood page: ${name}`, 'success');
+        loadNodes(plan.id);
+        // Remove from gaps list
+        setGaps(prev => prev.filter(g => g !== gap));
+      } else {
+        showNotification(data.error || 'Failed to create page', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to create neighborhood page', 'error');
     }
   };
 
@@ -541,12 +775,46 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
             {syncing ? 'Checking...' : 'Check WP Sync'}
           </button>
 
-          {/* Import button */}
+          {/* Tab Import button */}
+          <button
+            onClick={() => setShowTabImportModal(true)}
+            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition flex items-center gap-1"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Import List
+          </button>
+
+          {/* Multi-location button */}
+          <button
+            onClick={() => setShowLocationModal(true)}
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 rounded text-white text-sm transition flex items-center gap-1"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            + Location
+          </button>
+
+          {/* Gap Analysis button */}
+          <button
+            onClick={() => { setShowGapModal(true); analyzeGaps(); }}
+            className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 rounded text-white text-sm transition flex items-center gap-1"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+            Neighborhoods
+          </button>
+
+          {/* Import CSV button */}
           <button
             onClick={() => setShowImportModal(true)}
-            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition"
+            className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 rounded text-white text-sm transition"
           >
-            Import CSV
+            CSV
           </button>
 
           {/* Add root page */}
@@ -823,6 +1091,389 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
           </div>
         </div>
       )}
+
+      {/* Tab-Based Import Modal */}
+      {showTabImportModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-3xl max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+              <h3 className="text-lg font-semibold text-white">Import Site Structure</h3>
+              <button onClick={() => { setShowTabImportModal(false); setTabImportResult(null); }} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <p className="text-sm text-gray-400 mb-2">
+                  Paste your page list. Use <span className="text-brand-cyan font-semibold">tabs</span> for hierarchy:
+                </p>
+                <div className="bg-slate-800 p-3 rounded text-xs font-mono text-gray-300 mb-3">
+                  <div>Home Cleaning Services</div>
+                  <div className="ml-4">Deep Cleaning</div>
+                  <div className="ml-4">Move-In Cleaning</div>
+                  <div>Janitorial Services</div>
+                  <div className="ml-4">Office Cleaning</div>
+                  <div className="ml-4">Medical Facility</div>
+                </div>
+                <p className="text-xs text-gray-500 mb-2">
+                  Optional: Add audience tags like <code className="text-amber-400">[H]</code> <code className="text-amber-400">[J]</code> <code className="text-amber-400">[C]</code> after titles
+                </p>
+              </div>
+
+              <textarea
+                value={tabImportText}
+                onChange={(e) => setTabImportText(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white font-mono text-sm"
+                rows={12}
+                placeholder="Home Cleaning Services&#10;&#9;Deep Cleaning [H]&#10;&#9;Move-In Cleaning [H]&#10;&#9;Regular Maid Service [H]&#10;Janitorial Services&#10;&#9;Office Cleaning [J]&#10;&#9;Medical Facility Cleaning [J]&#10;Construction Cleanup&#10;&#9;Post-Construction [C]&#10;&#9;Rough Clean [C]"
+              />
+
+              {/* Import mode selection */}
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input
+                    type="radio"
+                    name="importMode"
+                    checked={tabImportMode === 'merge'}
+                    onChange={() => setTabImportMode('merge')}
+                    className="accent-brand-cyan"
+                  />
+                  Merge (fill in blanks)
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-300">
+                  <input
+                    type="radio"
+                    name="importMode"
+                    checked={tabImportMode === 'replace'}
+                    onChange={() => setTabImportMode('replace')}
+                    className="accent-brand-cyan"
+                  />
+                  Replace all
+                </label>
+              </div>
+
+              {/* Preview results */}
+              {tabImportResult && (
+                <div className="bg-slate-800 p-4 rounded-lg border border-slate-600">
+                  <h4 className="text-sm font-semibold text-white mb-2">Preview</h4>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-green-400 font-bold">{tabImportResult.toCreate}</span>
+                      <span className="text-gray-400 ml-1">to create</span>
+                    </div>
+                    <div>
+                      <span className="text-blue-400 font-bold">{tabImportResult.existing}</span>
+                      <span className="text-gray-400 ml-1">existing</span>
+                    </div>
+                    <div>
+                      <span className="text-orange-400 font-bold">{tabImportResult.conflicts?.length || 0}</span>
+                      <span className="text-gray-400 ml-1">conflicts</span>
+                    </div>
+                  </div>
+
+                  {/* Conflict details */}
+                  {tabImportResult.conflicts?.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <h5 className="text-xs font-semibold text-orange-400">Conflicts:</h5>
+                      {tabImportResult.conflicts.map((c: any, i: number) => (
+                        <div key={i} className="text-xs bg-slate-900 p-2 rounded">
+                          <span className="text-white font-medium">{c.title}</span>
+                          <div className="text-gray-400 mt-1">
+                            Existing: <span className="text-blue-400">{c.existingParent || 'root'}</span>
+                            {' → '}
+                            Import: <span className="text-green-400">{c.importParent || 'root'}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between p-4 border-t border-slate-700">
+              <button
+                onClick={() => importTabHierarchy('preview')}
+                disabled={tabImporting || !tabImportText.trim()}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white transition disabled:opacity-50"
+              >
+                Preview
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowTabImportModal(false); setTabImportResult(null); }}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => importTabHierarchy(tabImportMode)}
+                  disabled={tabImporting || !tabImportText.trim()}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white font-medium transition disabled:opacity-50 flex items-center gap-2"
+                >
+                  {tabImporting && (
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  )}
+                  {tabImportMode === 'replace' ? 'Replace & Import' : 'Merge & Import'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Multi-Location Modal */}
+      {showLocationModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-lg">
+            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+              <h3 className="text-lg font-semibold text-white">Add Location</h3>
+              <button onClick={() => setShowLocationModal(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* Current locations */}
+              {locations.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-2">Current Locations ({locations.length})</h4>
+                  <div className="space-y-2">
+                    {locations.map((loc) => (
+                      <div key={loc.id} className="flex items-center justify-between p-2 bg-slate-800 rounded">
+                        <span className="text-white font-medium">{loc.title}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400">{loc.child_count} pages</span>
+                          <button
+                            onClick={() => loadLocationForEdit(loc)}
+                            className="text-xs text-blue-400 hover:text-blue-300"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Add new location */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">
+                  {locations.length === 0 ? 'Add Second Location (converts to multi-location structure)' : 'Add New Location'}
+                </label>
+                <input
+                  type="text"
+                  value={newLocationName}
+                  onChange={(e) => setNewLocationName(e.target.value)}
+                  placeholder="e.g., Phoenix, Scottsdale, Downtown"
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white"
+                />
+                {locations.length === 0 && (
+                  <p className="text-xs text-amber-400 mt-2">
+                    This will shift your current structure under "Location 1" and create a duplicate for the new location.
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t border-slate-700">
+              <button
+                onClick={() => setShowLocationModal(false)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addLocation}
+                disabled={addingLocation || !newLocationName.trim()}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded text-white font-medium transition disabled:opacity-50 flex items-center gap-2"
+              >
+                {addingLocation && (
+                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                Add Location
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Edit Modal */}
+      {showBulkEditModal && bulkEditLocation && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-3xl max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+              <h3 className="text-lg font-semibold text-white">
+                Edit: {bulkEditLocation.title}
+              </h3>
+              <button onClick={() => setShowBulkEditModal(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-gray-400 mb-4">
+                Uncheck pages that should be different from the original location, then edit their names.
+              </p>
+              <div className="space-y-2 max-h-[400px] overflow-auto">
+                {bulkEditNodes.map((node, idx) => (
+                  <div key={node.id} className="flex items-center gap-3 p-2 bg-slate-800 rounded">
+                    <input
+                      type="checkbox"
+                      checked={node.sameAsOriginal}
+                      onChange={(e) => {
+                        const updated = [...bulkEditNodes];
+                        updated[idx].sameAsOriginal = e.target.checked;
+                        setBulkEditNodes(updated);
+                      }}
+                      className="accent-brand-cyan"
+                    />
+                    <div className="flex-1 flex gap-2">
+                      <input
+                        type="text"
+                        value={node.newTitle}
+                        onChange={(e) => {
+                          const updated = [...bulkEditNodes];
+                          updated[idx].newTitle = e.target.value;
+                          updated[idx].sameAsOriginal = false;
+                          setBulkEditNodes(updated);
+                        }}
+                        disabled={node.sameAsOriginal}
+                        className={`flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-sm ${node.sameAsOriginal ? 'opacity-50' : ''}`}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500" style={{ paddingLeft: `${node.depth * 8}px` }}>
+                      L{node.depth}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-between p-4 border-t border-slate-700">
+              <span className="text-sm text-gray-400">
+                {bulkEditNodes.filter(n => !n.sameAsOriginal).length} changes pending
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowBulkEditModal(false)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveBulkEdits}
+                  className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium transition"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gap Analysis / Neighborhoods Modal */}
+      {showGapModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-3xl max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+              <h3 className="text-lg font-semibold text-white">Neighborhood Pages</h3>
+              <button onClick={() => setShowGapModal(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-gray-400 mb-4">
+                Analyze your heat map data to find geographic gaps and create neighborhood pages to fill them.
+              </p>
+
+              {analyzingGaps ? (
+                <div className="text-center py-8">
+                  <svg className="animate-spin w-8 h-8 mx-auto text-pink-500" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <p className="text-gray-400 mt-2">Analyzing heat map data...</p>
+                </div>
+              ) : gaps.length === 0 ? (
+                <div className="text-center py-8 bg-slate-800 rounded-lg">
+                  <svg className="w-12 h-12 mx-auto text-gray-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                  </svg>
+                  <p className="text-gray-400 mb-2">No gaps found in current data.</p>
+                  <p className="text-xs text-gray-500">
+                    Run GeoGrid scans in Local Viking first, then come back here to find coverage gaps.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm text-gray-400">
+                      Found <span className="text-pink-400 font-bold">{gaps.length}</span> geographic gaps
+                    </span>
+                    <button
+                      onClick={analyzeGaps}
+                      className="text-sm text-blue-400 hover:text-blue-300"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+
+                  {gaps.map((gap, idx) => (
+                    <GapItem key={idx} gap={gap} onCreate={(name) => createNeighborhoodPage(gap, name)} />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t border-slate-700">
+              <button
+                onClick={() => setShowGapModal(false)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Gap Item Component
+const GapItem: React.FC<{ gap: any; onCreate: (name: string) => void }> = ({ gap, onCreate }) => {
+  const [name, setName] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const handleCreate = () => {
+    if (!name.trim()) return;
+    setCreating(true);
+    onCreate(name);
+  };
+
+  return (
+    <div className="p-3 bg-slate-800 rounded-lg">
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <span className="text-white font-medium">Position: #{gap.rank}</span>
+          <span className="text-gray-500 ml-2 text-sm">for "{gap.keyword}"</span>
+        </div>
+        <span className="text-xs text-gray-500">
+          {gap.lat?.toFixed(4)}, {gap.lng?.toFixed(4)}
+        </span>
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Neighborhood name (e.g., Arcadia, Downtown)"
+          className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white text-sm"
+        />
+        <button
+          onClick={handleCreate}
+          disabled={creating || !name.trim()}
+          className="px-3 py-1 bg-pink-600 hover:bg-pink-700 rounded text-white text-sm disabled:opacity-50"
+        >
+          {creating ? '...' : 'Create'}
+        </button>
+      </div>
     </div>
   );
 };
