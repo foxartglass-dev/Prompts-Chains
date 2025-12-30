@@ -24,6 +24,7 @@ import ArticlesPage from './src/pages/ArticlesPage';
 import ImageCreationSection from './src/components/ImageCreationSection';
 import SitePlanningSection from './src/components/SitePlanningSection';
 import { VibeCoderToggle } from './src/components/VibeCoderNotepad';
+import HelpButton from './src/components/HelpButton';
 
 // Types for workflow
 interface WorkflowItem {
@@ -3366,6 +3367,9 @@ const App: React.FC = () => {
 
             {/* VibeCoder Notepad - Floating toggle button */}
             <VibeCoderToggle />
+
+            {/* Help Button - Opens User Manual */}
+            <HelpButton position="bottom-left" />
         </div>
     );
 };
