@@ -122,6 +122,8 @@ interface BankImage {
   usedOn?: string;
   usedAt?: string;
   archived?: boolean; // For archive system - keeps images for future reference
+  tags?: string[]; // Tags for organization
+  dbId?: number; // Database ID for API calls (new table)
 }
 
 // ========== PROMPT PROBLEM AREAS ==========
@@ -663,6 +665,39 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           ? data.settings.consultant_chat_history
           : (data.settings.chat_history?.length > 0 ? data.settings.chat_history : []);
 
+        // Fetch image bank from new API (always use new API now)
+        let imageBankData: BankImage[] = [];
+        try {
+          const bankRes = await fetch(`/api/image-bank/${workflowId}`);
+          const bankData = await bankRes.json();
+          if (bankData.success && Array.isArray(bankData.data)) {
+            // Transform from DB format to frontend format
+            imageBankData = bankData.data.map((img: Record<string, unknown>) => ({
+              id: img.external_id || String(img.id),
+              url: img.url,
+              title: img.title || '',
+              category: img.category || '',
+              variation: img.variation_name || '',
+              variationId: img.variation_id || '',
+              avatarTag: img.avatar_tag || '',
+              orientation: img.orientation || 'vertical',
+              prompt: img.prompt || '',
+              model: img.model || '',
+              used: img.used || false,
+              usedOn: img.used_on || '',
+              usedAt: img.used_at || '',
+              archived: img.archived || false,
+              tags: Array.isArray(img.tags) ? img.tags : [],
+              dbId: img.id // Keep the database ID for API calls
+            }));
+            console.log(`[Image Creation] Loaded ${imageBankData.length} images from new API`);
+          }
+        } catch (bankError) {
+          console.error('[Image Creation] Failed to fetch image bank:', bankError);
+          // Fallback to settings data if API fails
+          imageBankData = data.settings.image_bank || [];
+        }
+
         const loadedSettings = {
           ...DEFAULT_SETTINGS,
           ...data.settings,
@@ -672,7 +707,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           audience_avatars: data.settings.audience_avatars?.length > 0
             ? data.settings.audience_avatars
             : [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
-          image_bank: data.settings.image_bank || [],
+          image_bank: imageBankData,
           // Image categories and auto-tag
           image_categories: data.settings.image_categories?.length > 0
             ? data.settings.image_categories
@@ -2223,6 +2258,17 @@ Start by introducing yourself and asking about their business in a friendly way.
           image_bank: [...settings.image_bank, newBankImage]
         });
 
+        // Sync to new database API
+        try {
+          await fetch(`/api/image-bank/${workflowId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: newBankImage })
+          });
+        } catch (err) {
+          console.error('[Image Bank] Add API failed:', err);
+        }
+
         setGenerationProgress('');
         log(`Image generated successfully for "${variation.name}"!`, LogStatus.SUCCESS);
         showNotification('Image generated and added to bank!', 'success');
@@ -2327,6 +2373,17 @@ Start by introducing yourself and asking about their business in a friendly way.
           updateSettings({
             image_bank: [...settings.image_bank, ...newBankImages]
           });
+
+          // Sync to new database API (bulk add)
+          try {
+            await fetch(`/api/image-bank/${workflowId}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ images: newBankImages })
+            });
+          } catch (err) {
+            console.error('[Image Bank] Bulk add API failed:', err);
+          }
 
           setGenerationProgress('');
           log(`Batch complete: ${successCount} generated, ${failCount} failed`, LogStatus.SUCCESS);
@@ -2452,35 +2509,87 @@ Start by introducing yourself and asking about their business in a friendly way.
     setShowFeedbackPopup(true);
   };
 
-  // Bank Management
-  const handleRemoveFromBank = (imageId: string) => {
+  // Bank Management - Now using new API for persistence
+  const handleRemoveFromBank = async (imageId: string) => {
+    const image = settings.image_bank.find(i => i.id === imageId);
     const newBank = settings.image_bank.filter(i => i.id !== imageId);
     updateSettings({ image_bank: newBank });
+
+    // Sync to database API
+    try {
+      const apiId = image?.dbId || imageId;
+      await fetch(`/api/image-bank/${workflowId}/${apiId}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('[Image Bank] Delete API failed:', err);
+    }
     showNotification('Image removed from bank', 'info');
   };
 
-  const handleMarkAsUsed = (imageId: string, pageUrl: string) => {
+  const handleMarkAsUsed = async (imageId: string, pageUrl: string) => {
+    const image = settings.image_bank.find(i => i.id === imageId);
     const newBank = settings.image_bank.map(img =>
       img.id === imageId ? { ...img, used: true, usedOn: pageUrl, usedAt: new Date().toISOString() } : img
     );
     updateSettings({ image_bank: newBank });
+
+    // Sync to database API
+    try {
+      const apiId = image?.dbId || imageId;
+      await fetch(`/api/image-bank/${workflowId}/mark-used/${apiId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usedOn: pageUrl })
+      });
+    } catch (err) {
+      console.error('[Image Bank] Mark used API failed:', err);
+    }
     log(`Image marked as used on: ${pageUrl}`, LogStatus.INFO);
   };
 
-  const handleRestoreFromUsed = (imageId: string) => {
+  const handleRestoreFromUsed = async (imageId: string) => {
+    const image = settings.image_bank.find(i => i.id === imageId);
     const newBank = settings.image_bank.map(img =>
       img.id === imageId ? { ...img, used: false, usedOn: undefined, usedAt: undefined } : img
     );
     updateSettings({ image_bank: newBank });
+
+    // Sync to database API
+    try {
+      const apiId = image?.dbId || imageId;
+      await fetch(`/api/image-bank/${workflowId}/${apiId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ used: false, usedOn: null })
+      });
+    } catch (err) {
+      console.error('[Image Bank] Restore API failed:', err);
+    }
     showNotification('Image restored to available', 'info');
   };
 
-  const handleArchiveImage = (imageId: string) => {
+  const handleArchiveImage = async (imageId: string) => {
+    const image = settings.image_bank.find(i => i.id === imageId);
+    const newArchived = !image?.archived;
     const newBank = settings.image_bank.map(img =>
-      img.id === imageId ? { ...img, archived: !img.archived } : img
+      img.id === imageId ? { ...img, archived: newArchived } : img
     );
     updateSettings({ image_bank: newBank });
-    const image = settings.image_bank.find(i => i.id === imageId);
+
+    // Sync to database API
+    try {
+      const apiId = image?.dbId || imageId;
+      if (newArchived) {
+        await fetch(`/api/image-bank/${workflowId}/archive/${apiId}`, { method: 'POST' });
+      } else {
+        await fetch(`/api/image-bank/${workflowId}/${apiId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ archived: false })
+        });
+      }
+    } catch (err) {
+      console.error('[Image Bank] Archive API failed:', err);
+    }
     showNotification(image?.archived ? 'Image restored from archive' : 'Image archived', 'info');
   };
 
@@ -2532,6 +2641,17 @@ Start by introducing yourself and asking about their business in a friendly way.
     const updatedBank = [...settings.image_bank, ...newImages];
     updateSettings({ image_bank: updatedBank });
 
+    // Sync to new database API
+    try {
+      await fetch(`/api/image-bank/${workflowId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: newImages })
+      });
+    } catch (err) {
+      console.error('[Image Bank] Upload sync API failed:', err);
+    }
+
     showNotification(`Uploaded ${newImages.length} image(s) to bank`, 'success');
 
     // Auto-tag if enabled
@@ -2581,6 +2701,21 @@ Start by introducing yourself and asking about their business in a friendly way.
                 : bankImg
             );
             updateSettings({ image_bank: newBank });
+
+            // Sync to API
+            try {
+              const apiId = img.dbId || img.id;
+              await fetch(`/api/image-bank/${workflowId}/${apiId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  title: data.suggestedTitle || img.title,
+                  category: data.suggestedCategory || img.category
+                })
+              });
+            } catch (err) {
+              console.error('[Image Bank] Auto-tag sync API failed:', err);
+            }
           }
         } catch (error) {
           console.error(`Auto-tag failed for image ${img.id}:`, error);
@@ -2599,23 +2734,49 @@ Start by introducing yourself and asking about their business in a friendly way.
   /**
    * Update image title
    */
-  const handleUpdateImageTitle = (imageId: string, newTitle: string) => {
+  const handleUpdateImageTitle = async (imageId: string, newTitle: string) => {
+    const image = settings.image_bank.find(i => i.id === imageId);
     const newBank = settings.image_bank.map(img =>
       img.id === imageId ? { ...img, title: newTitle } : img
     );
     updateSettings({ image_bank: newBank });
     setEditingImageId(null);
     setEditingTitle('');
+
+    // Sync to API
+    try {
+      const apiId = image?.dbId || imageId;
+      await fetch(`/api/image-bank/${workflowId}/${apiId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle })
+      });
+    } catch (err) {
+      console.error('[Image Bank] Update title API failed:', err);
+    }
   };
 
   /**
    * Update image category
    */
-  const handleUpdateImageCategory = (imageId: string, newCategory: string) => {
+  const handleUpdateImageCategory = async (imageId: string, newCategory: string) => {
+    const image = settings.image_bank.find(i => i.id === imageId);
     const newBank = settings.image_bank.map(img =>
       img.id === imageId ? { ...img, category: newCategory } : img
     );
     updateSettings({ image_bank: newBank });
+
+    // Sync to API
+    try {
+      const apiId = image?.dbId || imageId;
+      await fetch(`/api/image-bank/${workflowId}/${apiId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: newCategory })
+      });
+    } catch (err) {
+      console.error('[Image Bank] Update category API failed:', err);
+    }
   };
 
   /**

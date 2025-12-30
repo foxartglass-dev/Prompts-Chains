@@ -715,6 +715,32 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
       });
     }
 
+    // AUTO-MIGRATION: Check if image_bank is too large and migrate to separate table
+    let imageBankData = results[0].image_bank || [];
+    let imageBankMigrated = false;
+    const imageBankSize = JSON.stringify(imageBankData).length;
+    const IMAGE_BANK_THRESHOLD = 1 * 1024 * 1024; // 1MB threshold - be aggressive to prevent crashes
+
+    if (imageBankSize > IMAGE_BANK_THRESHOLD || (Array.isArray(imageBankData) && imageBankData.length > 20)) {
+      console.log(`[Image Creation API] Large image_bank detected (${(imageBankSize / 1024 / 1024).toFixed(1)}MB, ${imageBankData.length} images). Auto-migrating...`);
+
+      try {
+        // Import migration function dynamically
+        const { migrateImageBankFromSettings } = await import('../services/image-bank.js');
+        const migrationResult = await migrateImageBankFromSettings(parseInt(workflowId));
+        console.log('[Image Creation API] Migration result:', migrationResult);
+        imageBankMigrated = true;
+
+        // Clear the image_bank - it's now in the separate table
+        imageBankData = [];
+      } catch (migrationError) {
+        console.error('[Image Creation API] Auto-migration failed:', migrationError);
+        // Still return empty to prevent browser crash, images are safe in original DB column
+        imageBankData = [];
+        imageBankMigrated = true; // Tell frontend to use new API anyway
+      }
+    }
+
     res.json({
       success: true,
       settings: {
@@ -725,7 +751,7 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         reference_images: results[0].reference_images || [],
         logo_images: results[0].logo_images || [],
         audience_avatars: results[0].audience_avatars || [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
-        image_bank: results[0].image_bank || [],
+        image_bank: imageBankData,
         // Image categories and auto-tag
         image_categories: results[0].image_categories || ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'],
         auto_tag_enabled: results[0].auto_tag_enabled ?? true,
@@ -757,7 +783,8 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         // Generate Live prompt mode
         live_prompt_mode: results[0].live_prompt_mode || 'smart_prompt',
         smart_prompt_guidance: results[0].smart_prompt_guidance || ''
-      }
+      },
+      imageBankMigrated  // Tell frontend to use new /api/image-bank API
     });
 
   } catch (error) {
