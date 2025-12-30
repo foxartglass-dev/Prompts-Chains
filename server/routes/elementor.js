@@ -995,7 +995,12 @@ router.post('/publish', async (req, res) => {
       // Log hero image if present
       if (pipelineResult.chunks.intro?.imageData) {
         const heroAction = pipelineResult.chunks.intro.extractedAction || {};
+        const heroData = pipelineResult.chunks.intro.imageData;
+        const introWords = pipelineResult.chunks.intro.wordCount || 0;
+        const sizeLabel = heroData.requestedSize === '1536x1024' ? 'LANDSCAPE' :
+                          heroData.requestedSize === '1024x1024' ? 'SQUARE' : 'PORTRAIT';
         console.log('║ HERO IMAGE:                                                  ║');
+        console.log(`║   Auto-Size: ${introWords} words → ${sizeLabel} (${heroData.requestedSize || 'default'})`.padEnd(62) + '║');
         console.log(`║   Action: ${(heroAction.action || 'N/A').substring(0, 50).padEnd(50)} ║`);
         console.log(`║   Mood: ${(heroAction.mood || 'N/A').padEnd(52)} ║`);
         console.log(`║   Setting: ${(heroAction.setting || 'N/A').substring(0, 48).padEnd(48)} ║`);

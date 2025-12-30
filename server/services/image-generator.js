@@ -429,6 +429,33 @@ export async function generateBatchImages(prompts, options = {}, apiKey, onProgr
 }
 
 /**
+ * Calculate optimal hero image size based on intro word count
+ * Short intro → landscape (to fill less vertical space)
+ * Long intro → portrait (to match more vertical space)
+ *
+ * @param {number} wordCount - Number of words in the intro
+ * @returns {string} Size string: '1536x1024' (landscape), '1024x1024' (square), or '1024x1536' (portrait)
+ */
+function calculateHeroSize(wordCount) {
+  // Typical line holds ~12-15 words in the 50% width hero layout
+  // Estimate: 100 words = ~7 lines of text
+  // Short intro (<100 words, ~7 lines): use landscape - image is wider to match short text block
+  // Medium intro (100-175 words, ~7-12 lines): use square - balanced
+  // Long intro (>175 words, >12 lines): use portrait - image is taller to match tall text block
+
+  if (wordCount < 100) {
+    console.log(`[Hero Auto-Size] ${wordCount} words → LANDSCAPE (1536x1024) - short intro`);
+    return '1536x1024'; // Landscape 3:2
+  } else if (wordCount < 175) {
+    console.log(`[Hero Auto-Size] ${wordCount} words → SQUARE (1024x1024) - medium intro`);
+    return '1024x1024'; // Square 1:1
+  } else {
+    console.log(`[Hero Auto-Size] ${wordCount} words → PORTRAIT (1024x1536) - long intro`);
+    return '1024x1536'; // Portrait 2:3
+  }
+}
+
+/**
  * Generate images for article chunks
  * @param {object} chunks - Chunked content with prompts
  * @param {object} options - Generation options
@@ -441,19 +468,24 @@ export async function generateArticleImages(chunks, options = {}, apiKey) {
     maxImages = 4,
     onProgress = null,
     model = DEFAULT_MODEL,
-    quality = 'low'
+    quality = 'low',
+    heroAutoSize = true  // NEW: Auto-size hero based on intro length
   } = options;
 
   // Collect prompts from chunks that need images
   const imageSlots = [];
 
-  // Hero image from intro (if present) - use portrait for hero
+  // Hero image from intro (if present)
   if (heroImage && chunks.intro) {
+    // Calculate optimal hero size based on intro word count
+    const introWordCount = chunks.intro.wordCount || 100; // Default to 100 if not set
+    const heroSize = heroAutoSize ? calculateHeroSize(introWordCount) : '1024x1536';
+
     imageSlots.push({
       type: 'hero',
       chunkIndex: -1, // -1 indicates intro
       prompt: chunks.intro.imagePrompt || null,
-      size: '1024x1536' // Portrait for hero
+      size: heroSize
     });
   }
 
@@ -503,7 +535,9 @@ export async function generateArticleImages(chunks, options = {}, apiKey) {
           width: image.width,
           height: image.height,
           alt: 'Hero image',
-          type: 'hero'
+          type: 'hero',
+          requestedSize: slot.size, // Track auto-sized dimensions
+          autoSized: true
         };
       } else {
         // Inline image goes in chunk
@@ -572,9 +606,18 @@ export function estimateCost(imageCount, quality = 'low', model = DEFAULT_MODEL)
   };
 }
 
+export {
+  generateImage,
+  generateBatchImages,
+  generateArticleImages,
+  estimateCost,
+  calculateHeroSize
+};
+
 export default {
   generateImage,
   generateBatchImages,
   generateArticleImages,
-  estimateCost
+  estimateCost,
+  calculateHeroSize
 };
