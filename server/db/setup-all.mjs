@@ -289,6 +289,18 @@ async function setup() {
       console.log('  - article push tracking columns already exist');
     }
 
+    // Migration: prompt_problem_areas column for Image Creation
+    const hasPromptProblemAreas = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'prompt_problem_areas'
+    `;
+    if (hasPromptProblemAreas.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN prompt_problem_areas JSONB DEFAULT '[]'`;
+      console.log('  ✓ Added prompt_problem_areas column');
+    } else {
+      console.log('  - prompt_problem_areas already exists');
+    }
+
     console.log('');
 
     // ================================

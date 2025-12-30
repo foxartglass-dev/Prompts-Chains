@@ -709,7 +709,9 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           image_quality: 'low',
           // Generate Live prompt mode
           live_prompt_mode: 'smart_prompt',
-          smart_prompt_guidance: ''
+          smart_prompt_guidance: '',
+          // Prompt Problem Areas
+          prompt_problem_areas: []
         },
         isNew: true
       });
@@ -782,7 +784,9 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         image_quality: results[0].image_quality || 'low',
         // Generate Live prompt mode
         live_prompt_mode: results[0].live_prompt_mode || 'smart_prompt',
-        smart_prompt_guidance: results[0].smart_prompt_guidance || ''
+        smart_prompt_guidance: results[0].smart_prompt_guidance || '',
+        // Prompt Problem Areas
+        prompt_problem_areas: results[0].prompt_problem_areas || []
       },
       imageBankMigrated  // Tell frontend to use new /api/image-bank API
     });
@@ -839,7 +843,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       matching_rule_4,
       // Generate Live prompt mode
       live_prompt_mode,
-      smart_prompt_guidance
+      smart_prompt_guidance,
+      // Prompt Problem Areas
+      prompt_problem_areas
     } = req.body;
 
     // Check if settings exist
@@ -879,7 +885,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               variation_order_mode,
               manual_variation_order,
               live_prompt_mode,
-              smart_prompt_guidance
+              smart_prompt_guidance,
+              prompt_problem_areas
             ) VALUES (
               ${workflowId},
               ${enabled ?? false},
@@ -903,7 +910,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               ${variation_order_mode ?? 'sequential'},
               ${JSON.stringify(manual_variation_order ?? [])},
               ${live_prompt_mode ?? 'smart_prompt'},
-              ${smart_prompt_guidance ?? ''}
+              ${smart_prompt_guidance ?? ''},
+              ${JSON.stringify(prompt_problem_areas ?? [])}
             )
             RETURNING id
           `;
@@ -992,6 +1000,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
               live_prompt_mode = COALESCE(${live_prompt_mode}, live_prompt_mode),
               smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
+              prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
               updated_at = CURRENT_TIMESTAMP
             WHERE workflow_id = ${workflowId}
           `;

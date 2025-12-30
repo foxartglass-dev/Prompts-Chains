@@ -720,7 +720,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           worker_chat_history: data.settings.worker_chat_history || [],
           worker_model: data.settings.worker_model || 'gpt-4o-mini',
           image_order: data.settings.image_order || [],
-          manual_variation_order: data.settings.manual_variation_order || []
+          manual_variation_order: data.settings.manual_variation_order || [],
+          // Prompt Problem Areas
+          prompt_problem_areas: data.settings.prompt_problem_areas || []
         };
         setSettings(loadedSettings);
         if (loadedSettings.audience_avatars.length > 0) {
