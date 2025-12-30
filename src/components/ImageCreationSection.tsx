@@ -124,6 +124,28 @@ interface BankImage {
   archived?: boolean; // For archive system - keeps images for future reference
 }
 
+// ========== PROMPT PROBLEM AREAS ==========
+// High-priority prompting issues with multiple solution prompts
+
+interface PromptSolution {
+  id: string;
+  miniContext: string; // Brief context for this specific prompt
+  promptText: string; // The actual prompt technique
+  status: 'testing' | 'working' | 'failed';
+  notes?: string; // Optional notes on results
+}
+
+interface PromptProblemArea {
+  id: string;
+  name: string; // e.g., "Logo Visibility"
+  context: string; // Why this is a problem, detailed explanation
+  priority: 'high' | 'medium' | 'low';
+  prompts: PromptSolution[];
+  isExpanded?: boolean; // UI state for expand/collapse
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -338,6 +360,8 @@ interface ImageCreationSettings {
     avoidList: string; // Things to avoid
     defaultSubject: string; // Default subject if no match
   } | null;
+  // Prompt Problem Areas - High priority prompting issues with solutions
+  prompt_problem_areas: PromptProblemArea[];
 }
 
 enum LogStatus {
@@ -395,7 +419,9 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   smart_prompt_guidance: '', // Empty by default - user can add guardrails
   // Guided GPT mode settings
   guided_model: 'gpt-4o',
-  guided_guardrails: null
+  guided_guardrails: null,
+  // Prompt Problem Areas - High priority prompting issues
+  prompt_problem_areas: []
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -507,6 +533,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [fetchingContext, setFetchingContext] = useState(false);
   const [avatarsCollapsed, setAvatarsCollapsed] = useState(false);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
+
+  // Prompt Problem Areas state
+  const [problemAreasCollapsed, setProblemAreasCollapsed] = useState(false);
+  const [activeProblemAreaId, setActiveProblemAreaId] = useState<string | null>(null);
+  const [editingProblemArea, setEditingProblemArea] = useState<PromptProblemArea | null>(null);
 
   // Feedback popup state
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
@@ -1227,6 +1258,88 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   const clearDownloadSelection = () => {
     setSelectedForDownload(new Set());
+  };
+
+  // ========== PROMPT PROBLEM AREAS HANDLERS ==========
+
+  const handleAddProblemArea = () => {
+    const newArea: PromptProblemArea = {
+      id: `area-${Date.now()}`,
+      name: 'New Problem Area',
+      context: '',
+      priority: 'high',
+      prompts: [],
+      isExpanded: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      prompt_problem_areas: [...settings.prompt_problem_areas, newArea]
+    });
+    setActiveProblemAreaId(newArea.id);
+    log('Added new problem area', LogStatus.INFO);
+  };
+
+  const handleUpdateProblemArea = (areaId: string, updates: Partial<PromptProblemArea>) => {
+    updateSettings({
+      prompt_problem_areas: settings.prompt_problem_areas.map(area =>
+        area.id === areaId ? { ...area, ...updates, updatedAt: new Date().toISOString() } : area
+      )
+    });
+  };
+
+  const handleRemoveProblemArea = (areaId: string) => {
+    updateSettings({
+      prompt_problem_areas: settings.prompt_problem_areas.filter(a => a.id !== areaId)
+    });
+    if (activeProblemAreaId === areaId) {
+      setActiveProblemAreaId(null);
+    }
+    log('Removed problem area', LogStatus.INFO);
+  };
+
+  const handleAddPromptToArea = (areaId: string) => {
+    const newPrompt: PromptSolution = {
+      id: `prompt-${Date.now()}`,
+      miniContext: '',
+      promptText: '',
+      status: 'testing'
+    };
+    handleUpdateProblemArea(areaId, {
+      prompts: [...(settings.prompt_problem_areas.find(a => a.id === areaId)?.prompts || []), newPrompt]
+    });
+  };
+
+  const handleUpdatePromptInArea = (areaId: string, promptId: string, updates: Partial<PromptSolution>) => {
+    const area = settings.prompt_problem_areas.find(a => a.id === areaId);
+    if (!area) return;
+    handleUpdateProblemArea(areaId, {
+      prompts: area.prompts.map(p => p.id === promptId ? { ...p, ...updates } : p)
+    });
+  };
+
+  const handleRemovePromptFromArea = (areaId: string, promptId: string) => {
+    const area = settings.prompt_problem_areas.find(a => a.id === areaId);
+    if (!area) return;
+    handleUpdateProblemArea(areaId, {
+      prompts: area.prompts.filter(p => p.id !== promptId)
+    });
+  };
+
+  const getActiveProblemArea = () => settings.prompt_problem_areas.find(a => a.id === activeProblemAreaId);
+
+  // Get working prompts for AI to use
+  const getWorkingPrompts = () => {
+    return settings.prompt_problem_areas.flatMap(area =>
+      area.prompts
+        .filter(p => p.status === 'working')
+        .map(p => ({
+          area: area.name,
+          priority: area.priority,
+          context: p.miniContext,
+          prompt: p.promptText
+        }))
+    );
   };
 
   // Audience Avatar Handlers
@@ -3047,6 +3160,180 @@ Start by introducing yourself and asking about their business in a friendly way.
           <span className="text-yellow-400 text-sm">{generationProgress}</span>
         </div>
       )}
+
+      {/* ========== PROMPT PROBLEM AREAS ========== */}
+      <div className="bg-slate-900 rounded-lg border border-orange-500/50 overflow-hidden">
+        <div
+          className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-800/50 transition"
+          onClick={() => setProblemAreasCollapsed(!problemAreasCollapsed)}
+        >
+          <div className="flex items-center gap-2">
+            <span className={`text-orange-400 transition-transform ${problemAreasCollapsed ? '' : 'rotate-90'}`}>▶</span>
+            <span className="text-orange-400 font-semibold">🎯 Prompt Problem Areas</span>
+            {settings.prompt_problem_areas.length > 0 && (
+              <span className="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded">
+                {settings.prompt_problem_areas.length} areas • {settings.prompt_problem_areas.flatMap(a => a.prompts.filter(p => p.status === 'working')).length} working
+              </span>
+            )}
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleAddProblemArea(); }}
+            className="text-orange-400 hover:text-orange-300 text-sm font-medium transition"
+          >
+            + Add Area
+          </button>
+        </div>
+
+        {!problemAreasCollapsed && (
+          <div className="p-3 border-t border-orange-500/30 space-y-3">
+            {settings.prompt_problem_areas.length === 0 ? (
+              <div className="text-center py-6 text-slate-500">
+                <p className="text-sm">No problem areas yet.</p>
+                <p className="text-xs mt-1">Add areas for issues like "Logo Visibility", "Camera Angles", etc.</p>
+              </div>
+            ) : (
+              <>
+                {/* Area Tabs */}
+                <div className="flex flex-wrap gap-2">
+                  {settings.prompt_problem_areas.map(area => (
+                    <button
+                      key={area.id}
+                      onClick={() => setActiveProblemAreaId(activeProblemAreaId === area.id ? null : area.id)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                        activeProblemAreaId === area.id
+                          ? 'bg-orange-500 text-slate-900'
+                          : 'bg-slate-800 text-orange-400 hover:bg-slate-700'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${
+                        area.priority === 'high' ? 'bg-red-500' :
+                        area.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                      }`} />
+                      {area.name}
+                      <span className="text-xs opacity-70">({area.prompts.length})</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Active Area Editor */}
+                {activeProblemAreaId && (() => {
+                  const area = getActiveProblemArea();
+                  if (!area) return null;
+                  return (
+                    <div className="bg-slate-800/50 rounded-lg p-3 space-y-3 border border-orange-500/20">
+                      {/* Area Header */}
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 space-y-2">
+                          <input
+                            type="text"
+                            value={area.name}
+                            onChange={(e) => handleUpdateProblemArea(area.id, { name: e.target.value })}
+                            className="w-full bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-white text-sm font-medium"
+                            placeholder="Problem area name..."
+                          />
+                          <textarea
+                            value={area.context}
+                            onChange={(e) => handleUpdateProblemArea(area.id, { context: e.target.value })}
+                            className="w-full bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-white text-xs resize-y"
+                            rows={2}
+                            placeholder="Context: Why is this a problem? What are you trying to solve?"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <select
+                            value={area.priority}
+                            onChange={(e) => handleUpdateProblemArea(area.id, { priority: e.target.value as 'high' | 'medium' | 'low' })}
+                            className="bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-xs text-white"
+                          >
+                            <option value="high">🔴 High</option>
+                            <option value="medium">🟡 Medium</option>
+                            <option value="low">🟢 Low</option>
+                          </select>
+                          <button
+                            onClick={() => handleRemoveProblemArea(area.id)}
+                            className="text-xs text-red-400 hover:text-red-300 transition"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Prompts Within This Area */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-orange-300 font-medium">Solution Prompts:</span>
+                          <button
+                            onClick={() => handleAddPromptToArea(area.id)}
+                            className="text-xs text-orange-400 hover:text-orange-300 transition"
+                          >
+                            + Add Prompt
+                          </button>
+                        </div>
+
+                        {area.prompts.length === 0 ? (
+                          <p className="text-xs text-slate-500 text-center py-2">No prompts yet. Add prompts that might solve this problem.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {area.prompts.map((prompt, idx) => (
+                              <div key={prompt.id} className="bg-slate-900/50 rounded p-2 space-y-1.5 border border-slate-700">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-500 font-mono">#{idx + 1}</span>
+                                  <input
+                                    type="text"
+                                    value={prompt.miniContext}
+                                    onChange={(e) => handleUpdatePromptInArea(area.id, prompt.id, { miniContext: e.target.value })}
+                                    className="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-white text-xs"
+                                    placeholder="Brief context for this prompt..."
+                                  />
+                                  <select
+                                    value={prompt.status}
+                                    onChange={(e) => handleUpdatePromptInArea(area.id, prompt.id, { status: e.target.value as 'testing' | 'working' | 'failed' })}
+                                    className={`text-xs rounded px-2 py-0.5 border ${
+                                      prompt.status === 'working' ? 'bg-green-900/50 border-green-500 text-green-300' :
+                                      prompt.status === 'failed' ? 'bg-red-900/50 border-red-500 text-red-300' :
+                                      'bg-yellow-900/50 border-yellow-500 text-yellow-300'
+                                    }`}
+                                  >
+                                    <option value="testing">🧪 Testing</option>
+                                    <option value="working">✅ Working</option>
+                                    <option value="failed">❌ Failed</option>
+                                  </select>
+                                  <button
+                                    onClick={() => handleRemovePromptFromArea(area.id, prompt.id)}
+                                    className="text-red-400 hover:text-red-300 text-xs"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                                <textarea
+                                  value={prompt.promptText}
+                                  onChange={(e) => handleUpdatePromptInArea(area.id, prompt.id, { promptText: e.target.value })}
+                                  className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white text-xs font-mono resize-y"
+                                  rows={2}
+                                  placeholder="The actual prompt technique to try..."
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Working Prompts Summary */}
+                      {area.prompts.filter(p => p.status === 'working').length > 0 && (
+                        <div className="bg-green-900/20 border border-green-500/30 rounded p-2">
+                          <span className="text-xs text-green-400 font-medium">
+                            ✅ {area.prompts.filter(p => p.status === 'working').length} working prompt(s) - AI will use these
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Reference Images (Collapsible) */}
           <div className="bg-slate-900 rounded-lg border border-brand-gold/50 overflow-hidden">
