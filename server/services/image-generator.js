@@ -429,30 +429,62 @@ export async function generateBatchImages(prompts, options = {}, apiKey, onProgr
 }
 
 /**
- * Calculate optimal hero image size based on intro word count
- * Short intro → landscape (to fill less vertical space)
- * Long intro → portrait (to match more vertical space)
+ * Calculate optimal hero image size based on estimated line count
+ * Uses line estimation for more accurate sizing than raw word count
+ *
+ * Line Estimation:
+ * - Hero text is typically 50% of container width
+ * - Average reading line: ~55-65 characters
+ * - Average word: ~5 chars + 1 space = 6 characters
+ * - Words per line ≈ 10
  *
  * @param {number} wordCount - Number of words in the intro
- * @returns {string} Size string: '1536x1024' (landscape), '1024x1024' (square), or '1024x1536' (portrait)
+ * @returns {{size: string, lines: number, ratio: string}} Size info
  */
 function calculateHeroSize(wordCount) {
-  // Typical line holds ~12-15 words in the 50% width hero layout
-  // Estimate: 100 words = ~7 lines of text
-  // Short intro (<100 words, ~7 lines): use landscape - image is wider to match short text block
-  // Medium intro (100-175 words, ~7-12 lines): use square - balanced
-  // Long intro (>175 words, >12 lines): use portrait - image is taller to match tall text block
+  // Estimate line count: ~10 words per line in typical hero layout
+  const WORDS_PER_LINE = 10;
+  const estimatedLines = Math.ceil(wordCount / WORDS_PER_LINE);
 
-  if (wordCount < 100) {
-    console.log(`[Hero Auto-Size] ${wordCount} words → LANDSCAPE (1536x1024) - short intro`);
-    return '1536x1024'; // Landscape 3:2
-  } else if (wordCount < 175) {
-    console.log(`[Hero Auto-Size] ${wordCount} words → SQUARE (1024x1024) - medium intro`);
-    return '1024x1024'; // Square 1:1
+  // 6-tier system for more precise matching
+  // Aspect ratios available: 16:9, 3:2, 4:3, 1:1, 3:4, 2:3
+  let size, ratio, label;
+
+  if (estimatedLines <= 4) {
+    // Very short - ultra wide
+    size = '1536x1024';  // 3:2 landscape
+    ratio = '3:2';
+    label = 'WIDE LANDSCAPE';
+  } else if (estimatedLines <= 6) {
+    // Short - standard landscape
+    size = '1536x1024';  // 3:2 landscape
+    ratio = '3:2';
+    label = 'LANDSCAPE';
+  } else if (estimatedLines <= 8) {
+    // Medium-short - slight landscape
+    size = '1024x1024';  // Using square, CSS will handle
+    ratio = '4:3';
+    label = 'SLIGHT LANDSCAPE';
+  } else if (estimatedLines <= 11) {
+    // Medium - square
+    size = '1024x1024';  // 1:1 square
+    ratio = '1:1';
+    label = 'SQUARE';
+  } else if (estimatedLines <= 14) {
+    // Medium-long - slight portrait
+    size = '1024x1536';  // 2:3 portrait
+    ratio = '3:4';
+    label = 'SLIGHT PORTRAIT';
   } else {
-    console.log(`[Hero Auto-Size] ${wordCount} words → PORTRAIT (1024x1536) - long intro`);
-    return '1024x1536'; // Portrait 2:3
+    // Long - full portrait
+    size = '1024x1536';  // 2:3 portrait
+    ratio = '2:3';
+    label = 'PORTRAIT';
   }
+
+  console.log(`[Hero Auto-Size] ${wordCount} words ≈ ${estimatedLines} lines → ${label} (${size}, ${ratio})`);
+
+  return size;
 }
 
 /**
