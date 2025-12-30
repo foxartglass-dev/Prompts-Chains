@@ -2,50 +2,61 @@
 
 ## Table of Contents
 1. [System Overview](#system-overview)
-2. [What Has UI vs API-Only](#what-has-ui-vs-api-only)
+2. [Getting Started](#getting-started)
 3. [Image Creation System](#image-creation-system)
 4. [Site Planning](#site-planning)
-5. [Hierarchical Page Push](#hierarchical-page-push)
+5. [Push to WordPress](#push-to-wordpress)
 6. [Local Viking Integration](#local-viking-integration)
-7. [WordPress Publishing](#wordpress-publishing)
+7. [The SEO Automation Loop](#the-seo-automation-loop)
 8. [API Reference](#api-reference)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## System Overview
 
-PromptFlow is an AI-powered content and image generation system designed for SEO-focused website building. The system includes:
+PromptFlow is an AI-powered content and image generation system designed for local SEO. The goal: get your Google Business Profile into the **Map Pack** (top 3 local results).
 
-- **Article Generation** - AI-written content with keyword targeting
-- **Image Creation** - AI image generation with audience avatars
-- **Site Planning** - Hierarchical site structure management
-- **WordPress Publishing** - Push content to WordPress with Elementor
-- **Local Viking Integration** - Rank tracking and GBP automation (NEW)
+### Core Features
+
+| Feature | What It Does | Has UI? |
+|---------|--------------|---------|
+| Workflow Management | Organize content projects | ✅ Yes |
+| Article Generation | AI-written SEO content | ✅ Yes |
+| Image Creation | AI images with avatars | ✅ Yes |
+| Site Planning | Hierarchical page structure | ✅ Yes |
+| Push to WordPress | Publish with parent-child pages | ✅ Yes |
+| Local Viking | Rank tracking & GBP automation | ✅ Yes |
 
 ---
 
-## What Has UI vs API-Only
+## Getting Started
 
-### Has Full UI (Ready to Use)
-| Feature | Location | Status |
-|---------|----------|--------|
-| Workflow Management | Main dashboard | Full UI |
-| Article Generation | Workflow → Content section | Full UI |
-| Image Creation | Workflow → Image Creation tab | Full UI |
-| Image Bank | Within Image Creation | Full UI |
-| Prompt Engineering | Within Image Creation | Full UI |
-| Human Feedback | Popup after image generation | Full UI |
-| Client/Website Management | Settings | Full UI |
+### Step 1: Set Up a Client and Website
 
-### API-Only (Backend Built, No UI Yet)
-| Feature | What It Does | How to Use Now |
-|---------|--------------|----------------|
-| Site Planning | Hierarchical page structure | API calls or direct DB |
-| Hierarchical Page Push | Push pages with parent-child relationships | API calls |
-| Local Viking | Rank tracking, GBP posting | API calls |
-| Rinse & Repeat | Auto-cycle GBP posts | API calls |
+1. Click **"Settings"** in the top navigation
+2. Under **Agency Manager**, click **"Add Client"**
+3. Fill in:
+   - Client name
+   - Contact email (optional)
+4. Click **"Save"**
+5. Click **"Add Website"** for your new client
+6. Fill in:
+   - Website name
+   - Website URL
+   - WordPress URL (e.g., `https://yoursite.com/wp-json`)
+   - WordPress username
+   - WordPress application password
+   - **Local Viking API Key** (get from localviking.com → Settings)
+   - **Local Viking Location ID** (your GBP location ID)
+7. Click **"Save"**
 
-**What this means:** The backend is complete and working. To use these features today, you need to make API calls (via Postman, curl, or custom frontend). I can help build frontend UI for any of these if you want.
+### Step 2: Create a Workflow
+
+1. Click **"New Workflow"** on the main dashboard
+2. Select your client and website
+3. Give it a name (e.g., "Core 30 Pages")
+4. Click **"Create"**
 
 ---
 
@@ -54,387 +65,396 @@ PromptFlow is an AI-powered content and image generation system designed for SEO
 ### Location
 Workflow → **Image Creation** tab
 
-### Features with Full UI
+### Step-by-Step Guide
 
-#### 1. Audience Avatars
-Create different "personas" for your AI images. Each avatar represents a target audience or image style.
+#### Creating Audience Avatars
 
-**How to use:**
-1. Go to Image Creation tab
-2. Click "Add Avatar" or edit existing
-3. Set the main prompt (e.g., "Professional glass installer, 40s, wearing safety glasses")
-4. Add variations for different scenarios
+Avatars define the "look" of people in your AI images.
 
-#### 2. Image Bank
-Store generated images for later use instead of generating new ones each time.
+1. Go to **Image Creation** tab
+2. Click **"Add Avatar"**
+3. Fill in:
+   - **Name**: e.g., "Professional Installer"
+   - **Main Prompt**: e.g., "Professional glass installer, 40s, wearing safety glasses, blue work shirt"
+4. Add **Variations** for different scenarios:
+   - "installing residential window"
+   - "measuring glass panel"
+   - "consulting with homeowner"
+5. Click **"Save"**
 
-**How to use:**
-1. Generate images or upload them
-2. They appear in the Image Bank
-3. Tag them by category (Hero, Service, Team, etc.)
-4. When publishing articles, images are pulled from the bank
+#### Generating Images
 
-#### 3. Prompt Engineering Chat
-Two-agent system for refining image prompts:
-- **Consultant**: High-level strategy and direction
-- **Worker**: Executes specific prompt refinements
+1. Select an avatar from the dropdown
+2. Choose a variation (or use main prompt)
+3. Set quantity (1-4 images)
+4. Click **"Generate"**
+5. Wait for images to appear (usually 10-30 seconds)
 
-**How to use:**
-1. Click the chat icon in Image Creation
-2. Describe what's not working with your images
-3. The AI will suggest prompt improvements
+#### Rating Images (Human Feedback)
 
-#### 4. Prompt Problem Areas
-Track recurring issues with your image generation.
+After generation, a popup appears:
 
-**How to use:**
-1. When images don't look right, note the problem
-2. Add it to Problem Areas
-3. Mark as "solved" when you find a fix
-4. This builds your knowledge base over time
+| Rating | When to Use |
+|--------|-------------|
+| ⭐ Perfect | Exactly what you wanted |
+| 👍 Good | Usable, minor issues |
+| 🔄 Needs Work | Close but needs refinement |
+| ❌ Bad | Wrong completely |
 
-#### 5. Human Feedback Loop
-After generating images, rate them to improve future results.
+Add tags for issues: "wrong lighting", "weird hands", "wrong uniform"
 
-**How to use:**
-1. After image generation, a popup appears
-2. Rate: Perfect / Good / Needs Work / Bad
-3. Add tags for what went wrong (wrong lighting, wrong pose, etc.)
-4. System learns from your feedback
+#### Building Your Image Bank
+
+1. Good images automatically go to the **Image Bank**
+2. Click **"Image Bank"** tab to view
+3. Tag images by category:
+   - Hero (main banner images)
+   - Service (action shots)
+   - Team (portraits)
+   - Gallery (general use)
+4. When publishing articles, images pull from this bank
 
 ---
 
 ## Site Planning
 
-### What It Is
-A hierarchical tree structure for planning your website before building it. Think of it as a blueprint.
+### Location
+Section **8** on the main dashboard (scroll down)
+
+### What It Does
+Creates a hierarchical tree of pages for your website. This is your SEO blueprint.
+
+### Step-by-Step Guide
+
+#### Creating a Site Plan
+
+1. Scroll to **Site Planning** section
+2. Select your website from the dropdown
+3. Click **"New Plan"**
+4. Enter:
+   - **Plan Name**: e.g., "Main Site Structure"
+   - **Description**: e.g., "30 core pages for local SEO"
+5. Click **"Create"**
+
+#### Adding Pages (Nodes)
+
+1. Select your plan from the dropdown
+2. The tree view shows existing pages
+3. Click **"Add Page"**
+4. Fill in:
+   - **Title**: Page title (e.g., "Residential Glass Services")
+   - **Slug**: URL slug (e.g., "residential-glass")
+   - **Parent**: Select parent page for hierarchy
+   - **Target Keyword**: Main SEO keyword
+   - **Page Type**: service, location, about, etc.
+   - **Is Pillar Page**: Check if this is a main topic page
+5. Click **"Add"**
+
+#### Understanding the Tree View
 
 ```
 Homepage
-├── Services
+├── Services (pillar)
 │   ├── Residential Glass
 │   ├── Commercial Glass
 │   └── Emergency Repairs
-├── About Us
-│   ├── Our Team
-│   └── Our History
-├── Service Areas
+├── Service Areas (pillar)
 │   ├── Phoenix
 │   ├── Scottsdale
 │   └── Mesa
 └── Contact
 ```
 
-### Current Status: API-Only
-The database tables and API endpoints exist, but there's no drag-and-drop UI yet.
-
-### How to Use Now (API)
-
-#### Create a Site Plan
-```bash
-POST /api/site-planning/plans
-{
-  "websiteId": 1,
-  "name": "Main Site Structure",
-  "description": "30 core pages for SEO"
-}
-```
-
-#### Add Nodes (Pages)
-```bash
-POST /api/site-planning/nodes
-{
-  "sitePlanId": 1,
-  "title": "Residential Glass Services",
-  "slug": "residential-glass",
-  "parentId": 2,  // ID of parent node (e.g., "Services")
-  "targetKeyword": "residential glass installation phoenix",
-  "isPillarPage": true,
-  "pageType": "service"
-}
-```
-
-#### Get the Tree
-```bash
-GET /api/site-planning/nodes/1
-```
-Returns nested tree structure with all pages.
-
-#### Import from Spreadsheet
-```bash
-POST /api/site-planning/import
-{
-  "sitePlanId": 1,
-  "format": "csv",
-  "data": "title,parent,keyword,type\nServices,,glass services,page\nResidential,Services,residential glass,service"
-}
-```
+- **Pillar pages** are marked with a special icon
+- **Child pages** are indented under their parent
+- **Status colors**:
+  - Gray = Not pushed
+  - Yellow = Draft in WordPress
+  - Green = Published
 
 ---
 
-## Hierarchical Page Push
+## Push to WordPress
 
-### What It Is
-Push your site plan to WordPress while preserving parent-child relationships. When you push:
-- Parent pages are created first
-- Child pages link to their parents
-- WordPress menu structure matches your plan
+### Location
+Site Planning section → **"Push to WP"** button
 
-### Why It Matters
-- Better SEO (URL structure: `/services/residential-glass/`)
-- Easier navigation
-- Google understands your site hierarchy
+### What It Does
+Pushes your entire site plan to WordPress, preserving the parent-child hierarchy. This creates proper URL structures like:
+- `/services/residential-glass/`
+- `/service-areas/phoenix/`
 
-### How to Use (API)
+### Step-by-Step Guide
 
-#### Push Entire Hierarchy
-```bash
-POST /api/site-planning/push-hierarchy/1
-{
-  "status": "draft",           // or "publish"
-  "dripFeed": true,            // Spread publishing over time
-  "dripIntervalHours": 24      // One page per day
-}
-```
+#### Pushing Your Site Plan
 
-This will:
-1. Get all unpushed nodes ordered by depth
-2. Create parent pages first
-3. Create child pages with correct parent IDs
-4. Update your site plan with WordPress page IDs
+1. In **Site Planning**, select your plan
+2. Click the **"Push to WP"** button (dropdown arrow)
+3. Choose:
+   - **"Push as Draft"** - Creates pages as drafts for review
+   - **"Push & Publish"** - Creates and publishes immediately
+4. Wait for the push to complete
+5. A result message shows:
+   - Pages created
+   - Pages updated
+   - Any errors
 
-#### Push Single Page with Content
-```bash
-POST /api/site-planning/push-with-content/15
-{
-  "status": "draft"
-}
-```
+#### What Happens Behind the Scenes
 
-Uses the linked article's content if available.
+1. System reads your site plan tree
+2. Parent pages are created first
+3. Child pages are created with correct WordPress parent IDs
+4. Your site plan updates with WordPress page IDs
+5. Status updates to "draft" or "published"
 
-#### Link Article to Site Plan Node
-```bash
-POST /api/site-planning/link-article/15
-{
-  "articleId": 42
-}
-```
+#### Tips
+
+- **Always push as draft first** to review before publishing
+- **Check WordPress** after pushing to verify hierarchy
+- **Re-push** if you add new pages to the plan
 
 ---
 
 ## Local Viking Integration
 
-### What It Is
-Integration with [Local Viking](https://localviking.com) for:
-- **GeoGrid Rank Tracking**: Heat maps showing where you rank in different locations
-- **GBP Posting**: Post to Google Business Profile automatically
-- **Rinse & Repeat**: Auto-delete old posts and repost same content (keeps posts fresh)
-- **Photo Uploads**: Push AI-generated images to GBP
+### Location
+Section **9** on the main dashboard (scroll down past Site Planning)
 
-### The "Sheep Herding" Strategy
-This is the core SEO strategy the system supports:
+### What It Does
+- Track where you rank in Google Maps across different locations
+- Post to your Google Business Profile
+- Identify keywords that are "almost" in the top 3 (sheep herding)
+- Automate GBP post rotation (rinse & repeat)
 
-1. **Scan keywords** with GeoGrid to see where you rank
-2. **Identify "sheep"** - keywords ranking 4-10 (close to top 3)
-3. **Create supporting content** for those keywords
-4. **Push to top 3** with focused effort on winnable keywords
-5. **Maintain** with GBP posts and fresh content
+### Prerequisites
+1. Local Viking account (localviking.com)
+2. API key added to your website settings
+3. Location ID added to your website settings
 
-### Setup (When You Have an Account)
+---
 
-#### 1. Add API Key to Website
-In your website settings, add:
-- `local_viking_api_key`: Your API key from Local Viking
-- `local_viking_location_id`: Your GBP location ID
+### Tab 1: Overview
 
-Or via API:
-```bash
-PUT /api/websites/1
-{
-  "local_viking_api_key": "your-key-here",
-  "local_viking_location_id": "location-id-here"
-}
-```
+Shows your connection status and account info.
 
-#### 2. Run Database Migration
-```bash
-node server/db/setup-all.mjs
-```
+#### What You See
+- **Connection Status**: Green = connected, Red = disconnected
+- **Credit Balance**: How many Local Viking credits you have
+- **Location Name**: Your GBP listing name
+- **Account Info**: Plan type, features enabled
 
-### How to Use (API)
+#### Buttons
+| Button | What It Does |
+|--------|--------------|
+| **Check Connection** | Tests your API key and shows account status |
+| **Refresh** | Updates the displayed information |
 
-#### Test Connection
-```bash
-POST /api/local-viking/test-connection
-{
-  "websiteId": 1
-}
-```
+---
 
-#### Check Credit Balance
-```bash
-GET /api/local-viking/credits/1
-```
+### Tab 2: Heat Map
 
-#### Run a Rank Scan
-```bash
-POST /api/local-viking/geogrid/scan
-{
-  "websiteId": 1,
-  "keyword": "glass repair near me",
-  "gridSize": 7,      // 7x7 = 49 credits
-  "distance": 1       // Miles between grid points
-}
-```
+Visual display of where you rank for keywords across a geographic grid.
 
-Returns:
-```json
-{
-  "success": true,
-  "scan": { "grid_data": [...] },
-  "analysis": {
-    "total_points": 49,
-    "top_3": 12,
-    "positions_4_to_10": 20,  // SHEEP - ready to herd!
-    "sheep_opportunity_score": 45.5,
-    "recommendation": "HIGH PRIORITY: Many positions ready to push to top 3!"
-  }
-}
-```
+#### How to Read the Heat Map
 
-#### Scan Multiple Keywords
-```bash
-POST /api/local-viking/geogrid/bulk-scan
-{
-  "websiteId": 1,
-  "keywords": ["glass repair phoenix", "window replacement", "shower doors"],
-  "gridSize": 7
-}
-```
+The heat map shows a 7x7 or larger grid centered on your business location. Each cell shows your rank at that spot:
 
-#### Get Rank History (Trends)
-```bash
-GET /api/local-viking/geogrid/history/1?keyword=glass%20repair&days=30
-```
+| Color | Rank | Meaning |
+|-------|------|---------|
+| 🟢 Green | 1-3 | **In the Map Pack!** |
+| 🟡 Yellow | 4-10 | **Sheep** - close to top 3 |
+| 🟠 Orange | 11-20 | Needs work |
+| 🔴 Red | 20+ | Not ranking |
 
-#### Get Sheep Opportunities
-```bash
-GET /api/local-viking/sheep-opportunities/1
-```
+#### Running a Scan
 
-Returns keywords sorted by opportunity score (highest = best ROI for content creation).
+1. Go to **Heat Map** tab
+2. Enter a keyword (e.g., "glass repair near me")
+3. Select grid size:
+   - 7x7 = 49 credits (standard)
+   - 9x9 = 81 credits (more detail)
+   - 11x11 = 121 credits (comprehensive)
+4. Click **"Run Scan"**
+5. Wait 30-60 seconds for results
+6. Heat map displays with your rankings
 
-#### Create a GBP Post
-```bash
-POST /api/local-viking/posts
-{
-  "websiteId": 1,
-  "content": "Need emergency glass repair? We're available 24/7! Call now for same-day service.",
-  "callToAction": "CALL",
-  "ctaUrl": "tel:+16025551234",
-  "imageUrl": "https://yoursite.com/image.jpg",
-  "saveAsTemplate": true,
-  "templateName": "Emergency Services"
-}
-```
+#### Viewing History
 
-#### Create Post Templates (for Rinse & Repeat)
-```bash
-POST /api/local-viking/templates
-{
-  "websiteId": 1,
-  "name": "Monday - Emergency Services",
-  "content": "24/7 Emergency Glass Repair! When disaster strikes, we're here.",
-  "callToAction": "CALL",
-  "ctaUrl": "tel:+16025551234",
-  "rotationDay": 1  // 1 = Monday
-}
-```
+- Select a keyword from the dropdown
+- Previous scans appear below
+- Click a past scan to view that heat map
+- Compare over time to see improvement
 
-Create 7 templates (one per day) for automatic rotation.
+---
 
-#### Execute Rinse & Repeat
-```bash
-POST /api/local-viking/rinse-repeat/1
-{
-  "maxAgeDays": 7,        // Delete posts older than 7 days
-  "repostImmediately": true,
-  "useTemplates": true    // Use stored templates instead of same content
-}
-```
+### Tab 3: Sheep Analysis
 
-**What happens:**
-1. Fetches all GBP posts
-2. Deletes posts older than 7 days
-3. Posts today's template
-4. Updates template stats
+This is where the magic happens. "Sheep" are keywords ranking 4-10 - they're close to the top 3 and ready to be "herded" up.
 
-**Run this weekly** via cron job or manual trigger.
+#### Understanding the Sheep Report
 
-#### Check Rinse & Repeat Status
-```bash
-GET /api/local-viking/rinse-repeat/status/1?maxAgeDays=7
-```
-
-Shows which posts are due for refresh.
-
-#### Analyze Site Plan with Rank Data
-```bash
-POST /api/local-viking/analyze-site-plan/1
-{
-  "scanKeywords": true,   // Run scans for keywords without recent data
-  "gridSize": 7
-}
-```
-
-Returns prioritized list of pages to create content for, based on sheep opportunity scores.
-
-### Credit Costs
-| Action | Credits |
+| Column | Meaning |
 |--------|---------|
-| 7x7 GeoGrid scan | 49 |
-| 9x9 GeoGrid scan | 81 |
-| 11x11 GeoGrid scan | 121 |
-| GBP Post | 1 |
-| Photo Upload | 1 |
+| Keyword | The search term |
+| Avg Rank | Average position across the grid |
+| Top 3 % | Percentage of grid points in positions 1-3 |
+| Sheep % | Percentage in positions 4-10 |
+| Opportunity Score | Higher = better ROI for effort |
 
-#### Estimate Monthly Usage
-```bash
-POST /api/local-viking/estimate-credits
-{
-  "locationsCount": 1,
-  "keywordsPerLocation": 10,
-  "scansPerMonth": 4,
-  "gridSize": 7,
-  "postsPerWeek": 2
-}
+#### Using Sheep Data
+
+1. Go to **Sheep Analysis** tab
+2. Click **"Load Analysis"**
+3. Review the table sorted by opportunity score
+4. **High opportunity** keywords:
+   - Create supporting content
+   - Add GBP posts mentioning them
+   - Build internal links to related pages
+5. Re-scan after 2-4 weeks to measure progress
+
+#### The Strategy
+
+```
+High Opportunity (score 70+)
+└── Create supporting blog posts
+└── Add GBP posts with keyword
+└── Build internal links
+└── Re-scan in 2 weeks
+
+Medium Opportunity (score 40-70)
+└── Monitor for movement
+└── Include in content naturally
+
+Low Opportunity (score <40)
+└── Long-term project
+└── May need more backlinks
 ```
 
 ---
 
-## WordPress Publishing
+### Tab 4: GBP Templates
 
-### Location
-Workflow → **Elementor** tab (for articles with images)
+Create reusable post templates for your Google Business Profile.
 
-### Features
+#### Creating a Template
 
-#### Push Single Article
-1. Select an article
-2. Click "Push to Elementor"
-3. Choose draft or publish
-4. Article is created in WordPress with Elementor formatting
+1. Go to **GBP Templates** tab
+2. Click **"New Template"**
+3. Fill in:
+   - **Name**: e.g., "Monday - Emergency Services"
+   - **Content**: Your post text (500 char max)
+   - **Call to Action**: CALL, BOOK, LEARN_MORE, etc.
+   - **CTA URL**: Link or phone number
+   - **Rotation Day**: Which day to use this template (for automation)
+4. Click **"Save"**
 
-#### Drip Feed Publishing
-Schedule multiple articles to publish over time:
-1. Select multiple articles
-2. Click "Schedule Drip Feed"
-3. Set pages per day and start time
-4. Articles are scheduled across multiple days
+#### Template Tips
 
-### Hierarchy Support (New)
-When pushing from Site Planning, pages maintain their parent-child relationships.
+- Create 7 templates (one for each day)
+- Rotate between different services/offers
+- Include target keywords naturally
+- Keep content fresh and engaging
+
+#### Posting from a Template
+
+1. Select a template from the list
+2. Click **"Post Now"**
+3. Confirm the action
+4. Post appears on your GBP within minutes
+
+---
+
+### Tab 5: Automation
+
+Set up automatic "rinse and repeat" - delete old posts and repost fresh content.
+
+#### Why Rinse & Repeat?
+
+Google likes fresh content. Posts older than 7 days get less visibility. By deleting and reposting:
+- Your posts stay "new"
+- Google sees activity
+- Customers see current info
+
+#### Setting Up Automation
+
+1. Go to **Automation** tab
+2. Configure:
+   - **Max Post Age**: Days before deletion (default: 7)
+   - **Use Templates**: Enable to use your saved templates
+   - **Auto-Run**: Schedule automatic execution
+3. Click **"Save Settings"**
+
+#### Running Manually
+
+1. Click **"Run Rinse & Repeat"**
+2. System will:
+   - Check all GBP posts
+   - Delete posts older than your max age
+   - Post today's template
+3. Results show:
+   - Posts deleted
+   - New post created
+   - Any errors
+
+#### Checking Status
+
+- **Posts Due for Refresh**: Shows which posts are getting old
+- **Last Run**: When automation last executed
+- **Template Usage**: Which templates have been used recently
+
+---
+
+## The SEO Automation Loop
+
+Here's how all the pieces work together:
+
+### The Full Workflow
+
+```
+1. PLAN: Create site structure in Site Planning
+          └── 30 core pages with keywords
+
+2. WRITE: Generate articles in Workflows
+          └── AI content for each page
+
+3. IMAGE: Create visuals in Image Creation
+          └── Avatars → Bank → Articles
+
+4. PUSH: Push to WordPress
+          └── Hierarchical pages live on site
+
+5. TRACK: Run Local Viking scans
+          └── See where you rank
+
+6. ANALYZE: Check Sheep Analysis
+          └── Find opportunities
+
+7. SUPPORT: Create supporting content
+          └── Blog posts for sheep keywords
+
+8. POST: GBP posts with keywords
+          └── Fresh content signals
+
+9. REPEAT: Rinse & repeat automation
+          └── Keep posts fresh
+
+10. MEASURE: Re-scan in 2-4 weeks
+          └── Track movement to top 3
+```
+
+### The "Sheep Herding" Strategy Explained
+
+**Goal**: Get keywords from position 4-10 into the Map Pack (positions 1-3)
+
+**Why it works**: Keywords ranking 4-10 are already close. A little push (supporting content, GBP posts, internal links) can bump them up. This is easier than trying to rank from position 50.
+
+**The process**:
+1. Scan your target keywords
+2. Identify "sheep" (positions 4-10)
+3. Create content specifically for those keywords
+4. Post to GBP mentioning those keywords
+5. Re-scan to see improvement
+6. Celebrate when they hit top 3!
 
 ---
 
@@ -446,39 +466,7 @@ http://localhost:3001/api (development)
 https://your-domain.com/api (production)
 ```
 
-### Authentication
-Most endpoints don't require auth, but WordPress operations use credentials stored in website settings.
-
 ### Key Endpoints
-
-#### Workflows
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /workflows | List all workflows |
-| GET | /workflows/:id | Get workflow details |
-| POST | /workflows | Create workflow |
-| PUT | /workflows/:id | Update workflow |
-
-#### Articles
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /articles?workflowId=1 | List articles for workflow |
-| POST | /articles | Create article |
-| PUT | /articles/:id | Update article |
-
-#### Image Creation
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /image-creation/:workflowId | Get settings |
-| PUT | /image-creation/:workflowId | Update settings |
-
-#### Image Bank
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /image-bank/:workflowId | Get all images |
-| POST | /image-bank/:workflowId | Add image |
-| PUT | /image-bank/:workflowId/:imageId | Update image |
-| DELETE | /image-bank/:workflowId/:imageId | Delete image |
 
 #### Site Planning
 | Method | Endpoint | Description |
@@ -492,73 +480,72 @@ Most endpoints don't require auth, but WordPress operations use credentials stor
 #### Local Viking
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | /local-viking/test-connection | Test API |
+| GET | /local-viking/account/:websiteId | Get account info |
 | GET | /local-viking/credits/:websiteId | Check credits |
 | POST | /local-viking/geogrid/scan | Run rank scan |
+| GET | /local-viking/geogrid/history/:websiteId | Get scan history |
+| GET | /local-viking/sheep-opportunities/:websiteId | Get sheep data |
 | POST | /local-viking/posts | Create GBP post |
-| POST | /local-viking/rinse-repeat/:websiteId | Execute cycle |
-| GET | /local-viking/sheep-opportunities/:websiteId | Get priorities |
+| GET | /local-viking/templates/:websiteId | Get templates |
+| POST | /local-viking/templates | Create template |
+| POST | /local-viking/rinse-repeat/:websiteId | Run automation |
 
 ---
 
-## What Needs Frontend Work
+## Troubleshooting
 
-If you want me to build UI for any of these, just say the word:
+### Connection Issues
 
-1. **Site Planning Tree View**
-   - Drag-and-drop tree editor
-   - Visual hierarchy management
-   - Quick actions (add child, delete, edit)
+**"Local Viking not connected"**
+1. Go to Settings → Website
+2. Check your API key is entered correctly
+3. Verify your Location ID is correct
+4. Click "Check Connection" in Local Viking section
 
-2. **Local Viking Dashboard**
-   - Credit balance display
-   - Keyword rank heatmaps
-   - Sheep opportunity list
-   - Post template manager
-   - Rinse & repeat scheduler
+**"Push to WordPress failed"**
+1. Verify WordPress URL ends with `/wp-json`
+2. Check username is correct
+3. Ensure you're using an Application Password (not regular password)
+4. WordPress → Users → Application Passwords → Generate new
 
-3. **Hierarchical Push UI**
-   - Preview tree before pushing
-   - Progress indicator during push
-   - Status of each page (pushed/pending)
+### Common Errors
 
-4. **Site Planning Import**
-   - CSV/spreadsheet upload
-   - Column mapping interface
-   - Preview before import
+| Error | Solution |
+|-------|----------|
+| "Invalid API key" | Re-enter your Local Viking API key in settings |
+| "Location not found" | Check Location ID matches your GBP |
+| "Insufficient credits" | Buy more credits at localviking.com |
+| "WordPress auth failed" | Generate new application password |
+| "Parent page not found" | Push parent pages before children |
 
----
+### Getting Help
 
-## Quick Start Checklist
-
-### To Use Image Creation (Ready Now)
-- [ ] Create a workflow
-- [ ] Go to Image Creation tab
-- [ ] Set up at least one avatar
-- [ ] Generate some test images
-- [ ] Build your image bank
-
-### To Use Site Planning (API)
-- [ ] Create a website in settings
-- [ ] Create a site plan via API
-- [ ] Add nodes (pages) to the plan
-- [ ] Link articles to nodes
-- [ ] Push to WordPress
-
-### To Use Local Viking (When Ready)
-- [ ] Sign up at localviking.com
-- [ ] Add API key to website settings
-- [ ] Run database migration
-- [ ] Test connection
-- [ ] Create post templates
-- [ ] Set up weekly rinse & repeat
+- **Check server logs**: `npm run dev` shows backend errors
+- **Database issues**: Run `node server/db/setup-all.mjs`
+- **Reset data**: Check database tables directly
 
 ---
 
-## Getting Help
+## Quick Reference Card
 
-- **API Issues**: Check server logs for error details
-- **Database**: Run `node server/db/setup-all.mjs` to ensure all tables exist
-- **Frontend Not Loading**: Check if server is running on port 3001
+### Keyboard Shortcuts
+(None currently - all mouse/touch based)
 
-For questions about any feature, I can explain in more detail or help build the UI you need!
+### Button Quick Guide
+
+| Section | Button | What It Does |
+|---------|--------|--------------|
+| Site Planning | Push to WP | Pushes pages to WordPress |
+| Site Planning | Push as Draft | Creates as drafts |
+| Site Planning | Push & Publish | Creates and publishes |
+| Local Viking | Check Connection | Tests API connection |
+| Local Viking | Run Scan | Runs new GeoGrid scan |
+| Local Viking | Load Analysis | Gets sheep opportunities |
+| Local Viking | New Template | Creates GBP post template |
+| Local Viking | Post Now | Posts template to GBP |
+| Local Viking | Run Rinse & Repeat | Executes post rotation |
+
+---
+
+*Last updated: December 2024*
+*PromptFlow v2.0 - Complete with Local Viking UI*
