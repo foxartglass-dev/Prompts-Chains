@@ -25,6 +25,7 @@ import imageCreationRouter from './routes/image-creation.js';
 import sitePlanningRouter from './routes/site-planning.js';
 import promptEngineeringRouter from './routes/prompt-engineering.js';
 import humanFeedbackRouter from './routes/human-feedback.js';
+import imageBankRouter from './routes/image-bank.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
 dotenv.config();
@@ -189,6 +190,7 @@ app.use('/api/image-creation', imageCreationRouter);
 app.use('/api/site-planning', sitePlanningRouter);
 app.use('/api/prompt-engineering', promptEngineeringRouter);
 app.use('/api/feedback', humanFeedbackRouter);
+app.use('/api/image-bank', imageBankRouter);
 
 // Database status endpoint
 app.get('/api/db/status', async (req, res) => {

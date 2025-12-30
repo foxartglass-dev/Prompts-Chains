@@ -178,6 +178,39 @@ async function setup() {
     `;
     console.log('  ✓ image_creation_settings');
 
+    // Image Bank Items - Separate table to avoid payload bloat
+    await sql`
+      CREATE TABLE IF NOT EXISTS image_bank_items (
+        id SERIAL PRIMARY KEY,
+        workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE,
+        external_id VARCHAR(100), -- Client-side ID like 'img-1234567890'
+        url TEXT NOT NULL,
+        title VARCHAR(500),
+        category VARCHAR(100),
+        variation_name VARCHAR(255),
+        variation_id VARCHAR(100),
+        avatar_tag VARCHAR(50),
+        orientation VARCHAR(20) DEFAULT 'vertical',
+        prompt TEXT,
+        model VARCHAR(100),
+        used BOOLEAN DEFAULT false,
+        used_on TEXT, -- URL where image was used
+        used_at TIMESTAMP,
+        archived BOOLEAN DEFAULT false,
+        tags JSONB DEFAULT '[]',
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ image_bank_items');
+
+    // Index for faster queries
+    await sql`CREATE INDEX IF NOT EXISTS idx_image_bank_workflow ON image_bank_items(workflow_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_image_bank_used ON image_bank_items(workflow_id, used)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_image_bank_avatar ON image_bank_items(workflow_id, avatar_tag)`;
+    console.log('  ✓ image_bank indexes');
+
     console.log('');
 
     // ================================
