@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { generateImage } from '../services/image-generator.js';
+import { uploadMedia } from '../services/wordpress-publisher.js';
 
 const router = express.Router();
 
@@ -1952,6 +1953,222 @@ router.post('/smart-match-batch', requireDb, async (req, res) => {
 
   } catch (error) {
     console.error('Smart match batch error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// STAGING WORDPRESS UPLOAD
+// ========================================
+
+/**
+ * POST /api/image-creation/upload-to-staging
+ * Upload a base64 image to the staging WordPress site
+ *
+ * Flow: AI generates base64 → Upload to Staging WP (bypasses ModSecurity) → Returns permanent wpUrl
+ *
+ * This endpoint is used by:
+ * - Batch Generate: Upload generated images to staging for Image Bank storage
+ * - Generate Live: Upload images before placing on customer sites
+ */
+router.post('/upload-to-staging', async (req, res) => {
+  try {
+    const {
+      // Image data
+      imageData, // base64 string (with or without data:image/png;base64, prefix)
+      filename,  // Optional filename, will generate one if not provided
+      alt = '',  // Alt text for accessibility
+
+      // Staging WordPress credentials (required)
+      wpUrl,     // Staging site URL (e.g., https://staging.example.com)
+      wpUser,    // WordPress username
+      wpPassword // Application password
+
+    } = req.body;
+
+    // Validate required fields
+    if (!imageData) {
+      return res.status(400).json({ error: 'imageData (base64) is required' });
+    }
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({
+        error: 'Staging WordPress credentials required (wpUrl, wpUser, wpPassword)'
+      });
+    }
+
+    // Generate filename if not provided
+    const finalFilename = filename || `image-${Date.now()}.png`;
+
+    console.log('[Upload to Staging] Starting upload...');
+    console.log('[Upload to Staging] URL:', wpUrl);
+    console.log('[Upload to Staging] Filename:', finalFilename);
+
+    // Use the uploadMedia function from wordpress-publisher
+    const wpCredentials = {
+      url: wpUrl,
+      user: wpUser,
+      password: wpPassword
+    };
+
+    const media = await uploadMedia(
+      wpCredentials,
+      imageData,
+      finalFilename,
+      { alt: alt || finalFilename }
+    );
+
+    console.log('[Upload to Staging] Success! Media ID:', media.id);
+    console.log('[Upload to Staging] URL:', media.source_url);
+
+    res.json({
+      success: true,
+      wpMediaId: media.id,
+      wpUrl: media.source_url,
+      filename: finalFilename,
+      alt: media.alt_text || alt
+    });
+
+  } catch (error) {
+    console.error('[Upload to Staging] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to upload image to staging WordPress'
+    });
+  }
+});
+
+/**
+ * POST /api/image-creation/upload-bank-to-staging
+ * Upload multiple Image Bank images to staging WordPress
+ *
+ * This is a batch operation to upload all bank images that don't have wpUrl yet
+ */
+router.post('/upload-bank-to-staging', requireDb, async (req, res) => {
+  try {
+    const {
+      workflowId,
+      // Staging WordPress credentials
+      wpUrl,
+      wpUser,
+      wpPassword,
+      // Optional: specific image IDs to upload (if not provided, uploads all missing)
+      imageIds
+    } = req.body;
+
+    if (!workflowId) {
+      return res.status(400).json({ error: 'workflowId is required' });
+    }
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({
+        error: 'Staging WordPress credentials required (wpUrl, wpUser, wpPassword)'
+      });
+    }
+
+    // Get current settings
+    const settings = await sql`
+      SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+    `;
+
+    if (settings.length === 0) {
+      return res.status(404).json({ error: 'Image Creation settings not found' });
+    }
+
+    const config = settings[0];
+    const imageBank = config.image_bank || [];
+
+    // Find images that need uploading
+    let imagesToUpload = imageBank.filter(img => {
+      // Skip if already has wpUrl
+      if (img.wpUrl) return false;
+      // Skip if no base64 data
+      if (!img.url || !img.url.startsWith('data:')) return false;
+      // If specific IDs requested, only include those
+      if (imageIds && !imageIds.includes(img.id)) return false;
+      return true;
+    });
+
+    if (imagesToUpload.length === 0) {
+      return res.json({
+        success: true,
+        uploaded: 0,
+        message: 'No images need uploading (all already have WordPress URLs)'
+      });
+    }
+
+    console.log(`[Upload Bank to Staging] Uploading ${imagesToUpload.length} images...`);
+
+    const wpCredentials = {
+      url: wpUrl,
+      user: wpUser,
+      password: wpPassword
+    };
+
+    const results = [];
+    const updatedBank = [...imageBank];
+
+    for (const img of imagesToUpload) {
+      try {
+        const filename = `bank-${img.id}-${Date.now()}.png`;
+        const media = await uploadMedia(
+          wpCredentials,
+          img.url, // base64 data URL
+          filename,
+          { alt: img.variation || img.title || 'Image Bank' }
+        );
+
+        // Update the image in the bank
+        const bankIndex = updatedBank.findIndex(b => b.id === img.id);
+        if (bankIndex !== -1) {
+          updatedBank[bankIndex] = {
+            ...updatedBank[bankIndex],
+            wpUrl: media.source_url,
+            wpMediaId: media.id,
+            uploadedAt: new Date().toISOString()
+          };
+        }
+
+        results.push({
+          id: img.id,
+          success: true,
+          wpUrl: media.source_url,
+          wpMediaId: media.id
+        });
+
+        console.log(`[Upload Bank to Staging] ✓ Uploaded ${img.id}: ${media.source_url}`);
+
+      } catch (uploadError) {
+        console.error(`[Upload Bank to Staging] ✗ Failed ${img.id}:`, uploadError.message);
+        results.push({
+          id: img.id,
+          success: false,
+          error: uploadError.message
+        });
+      }
+    }
+
+    // Save updated bank to database
+    const successCount = results.filter(r => r.success).length;
+    if (successCount > 0) {
+      await sql`
+        UPDATE image_creation_settings
+        SET image_bank = ${JSON.stringify(updatedBank)}::jsonb,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE workflow_id = ${workflowId}
+      `;
+    }
+
+    res.json({
+      success: true,
+      uploaded: successCount,
+      failed: results.filter(r => !r.success).length,
+      total: imagesToUpload.length,
+      results
+    });
+
+  } catch (error) {
+    console.error('[Upload Bank to Staging] Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -888,9 +888,46 @@ router.post('/publish', async (req, res) => {
 
     // Step 3: Generate live images if needed (either "Generate Live" mode or fallback)
     const needsLiveGeneration = effectiveGenerateLive && imagesFromBank < dynamicMaxImages;
+
+    // Get Generate Live settings from config if available
+    let livePromptMode = 'smart_prompt';
+    let targetAvatar = null;
+    let smartPromptGuidance = '';
+    let matchPlurals = true;
+
+    if (workflowId && isDatabaseEnabled()) {
+      try {
+        const settingsResult = await sql`
+          SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+        `;
+        if (settingsResult.length > 0) {
+          const config = settingsResult[0];
+          livePromptMode = config.live_prompt_mode || 'smart_prompt';
+          smartPromptGuidance = config.smart_prompt_guidance || '';
+          matchPlurals = config.match_plurals !== false;
+
+          // Find the target avatar for this article
+          const avatars = config.audience_avatars || [];
+          const tagMatch = keyword?.match(/\(([A-Z])\)/i);
+          const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+          targetAvatar = articleTag ? avatars.find(a => a.tag === articleTag) : avatars[0];
+
+          console.log('[Elementor Publish] Generate Live settings:');
+          console.log('  - Prompt mode:', livePromptMode);
+          console.log('  - Target avatar:', targetAvatar?.name || 'None');
+          if (livePromptMode === 'main_prompt' && targetAvatar?.mainPrompt) {
+            console.log('  - Main prompt:', targetAvatar.mainPrompt.substring(0, 50) + '...');
+          }
+        }
+      } catch (err) {
+        console.error('[Elementor Publish] Failed to fetch Generate Live settings:', err.message);
+      }
+    }
+
     if (needsLiveGeneration) {
       const imagesToGenerate = dynamicMaxImages - imagesFromBank;
       console.log(`[Elementor Publish] Generating ${imagesToGenerate} live images with model: ${imageGenModel}`);
+      console.log(`[Elementor Publish] Prompt mode: ${livePromptMode}`);
 
       // Use the image pipeline for remaining images
       const pipelineResult = await processArticleWithImages(cleanedContent, {
@@ -904,7 +941,12 @@ router.post('/publish', async (req, res) => {
         maxImages: imagesToGenerate,
         maxWords,
         model: imageGenModel, // gpt-image-1.5 or flux-1.1-pro
-        quality: imageQuality // low/medium/high (for gpt-image-1.5)
+        quality: imageQuality, // low/medium/high (for gpt-image-1.5)
+        // Generate Live mode options
+        livePromptMode,
+        targetAvatar,
+        smartPromptGuidance,
+        matchPlurals
       });
 
       // Merge pipeline images with bank images
@@ -967,7 +1009,12 @@ router.post('/publish', async (req, res) => {
       imageDecisionReport.mode = 'live';
       imageDecisionReport.model = imageGenModel;
       imageDecisionReport.quality = imageQuality;
-      imageDecisionReport.smartMatchingEnabled = false;
+      imageDecisionReport.livePromptMode = livePromptMode; // 'main_prompt' or 'smart_prompt'
+      imageDecisionReport.smartMatchingEnabled = livePromptMode === 'main_prompt';
+      if (livePromptMode === 'main_prompt' && targetAvatar) {
+        imageDecisionReport.avatar = targetAvatar.name;
+        imageDecisionReport.mainPrompt = targetAvatar.mainPrompt?.substring(0, 100);
+      }
 
       // Add hero image to report
       if (pipelineResult.chunks.intro?.imageData) {

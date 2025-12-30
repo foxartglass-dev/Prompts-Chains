@@ -39,12 +39,27 @@ const DEFAULT_SEO_PLUGINS: SeoPlugin[] = [
   { id: 'seopress', name: 'SEOPress', isDefault: true },
 ];
 
+interface StagingCredentials {
+  wpUrl: string;
+  wpUser: string;
+  wpPassword: string;
+}
+
 const WordPressSettings: React.FC<WordPressSettingsProps> = ({ isOpen, onClose }) => {
   const [seoPlugins, setSeoPlugins] = useState<SeoPlugin[]>([]);
   const [defaultElementorPrompt, setDefaultElementorPrompt] = useState(DEFAULT_ELEMENTOR_PROMPT);
   const [newPluginName, setNewPluginName] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Staging WordPress credentials for Image Bank uploads
+  const [stagingCredentials, setStagingCredentials] = useState<StagingCredentials>({
+    wpUrl: '',
+    wpUser: '',
+    wpPassword: ''
+  });
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [connectionMessage, setConnectionMessage] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -57,6 +72,7 @@ const WordPressSettings: React.FC<WordPressSettingsProps> = ({ isOpen, onClose }
       // Load from localStorage for now (can be moved to database later)
       const savedPlugins = localStorage.getItem('promptflow_seo_plugins');
       const savedPrompt = localStorage.getItem('promptflow_default_elementor_prompt');
+      const savedStagingCreds = localStorage.getItem('promptflow_staging_credentials');
 
       if (savedPlugins) {
         setSeoPlugins(JSON.parse(savedPlugins));
@@ -66,6 +82,10 @@ const WordPressSettings: React.FC<WordPressSettingsProps> = ({ isOpen, onClose }
 
       if (savedPrompt) {
         setDefaultElementorPrompt(savedPrompt);
+      }
+
+      if (savedStagingCreds) {
+        setStagingCredentials(JSON.parse(savedStagingCreds));
       }
     } catch (err) {
       console.error('Failed to load WordPress settings:', err);
@@ -78,12 +98,53 @@ const WordPressSettings: React.FC<WordPressSettingsProps> = ({ isOpen, onClose }
     try {
       localStorage.setItem('promptflow_seo_plugins', JSON.stringify(seoPlugins));
       localStorage.setItem('promptflow_default_elementor_prompt', defaultElementorPrompt);
+      localStorage.setItem('promptflow_staging_credentials', JSON.stringify(stagingCredentials));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error('Failed to save settings:', err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Test staging WordPress connection
+  const testStagingConnection = async () => {
+    if (!stagingCredentials.wpUrl || !stagingCredentials.wpUser || !stagingCredentials.wpPassword) {
+      setConnectionStatus('error');
+      setConnectionMessage('Please fill in all staging credentials');
+      return;
+    }
+
+    setTestingConnection(true);
+    setConnectionStatus('idle');
+    setConnectionMessage('');
+
+    try {
+      const res = await fetch('/api/elementor/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wpUrl: stagingCredentials.wpUrl,
+          wpUser: stagingCredentials.wpUser,
+          wpPassword: stagingCredentials.wpPassword
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setConnectionStatus('success');
+        setConnectionMessage(`Connected! ${data.canPublish ? 'Can create pages.' : 'Read-only access.'}`);
+      } else {
+        setConnectionStatus('error');
+        setConnectionMessage(data.error || 'Connection failed');
+      }
+    } catch (err: any) {
+      setConnectionStatus('error');
+      setConnectionMessage(err.message || 'Connection test failed');
+    } finally {
+      setTestingConnection(false);
     }
   };
 
@@ -182,6 +243,89 @@ const WordPressSettings: React.FC<WordPressSettingsProps> = ({ isOpen, onClose }
               >
                 Add
               </button>
+            </div>
+          </div>
+
+          {/* Staging WordPress Credentials Section */}
+          <div className="bg-slate-800/50 rounded-lg p-4 border border-purple-500/30">
+            <h3 className="text-lg font-semibold text-purple-400 mb-3 flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Staging WordPress (Image Bank Uploads)
+            </h3>
+            <div className="bg-purple-900/20 border border-purple-500/20 rounded-lg p-3 mb-4">
+              <p className="text-sm text-purple-300/80">
+                <strong>Why staging?</strong> Many WordPress hosts block large base64 image uploads via ModSecurity.
+                The staging site acts as a media library that bypasses these restrictions.
+              </p>
+              <p className="text-xs text-purple-300/60 mt-2">
+                <strong>Flow:</strong> AI generates base64 → Upload to Staging WP → Get URL → Use URL on customer sites
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-purple-300 mb-1 block">Staging WordPress URL</label>
+                <input
+                  type="url"
+                  value={stagingCredentials.wpUrl}
+                  onChange={(e) => setStagingCredentials({ ...stagingCredentials, wpUrl: e.target.value })}
+                  placeholder="https://staging.example.com"
+                  className="w-full bg-slate-700 border border-purple-500/30 rounded px-3 py-2 text-white text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-purple-300 mb-1 block">Username</label>
+                  <input
+                    type="text"
+                    value={stagingCredentials.wpUser}
+                    onChange={(e) => setStagingCredentials({ ...stagingCredentials, wpUser: e.target.value })}
+                    placeholder="admin"
+                    className="w-full bg-slate-700 border border-purple-500/30 rounded px-3 py-2 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-purple-300 mb-1 block">Application Password</label>
+                  <input
+                    type="password"
+                    value={stagingCredentials.wpPassword}
+                    onChange={(e) => setStagingCredentials({ ...stagingCredentials, wpPassword: e.target.value })}
+                    placeholder="xxxx xxxx xxxx xxxx"
+                    className="w-full bg-slate-700 border border-purple-500/30 rounded px-3 py-2 text-white text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={testStagingConnection}
+                  disabled={testingConnection}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 rounded text-white text-sm font-medium transition flex items-center gap-2"
+                >
+                  {testingConnection ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Testing...
+                    </>
+                  ) : (
+                    'Test Connection'
+                  )}
+                </button>
+                {connectionStatus !== 'idle' && (
+                  <span className={`text-sm ${connectionStatus === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                    {connectionMessage}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-gray-500">
+                💡 Create an Application Password: WordPress → Users → Profile → Application Passwords
+              </p>
             </div>
           </div>
 
