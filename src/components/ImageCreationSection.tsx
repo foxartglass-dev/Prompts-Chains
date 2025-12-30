@@ -479,6 +479,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     lastFetched: string | null;
   }>({ articles: [], workflow: null, websites: [], lastFetched: null });
   const [fetchingContext, setFetchingContext] = useState(false);
+  const [avatarsCollapsed, setAvatarsCollapsed] = useState(false);
+  const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -3092,17 +3094,28 @@ Start by introducing yourself and asking about their business in a friendly way.
 
           {/* Audience Avatars */}
           <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50">
-            <div className="flex items-center justify-between mb-3">
+            <div
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => setAvatarsCollapsed(!avatarsCollapsed)}
+            >
               <div className="flex items-center gap-3">
+                <span className={`text-brand-gold transition-transform ${avatarsCollapsed ? '' : 'rotate-90'}`}>▶</span>
                 <h3 className="text-brand-gold font-semibold">Audience Avatars</h3>
                 {tags.length > 0 && (
                   <span className="text-xs text-brand-cyan/70 bg-brand-cyan/10 px-2 py-0.5 rounded">
                     Synced with Tag Manager: {tags.map(t => t.name).join(', ')}
                   </span>
                 )}
+                {avatarsCollapsed && activeAvatar && (
+                  <span className="text-xs text-brand-gold/50 bg-slate-800 px-2 py-0.5 rounded">
+                    Active: {activeAvatar.name}
+                  </span>
+                )}
               </div>
-              <button onClick={handleAddAvatar} className="text-brand-cyan hover:text-brand-cyan-light text-sm font-medium transition">+ Add Avatar</button>
+              <button onClick={(e) => { e.stopPropagation(); handleAddAvatar(); }} className="text-brand-cyan hover:text-brand-cyan-light text-sm font-medium transition">+ Add Avatar</button>
             </div>
+
+            {!avatarsCollapsed && <div className="mt-3">
 
             <div className="flex flex-wrap gap-2 mb-4">
               {settings.audience_avatars.map((avatar) => (
@@ -3213,10 +3226,21 @@ Start by introducing yourself and asking about their business in a friendly way.
                 {/* ========== ADVANCED MODE: Placeholder Categories ========== */}
                 {activeAvatar.placeholderMode === 'advanced' && (
                   <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm text-purple-300 font-medium">Placeholder Categories</label>
+                    <div
+                      className="flex items-center justify-between cursor-pointer"
+                      onClick={() => setCategoriesCollapsed(!categoriesCollapsed)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`text-purple-400 transition-transform ${categoriesCollapsed ? '' : 'rotate-90'}`}>▶</span>
+                        <label className="text-sm text-purple-300 font-medium cursor-pointer">Placeholder Categories</label>
+                        {categoriesCollapsed && (activeAvatar.placeholderCategories || []).length > 0 && (
+                          <span className="text-xs text-purple-400/70 bg-slate-800 px-2 py-0.5 rounded">
+                            {(activeAvatar.placeholderCategories || []).length} categories
+                          </span>
+                        )}
+                      </div>
                       <button
-                        onClick={() => handleAddPlaceholderCategory()}
+                        onClick={(e) => { e.stopPropagation(); handleAddPlaceholderCategory(); }}
                         className="px-2 py-1 bg-purple-600/50 hover:bg-purple-600 rounded text-white text-xs transition"
                       >
                         + Add Category
@@ -3224,6 +3248,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </div>
 
                     {/* Category List */}
+                    {!categoriesCollapsed && (<>
                     {(activeAvatar.placeholderCategories || []).map((category, catIndex) => (
                       <div key={category.id} className="bg-slate-800/50 rounded-lg p-3 space-y-2">
                         <div className="flex items-center gap-2">
@@ -3479,6 +3504,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                         </div>
                       </div>
                     )}
+                    </>)}
                   </div>
                 )}
 
@@ -3556,6 +3582,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                 )}
               </div>
             )}
+            </div>}
           </div>
 
           {/* Chat Interface (Collapsible) */}
