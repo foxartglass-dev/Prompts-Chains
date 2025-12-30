@@ -365,6 +365,73 @@ async function setup() {
     `;
     console.log('  ✓ agent_handoffs');
 
+    // Human Feedback System - The center of the learning loop
+    await sql`
+      CREATE TABLE IF NOT EXISTS human_feedback (
+        id SERIAL PRIMARY KEY,
+        workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE,
+        avatar_id INTEGER,
+        article_id INTEGER,
+        run_type VARCHAR(50) DEFAULT 'batch',
+
+        -- The images that were generated
+        generated_images JSONB DEFAULT '[]',
+        prompts_used JSONB DEFAULT '[]',
+
+        -- Quick feedback
+        rating VARCHAR(20),
+        quick_tags JSONB DEFAULT '[]',
+
+        -- Detailed feedback
+        detailed_feedback TEXT,
+
+        -- AI questions answered
+        questions_answered JSONB DEFAULT '[]',
+
+        -- Tracking
+        feedback_given BOOLEAN DEFAULT false,
+        skipped BOOLEAN DEFAULT false,
+        perfect_streak INTEGER DEFAULT 0,
+
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ human_feedback');
+
+    // AI Questions Queue - Things the AI is uncertain about
+    await sql`
+      CREATE TABLE IF NOT EXISTS ai_questions (
+        id SERIAL PRIMARY KEY,
+        workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE,
+        avatar_id INTEGER,
+        question TEXT NOT NULL,
+        context TEXT,
+        options JSONB DEFAULT '[]',
+        priority INTEGER DEFAULT 0,
+        answered BOOLEAN DEFAULT false,
+        answer TEXT,
+        answered_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ ai_questions');
+
+    // Feedback Settings - When to show/hide the popup
+    await sql`
+      CREATE TABLE IF NOT EXISTS feedback_settings (
+        id SERIAL PRIMARY KEY,
+        workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE UNIQUE,
+        show_after_every_run BOOLEAN DEFAULT true,
+        perfect_streak_threshold INTEGER DEFAULT 10,
+        current_perfect_streak INTEGER DEFAULT 0,
+        auto_disabled BOOLEAN DEFAULT false,
+        never_ask_again BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ feedback_settings');
+
     console.log('');
 
     // ================================
