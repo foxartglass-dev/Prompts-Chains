@@ -11,8 +11,118 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+
 const MODEL = 'gpt-4o-mini';
 const MODEL_SMART = 'gpt-4o'; // Smarter model for guided mode
+
+// Available models for Guided GPT mode - all top models from all providers
+// Model IDs must match the provider APIs exactly
+export const GUIDED_MODELS = [
+  // OpenAI - Best for image prompts
+  { id: 'gpt-5.2-2025-12-11', name: 'GPT-5.2 (Latest & Best)', provider: 'openai', description: 'OpenAI\'s latest and most capable' },
+  { id: 'gpt-4o', name: 'GPT-4o (Recommended)', provider: 'openai', description: 'Excellent multimodal understanding' },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Fast & Cheap)', provider: 'openai', description: 'Fast and cheap' },
+  // Anthropic - Great writers (model IDs from anthropic provider)
+  { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5 (Your Writer!)', provider: 'anthropic', description: 'Same model writing your articles!' },
+  { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic', description: 'Excellent at following instructions' },
+  { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus (Most Capable)', provider: 'anthropic', description: 'Most capable Claude' },
+  { id: 'claude-3-haiku-20240307', name: 'Claude Haiku (Fastest)', provider: 'anthropic', description: 'Very fast' },
+  // Google Gemini - Great for visual/UI (model IDs from gemini provider)
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3.0 Pro (Latest)', provider: 'gemini', description: 'Best at visual/spatial reasoning' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Deep Thinking)', provider: 'gemini', description: 'Deep reasoning' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Fast)', provider: 'gemini', description: 'Fast and capable' },
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'gemini', description: 'Solid workhorse' },
+];
+
+/**
+ * Call any LLM provider for guided prompt generation
+ */
+async function callLLM(systemPrompt, userPrompt, options = {}) {
+  const { model = 'gpt-4o', apiKeys = {} } = options;
+
+  // Detect provider from model
+  let provider = 'openai';
+  if (model.startsWith('claude-')) provider = 'anthropic';
+  else if (model.startsWith('gemini-')) provider = 'gemini';
+  else if (model.startsWith('gpt-')) provider = 'openai';
+
+  const apiKey = apiKeys[provider];
+  if (!apiKey) {
+    throw new Error(`No API key for ${provider}. Provide ${provider}ApiKey.`);
+  }
+
+  console.log(`[Guided GPT] Using ${provider}/${model}`);
+
+  if (provider === 'openai') {
+    const response = await fetch(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.6,
+        max_tokens: 500
+      })
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || `OpenAI error: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.choices[0].message.content;
+
+  } else if (provider === 'anthropic') {
+    const response = await fetch(ANTHROPIC_API_URL, {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'Content-Type': 'application/json',
+        'anthropic-version': '2024-01-01'
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 500,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      })
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || `Anthropic error: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.content[0].text;
+
+  } else if (provider === 'gemini') {
+    const url = `${GEMINI_API_URL}/${model}:generateContent?key=${apiKey}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }]
+        }],
+        generationConfig: { maxOutputTokens: 500, temperature: 0.6 }
+      })
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || `Gemini error: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
+  }
+
+  throw new Error(`Unknown provider: ${provider}`);
+}
 
 /**
  * Convert a local file path to base64 data URL
@@ -266,15 +376,20 @@ Respond in this exact JSON format:
 
 /**
  * GUIDED GPT MODE: Generate a complete image prompt with guardrails
- * Uses GPT-4o (smarter model) with user-provided guardrails/instructions
+ * Supports multiple providers: OpenAI (GPT), Anthropic (Claude), Google (Gemini)
  *
  * @param {string} sectionContent - Text content of the section
  * @param {object} context - Additional context
  * @param {object} guardrails - User-defined guardrails and instructions
- * @param {string} apiKey - OpenAI API key
+ * @param {object} apiKeys - API keys { openai, anthropic, gemini }
+ * @param {object} options - Options including guidedModel
  * @returns {Promise<{prompt: string, action: string, mood: string}>}
  */
-export async function generateGuidedPrompt(sectionContent, context = {}, guardrails = {}, apiKey, options = {}) {
+export async function generateGuidedPrompt(sectionContent, context = {}, guardrails = {}, apiKeys = {}, options = {}) {
+  // Support legacy single apiKey parameter (backwards compatibility)
+  if (typeof apiKeys === 'string') {
+    apiKeys = { openai: apiKeys };
+  }
   if (!sectionContent) {
     throw new Error('Section content is required');
   }
@@ -350,16 +465,10 @@ Output the prompt only, nothing else:`;
   try {
     console.log(`[Guided GPT] Generating prompt for "${imageType}" with ${guidedModel}`);
 
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ];
-
-    // Use selected model (configurable)
-    const rawResponse = await callGPT(messages, apiKey, {
+    // Use the new multi-provider callLLM function
+    const rawResponse = await callLLM(systemPrompt, userPrompt, {
       model: guidedModel,
-      temperature: 0.6,
-      maxTokens: 500
+      apiKeys
     });
 
     // Clean up the response - remove any quotes or prefixes
@@ -573,17 +682,10 @@ Respond in JSON format:
   return { raw: response };
 }
 
-// Available GPT models for guided mode
-export const GUIDED_GPT_MODELS = [
-  { id: 'gpt-4o', name: 'GPT-4o (Smartest, Recommended)', description: 'Best at following complex instructions' },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Fast)', description: 'Faster and cheaper, good for simple guardrails' },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Very capable, good balance of speed and quality' }
-];
-
 export default {
   extractStyleDNA,
   generateGuidedPrompt,
-  GUIDED_GPT_MODELS,
+  GUIDED_MODELS,
   extractAction,
   buildFluxPrompt,
   generatePromptsForArticle,

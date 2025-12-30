@@ -304,7 +304,7 @@ interface ImageCreationSettings {
   live_prompt_mode: 'main_prompt' | 'guided_gpt' | 'smart_prompt'; // main_prompt = avatar template, guided_gpt = GPT-4o with guardrails, smart_prompt = legacy
   smart_prompt_guidance: string; // Guidance/guardrails for GPT-4o when using smart_prompt mode
   // Guided GPT mode settings
-  guided_model: 'gpt-4o' | 'gpt-4o-mini' | 'gpt-4-turbo'; // Model for guided mode
+  guided_model: string; // Model for guided mode (any provider)
   guided_guardrails: {
     instructions: string; // Main guardrails
     uniformDescription: string; // Worker appearance
@@ -4614,15 +4614,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                         </p>
                         {/* Model selector */}
                         <div>
-                          <label className="text-[10px] text-emerald-400 mb-1 block">GPT Model:</label>
+                          <label className="text-[10px] text-emerald-400 mb-1 block">AI Model:</label>
                           <select
                             value={settings.guided_model || 'gpt-4o'}
-                            onChange={(e) => updateSettings({ guided_model: e.target.value as any })}
+                            onChange={(e) => updateSettings({ guided_model: e.target.value })}
                             className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white"
                           >
-                            <option value="gpt-4o">GPT-4o (Smartest - Recommended)</option>
-                            <option value="gpt-4o-mini">GPT-4o Mini (Faster, Cheaper)</option>
-                            <option value="gpt-4-turbo">GPT-4 Turbo (Very Capable)</option>
+                            <optgroup label="🟢 OpenAI - Best for Image Prompts">
+                              <option value="gpt-5.2-2025-12-11">GPT-5.2 (Latest & Best)</option>
+                              <option value="gpt-4o">GPT-4o (Recommended)</option>
+                              <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cheap)</option>
+                            </optgroup>
+                            <optgroup label="🟣 Anthropic - Great Writers">
+                              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Your Writer!)</option>
+                              <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                              <option value="claude-3-opus-20240229">Claude 3 Opus (Most Capable)</option>
+                              <option value="claude-3-haiku-20240307">Claude Haiku (Fastest)</option>
+                            </optgroup>
+                            <optgroup label="🔵 Google Gemini - Visual Experts">
+                              <option value="gemini-3-pro-preview">Gemini 3.0 Pro (Latest)</option>
+                              <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Thinking)</option>
+                              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast)</option>
+                              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                            </optgroup>
                           </select>
                         </div>
                         {/* Guardrails */}

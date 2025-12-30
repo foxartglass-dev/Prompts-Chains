@@ -208,6 +208,8 @@ export async function processArticleWithImages(content, options = {}) {
 
     // API keys
     openaiApiKey,
+    anthropicApiKey,  // Used for Claude models in Guided GPT
+    geminiApiKey,     // Used for Gemini models in Guided GPT
     replicateApiKey,  // Used for Flux 1.1 Pro
 
     // Style DNA
@@ -452,7 +454,7 @@ export async function processArticleWithImages(content, options = {}) {
             businessType: targetAvatar?.businessType || ''
           },
           guardrails,
-          openaiApiKey,
+          { openai: openaiApiKey, anthropic: anthropicApiKey, gemini: geminiApiKey },
           { guidedModel }
         );
 
@@ -495,7 +497,7 @@ export async function processArticleWithImages(content, options = {}) {
               businessType: targetAvatar?.businessType || ''
             },
             guardrails,
-            openaiApiKey,
+            { openai: openaiApiKey, anthropic: anthropicApiKey, gemini: geminiApiKey },
             { guidedModel }
           );
 

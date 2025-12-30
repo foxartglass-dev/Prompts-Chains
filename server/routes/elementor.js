@@ -288,6 +288,8 @@ router.post('/publish', async (req, res) => {
       styleDNA = null,
       referenceImages = null,
       openaiApiKey = null,
+      anthropicApiKey = null,  // For Claude models in Guided GPT
+      geminiApiKey = null,     // For Gemini models in Guided GPT
       replicateApiKey = null,
       maxImages = 4
     } = req.body;
@@ -946,6 +948,8 @@ router.post('/publish', async (req, res) => {
         styleDNA,
         referenceImages,
         openaiApiKey: openaiApiKey || process.env.OPENAI_API_KEY,
+        anthropicApiKey: anthropicApiKey || process.env.ANTHROPIC_API_KEY,
+        geminiApiKey: geminiApiKey || process.env.GEMINI_API_KEY,
         replicateApiKey: replicateApiKey || process.env.REPLICATE_API_TOKEN,
         wpCredentials,
         maxImages: imagesToGenerate,
