@@ -32,7 +32,16 @@ PromptFlow is an AI-powered content and image generation system designed for loc
 
 ## Getting Started
 
-### Step 1: Set Up a Client and Website
+### Step 1: Set Up Local Viking API Key (Global)
+
+1. Click **"Settings"** in the top navigation (gear icon)
+2. Scroll to the **Local Viking** section
+3. Enter your **Local Viking API Key** (get from localviking.com → Settings → API Keys)
+4. Click **"Save Local Viking Settings"**
+
+> **Note:** The API key is account-level and works for all your websites. You only enter it once.
+
+### Step 2: Set Up a Client and Website
 
 1. Click **"Settings"** in the top navigation
 2. Under **Agency Manager**, click **"Add Client"**
@@ -47,11 +56,10 @@ PromptFlow is an AI-powered content and image generation system designed for loc
    - WordPress URL (e.g., `https://yoursite.com/wp-json`)
    - WordPress username
    - WordPress application password
-   - **Local Viking API Key** (get from localviking.com → Settings)
-   - **Local Viking Location ID** (your GBP location ID)
+   - **Local Viking Location ID** (your GBP campaign/location ID - each business has its own)
 7. Click **"Save"**
 
-### Step 2: Create a Workflow
+### Step 3: Create a Workflow
 
 1. Click **"New Workflow"** on the main dashboard
 2. Select your client and website
@@ -228,8 +236,8 @@ Section **9** on the main dashboard (scroll down past Site Planning)
 
 ### Prerequisites
 1. Local Viking account (localviking.com)
-2. API key added to your website settings
-3. Location ID added to your website settings
+2. **API key** added to global Settings (Settings → Local Viking section)
+3. **Location ID** added to your website settings (Agency Manager → Website → Local Viking Location ID)
 
 ---
 
@@ -497,9 +505,9 @@ https://your-domain.com/api (production)
 ### Connection Issues
 
 **"Local Viking not connected"**
-1. Go to Settings → Website
-2. Check your API key is entered correctly
-3. Verify your Location ID is correct
+1. Go to **Settings** (gear icon) → Local Viking section
+2. Check your **API key** is entered correctly and saved
+3. Go to **Agency Manager** → edit Website → check **Location ID** is correct
 4. Click "Check Connection" in Local Viking section
 
 **"Push to WordPress failed"**
@@ -512,8 +520,8 @@ https://your-domain.com/api (production)
 
 | Error | Solution |
 |-------|----------|
-| "Invalid API key" | Re-enter your Local Viking API key in settings |
-| "Location not found" | Check Location ID matches your GBP |
+| "Invalid API key" | Go to Settings → Local Viking and re-enter your API key |
+| "Location not found" | Check Location ID in Agency Manager → Website settings |
 | "Insufficient credits" | Buy more credits at localviking.com |
 | "WordPress auth failed" | Generate new application password |
 | "Parent page not found" | Push parent pages before children |
@@ -535,9 +543,13 @@ https://your-domain.com/api (production)
 
 | Section | Button | What It Does |
 |---------|--------|--------------|
+| Settings | Save Local Viking Settings | Saves the global API key |
 | Site Planning | Push to WP | Pushes pages to WordPress |
 | Site Planning | Push as Draft | Creates as drafts |
 | Site Planning | Push & Publish | Creates and publishes |
+| Site Planning | Import List | Import tab-indented hierarchy |
+| Site Planning | + Location | Add multi-location expansion |
+| Site Planning | Neighborhoods | Gap analysis for neighborhoods |
 | Local Viking | Check Connection | Tests API connection |
 | Local Viking | Run Scan | Runs new GeoGrid scan |
 | Local Viking | Load Analysis | Gets sheep opportunities |
@@ -548,4 +560,4 @@ https://your-domain.com/api (production)
 ---
 
 *Last updated: December 2024*
-*PromptFlow v2.0 - Complete with Local Viking UI*
+*PromptFlow v2.1 - Global Settings & Multi-Location*

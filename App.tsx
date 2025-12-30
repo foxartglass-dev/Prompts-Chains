@@ -215,6 +215,8 @@ const App: React.FC = () => {
     const [isWordPressOpen, setIsWordPressOpen] = useState(false);
     const [isArticlesPageOpen, setIsArticlesPageOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [globalSettings, setGlobalSettings] = useState<{local_viking_api_key?: string}>({});
+    const [globalSettingsLoading, setGlobalSettingsLoading] = useState(false);
     const [isMoreDropdownOpen, setIsMoreDropdownOpen] = useState(false);
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
     const [defaultWorkflow, setDefaultWorkflow] = useState<DefaultWorkflowConfig | null>(() => {
@@ -457,6 +459,47 @@ const App: React.FC = () => {
             }
         };
     }, [currentProject?.state, currentWorkflowId]); // Only trigger on state changes, not on currentProject change
+
+    // Load global settings when Settings modal opens
+    useEffect(() => {
+        if (isSettingsOpen) {
+            setGlobalSettingsLoading(true);
+            fetch('/api/global-settings')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.settings) {
+                        setGlobalSettings({
+                            local_viking_api_key: data.settings.local_viking_api_key || ''
+                        });
+                    }
+                })
+                .catch(err => console.error('Failed to load global settings:', err))
+                .finally(() => setGlobalSettingsLoading(false));
+        }
+    }, [isSettingsOpen]);
+
+    // Save global settings
+    const saveGlobalSettings = async () => {
+        try {
+            setGlobalSettingsLoading(true);
+            const res = await fetch('/api/global-settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(globalSettings)
+            });
+            const data = await res.json();
+            if (data.success) {
+                showNotification('Global settings saved!', 'success');
+            } else {
+                showNotification('Failed to save settings', 'error');
+            }
+        } catch (err) {
+            console.error('Failed to save global settings:', err);
+            showNotification('Failed to save settings', 'error');
+        } finally {
+            setGlobalSettingsLoading(false);
+        }
+    };
 
     // ========== CONDITIONAL RETURNS (after all hooks) ==========
 
@@ -1814,6 +1857,34 @@ const App: React.FC = () => {
                                             className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-slate-500"
                                         />
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* Local Viking API Key (Global) */}
+                            <div className="bg-slate-800/50 p-4 rounded-lg border border-green-500/30">
+                                <h3 className="text-lg font-semibold text-green-400 mb-3">Local Viking</h3>
+                                <p className="text-xs text-slate-400 mb-3">
+                                    This API key is used for all websites. Location ID is set per-website in Agency Manager.
+                                </p>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-green-400 mb-1">Local Viking API Key</label>
+                                        <input
+                                            type="password"
+                                            placeholder="Your Local Viking API key"
+                                            value={globalSettings.local_viking_api_key || ''}
+                                            onChange={e => setGlobalSettings(prev => ({ ...prev, local_viking_api_key: e.target.value }))}
+                                            className="w-full bg-slate-700 border border-green-500/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-green-500"
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">Find this in Local Viking → Settings → API Keys</p>
+                                    </div>
+                                    <button
+                                        onClick={saveGlobalSettings}
+                                        disabled={globalSettingsLoading}
+                                        className="w-full px-4 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 rounded-lg text-white text-sm font-medium transition"
+                                    >
+                                        {globalSettingsLoading ? 'Saving...' : 'Save Local Viking Settings'}
+                                    </button>
                                 </div>
                             </div>
 

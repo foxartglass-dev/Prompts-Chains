@@ -641,6 +641,32 @@ async function setup() {
     console.log('  ✓ Local Viking indexes');
 
     console.log('');
+
+    // ================================
+    // GLOBAL SETTINGS TABLE
+    // ================================
+    console.log('🌐 Creating Global Settings table...\n');
+
+    // Global settings (singleton table for account-level settings)
+    await sql`
+      CREATE TABLE IF NOT EXISTS global_settings (
+        id SERIAL PRIMARY KEY,
+        local_viking_api_key VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
+    // Ensure the row exists
+    const hasGlobalSettings = await sql`SELECT id FROM global_settings WHERE id = 1`;
+    if (hasGlobalSettings.length === 0) {
+      await sql`INSERT INTO global_settings (id) VALUES (1)`;
+      console.log('  ✓ Created global_settings with initial row');
+    } else {
+      console.log('  - global_settings already exists');
+    }
+
+    console.log('');
     console.log('================================');
     console.log('✅ Database setup complete!');
     console.log('================================');

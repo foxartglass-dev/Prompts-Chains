@@ -31,8 +31,8 @@ interface Website {
   wp_url: string | null;
   wp_user: string | null;
   wp_app_password: string | null;
-  local_viking_api_key: string | null;
-  local_viking_location_id: string | null;
+  local_viking_location_id: string | null;  // Location/Campaign ID (per-website)
+  // Note: API key is now stored in global_settings table
   created_at: string;
 }
 
@@ -93,7 +93,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   });
   const [websiteForm, setWebsiteForm] = useState({
     name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '',
-    local_viking_api_key: '', local_viking_location_id: ''
+    local_viking_location_id: ''  // API key is now in global settings
   });
   const [projectForm, setProjectForm] = useState({ name: '', description: '' });
 
@@ -309,7 +309,6 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
       wp_url: website.wp_url || '',
       wp_user: website.wp_user || '',
       wp_app_password: website.wp_app_password || '',
-      local_viking_api_key: website.local_viking_api_key || '',
       local_viking_location_id: website.local_viking_location_id || ''
     });
     setShowWebsiteForm(true);
@@ -387,7 +386,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   const cancelWebsiteForm = () => {
     setShowWebsiteForm(false);
     setEditingWebsiteId(null);
-    setWebsiteForm({ name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '', local_viking_api_key: '', local_viking_location_id: '' });
+    setWebsiteForm({ name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '', local_viking_location_id: '' });
   };
 
   const deleteClient = async (id: number) => {
@@ -1082,19 +1081,9 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                         </div>
                       </div>
                       <div className="border-t border-gray-700 pt-4 mt-4">
-                        <p className="text-sm text-green-400 font-medium mb-3">Local Viking Settings (optional)</p>
-                        <p className="text-xs text-gray-500 mb-3">Connect to Local Viking for rank tracking and GBP automation</p>
+                        <p className="text-sm text-green-400 font-medium mb-3">Local Viking Settings</p>
+                        <p className="text-xs text-gray-500 mb-3">Connect to Local Viking for rank tracking and GBP automation. API key is set in global Settings.</p>
                         <div className="space-y-3">
-                          <div>
-                            <label className="block text-sm text-gray-400 mb-1">Local Viking API Key</label>
-                            <input
-                              type="password"
-                              placeholder="Your Local Viking API key"
-                              value={websiteForm.local_viking_api_key}
-                              onChange={(e) => setWebsiteForm({ ...websiteForm, local_viking_api_key: e.target.value })}
-                              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-green-500 focus:outline-none"
-                            />
-                          </div>
                           <div>
                             <label className="block text-sm text-gray-400 mb-1">Location ID (Campaign ID)</label>
                             <input
@@ -1104,7 +1093,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                               onChange={(e) => setWebsiteForm({ ...websiteForm, local_viking_location_id: e.target.value })}
                               className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-green-500 focus:outline-none"
                             />
-                            <p className="text-xs text-gray-500 mt-1">Find this in your Local Viking campaign URL</p>
+                            <p className="text-xs text-gray-500 mt-1">Find this in your Local Viking campaign URL (each business location has its own ID)</p>
                           </div>
                         </div>
                       </div>
