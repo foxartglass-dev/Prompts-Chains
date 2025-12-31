@@ -1,5 +1,5 @@
 import express from 'express';
-import { getDb, isDatabaseEnabled } from '../db/index.js';
+import { sql, isDatabaseEnabled } from '../db/index.js';
 
 const router = express.Router();
 
@@ -15,8 +15,6 @@ const requireDb = (req, res, next) => {
 // Returns global settings (creates row if doesn't exist)
 router.get('/', requireDb, async (req, res) => {
   try {
-    const sql = getDb();
-
     // First check if the table exists, create if not
     await sql`
       CREATE TABLE IF NOT EXISTS global_settings (
@@ -50,7 +48,6 @@ router.get('/', requireDb, async (req, res) => {
 // Update global settings
 router.put('/', requireDb, async (req, res) => {
   try {
-    const sql = getDb();
     const { local_viking_api_key } = req.body;
 
     // First ensure the table and row exist
@@ -99,8 +96,6 @@ router.put('/', requireDb, async (req, res) => {
 // Returns just the Local Viking API key (for internal use)
 router.get('/local-viking-api-key', requireDb, async (req, res) => {
   try {
-    const sql = getDb();
-
     // First check if the table exists
     await sql`
       CREATE TABLE IF NOT EXISTS global_settings (
