@@ -451,16 +451,19 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Collapsible sections
+  // Collapsible sections - default to collapsed for cleaner UI
   const [isReferenceOpen, setIsReferenceOpen] = useState(false);
   const [isLogoOpen, setIsLogoOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isConsultantChatOpen, setIsConsultantChatOpen] = useState(false);
   const [isWorkerChatOpen, setIsWorkerChatOpen] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
-  const [isBankOpen, setIsBankOpen] = useState(true);
+  const [isBankOpen, setIsBankOpen] = useState(false); // Collapsed by default
   const [isUsedOpen, setIsUsedOpen] = useState(false);
   const [isOrderOpen, setIsOrderOpen] = useState(false);
+
+  // Tab for Reference Assets in Guided GPT section
+  const [guidedAssetsTab, setGuidedAssetsTab] = useState<'problems' | 'reference' | 'logo'>('problems');
 
   // Image preview modal
   const [previewImage, setPreviewImage] = useState<BankImage | null>(null);
@@ -5698,7 +5701,301 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
                 )}
 
-                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-900/50 rounded">
+                {/* ─────────────────────────────────────────────────────
+                    Reference Assets Tabs (Problem Areas, Reference Images, Logo/Action)
+                ───────────────────────────────────────────────────── */}
+                <div className="mt-4 border-t border-slate-700 pt-4">
+                  {/* Tab Buttons */}
+                  <div className="flex border-b border-slate-700">
+                    <button
+                      onClick={() => setGuidedAssetsTab('problems')}
+                      className={`flex-1 px-4 py-2.5 text-sm font-medium transition-all border-b-2 ${
+                        guidedAssetsTab === 'problems'
+                          ? 'text-orange-400 border-orange-500 bg-orange-500/10'
+                          : 'text-slate-400 border-transparent hover:text-slate-300 hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        🎯 Prompt Problem Areas
+                        {settings.prompt_problem_areas.length > 0 && (
+                          <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-300 text-[10px] rounded">
+                            {settings.prompt_problem_areas.length}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setGuidedAssetsTab('logo')}
+                      className={`flex-1 px-4 py-2.5 text-sm font-medium transition-all border-b-2 ${
+                        guidedAssetsTab === 'logo'
+                          ? 'text-brand-cyan border-brand-cyan bg-brand-cyan/10'
+                          : 'text-slate-400 border-transparent hover:text-slate-300 hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        LOGO REFERENCE
+                        {(logoImages.length > 0 || actionShots.length > 0) && (
+                          <span className="px-1.5 py-0.5 bg-brand-cyan/20 text-brand-cyan text-[10px] rounded">
+                            {logoImages.length + actionShots.length}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setGuidedAssetsTab('reference')}
+                      className={`flex-1 px-4 py-2.5 text-sm font-medium transition-all border-b-2 ${
+                        guidedAssetsTab === 'reference'
+                          ? 'text-purple-400 border-purple-500 bg-purple-500/10'
+                          : 'text-slate-400 border-transparent hover:text-slate-300 hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        Reference Images
+                        {settings.reference_images.length > 0 && (
+                          <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 text-[10px] rounded">
+                            {settings.reference_images.length}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Tab Content */}
+                  <div className="p-4 bg-slate-900/50 rounded-b-lg">
+                    {/* Prompt Problem Areas Tab */}
+                    {guidedAssetsTab === 'problems' && (
+                      <div className="space-y-3">
+                        {settings.prompt_problem_areas.length === 0 ? (
+                          <div className="text-center py-6 text-slate-500">
+                            <p className="text-sm">No problem areas yet.</p>
+                            <p className="text-xs mt-1">Add areas for issues like "Logo Visibility", "Camera Angles", etc.</p>
+                            <button
+                              onClick={handleAddProblemArea}
+                              className="mt-3 px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white text-sm rounded-lg transition"
+                            >
+                              + Add Problem Area
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Area Tabs */}
+                            <div className="flex flex-wrap gap-2">
+                              {settings.prompt_problem_areas.map(area => (
+                                <button
+                                  key={area.id}
+                                  onClick={() => setActiveProblemAreaId(activeProblemAreaId === area.id ? null : area.id)}
+                                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                                    area.status === 'solved'
+                                      ? activeProblemAreaId === area.id
+                                        ? 'bg-green-500 text-slate-900'
+                                        : 'bg-green-900/50 text-green-400 hover:bg-green-900/70 border border-green-500/50'
+                                      : activeProblemAreaId === area.id
+                                        ? 'bg-orange-500 text-slate-900'
+                                        : 'bg-slate-800 text-orange-400 hover:bg-slate-700'
+                                  }`}
+                                >
+                                  {area.status === 'solved' ? (
+                                    <span className="text-green-300">✓</span>
+                                  ) : (
+                                    <span className={`w-2 h-2 rounded-full ${
+                                      area.priority === 'high' ? 'bg-red-500' :
+                                      area.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                                    }`} />
+                                  )}
+                                  {area.name}
+                                  <span className="text-xs opacity-70">({area.prompts.length})</span>
+                                </button>
+                              ))}
+                              <button
+                                onClick={handleAddProblemArea}
+                                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-orange-400 hover:bg-slate-700 border border-dashed border-orange-500/50"
+                              >
+                                + New
+                              </button>
+                            </div>
+
+                            {/* Active Problem Area Editor */}
+                            {activeProblemAreaId && (() => {
+                              const area = getActiveProblemArea();
+                              if (!area) return null;
+                              return (
+                                <div className="bg-slate-800/50 rounded-lg p-3 space-y-3 border border-orange-500/20">
+                                  <div className="flex items-start gap-3">
+                                    <div className="flex-1 space-y-2">
+                                      <input
+                                        type="text"
+                                        value={area.name}
+                                        onChange={(e) => handleUpdateProblemArea(area.id, { name: e.target.value })}
+                                        className="w-full bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-white text-sm font-medium"
+                                        placeholder="Problem area name..."
+                                      />
+                                      <textarea
+                                        value={area.context}
+                                        onChange={(e) => handleUpdateProblemArea(area.id, { context: e.target.value })}
+                                        className="w-full bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-white text-xs resize-y"
+                                        rows={2}
+                                        placeholder="Context: Why is this a problem? What are you trying to solve?"
+                                      />
+                                    </div>
+                                    <select
+                                      value={area.priority}
+                                      onChange={(e) => handleUpdateProblemArea(area.id, { priority: e.target.value as any })}
+                                      className="bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-xs text-white"
+                                    >
+                                      <option value="high">🔴 High</option>
+                                      <option value="medium">🟡 Medium</option>
+                                      <option value="low">🟢 Low</option>
+                                    </select>
+                                    <button
+                                      onClick={() => handleDeleteProblemArea(area.id)}
+                                      className="text-red-400 hover:text-red-300 text-xs"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                  <div className="text-xs text-slate-400">
+                                    {area.prompts.length} solution prompts • Click "+ Add Prompt" in the original section to add more
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Logo & Action Shots Tab */}
+                    {guidedAssetsTab === 'logo' && (
+                      <div className="space-y-4">
+                        {/* Logo Image */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm text-brand-cyan font-medium">Logo Image (the actual logo)</label>
+                            <button
+                              onClick={() => logoFileInputRef.current?.click()}
+                              className="px-3 py-1 bg-brand-cyan/20 hover:bg-brand-cyan/30 text-brand-cyan text-xs rounded transition"
+                            >
+                              + Upload Logo
+                            </button>
+                          </div>
+                          {logoImages.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {logoImages.map((img, idx) => (
+                                <div key={idx} className="relative group">
+                                  <img src={img.dataUrl} alt="Logo" className="h-16 w-auto rounded border border-brand-cyan/30" />
+                                  <button
+                                    onClick={() => removeLogo(idx)}
+                                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                  >
+                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500">No logo uploaded yet</p>
+                          )}
+                        </div>
+
+                        {/* Action Shots */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm text-brand-cyan font-medium">Action Shots (logo on shirts, vehicles, etc.)</label>
+                            <button
+                              onClick={() => actionShotsInputRef.current?.click()}
+                              className="px-3 py-1 bg-brand-cyan/20 hover:bg-brand-cyan/30 text-brand-cyan text-xs rounded transition"
+                            >
+                              + Upload Action Shots
+                            </button>
+                          </div>
+                          {actionShots.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {actionShots.map((img, idx) => (
+                                <div key={idx} className="relative group">
+                                  <img src={img.dataUrl} alt="Action shot" className="h-16 w-auto rounded border border-slate-600" />
+                                  <button
+                                    onClick={() => removeActionShot(idx)}
+                                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                  >
+                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500">No action shots uploaded yet</p>
+                          )}
+                        </div>
+
+                        <p className="text-[10px] text-slate-500">
+                          Tip: These images help AI understand your brand. Use {'{logo}'} in prompts to reference the logo placement.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Reference Images Tab */}
+                    {guidedAssetsTab === 'reference' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-purple-400 font-medium">Reference Images ({settings.reference_images.length})</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              placeholder="Or paste image URL..."
+                              className="px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white placeholder-slate-500 w-48"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const url = (e.target as HTMLInputElement).value.trim();
+                                  if (url) {
+                                    updateSettings({
+                                      reference_images: [...settings.reference_images, { id: `ref-${Date.now()}`, dataUrl: url, name: 'From URL' }]
+                                    });
+                                    (e.target as HTMLInputElement).value = '';
+                                  }
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={() => fileInputRef.current?.click()}
+                              className="px-3 py-1 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs rounded transition"
+                            >
+                              ↑ Upload
+                            </button>
+                          </div>
+                        </div>
+                        {settings.reference_images.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {settings.reference_images.map((img, idx) => (
+                              <div key={img.id} className="relative group">
+                                <img src={img.dataUrl} alt={img.name} className="h-16 w-auto rounded border border-purple-500/30" />
+                                <button
+                                  onClick={() => {
+                                    const updated = settings.reference_images.filter((_, i) => i !== idx);
+                                    updateSettings({ reference_images: updated });
+                                  }}
+                                  className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                >
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500 text-center py-4">No reference images yet. Upload images that represent your desired style.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Fallback Checkbox - Now below tabs */}
+                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-900/50 rounded mt-3">
                   <input type="checkbox" checked={settings.fallback_to_live} onChange={(e) => updateSettings({ fallback_to_live: e.target.checked })} className="w-4 h-4 rounded border-amber-500 text-amber-500 focus:ring-amber-500 bg-slate-900" />
                   <span className="text-sm text-amber-400">Fallback: Generate if bank is empty or no match</span>
                 </label>
