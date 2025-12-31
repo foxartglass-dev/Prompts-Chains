@@ -544,6 +544,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [activeProblemAreaId, setActiveProblemAreaId] = useState<string | null>(null);
   const [editingProblemArea, setEditingProblemArea] = useState<PromptProblemArea | null>(null);
 
+  // Guided GPT Assistant Chat state
+  const [guidedAssistantOpen, setGuidedAssistantOpen] = useState(false);
+  const [guidedAssistantMessages, setGuidedAssistantMessages] = useState<ChatMessage[]>([]);
+  const [guidedAssistantInput, setGuidedAssistantInput] = useState('');
+  const [guidedAssistantImages, setGuidedAssistantImages] = useState<string[]>([]);
+  const [guidedAssistantLoading, setGuidedAssistantLoading] = useState(false);
+  const guidedAssistantChatRef = useRef<HTMLDivElement>(null);
+  const guidedAssistantFileInputRef = useRef<HTMLInputElement>(null);
+
   // Feedback popup state
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
   const [pendingFeedbackRequest, setPendingFeedbackRequest] = useState<FeedbackRequest | null>(null);
@@ -1932,6 +1941,129 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
 
     setConsultantLoading(false);
+  };
+
+  /**
+   * Send message to Guided GPT Assistant Chat
+   * This chat helps users refine guardrails and understand prompt techniques
+   */
+  const handleSendGuidedAssistant = async () => {
+    if (!guidedAssistantInput.trim() && guidedAssistantImages.length === 0) return;
+
+    const newMessage: ChatMessage = {
+      role: 'user',
+      content: guidedAssistantInput,
+      images: guidedAssistantImages.length > 0 ? guidedAssistantImages : undefined,
+      timestamp: new Date().toISOString()
+    };
+
+    // Build message history for API
+    const historyToSend = [...guidedAssistantMessages, newMessage];
+
+    // Update local state immediately
+    setGuidedAssistantMessages(historyToSend);
+    setGuidedAssistantInput('');
+    setGuidedAssistantImages([]);
+    setGuidedAssistantLoading(true);
+
+    try {
+      // Build context from current settings
+      const context = {
+        guardrails: settings.guided_guardrails,
+        referenceImages: settings.reference_images.length,
+        logoImages: logoImages.length,
+        actionShots: actionShots.length,
+        problemAreas: (settings.prompt_problem_areas || [])
+          .filter((a: PromptProblemArea) => a.status === 'active')
+          .map((a: PromptProblemArea) => ({ name: a.name, context: a.context }))
+      };
+
+      const res = await fetch('/api/prompt-assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: settings.guided_model || 'gpt-4o',
+          messages: historyToSend.map(m => ({
+            role: m.role,
+            content: m.content,
+            images: m.images
+          })),
+          context
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: data.response,
+          timestamp: new Date().toISOString()
+        };
+        setGuidedAssistantMessages([...historyToSend, assistantMessage]);
+      } else {
+        showNotification(data.error || 'Chat failed', 'error');
+      }
+    } catch (error) {
+      console.error('Guided assistant chat error:', error);
+      showNotification('Failed to send message', 'error');
+    }
+
+    setGuidedAssistantLoading(false);
+
+    // Scroll to bottom
+    setTimeout(() => {
+      if (guidedAssistantChatRef.current) {
+        guidedAssistantChatRef.current.scrollTop = guidedAssistantChatRef.current.scrollHeight;
+      }
+    }, 100);
+  };
+
+  /**
+   * Handle image upload for Guided Assistant Chat
+   */
+  const handleGuidedAssistantImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        setGuidedAssistantImages(prev => [...prev, base64]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Reset input
+    if (e.target) e.target.value = '';
+  };
+
+  /**
+   * Extract and save guardrail suggestions from assistant response
+   */
+  const saveGuardrailFromChat = (text: string) => {
+    // Extract content from ```guardrail blocks
+    const guardrailMatch = text.match(/```guardrail\n?([\s\S]*?)```/);
+    if (guardrailMatch) {
+      const guardrailText = guardrailMatch[1].trim();
+      // Append to existing instructions
+      const currentInstructions = settings.guided_guardrails?.instructions || '';
+      const newInstructions = currentInstructions
+        ? `${currentInstructions}\n\n${guardrailText}`
+        : guardrailText;
+
+      updateSettings({
+        guided_guardrails: {
+          ...settings.guided_guardrails,
+          instructions: newInstructions
+        } as any
+      });
+      showNotification('Guardrail saved to instructions!', 'success');
+    } else {
+      // If no special block, just copy the selected text to clipboard
+      navigator.clipboard.writeText(text);
+      showNotification('Copied to clipboard', 'success');
+    }
   };
 
   /**
@@ -5348,6 +5480,195 @@ Start by introducing yourself and asking about their business in a friendly way.
                             placeholder="e.g., No cartoon style, no stock photo feel, no text"
                             className="w-full p-1.5 text-xs bg-slate-900 border border-red-500/20 rounded text-white placeholder-slate-500"
                           />
+                        </div>
+
+                        {/* AI Prompt Assistant Chat */}
+                        <div className="mt-4 border-t border-emerald-500/30 pt-4">
+                          <button
+                            type="button"
+                            onClick={() => setGuidedAssistantOpen(!guidedAssistantOpen)}
+                            className="w-full flex items-center justify-between p-2 bg-emerald-900/30 hover:bg-emerald-900/50 rounded-lg transition"
+                          >
+                            <span className="flex items-center gap-2 text-emerald-400 font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                              AI Prompt Assistant
+                              {guidedAssistantMessages.length > 0 && (
+                                <span className="px-1.5 py-0.5 bg-emerald-600 text-white text-[10px] rounded-full">
+                                  {guidedAssistantMessages.length}
+                                </span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-emerald-400 transition-transform ${guidedAssistantOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {guidedAssistantOpen && (
+                            <div className="mt-3 space-y-3">
+                              <p className="text-[10px] text-emerald-300/60">
+                                Chat with AI to refine your guardrails, understand prompt techniques, and get suggestions. Upload images for visual feedback.
+                              </p>
+
+                              {/* Chat Messages */}
+                              <div
+                                ref={guidedAssistantChatRef}
+                                className="h-64 overflow-y-auto bg-slate-950 rounded-lg p-3 space-y-3 border border-emerald-500/20"
+                              >
+                                {guidedAssistantMessages.length === 0 ? (
+                                  <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                                    <div className="text-center">
+                                      <svg className="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                      </svg>
+                                      <p>Ask about prompt techniques, guardrails, or upload reference images for analysis</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  guidedAssistantMessages.map((msg, idx) => (
+                                    <div
+                                      key={idx}
+                                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                    >
+                                      <div
+                                        className={`max-w-[85%] rounded-lg p-2.5 ${
+                                          msg.role === 'user'
+                                            ? 'bg-emerald-600 text-white'
+                                            : 'bg-slate-800 text-slate-200'
+                                        }`}
+                                      >
+                                        {/* Show attached images */}
+                                        {msg.images && msg.images.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mb-2">
+                                            {msg.images.map((img, imgIdx) => (
+                                              <img key={imgIdx} src={img} alt="" className="h-16 w-auto rounded" />
+                                            ))}
+                                          </div>
+                                        )}
+                                        {/* Message content with markdown-ish rendering */}
+                                        <div className="text-xs whitespace-pre-wrap">
+                                          {msg.content.split('```guardrail').map((part, partIdx) => {
+                                            if (partIdx === 0) return <span key={partIdx}>{part}</span>;
+                                            const [guardrail, rest] = part.split('```');
+                                            return (
+                                              <span key={partIdx}>
+                                                <div className="my-2 bg-emerald-900/50 border border-emerald-500/50 rounded p-2">
+                                                  <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-[10px] text-emerald-400 font-medium">Suggested Guardrail:</span>
+                                                    <button
+                                                      onClick={() => saveGuardrailFromChat(`\`\`\`guardrail\n${guardrail}\`\`\``)}
+                                                      className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] rounded transition"
+                                                    >
+                                                      + Add to Guardrails
+                                                    </button>
+                                                  </div>
+                                                  <code className="text-emerald-300 text-[11px]">{guardrail.trim()}</code>
+                                                </div>
+                                                {rest}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                        {/* Copy button for assistant messages */}
+                                        {msg.role === 'assistant' && (
+                                          <button
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(msg.content);
+                                              showNotification('Copied to clipboard', 'success');
+                                            }}
+                                            className="mt-2 text-[10px] text-slate-400 hover:text-white transition"
+                                          >
+                                            Copy response
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                                {guidedAssistantLoading && (
+                                  <div className="flex justify-start">
+                                    <div className="bg-slate-800 rounded-lg p-2.5">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Image attachments preview */}
+                              {guidedAssistantImages.length > 0 && (
+                                <div className="flex flex-wrap gap-2 p-2 bg-slate-900 rounded-lg">
+                                  {guidedAssistantImages.map((img, idx) => (
+                                    <div key={idx} className="relative group">
+                                      <img src={img} alt="" className="h-12 w-auto rounded" />
+                                      <button
+                                        onClick={() => setGuidedAssistantImages(prev => prev.filter((_, i) => i !== idx))}
+                                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                      >
+                                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Chat Input */}
+                              <div className="flex gap-2">
+                                <input
+                                  ref={guidedAssistantFileInputRef}
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={handleGuidedAssistantImageUpload}
+                                  className="hidden"
+                                />
+                                <button
+                                  onClick={() => guidedAssistantFileInputRef.current?.click()}
+                                  className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition"
+                                  title="Attach images"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                </button>
+                                <input
+                                  type="text"
+                                  value={guidedAssistantInput}
+                                  onChange={(e) => setGuidedAssistantInput(e.target.value)}
+                                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendGuidedAssistant())}
+                                  placeholder="Ask about guardrails, prompt techniques..."
+                                  className="flex-1 p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded-lg text-white placeholder-slate-500"
+                                  disabled={guidedAssistantLoading}
+                                />
+                                <button
+                                  onClick={handleSendGuidedAssistant}
+                                  disabled={guidedAssistantLoading || (!guidedAssistantInput.trim() && guidedAssistantImages.length === 0)}
+                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg text-white text-xs font-medium transition"
+                                >
+                                  {guidedAssistantLoading ? '...' : 'Send'}
+                                </button>
+                              </div>
+
+                              {/* Clear chat button */}
+                              {guidedAssistantMessages.length > 0 && (
+                                <button
+                                  onClick={() => {
+                                    setGuidedAssistantMessages([]);
+                                    showNotification('Chat cleared', 'success');
+                                  }}
+                                  className="w-full p-1.5 text-[10px] text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded transition"
+                                >
+                                  Clear conversation
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
