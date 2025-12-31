@@ -814,17 +814,22 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       try {
         console.log('[Image Creation] Saving settings to workflow:', workflowId);
 
-        // PRE-SAVE CHECK: Calculate payload size and warn if too large
-        const payloadJson = JSON.stringify(newSettings);
+        // IMPORTANT: Exclude image_bank from save payload since it's stored in database separately
+        // This prevents the 50MB+ payload bloat issue - images are managed via /api/image-bank
+        const { image_bank, ...settingsWithoutBank } = newSettings;
+        const payloadJson = JSON.stringify(settingsWithoutBank);
         const payloadSizeMB = new Blob([payloadJson]).size / (1024 * 1024);
 
+        console.log(`[Image Creation] Payload size: ${payloadSizeMB.toFixed(2)}MB (image_bank excluded - stored in DB)`);
+
         // Warn at 50MB, block at 90MB (server limit is 100MB)
+        // These limits should rarely be hit now since image_bank is excluded
         if (payloadSizeMB > 90) {
-          showNotification(`⚠️ CANNOT SAVE: Payload is ${payloadSizeMB.toFixed(1)}MB (limit: 100MB). Delete some images from the Image Bank NOW to avoid losing work!`, 'error');
+          showNotification(`⚠️ CANNOT SAVE: Payload is ${payloadSizeMB.toFixed(1)}MB (limit: 100MB). Try clearing old chat history.`, 'error');
           setSaving(false);
           return;
         } else if (payloadSizeMB > 50) {
-          showNotification(`⚠️ WARNING: Payload is ${payloadSizeMB.toFixed(1)}MB. Consider deleting unused images from the Image Bank to prevent save failures.`, 'warning');
+          showNotification(`⚠️ WARNING: Payload is ${payloadSizeMB.toFixed(1)}MB. Consider clearing old chat history or reference images.`, 'warning');
         } else if (payloadSizeMB > 30) {
           console.log(`[Image Creation] Payload size: ${payloadSizeMB.toFixed(1)}MB - getting large`);
         }
@@ -841,7 +846,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           let errorMsg = '';
           switch (res.status) {
             case 413:
-              errorMsg = `Payload too large (${res.status}): Your image bank has too many images. Try deleting some images from the bank to reduce the save size.`;
+              errorMsg = `Payload too large (${res.status}): Settings data is too large. Try clearing old chat history or reducing reference images.`;
               break;
             case 500:
               errorMsg = `Server error (${res.status}): Database may be full or unavailable. Check your Neon dashboard.`;
@@ -914,10 +919,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Get unique models for filtering
   const uniqueModels = [...new Set(settings.image_bank.map(img => img.model).filter(Boolean))];
 
-  // Calculate payload size for warning indicator
+  // Calculate payload size for warning indicator (excludes image_bank since it's stored in DB)
   const payloadSizeMB = useMemo(() => {
     try {
-      const size = new Blob([JSON.stringify(settings)]).size / (1024 * 1024);
+      const { image_bank, ...settingsWithoutBank } = settings;
+      const size = new Blob([JSON.stringify(settingsWithoutBank)]).size / (1024 * 1024);
       return size;
     } catch {
       return 0;
