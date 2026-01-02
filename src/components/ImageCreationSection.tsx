@@ -158,6 +158,35 @@ interface ChatMessage {
   timestamp: string;
 }
 
+// ========== PROMPT JOURNAL SYSTEM ==========
+// Save prompts, track iterations, organize with tags/files
+
+interface JournalEntry {
+  id: string;
+  prompt: string;
+  imageUrl?: string;
+  model: string;
+  notes: string;
+  tags: string[]; // For file/folder organization (e.g., ["logo", "angles"])
+  seriesId?: string; // Links entries in an iteration series
+  seriesPosition?: number; // Position in series (1, 2, 3...)
+  isFinal?: boolean; // Is this the "winner" prompt of a series?
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface JournalSeries {
+  id: string;
+  name: string;
+  description?: string;
+  tags: string[]; // Inherit tags to all entries
+  isClosed: boolean; // Series is complete
+  finalEntryId?: string; // The winning entry
+  closedNotes?: string; // Notes when closing out
+  createdAt: string;
+  closedAt?: string;
+}
+
 // Models that support vision/images (for chat assistants)
 const IMAGE_CAPABLE_MODELS = ['gpt-image-1.5', 'gpt-4o', 'gpt-5.2-2025-12-11', 'claude-sonnet-4-5-20250929', 'claude-3-5-sonnet-20241022', 'gemini-2.5-pro'];
 
@@ -575,6 +604,31 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Helper to get active tab
   const activeTestingTab = testingTabs.find(t => t.id === activeTestingTabId) || testingTabs[0];
+
+  // ========== PROMPT JOURNAL STATE ==========
+  const [journalOpen, setJournalOpen] = useState(false);
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [journalSeries, setJournalSeries] = useState<JournalSeries[]>([]);
+  const [journalFilterTag, setJournalFilterTag] = useState<string | null>(null); // Filter by tag/file
+  const [journalActiveSeries, setJournalActiveSeries] = useState<string | null>(null); // Current working series
+  const [journalEditingEntry, setJournalEditingEntry] = useState<string | null>(null); // Entry being edited
+
+  // Get all unique tags from journal entries
+  const journalTags = useMemo(() => {
+    const tags = new Set<string>();
+    journalEntries.forEach(e => e.tags.forEach(t => tags.add(t)));
+    journalSeries.forEach(s => s.tags.forEach(t => tags.add(t)));
+    return Array.from(tags).sort();
+  }, [journalEntries, journalSeries]);
+
+  // Filtered journal entries
+  const filteredJournalEntries = useMemo(() => {
+    let entries = journalEntries;
+    if (journalFilterTag) {
+      entries = entries.filter(e => e.tags.includes(journalFilterTag));
+    }
+    return entries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [journalEntries, journalFilterTag]);
 
   // Feedback popup state
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
@@ -2105,7 +2159,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           isOpen: testingModeOpen,
           activeTab: activeTestingTab.name,
           currentPrompt: activeTestingTab.prompt,
-          recentHistory: activeTestingTab.history.slice(0, 5).map(h => ({
+          // Send ALL history - no limit, AI should see the full iteration journey
+          fullHistory: activeTestingTab.history.map(h => ({
             prompt: h.prompt,
             model: h.model,
             timestamp: h.timestamp
@@ -2362,6 +2417,155 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       console.error('Save to bank error:', error);
       showNotification('Failed to save to bank', 'error');
     }
+  };
+
+  // ═══════════════════════════════════════════
+  // PROMPT JOURNAL Functions
+  // ═══════════════════════════════════════════
+
+  /**
+   * Save a prompt to the journal
+   */
+  const saveToJournal = (
+    prompt: string,
+    imageUrl?: string,
+    model?: string,
+    tags?: string[],
+    notes?: string
+  ) => {
+    const newEntry: JournalEntry = {
+      id: `entry-${Date.now()}`,
+      prompt,
+      imageUrl,
+      model: model || settings.default_model || 'gpt-image-1.5',
+      notes: notes || '',
+      tags: tags || [],
+      seriesId: journalActiveSeries || undefined,
+      seriesPosition: journalActiveSeries
+        ? journalEntries.filter(e => e.seriesId === journalActiveSeries).length + 1
+        : undefined,
+      isFinal: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    setJournalEntries(prev => [newEntry, ...prev]);
+    showNotification('Saved to Journal!', 'success');
+    return newEntry.id;
+  };
+
+  /**
+   * Create a new series for tracking iterations
+   */
+  const createJournalSeries = (name: string, tags?: string[], description?: string) => {
+    const newSeries: JournalSeries = {
+      id: `series-${Date.now()}`,
+      name,
+      description,
+      tags: tags || [],
+      isClosed: false,
+      createdAt: new Date().toISOString()
+    };
+
+    setJournalSeries(prev => [newSeries, ...prev]);
+    setJournalActiveSeries(newSeries.id);
+    showNotification(`Started series: ${name}`, 'success');
+    return newSeries.id;
+  };
+
+  /**
+   * Close out a series (mark it complete with a winner)
+   */
+  const closeJournalSeries = (seriesId: string, finalEntryId?: string, notes?: string) => {
+    setJournalSeries(prev => prev.map(s =>
+      s.id === seriesId
+        ? { ...s, isClosed: true, finalEntryId, closedNotes: notes, closedAt: new Date().toISOString() }
+        : s
+    ));
+    if (finalEntryId) {
+      setJournalEntries(prev => prev.map(e =>
+        e.id === finalEntryId ? { ...e, isFinal: true } : e
+      ));
+    }
+    if (journalActiveSeries === seriesId) {
+      setJournalActiveSeries(null);
+    }
+    showNotification('Series closed!', 'success');
+  };
+
+  /**
+   * Update journal entry notes
+   */
+  const updateJournalEntryNotes = (entryId: string, notes: string) => {
+    setJournalEntries(prev => prev.map(e =>
+      e.id === entryId ? { ...e, notes, updatedAt: new Date().toISOString() } : e
+    ));
+  };
+
+  /**
+   * Add tag to journal entry
+   */
+  const addTagToJournalEntry = (entryId: string, tag: string) => {
+    const normalizedTag = tag.toLowerCase().trim();
+    if (!normalizedTag) return;
+    setJournalEntries(prev => prev.map(e =>
+      e.id === entryId && !e.tags.includes(normalizedTag)
+        ? { ...e, tags: [...e.tags, normalizedTag], updatedAt: new Date().toISOString() }
+        : e
+    ));
+  };
+
+  /**
+   * Remove tag from journal entry
+   */
+  const removeTagFromJournalEntry = (entryId: string, tag: string) => {
+    setJournalEntries(prev => prev.map(e =>
+      e.id === entryId
+        ? { ...e, tags: e.tags.filter(t => t !== tag), updatedAt: new Date().toISOString() }
+        : e
+    ));
+  };
+
+  /**
+   * Delete journal entry
+   */
+  const deleteJournalEntry = (entryId: string) => {
+    setJournalEntries(prev => prev.filter(e => e.id !== entryId));
+    showNotification('Entry deleted', 'success');
+  };
+
+  /**
+   * Load prompt from journal back to Testing Mode
+   */
+  const loadFromJournal = (entry: JournalEntry) => {
+    setTestingModeOpen(true);
+    updateActiveTabPrompt(entry.prompt);
+    showNotification('Prompt loaded to Testing Mode', 'success');
+  };
+
+  /**
+   * Start a new series from the current Testing Mode tab
+   */
+  const startSeriesFromTestingMode = (name: string, tags?: string[]) => {
+    const seriesId = createJournalSeries(name, tags);
+    // Save all current history to this series
+    activeTestingTab.history.forEach((h, idx) => {
+      const entry: JournalEntry = {
+        id: `entry-${Date.now()}-${idx}`,
+        prompt: h.prompt,
+        imageUrl: h.url,
+        model: h.model,
+        notes: '',
+        tags: tags || [],
+        seriesId,
+        seriesPosition: activeTestingTab.history.length - idx,
+        isFinal: false,
+        createdAt: h.timestamp,
+        updatedAt: h.timestamp
+      };
+      setJournalEntries(prev => [...prev, entry]);
+    });
+    showNotification(`Series created with ${activeTestingTab.history.length} entries`, 'success');
   };
 
   /**
@@ -6153,16 +6357,30 @@ Start by introducing yourself and asking about their business in a friendly way.
                                       {/* History - Scrollable list showing prompt + image pairs */}
                                       {activeTestingTab.history.length > 0 ? (
                                         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-                                          <div className="text-[10px] text-slate-500 flex justify-between">
+                                          <div className="text-[10px] text-slate-500 flex justify-between items-center">
                                             <span>Test History ({activeTestingTab.history.length})</span>
-                                            <button
-                                              onClick={() => setTestingTabs(prev => prev.map(tab =>
-                                                tab.id === activeTestingTabId ? { ...tab, history: [] } : tab
-                                              ))}
-                                              className="text-red-400 hover:text-red-300"
-                                            >
-                                              Clear History
-                                            </button>
+                                            <div className="flex gap-2">
+                                              <button
+                                                onClick={() => {
+                                                  const name = prompt('Name this series:', activeTestingTab.name);
+                                                  if (name) {
+                                                    const tag = prompt('Add a tag/file (optional):', '');
+                                                    startSeriesFromTestingMode(name, tag ? [tag.toLowerCase()] : []);
+                                                  }
+                                                }}
+                                                className="text-blue-400 hover:text-blue-300"
+                                              >
+                                                Save All to Journal
+                                              </button>
+                                              <button
+                                                onClick={() => setTestingTabs(prev => prev.map(tab =>
+                                                  tab.id === activeTestingTabId ? { ...tab, history: [] } : tab
+                                                ))}
+                                                className="text-red-400 hover:text-red-300"
+                                              >
+                                                Clear
+                                              </button>
+                                            </div>
                                           </div>
                                           {activeTestingTab.history.map((item, idx) => (
                                             <div key={idx} className="bg-slate-950 rounded-lg p-2 border border-slate-700">
@@ -6181,18 +6399,27 @@ Start by introducing yourself and asking about their business in a friendly way.
                                                   <div className="text-[8px] text-slate-600 mb-2">
                                                     {item.model} • {new Date(item.timestamp).toLocaleTimeString()}
                                                   </div>
-                                                  <div className="flex gap-1">
+                                                  <div className="flex gap-1 flex-wrap">
                                                     <button
                                                       onClick={() => handleSaveTestImageToBank(item.url, item.prompt, item.model)}
                                                       className="px-2 py-0.5 bg-green-600 hover:bg-green-500 rounded text-white text-[9px] transition"
                                                     >
-                                                      Save
+                                                      Bank
+                                                    </button>
+                                                    <button
+                                                      onClick={() => {
+                                                        const tag = prompt('Add tag (optional):', '');
+                                                        saveToJournal(item.prompt, item.url, item.model, tag ? [tag.toLowerCase()] : []);
+                                                      }}
+                                                      className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-[9px] transition"
+                                                    >
+                                                      Journal
                                                     </button>
                                                     <button
                                                       onClick={() => updateActiveTabPrompt(item.prompt)}
                                                       className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-[9px] transition"
                                                     >
-                                                      Use Prompt
+                                                      Use
                                                     </button>
                                                     <button
                                                       onClick={() => {
@@ -6216,6 +6443,184 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         </div>
                                       )}
                                     </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* ═══════════════════════════════════════════
+                                  PROMPT JOURNAL - Save & organize prompts
+                              ═══════════════════════════════════════════ */}
+                              <div className="mt-4 border-t border-blue-500/30 pt-4">
+                                <button
+                                  type="button"
+                                  onClick={() => setJournalOpen(!journalOpen)}
+                                  className="w-full flex items-center justify-between p-2 bg-blue-900/30 hover:bg-blue-900/50 rounded-t-lg transition"
+                                >
+                                  <span className="flex items-center gap-2 text-blue-400 font-medium text-sm">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                    </svg>
+                                    Prompt Journal
+                                    {journalEntries.length > 0 && (
+                                      <span className="px-1.5 py-0.5 bg-blue-600 text-white text-[10px] rounded-full">
+                                        {journalEntries.length}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <svg className={`w-4 h-4 text-blue-400 transition-transform ${journalOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+
+                                {journalOpen && (
+                                  <div className="bg-slate-900/50 rounded-b-lg border border-t-0 border-blue-500/20 p-3">
+                                    {/* Filter by tag/file */}
+                                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                                      <span className="text-[10px] text-blue-400">Filter:</span>
+                                      <button
+                                        onClick={() => setJournalFilterTag(null)}
+                                        className={`px-2 py-0.5 rounded text-[9px] transition ${
+                                          !journalFilterTag
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                        }`}
+                                      >
+                                        All ({journalEntries.length})
+                                      </button>
+                                      {journalTags.map(tag => (
+                                        <button
+                                          key={tag}
+                                          onClick={() => setJournalFilterTag(tag)}
+                                          className={`px-2 py-0.5 rounded text-[9px] transition ${
+                                            journalFilterTag === tag
+                                              ? 'bg-blue-600 text-white'
+                                              : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                          }`}
+                                        >
+                                          {tag} ({journalEntries.filter(e => e.tags.includes(tag)).length})
+                                        </button>
+                                      ))}
+                                    </div>
+
+                                    {/* Active Series indicator */}
+                                    {journalActiveSeries && (
+                                      <div className="mb-3 p-2 bg-blue-900/30 rounded border border-blue-500/30">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[10px] text-blue-400">
+                                            Active Series: <strong>{journalSeries.find(s => s.id === journalActiveSeries)?.name}</strong>
+                                          </span>
+                                          <button
+                                            onClick={() => {
+                                              const notes = prompt('Closing notes (optional):');
+                                              closeJournalSeries(journalActiveSeries, undefined, notes || undefined);
+                                            }}
+                                            className="text-[9px] text-green-400 hover:text-green-300"
+                                          >
+                                            Close Series
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Journal entries */}
+                                    {filteredJournalEntries.length > 0 ? (
+                                      <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                        {filteredJournalEntries.map((entry) => (
+                                          <div
+                                            key={entry.id}
+                                            className={`bg-slate-950 rounded-lg p-2 border ${
+                                              entry.isFinal
+                                                ? 'border-green-500/50'
+                                                : 'border-slate-700'
+                                            }`}
+                                          >
+                                            <div className="flex gap-3">
+                                              {/* Image thumbnail */}
+                                              {entry.imageUrl && (
+                                                <img
+                                                  src={entry.imageUrl}
+                                                  alt=""
+                                                  className="w-16 h-auto rounded flex-shrink-0"
+                                                />
+                                              )}
+                                              <div className="flex-1 min-w-0">
+                                                <div className="text-[10px] text-slate-400 mb-1 line-clamp-2">
+                                                  {entry.prompt}
+                                                </div>
+                                                {/* Tags */}
+                                                <div className="flex gap-1 mb-1 flex-wrap">
+                                                  {entry.tags.map(tag => (
+                                                    <span
+                                                      key={tag}
+                                                      className="px-1 py-0.5 bg-blue-900/50 text-blue-300 text-[8px] rounded"
+                                                    >
+                                                      {tag}
+                                                    </span>
+                                                  ))}
+                                                  {entry.seriesPosition && (
+                                                    <span className="px-1 py-0.5 bg-purple-900/50 text-purple-300 text-[8px] rounded">
+                                                      #{entry.seriesPosition}
+                                                    </span>
+                                                  )}
+                                                  {entry.isFinal && (
+                                                    <span className="px-1 py-0.5 bg-green-900/50 text-green-300 text-[8px] rounded">
+                                                      WINNER
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                {/* Notes */}
+                                                {entry.notes && (
+                                                  <div className="text-[9px] text-slate-500 italic mb-1">
+                                                    {entry.notes}
+                                                  </div>
+                                                )}
+                                                <div className="text-[8px] text-slate-600 mb-1">
+                                                  {entry.model} • {new Date(entry.createdAt).toLocaleDateString()} {new Date(entry.createdAt).toLocaleTimeString()}
+                                                </div>
+                                                {/* Actions */}
+                                                <div className="flex gap-1 flex-wrap">
+                                                  <button
+                                                    onClick={() => loadFromJournal(entry)}
+                                                    className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-[9px] transition"
+                                                  >
+                                                    Load
+                                                  </button>
+                                                  <button
+                                                    onClick={() => {
+                                                      const note = prompt('Add note:', entry.notes);
+                                                      if (note !== null) updateJournalEntryNotes(entry.id, note);
+                                                    }}
+                                                    className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-[9px] transition"
+                                                  >
+                                                    Note
+                                                  </button>
+                                                  <button
+                                                    onClick={() => {
+                                                      const tag = prompt('Add tag:');
+                                                      if (tag) addTagToJournalEntry(entry.id, tag);
+                                                    }}
+                                                    className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-[9px] transition"
+                                                  >
+                                                    +Tag
+                                                  </button>
+                                                  <button
+                                                    onClick={() => deleteJournalEntry(entry.id)}
+                                                    className="px-2 py-0.5 bg-red-900/50 hover:bg-red-800 rounded text-red-300 text-[9px] transition"
+                                                  >
+                                                    Del
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-center py-6 text-slate-500 text-xs">
+                                        <p>No journal entries yet.</p>
+                                        <p className="text-[10px] mt-1">Save prompts from Testing Mode to keep track of your work.</p>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>

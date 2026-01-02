@@ -399,11 +399,13 @@ router.post('/chat', async (req, res) => {
         } else {
           parts.push('*No prompt currently in Testing Mode*');
         }
-        if (context.testingMode.recentHistory?.length > 0) {
-          parts.push(`\n**Recent Test History (${context.testingMode.recentHistory.length} tests):**`);
-          for (const h of context.testingMode.recentHistory) {
-            parts.push(`- "${h.prompt.substring(0, 100)}${h.prompt.length > 100 ? '...' : ''}" (${h.model})`);
-          }
+        if (context.testingMode.fullHistory?.length > 0) {
+          parts.push(`\n**Full Test History (${context.testingMode.fullHistory.length} iterations):**`);
+          context.testingMode.fullHistory.forEach((h, idx) => {
+            const iterNum = context.testingMode.fullHistory.length - idx; // Newest first, so count backwards
+            parts.push(`\n[Iteration ${iterNum}] (${h.model}, ${new Date(h.timestamp).toLocaleTimeString()}):`);
+            parts.push(`"${h.prompt}"`);
+          });
         }
         parts.push('\n**IMPORTANT: You can directly edit the Testing Mode prompt!**');
         parts.push('To update/modify the test prompt, output your new or modified prompt inside a ```testprompt code block.');
