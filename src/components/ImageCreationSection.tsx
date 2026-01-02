@@ -630,6 +630,36 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     return entries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [journalEntries, journalFilterTag]);
 
+  // ========== ARTICLE TESTING STATE ==========
+  // For testing full page image placement with real articles
+  interface ImagePlacement {
+    id: string;
+    position: number; // Character position in article
+    paragraphIndex: number;
+    wordsBefore: string; // The 50 (or N) words before
+    wordsAfter: string; // The 50 (or N) words after
+    matchedKeywords: string[]; // Keywords found in the zone
+    suggestedPrompt?: string;
+    generatedImage?: { url: string; prompt: string; model: string };
+    status: 'pending' | 'generating' | 'generated' | 'saved';
+  }
+
+  interface ArticleTest {
+    articleId: string;
+    title: string;
+    keyword: string;
+    content: string;
+    wordCount: number;
+    placements: ImagePlacement[];
+  }
+
+  const [articleTestOpen, setArticleTestOpen] = useState(false);
+  const [articleTestLoading, setArticleTestLoading] = useState(false);
+  const [availableArticles, setAvailableArticles] = useState<Array<{ id: string; keyword: string; title: string; wordCount: number }>>([]);
+  const [selectedArticleTest, setSelectedArticleTest] = useState<ArticleTest | null>(null);
+  const [keywordRange, setKeywordRange] = useState(50); // Words to look up/down for keywords
+  const [simulationRunning, setSimulationRunning] = useState(false);
+
   // Feedback popup state
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
   const [pendingFeedbackRequest, setPendingFeedbackRequest] = useState<FeedbackRequest | null>(null);
@@ -2566,6 +2596,290 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       setJournalEntries(prev => [...prev, entry]);
     });
     showNotification(`Series created with ${activeTestingTab.history.length} entries`, 'success');
+  };
+
+  // ═══════════════════════════════════════════
+  // ARTICLE TESTING Functions
+  // ═══════════════════════════════════════════
+
+  /**
+   * Fetch available articles from the API
+   */
+  const fetchAvailableArticles = async () => {
+    try {
+      // Get the current website from settings or use default
+      const response = await fetch('/api/articles');
+      const data = await response.json();
+      if (data.articles) {
+        setAvailableArticles(data.articles.map((a: any) => ({
+          id: a.id,
+          keyword: a.keyword,
+          title: a.title || a.keyword,
+          wordCount: a.word_count || 0
+        })));
+      }
+    } catch (error) {
+      console.error('Failed to fetch articles:', error);
+    }
+  };
+
+  /**
+   * Load an article for testing and analyze image placements
+   */
+  const loadArticleForTesting = async (articleId: string) => {
+    setArticleTestLoading(true);
+    try {
+      const response = await fetch(`/api/articles/${articleId}`);
+      const data = await response.json();
+
+      if (data.article) {
+        const article = data.article;
+        const content = article.content || '';
+
+        // Parse the article to find image placement points
+        // Rule: Image at last paragraph break under 300 words since previous image
+        const placements = analyzeArticleForPlacements(content, keywordRange);
+
+        setSelectedArticleTest({
+          articleId: article.id,
+          title: article.title || article.keyword,
+          keyword: article.keyword,
+          content,
+          wordCount: content.split(/\s+/).length,
+          placements
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load article:', error);
+      showNotification('Failed to load article', 'error');
+    }
+    setArticleTestLoading(false);
+  };
+
+  /**
+   * Analyze article content to find image placement points based on rules
+   */
+  const analyzeArticleForPlacements = (content: string, wordRange: number): ImagePlacement[] => {
+    const placements: ImagePlacement[] = [];
+    const paragraphs = content.split(/\n\n+/);
+    let wordsSinceLastImage = 0;
+    let charPosition = 0;
+
+    // Get placeholder keywords from active avatar
+    const placeholderKeywords: string[] = [];
+    if (activeAvatar?.placeholderCategories) {
+      activeAvatar.placeholderCategories.forEach(cat => {
+        cat.options.forEach(opt => {
+          if (opt.primaryKeywords) placeholderKeywords.push(...opt.primaryKeywords);
+          if (opt.secondaryKeywords) placeholderKeywords.push(...opt.secondaryKeywords);
+        });
+      });
+    }
+    // Also add variation names as keywords
+    if (activeAvatar?.variations) {
+      activeAvatar.variations.forEach(v => {
+        placeholderKeywords.push(v.name.toLowerCase());
+      });
+    }
+
+    paragraphs.forEach((paragraph, pIdx) => {
+      const paragraphWords = paragraph.split(/\s+/).filter(w => w.length > 0);
+      wordsSinceLastImage += paragraphWords.length;
+
+      // Check if we should place an image (last paragraph break under 300 words)
+      if (wordsSinceLastImage >= 200 && wordsSinceLastImage <= 350) {
+        // This is a good spot for an image
+        const allWords = content.split(/\s+/);
+        const currentWordIndex = content.substring(0, charPosition).split(/\s+/).length;
+
+        // Get words before and after
+        const startIdx = Math.max(0, currentWordIndex - wordRange);
+        const endIdx = Math.min(allWords.length, currentWordIndex + wordRange);
+        const wordsBefore = allWords.slice(startIdx, currentWordIndex).join(' ');
+        const wordsAfter = allWords.slice(currentWordIndex, endIdx).join(' ');
+        const zoneText = (wordsBefore + ' ' + wordsAfter).toLowerCase();
+
+        // Find matching keywords in the zone
+        const matchedKeywords = placeholderKeywords.filter(kw =>
+          zoneText.includes(kw.toLowerCase())
+        );
+
+        placements.push({
+          id: `placement-${pIdx}`,
+          position: charPosition,
+          paragraphIndex: pIdx,
+          wordsBefore,
+          wordsAfter,
+          matchedKeywords,
+          status: 'pending'
+        });
+
+        wordsSinceLastImage = 0;
+      }
+
+      charPosition += paragraph.length + 2; // +2 for \n\n
+    });
+
+    // Always add a hero image at the start
+    if (placements.length === 0 || placements[0].paragraphIndex > 0) {
+      const firstWords = content.split(/\s+/).slice(0, wordRange).join(' ');
+      const zoneText = firstWords.toLowerCase();
+      const matchedKeywords = placeholderKeywords.filter(kw =>
+        zoneText.includes(kw.toLowerCase())
+      );
+
+      placements.unshift({
+        id: 'placement-hero',
+        position: 0,
+        paragraphIndex: 0,
+        wordsBefore: '',
+        wordsAfter: firstWords,
+        matchedKeywords,
+        status: 'pending'
+      });
+    }
+
+    return placements;
+  };
+
+  /**
+   * Re-analyze the article with new keyword range
+   */
+  const reanalyzeArticle = () => {
+    if (selectedArticleTest) {
+      const placements = analyzeArticleForPlacements(selectedArticleTest.content, keywordRange);
+      setSelectedArticleTest({
+        ...selectedArticleTest,
+        placements
+      });
+    }
+  };
+
+  /**
+   * Generate image for a single placement
+   */
+  const generatePlacementImage = async (placementId: string) => {
+    if (!selectedArticleTest) return;
+
+    const placement = selectedArticleTest.placements.find(p => p.id === placementId);
+    if (!placement) return;
+
+    // Update status to generating
+    setSelectedArticleTest(prev => prev ? {
+      ...prev,
+      placements: prev.placements.map(p =>
+        p.id === placementId ? { ...p, status: 'generating' as const } : p
+      )
+    } : null);
+
+    try {
+      const model = settings.default_model || 'gpt-image-1.5';
+
+      // Build a prompt based on matched keywords and guardrails
+      let prompt = '';
+      if (placement.matchedKeywords.length > 0) {
+        prompt = `${settings.guided_guardrails?.instructions || ''} Scene showing: ${placement.matchedKeywords.join(', ')}. ${settings.guided_guardrails?.uniformDescription || ''}`;
+      } else {
+        prompt = `${settings.guided_guardrails?.instructions || ''} Professional image for article about ${selectedArticleTest.keyword}. ${settings.guided_guardrails?.uniformDescription || ''}`;
+      }
+
+      const size = model.startsWith('gpt-image') ? '1024x1536' : '1024x1792';
+
+      const response = await fetch('/api/image-creation/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, model, size, quality: 'high' })
+      });
+
+      const data = await response.json();
+      if (data.success && data.image?.url) {
+        setSelectedArticleTest(prev => prev ? {
+          ...prev,
+          placements: prev.placements.map(p =>
+            p.id === placementId ? {
+              ...p,
+              status: 'generated' as const,
+              suggestedPrompt: prompt,
+              generatedImage: { url: data.image.url, prompt, model }
+            } : p
+          )
+        } : null);
+        showNotification('Image generated!', 'success');
+      } else {
+        throw new Error(data.error || 'Generation failed');
+      }
+    } catch (error) {
+      console.error('Image generation error:', error);
+      setSelectedArticleTest(prev => prev ? {
+        ...prev,
+        placements: prev.placements.map(p =>
+          p.id === placementId ? { ...p, status: 'pending' as const } : p
+        )
+      } : null);
+      showNotification('Failed to generate image', 'error');
+    }
+  };
+
+  /**
+   * Run full page simulation - generate all images
+   */
+  const runFullPageSimulation = async () => {
+    if (!selectedArticleTest) return;
+
+    setSimulationRunning(true);
+
+    for (const placement of selectedArticleTest.placements) {
+      if (placement.status !== 'generated' && placement.status !== 'saved') {
+        await generatePlacementImage(placement.id);
+        // Small delay between generations
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    setSimulationRunning(false);
+    showNotification('Simulation complete!', 'success');
+  };
+
+  /**
+   * Save a placement image to the Image Bank
+   */
+  const savePlacementToBank = async (placementId: string) => {
+    if (!selectedArticleTest) return;
+
+    const placement = selectedArticleTest.placements.find(p => p.id === placementId);
+    if (!placement?.generatedImage) return;
+
+    try {
+      const response = await fetch(`/api/image-bank/${settings.workflow_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: placement.generatedImage.url,
+          title: `Article Test: ${selectedArticleTest.keyword}`,
+          prompt: placement.generatedImage.prompt,
+          model: placement.generatedImage.model,
+          variation: placement.matchedKeywords.join(', ') || 'Article Test',
+          variationId: `article-test-${placementId}`,
+          orientation: 'vertical',
+          used: false,
+          archived: false
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setSelectedArticleTest(prev => prev ? {
+          ...prev,
+          placements: prev.placements.map(p =>
+            p.id === placementId ? { ...p, status: 'saved' as const } : p
+          )
+        } : null);
+        showNotification('Saved to Image Bank!', 'success');
+      }
+    } catch (error) {
+      console.error('Save to bank error:', error);
+      showNotification('Failed to save', 'error');
+    }
   };
 
   /**
@@ -6619,6 +6933,265 @@ Start by introducing yourself and asking about their business in a friendly way.
                                       <div className="text-center py-6 text-slate-500 text-xs">
                                         <p>No journal entries yet.</p>
                                         <p className="text-[10px] mt-1">Save prompts from Testing Mode to keep track of your work.</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* ═══════════════════════════════════════════
+                                  ARTICLE TESTING - Test full page layouts
+                              ═══════════════════════════════════════════ */}
+                              <div className="mt-4 border-t border-purple-500/30 pt-4">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setArticleTestOpen(!articleTestOpen);
+                                    if (!articleTestOpen) fetchAvailableArticles();
+                                  }}
+                                  className="w-full flex items-center justify-between p-2 bg-purple-900/30 hover:bg-purple-900/50 rounded-t-lg transition"
+                                >
+                                  <span className="flex items-center gap-2 text-purple-400 font-medium text-sm">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    Article Testing
+                                    {selectedArticleTest && (
+                                      <span className="px-1.5 py-0.5 bg-purple-600 text-white text-[10px] rounded-full">
+                                        {selectedArticleTest.placements.length} spots
+                                      </span>
+                                    )}
+                                  </span>
+                                  <svg className={`w-4 h-4 text-purple-400 transition-transform ${articleTestOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+
+                                {articleTestOpen && (
+                                  <div className="bg-slate-900/50 rounded-b-lg border border-t-0 border-purple-500/20 p-3">
+                                    <p className="text-[10px] text-purple-300/60 mb-3">
+                                      Import a real article to test image placement rules. See where images would go and what keywords are matched.
+                                    </p>
+
+                                    {/* Article selector */}
+                                    <div className="flex gap-2 mb-3">
+                                      <select
+                                        value={selectedArticleTest?.articleId || ''}
+                                        onChange={(e) => e.target.value && loadArticleForTesting(e.target.value)}
+                                        className="flex-1 p-2 text-xs bg-slate-900 border border-purple-500/30 rounded text-white"
+                                        disabled={articleTestLoading}
+                                      >
+                                        <option value="">Select an article...</option>
+                                        {availableArticles.map(a => (
+                                          <option key={a.id} value={a.id}>
+                                            {a.keyword} ({a.wordCount} words)
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        onClick={fetchAvailableArticles}
+                                        className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded text-purple-400 text-xs transition"
+                                        title="Refresh article list"
+                                      >
+                                        ↻
+                                      </button>
+                                    </div>
+
+                                    {/* Keyword range slider */}
+                                    <div className="mb-3 p-2 bg-slate-950 rounded border border-purple-500/20">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <label className="text-[10px] text-purple-400">Keyword Search Range:</label>
+                                        <span className="text-[10px] text-white font-medium">{keywordRange} words each way</span>
+                                      </div>
+                                      <input
+                                        type="range"
+                                        min="10"
+                                        max="100"
+                                        value={keywordRange}
+                                        onChange={(e) => setKeywordRange(parseInt(e.target.value))}
+                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                                      />
+                                      <div className="flex justify-between text-[8px] text-slate-500 mt-1">
+                                        <span>10 words</span>
+                                        <span>50 words</span>
+                                        <span>100 words</span>
+                                      </div>
+                                      {selectedArticleTest && (
+                                        <button
+                                          onClick={reanalyzeArticle}
+                                          className="mt-2 w-full p-1.5 text-[10px] bg-purple-900/50 hover:bg-purple-800/50 text-purple-300 rounded transition"
+                                        >
+                                          Re-analyze with new range
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {articleTestLoading && (
+                                      <div className="text-center py-4">
+                                        <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mx-auto mb-2"></div>
+                                        <p className="text-[10px] text-purple-400">Loading article...</p>
+                                      </div>
+                                    )}
+
+                                    {selectedArticleTest && !articleTestLoading && (
+                                      <div className="space-y-3">
+                                        {/* Article info header */}
+                                        <div className="p-2 bg-purple-900/30 rounded border border-purple-500/30">
+                                          <div className="flex items-center justify-between">
+                                            <div>
+                                              <h4 className="text-sm text-white font-medium">{selectedArticleTest.title}</h4>
+                                              <p className="text-[10px] text-purple-300">
+                                                {selectedArticleTest.wordCount} words • {selectedArticleTest.placements.length} image placements detected
+                                              </p>
+                                            </div>
+                                            <button
+                                              onClick={runFullPageSimulation}
+                                              disabled={simulationRunning}
+                                              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 rounded text-white text-xs font-medium transition flex items-center gap-1"
+                                            >
+                                              {simulationRunning ? (
+                                                <>
+                                                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                  Running...
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                  </svg>
+                                                  Generate All
+                                                </>
+                                              )}
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {/* Image placements */}
+                                        <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                                          {selectedArticleTest.placements.map((placement, idx) => (
+                                            <div
+                                              key={placement.id}
+                                              className={`p-3 rounded-lg border ${
+                                                placement.status === 'saved'
+                                                  ? 'bg-green-900/20 border-green-500/30'
+                                                  : placement.status === 'generated'
+                                                  ? 'bg-purple-900/20 border-purple-500/30'
+                                                  : 'bg-slate-950 border-slate-700'
+                                              }`}
+                                            >
+                                              {/* Placement header */}
+                                              <div className="flex items-center justify-between mb-2">
+                                                <span className="text-xs text-purple-400 font-medium">
+                                                  {idx === 0 && placement.id === 'placement-hero' ? '🖼️ Hero Image' : `📍 Image ${idx + 1}`}
+                                                  <span className="text-[10px] text-slate-500 ml-2">
+                                                    (Paragraph {placement.paragraphIndex + 1})
+                                                  </span>
+                                                </span>
+                                                <span className={`text-[10px] px-2 py-0.5 rounded ${
+                                                  placement.status === 'saved' ? 'bg-green-600 text-white' :
+                                                  placement.status === 'generated' ? 'bg-purple-600 text-white' :
+                                                  placement.status === 'generating' ? 'bg-yellow-600 text-white' :
+                                                  'bg-slate-700 text-slate-300'
+                                                }`}>
+                                                  {placement.status}
+                                                </span>
+                                              </div>
+
+                                              {/* Keyword zone visualization */}
+                                              <div className="mb-2 p-2 bg-slate-900 rounded text-[10px]">
+                                                <div className="text-slate-500 mb-1">Keyword Search Zone ({keywordRange} words each way):</div>
+                                                <div className="text-slate-400">
+                                                  {placement.wordsBefore && (
+                                                    <span className="bg-blue-900/30 text-blue-300 px-1 rounded">
+                                                      ...{placement.wordsBefore.split(' ').slice(-10).join(' ')}
+                                                    </span>
+                                                  )}
+                                                  <span className="text-purple-400 font-bold mx-1">|IMAGE|</span>
+                                                  {placement.wordsAfter && (
+                                                    <span className="bg-green-900/30 text-green-300 px-1 rounded">
+                                                      {placement.wordsAfter.split(' ').slice(0, 10).join(' ')}...
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+
+                                              {/* Matched keywords */}
+                                              <div className="mb-2">
+                                                <span className="text-[10px] text-slate-500">Matched Keywords: </span>
+                                                {placement.matchedKeywords.length > 0 ? (
+                                                  <span className="flex flex-wrap gap-1 mt-1">
+                                                    {placement.matchedKeywords.map((kw, kwIdx) => (
+                                                      <span key={kwIdx} className="px-1.5 py-0.5 bg-purple-600 text-white text-[9px] rounded">
+                                                        {kw}
+                                                      </span>
+                                                    ))}
+                                                  </span>
+                                                ) : (
+                                                  <span className="text-[10px] text-orange-400">None found - will use general prompt</span>
+                                                )}
+                                              </div>
+
+                                              {/* Generated image */}
+                                              {placement.generatedImage && (
+                                                <div className="mb-2">
+                                                  <img
+                                                    src={placement.generatedImage.url}
+                                                    alt=""
+                                                    className="w-full max-w-[200px] rounded-lg"
+                                                  />
+                                                  <div className="text-[9px] text-slate-500 mt-1">
+                                                    Prompt: {placement.suggestedPrompt?.substring(0, 100)}...
+                                                  </div>
+                                                </div>
+                                              )}
+
+                                              {/* Actions */}
+                                              <div className="flex gap-2">
+                                                {placement.status === 'pending' && (
+                                                  <button
+                                                    onClick={() => generatePlacementImage(placement.id)}
+                                                    className="px-2 py-1 bg-purple-600 hover:bg-purple-500 rounded text-white text-[10px] transition"
+                                                  >
+                                                    Generate
+                                                  </button>
+                                                )}
+                                                {placement.status === 'generating' && (
+                                                  <span className="px-2 py-1 text-[10px] text-yellow-400 flex items-center gap-1">
+                                                    <div className="w-3 h-3 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+                                                    Generating...
+                                                  </span>
+                                                )}
+                                                {placement.status === 'generated' && (
+                                                  <>
+                                                    <button
+                                                      onClick={() => generatePlacementImage(placement.id)}
+                                                      className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-[10px] transition"
+                                                    >
+                                                      Regenerate
+                                                    </button>
+                                                    <button
+                                                      onClick={() => savePlacementToBank(placement.id)}
+                                                      className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-white text-[10px] transition"
+                                                    >
+                                                      Save to Bank
+                                                    </button>
+                                                  </>
+                                                )}
+                                                {placement.status === 'saved' && (
+                                                  <span className="text-[10px] text-green-400">✓ Saved to Bank</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {!selectedArticleTest && !articleTestLoading && (
+                                      <div className="text-center py-6 text-slate-500 text-xs">
+                                        <p>Select an article to test image placement.</p>
+                                        <p className="text-[10px] mt-1">See where images would go and which keywords match.</p>
                                       </div>
                                     )}
                                   </div>
