@@ -272,13 +272,44 @@ router.post('/chat', async (req, res) => {
       });
     }
 
-    // Build context message if provided
+    // Build COMPREHENSIVE context message if provided
     let contextMessage = '';
     if (context) {
       const parts = [];
 
+      // Current avatar
+      if (context.activeAvatar) {
+        parts.push(`## Active Avatar: ${context.activeAvatar.name}${context.activeAvatar.tag ? ` (Tag: ${context.activeAvatar.tag})` : ''}`);
+      }
+
+      // Main prompt template - THE KEY PIECE
+      if (context.mainPrompt) {
+        parts.push('\n## Main Prompt Template:');
+        parts.push('```');
+        parts.push(context.mainPrompt);
+        parts.push('```');
+      }
+
+      // Placeholder system
+      if (context.placeholderMode === 'advanced' && context.placeholderCategories?.length > 0) {
+        parts.push('\n## Placeholder Categories (Advanced Mode):');
+        for (const cat of context.placeholderCategories) {
+          parts.push(`\n### ${cat.name} (${cat.placeholder})${cat.isRandomized ? ' [RANDOMIZED]' : ''}`);
+          for (const opt of cat.options) {
+            const keywords = opt.primaryKeywords?.length > 0 ? ` [Keywords: ${opt.primaryKeywords.join(', ')}]` : '';
+            parts.push(`  ${opt.number}. "${opt.text}"${keywords}`);
+          }
+        }
+      } else if (context.variations?.length > 0) {
+        parts.push('\n## Variations (Simple Mode):');
+        for (const v of context.variations) {
+          parts.push(`- **${v.name}** (${v.orientation}): "${v.prompt}"`);
+        }
+      }
+
+      // Guardrails
       if (context.guardrails) {
-        parts.push('## Current Guardrails:');
+        parts.push('\n## Guardrails:');
         if (context.guardrails.instructions) {
           parts.push(`**Instructions:** ${context.guardrails.instructions}`);
         }
@@ -293,25 +324,71 @@ router.post('/chat', async (req, res) => {
         }
       }
 
-      if (context.referenceImages) {
-        parts.push(`\n**Reference Images:** ${context.referenceImages} uploaded`);
-      }
-      if (context.logoImages) {
-        parts.push(`**Logo Images:** ${context.logoImages} uploaded`);
-      }
-      if (context.actionShots) {
-        parts.push(`**Action Shots:** ${context.actionShots} (showing logo in use)`);
-      }
-
-      if (context.problemAreas && context.problemAreas.length > 0) {
-        parts.push('\n## Active Problem Areas:');
-        for (const area of context.problemAreas) {
-          parts.push(`- **${area.name}**: ${area.context || 'No context provided'}`);
+      // Reference images with detail
+      if (context.referenceImages?.length > 0) {
+        parts.push(`\n## Reference Images (${context.referenceImages.length} uploaded):`);
+        for (const img of context.referenceImages) {
+          const tags = img.tags?.length > 0 ? ` [Tags: ${img.tags.join(', ')}]` : '';
+          parts.push(`- ${img.filename}${tags}`);
         }
       }
 
+      // Logo and action shots
+      if (context.logoImages?.length > 0 || context.actionShots?.length > 0) {
+        parts.push('\n## Logo Assets:');
+        if (context.logoImages?.length > 0) {
+          parts.push(`- **Logos:** ${context.logoImages.length} uploaded (${context.logoImages.map(l => l.filename).join(', ')})`);
+        }
+        if (context.actionShots?.length > 0) {
+          parts.push(`- **Action Shots:** ${context.actionShots.length} (showing logo in real use)`);
+        }
+      }
+
+      // Image bank examples - what has worked before
+      if (context.imageBankExamples?.length > 0) {
+        parts.push('\n## Image Bank Examples (recent successful generations):');
+        for (const img of context.imageBankExamples) {
+          const status = img.used ? ' [USED]' : '';
+          parts.push(`- **${img.title || img.variation}**${status} (${img.model || 'unknown model'}):`);
+          parts.push(`  Prompt: "${img.prompt}"`);
+        }
+      }
+
+      // Active problem areas WITH their solution attempts
+      if (context.problemAreas?.length > 0) {
+        parts.push('\n## Active Problem Areas (currently working on):');
+        for (const area of context.problemAreas) {
+          parts.push(`\n### ${area.name} [${area.priority} priority]`);
+          parts.push(`Context: ${area.context || 'No context provided'}`);
+          if (area.solutions?.length > 0) {
+            parts.push('Solution attempts:');
+            for (const sol of area.solutions) {
+              const statusEmoji = sol.status === 'working' ? '✓' : sol.status === 'failed' ? '✗' : '?';
+              parts.push(`  ${statusEmoji} [${sol.status}] ${sol.miniContext || 'No context'}`);
+              parts.push(`    Prompt: "${sol.promptText}"`);
+              if (sol.notes) parts.push(`    Notes: ${sol.notes}`);
+            }
+          }
+        }
+      }
+
+      // Solved problems - for reference
+      if (context.solvedProblems?.length > 0) {
+        parts.push('\n## Solved Problems (what worked!):');
+        for (const prob of context.solvedProblems) {
+          parts.push(`- **${prob.name}**: ${prob.context || ''}`);
+          if (prob.solvedWith) parts.push(`  Solution: "${prob.solvedWith}"`);
+          if (prob.solvedNotes) parts.push(`  Notes: ${prob.solvedNotes}`);
+        }
+      }
+
+      // All avatars for reference
+      if (context.allAvatars?.length > 1) {
+        parts.push(`\n## All Avatars: ${context.allAvatars.map(a => `${a.name}${a.tag ? ` (${a.tag})` : ''}${a.hasPrompt ? '' : ' [no prompt]'}`).join(', ')}`);
+      }
+
       if (parts.length > 0) {
-        contextMessage = `\n\n---\n**User's Current Setup:**\n${parts.join('\n')}\n---\n\n`;
+        contextMessage = `\n\n---\n**USER'S COMPLETE IMAGE PROMPT SETUP:**\n${parts.join('\n')}\n---\n\n`;
       }
     }
 

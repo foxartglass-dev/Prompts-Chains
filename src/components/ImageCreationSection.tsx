@@ -556,6 +556,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const guidedAssistantChatRef = useRef<HTMLDivElement>(null);
   const guidedAssistantFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Testing Mode state - sandbox for generating test images
+  const [testingModeOpen, setTestingModeOpen] = useState(false);
+  const [testingModePrompt, setTestingModePrompt] = useState('');
+  const [testingModeImage, setTestingModeImage] = useState<{ url: string; prompt: string; model: string } | null>(null);
+  const [testingModeLoading, setTestingModeLoading] = useState(false);
+  const [testingModeHistory, setTestingModeHistory] = useState<Array<{ url: string; prompt: string; model: string; timestamp: string }>>([]);
+
   // Feedback popup state
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
   const [pendingFeedbackRequest, setPendingFeedbackRequest] = useState<FeedbackRequest | null>(null);
@@ -1976,15 +1983,108 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setGuidedAssistantLoading(true);
 
     try {
-      // Build context from current settings
+      // Build COMPREHENSIVE context from current settings
+      // The AI Prompt Assistant should see EVERYTHING to help craft better prompts
       const context = {
+        // Guardrails / instructions
         guardrails: settings.guided_guardrails,
-        referenceImages: settings.reference_images.length,
-        logoImages: logoImages.length,
-        actionShots: actionShots.length,
+
+        // Main prompt template from active avatar
+        mainPrompt: activeAvatar?.mainPrompt || '',
+
+        // Placeholder categories with all options (for understanding prompt structure)
+        placeholderMode: activeAvatar?.placeholderMode || 'simple',
+        placeholderCategories: activeAvatar?.placeholderCategories?.map(cat => ({
+          name: cat.name,
+          placeholder: cat.placeholder,
+          isRandomized: cat.isRandomized,
+          options: cat.options.map(opt => ({
+            number: opt.number,
+            text: opt.text,
+            primaryKeywords: opt.primaryKeywords,
+            secondaryKeywords: opt.useSecondaryKeywords ? opt.secondaryKeywords : undefined
+          }))
+        })) || [],
+
+        // Variations (simple mode)
+        variations: activeAvatar?.variations?.map(v => ({
+          name: v.name,
+          prompt: v.prompt,
+          orientation: v.orientation
+        })) || [],
+
+        // Reference images with descriptions
+        referenceImages: settings.reference_images.map((img, idx) => ({
+          index: idx + 1,
+          filename: img.filename || `Reference ${idx + 1}`,
+          tags: img.tags || [],
+          hasUrl: !!img.url
+        })),
+
+        // Logo and action shots
+        logoImages: logoImages.map((img, idx) => ({
+          index: idx + 1,
+          filename: img.filename || `Logo ${idx + 1}`,
+          type: img.type
+        })),
+        actionShots: actionShots.map((img, idx) => ({
+          index: idx + 1,
+          filename: img.filename || `Action Shot ${idx + 1}`,
+          type: img.type
+        })),
+
+        // Image bank examples - show recent successful prompts
+        imageBankExamples: (settings.image_bank || [])
+          .slice(0, 10)
+          .map((img: BankImage) => ({
+            title: img.title,
+            prompt: img.prompt,
+            variation: img.variation,
+            model: img.model,
+            used: img.used,
+            avatarTag: img.avatarTag
+          })),
+
+        // Problem areas WITH their solution prompts (full context!)
         problemAreas: (settings.prompt_problem_areas || [])
           .filter((a: PromptProblemArea) => a.status === 'active')
-          .map((a: PromptProblemArea) => ({ name: a.name, context: a.context }))
+          .map((a: PromptProblemArea) => ({
+            name: a.name,
+            context: a.context,
+            priority: a.priority,
+            solutions: a.prompts.map(p => ({
+              miniContext: p.miniContext,
+              promptText: p.promptText,
+              status: p.status,
+              notes: p.notes
+            }))
+          })),
+
+        // Also include solved problems as reference
+        solvedProblems: (settings.prompt_problem_areas || [])
+          .filter((a: PromptProblemArea) => a.status === 'solved')
+          .map((a: PromptProblemArea) => {
+            const solvedPrompt = a.prompts.find(p => p.id === a.solvedPromptId);
+            return {
+              name: a.name,
+              context: a.context,
+              solvedWith: solvedPrompt?.promptText,
+              solvedNotes: a.solvedNotes
+            };
+          }),
+
+        // Current avatar info
+        activeAvatar: activeAvatar ? {
+          name: activeAvatar.name,
+          tag: activeAvatar.tag
+        } : null,
+
+        // All avatar names for reference
+        allAvatars: settings.audience_avatars.map(a => ({
+          name: a.name,
+          tag: a.tag,
+          hasPrompt: !!a.mainPrompt
+        }))
       };
 
       const res = await fetch('/api/prompt-assistant/chat', {
@@ -2072,6 +2172,92 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       // If no special block, just copy the selected text to clipboard
       navigator.clipboard.writeText(text);
       showNotification('Copied to clipboard', 'success');
+    }
+  };
+
+  /**
+   * Generate a test image in Testing Mode sandbox
+   */
+  const handleGenerateTestImage = async () => {
+    if (!testingModePrompt.trim()) {
+      showNotification('Please enter a prompt', 'error');
+      return;
+    }
+
+    setTestingModeLoading(true);
+    try {
+      const model = settings.default_model || 'gpt-image-1.5';
+
+      // Determine size based on model - use vertical (portrait) as default
+      const size = model.startsWith('gpt-image') ? '1024x1536' : '1024x1792';
+
+      const response = await fetch('/api/image-creation/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: testingModePrompt,
+          model,
+          size,
+          quality: 'high'
+        })
+      });
+
+      const data = await response.json();
+      if (data.success && data.image?.url) {
+        const newTestImage = {
+          url: data.image.url,
+          prompt: testingModePrompt,
+          model,
+          timestamp: new Date().toISOString()
+        };
+        setTestingModeImage(newTestImage);
+        setTestingModeHistory(prev => [newTestImage, ...prev].slice(0, 20)); // Keep last 20
+        showNotification('Test image generated!', 'success');
+      } else {
+        showNotification(data.error || 'Failed to generate test image', 'error');
+      }
+    } catch (error) {
+      console.error('Test image generation error:', error);
+      showNotification('Failed to generate test image', 'error');
+    }
+    setTestingModeLoading(false);
+  };
+
+  /**
+   * Save test image to the Image Bank
+   */
+  const handleSaveTestImageToBank = async () => {
+    if (!testingModeImage) return;
+
+    try {
+      // Add to image bank via API
+      const response = await fetch(`/api/image-bank/${settings.workflow_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: testingModeImage.url,
+          title: 'Test Image',
+          prompt: testingModeImage.prompt,
+          model: testingModeImage.model,
+          variation: 'Testing Mode',
+          variationId: 'testing-mode',
+          orientation: 'vertical',
+          used: false,
+          archived: false
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showNotification('Image saved to bank!', 'success');
+        // Clear current test image
+        setTestingModeImage(null);
+      } else {
+        showNotification(data.error || 'Failed to save to bank', 'error');
+      }
+    } catch (error) {
+      console.error('Save to bank error:', error);
+      showNotification('Failed to save to bank', 'error');
     }
   };
 
@@ -5676,6 +5862,166 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   Clear conversation
                                 </button>
                               )}
+
+                              {/* ═══════════════════════════════════════════
+                                  TESTING MODE - Sandbox for test images
+                              ═══════════════════════════════════════════ */}
+                              <div className="mt-4 border-t border-amber-500/30 pt-4">
+                                <button
+                                  type="button"
+                                  onClick={() => setTestingModeOpen(!testingModeOpen)}
+                                  className="w-full flex items-center justify-between p-2 bg-amber-900/30 hover:bg-amber-900/50 rounded-lg transition"
+                                >
+                                  <span className="flex items-center gap-2 text-amber-400 font-medium text-sm">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                    </svg>
+                                    Testing Mode
+                                    {testingModeHistory.length > 0 && (
+                                      <span className="px-1.5 py-0.5 bg-amber-600 text-white text-[10px] rounded-full">
+                                        {testingModeHistory.length}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <svg className={`w-4 h-4 text-amber-400 transition-transform ${testingModeOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+
+                                {testingModeOpen && (
+                                  <div className="mt-3 space-y-3">
+                                    <p className="text-[10px] text-amber-300/60">
+                                      Generate test images to dial in your prompts before using them in articles. Save winners to the Image Bank.
+                                    </p>
+
+                                    {/* Model selector */}
+                                    <div className="flex items-center gap-2">
+                                      <label className="text-[10px] text-amber-400">Model:</label>
+                                      <select
+                                        value={settings.default_model || 'gpt-image-1.5'}
+                                        onChange={(e) => updateSettings({ default_model: e.target.value })}
+                                        className="flex-1 p-1.5 text-xs bg-slate-900 border border-amber-500/30 rounded text-white"
+                                      >
+                                        {IMAGE_GENERATION_MODELS.map(m => (
+                                          <option key={m.id} value={m.id}>{m.name}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+
+                                    {/* Prompt input */}
+                                    <div>
+                                      <textarea
+                                        value={testingModePrompt}
+                                        onChange={(e) => setTestingModePrompt(e.target.value)}
+                                        placeholder="Enter your test prompt here... (tip: paste suggestions from the AI assistant above)"
+                                        className="w-full p-2 text-xs bg-slate-900 border border-amber-500/30 rounded-lg text-white placeholder-slate-500 resize-y min-h-[80px]"
+                                        rows={3}
+                                      />
+                                    </div>
+
+                                    {/* Generate button */}
+                                    <button
+                                      onClick={handleGenerateTestImage}
+                                      disabled={testingModeLoading || !testingModePrompt.trim()}
+                                      className="w-full p-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg text-white text-sm font-medium transition flex items-center justify-center gap-2"
+                                    >
+                                      {testingModeLoading ? (
+                                        <>
+                                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                          Generating...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                          </svg>
+                                          Generate Test Image
+                                        </>
+                                      )}
+                                    </button>
+
+                                    {/* Current test image result */}
+                                    {testingModeImage && (
+                                      <div className="bg-slate-950 rounded-lg p-3 border border-amber-500/30">
+                                        <div className="flex justify-between items-start mb-2">
+                                          <span className="text-[10px] text-amber-400 font-medium">Generated Image</span>
+                                          <span className="text-[10px] text-slate-500">{testingModeImage.model}</span>
+                                        </div>
+                                        <img
+                                          src={testingModeImage.url}
+                                          alt="Test generation"
+                                          className="w-full rounded-lg mb-3"
+                                        />
+                                        <div className="text-[10px] text-slate-400 mb-3 p-2 bg-slate-900 rounded">
+                                          <span className="text-amber-400">Prompt:</span> {testingModeImage.prompt}
+                                        </div>
+                                        <div className="flex gap-2">
+                                          <button
+                                            onClick={handleSaveTestImageToBank}
+                                            className="flex-1 p-2 bg-green-600 hover:bg-green-500 rounded-lg text-white text-xs font-medium transition flex items-center justify-center gap-1"
+                                          >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            Save to Bank
+                                          </button>
+                                          <button
+                                            onClick={() => setTestingModeImage(null)}
+                                            className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-xs transition"
+                                          >
+                                            Discard
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(testingModeImage.prompt);
+                                              showNotification('Prompt copied!', 'success');
+                                            }}
+                                            className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-xs transition"
+                                            title="Copy prompt"
+                                          >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* History thumbnails */}
+                                    {testingModeHistory.length > 0 && (
+                                      <div className="mt-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="text-[10px] text-slate-400">Recent Tests ({testingModeHistory.length})</span>
+                                          <button
+                                            onClick={() => setTestingModeHistory([])}
+                                            className="text-[10px] text-slate-500 hover:text-red-400 transition"
+                                          >
+                                            Clear
+                                          </button>
+                                        </div>
+                                        <div className="flex gap-2 overflow-x-auto pb-2">
+                                          {testingModeHistory.map((img, idx) => (
+                                            <div
+                                              key={idx}
+                                              className="relative group flex-shrink-0 cursor-pointer"
+                                              onClick={() => setTestingModeImage(img)}
+                                            >
+                                              <img
+                                                src={img.url}
+                                                alt=""
+                                                className="h-16 w-auto rounded-lg border border-slate-700 hover:border-amber-500 transition"
+                                              />
+                                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition">
+                                                <span className="text-[8px] text-white">View</span>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
