@@ -387,6 +387,33 @@ router.post('/chat', async (req, res) => {
         parts.push(`\n## All Avatars: ${context.allAvatars.map(a => `${a.name}${a.tag ? ` (${a.tag})` : ''}${a.hasPrompt ? '' : ' [no prompt]'}`).join(', ')}`);
       }
 
+      // TESTING MODE - Current prompt that AI can edit
+      if (context.testingMode) {
+        parts.push('\n## TESTING MODE (Active Sandbox):');
+        parts.push(`**Tab:** "${context.testingMode.activeTab}" | **Model:** ${context.testingMode.model}`);
+        if (context.testingMode.currentPrompt) {
+          parts.push(`**Current Prompt in Testing Mode:**`);
+          parts.push('```');
+          parts.push(context.testingMode.currentPrompt);
+          parts.push('```');
+        } else {
+          parts.push('*No prompt currently in Testing Mode*');
+        }
+        if (context.testingMode.recentHistory?.length > 0) {
+          parts.push(`\n**Recent Test History (${context.testingMode.recentHistory.length} tests):**`);
+          for (const h of context.testingMode.recentHistory) {
+            parts.push(`- "${h.prompt.substring(0, 100)}${h.prompt.length > 100 ? '...' : ''}" (${h.model})`);
+          }
+        }
+        parts.push('\n**IMPORTANT: You can directly edit the Testing Mode prompt!**');
+        parts.push('To update/modify the test prompt, output your new or modified prompt inside a ```testprompt code block.');
+        parts.push('Example: When the user asks you to adjust the prompt, output:');
+        parts.push('```testprompt');
+        parts.push('Your improved prompt text here...');
+        parts.push('```');
+        parts.push('This will automatically update the Testing Mode prompt box so they can generate a new test image.');
+      }
+
       if (parts.length > 0) {
         contextMessage = `\n\n---\n**USER'S COMPLETE IMAGE PROMPT SETUP:**\n${parts.join('\n')}\n---\n\n`;
       }

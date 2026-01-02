@@ -2097,7 +2097,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           name: a.name,
           tag: a.tag,
           hasPrompt: !!a.mainPrompt
-        }))
+        })),
+
+        // TESTING MODE - Current prompt and recent history
+        // AI can edit this by outputting ```testprompt blocks
+        testingMode: {
+          isOpen: testingModeOpen,
+          activeTab: activeTestingTab.name,
+          currentPrompt: activeTestingTab.prompt,
+          recentHistory: activeTestingTab.history.slice(0, 5).map(h => ({
+            prompt: h.prompt,
+            model: h.model,
+            timestamp: h.timestamp
+          })),
+          model: settings.default_model || 'gpt-image-1.5'
+        }
       };
 
       const res = await fetch('/api/prompt-assistant/chat', {
@@ -2116,9 +2130,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
       const data = await res.json();
       if (data.success) {
+        const responseContent = data.response;
+
+        // Check for ```testprompt blocks - AI can directly update Testing Mode
+        const testPromptMatch = responseContent.match(/```testprompt\n?([\s\S]*?)```/);
+        if (testPromptMatch) {
+          const newPrompt = testPromptMatch[1].trim();
+          // Open Testing Mode and update the prompt
+          setTestingModeOpen(true);
+          updateActiveTabPrompt(newPrompt);
+          showNotification('Prompt updated in Testing Mode!', 'success');
+        }
+
         const assistantMessage: ChatMessage = {
           role: 'assistant',
-          content: data.response,
+          content: responseContent,
           timestamp: new Date().toISOString()
         };
         setGuidedAssistantMessages([...historyToSend, assistantMessage]);
@@ -5818,29 +5844,71 @@ Start by introducing yourself and asking about their business in a friendly way.
                                             ))}
                                           </div>
                                         )}
-                                        {/* Message content with markdown-ish rendering */}
+                                        {/* Message content with markdown-ish rendering for special blocks */}
                                         <div className="text-xs whitespace-pre-wrap">
-                                          {msg.content.split('```guardrail').map((part, partIdx) => {
-                                            if (partIdx === 0) return <span key={partIdx}>{part}</span>;
-                                            const [guardrail, rest] = part.split('```');
-                                            return (
-                                              <span key={partIdx}>
-                                                <div className="my-2 bg-emerald-900/50 border border-emerald-500/50 rounded p-2">
+                                          {(() => {
+                                            // Parse content for both ```guardrail and ```testprompt blocks
+                                            let content = msg.content;
+                                            const elements: React.ReactNode[] = [];
+                                            let keyIdx = 0;
+
+                                            // Process ```testprompt blocks (amber)
+                                            const testPromptRegex = /```testprompt\n?([\s\S]*?)```/g;
+                                            let lastIndex = 0;
+                                            let match;
+
+                                            while ((match = testPromptRegex.exec(content)) !== null) {
+                                              // Add text before this match
+                                              if (match.index > lastIndex) {
+                                                elements.push(<span key={keyIdx++}>{content.slice(lastIndex, match.index)}</span>);
+                                              }
+                                              // Add the testprompt block
+                                              const testPrompt = match[1].trim();
+                                              elements.push(
+                                                <div key={keyIdx++} className="my-2 bg-amber-900/50 border border-amber-500/50 rounded p-2">
                                                   <div className="flex items-center justify-between mb-1">
-                                                    <span className="text-[10px] text-emerald-400 font-medium">Suggested Guardrail:</span>
-                                                    <button
-                                                      onClick={() => saveGuardrailFromChat(`\`\`\`guardrail\n${guardrail}\`\`\``)}
-                                                      className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] rounded transition"
-                                                    >
-                                                      + Add to Guardrails
-                                                    </button>
+                                                    <span className="text-[10px] text-amber-400 font-medium flex items-center gap-1">
+                                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                      </svg>
+                                                      Prompt Updated in Testing Mode
+                                                    </span>
                                                   </div>
-                                                  <code className="text-emerald-300 text-[11px]">{guardrail.trim()}</code>
+                                                  <code className="text-amber-300 text-[11px] block">{testPrompt}</code>
                                                 </div>
-                                                {rest}
-                                              </span>
-                                            );
-                                          })}
+                                              );
+                                              lastIndex = match.index + match[0].length;
+                                            }
+                                            // Add remaining content
+                                            if (lastIndex < content.length) {
+                                              const remaining = content.slice(lastIndex);
+                                              // Now process guardrail blocks in remaining content
+                                              elements.push(
+                                                ...remaining.split('```guardrail').map((part, partIdx) => {
+                                                  if (partIdx === 0) return <span key={keyIdx++}>{part}</span>;
+                                                  const [guardrail, rest] = part.split('```');
+                                                  return (
+                                                    <span key={keyIdx++}>
+                                                      <div className="my-2 bg-emerald-900/50 border border-emerald-500/50 rounded p-2">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                          <span className="text-[10px] text-emerald-400 font-medium">Suggested Guardrail:</span>
+                                                          <button
+                                                            onClick={() => saveGuardrailFromChat(`\`\`\`guardrail\n${guardrail}\`\`\``)}
+                                                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] rounded transition"
+                                                          >
+                                                            + Add to Guardrails
+                                                          </button>
+                                                        </div>
+                                                        <code className="text-emerald-300 text-[11px]">{guardrail?.trim()}</code>
+                                                      </div>
+                                                      {rest}
+                                                    </span>
+                                                  );
+                                                })
+                                              );
+                                            }
+                                            return elements.length > 0 ? elements : content;
+                                          })()}
                                         </div>
                                         {/* Action buttons for assistant messages */}
                                         {msg.role === 'assistant' && (
