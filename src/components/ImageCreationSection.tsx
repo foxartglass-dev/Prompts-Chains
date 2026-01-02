@@ -556,12 +556,25 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const guidedAssistantChatRef = useRef<HTMLDivElement>(null);
   const guidedAssistantFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Testing Mode state - sandbox for generating test images
+  // Testing Mode state - sandbox for generating test images with MULTIPLE TABS
   const [testingModeOpen, setTestingModeOpen] = useState(false);
-  const [testingModePrompt, setTestingModePrompt] = useState('');
-  const [testingModeImage, setTestingModeImage] = useState<{ url: string; prompt: string; model: string } | null>(null);
   const [testingModeLoading, setTestingModeLoading] = useState(false);
-  const [testingModeHistory, setTestingModeHistory] = useState<Array<{ url: string; prompt: string; model: string; timestamp: string }>>([]);
+
+  // Multi-tab testing system - each tab is an independent testing session
+  interface TestingTab {
+    id: string;
+    name: string;
+    prompt: string; // Current prompt in textarea
+    history: Array<{ url: string; prompt: string; model: string; timestamp: string }>;
+  }
+  const [testingTabs, setTestingTabs] = useState<TestingTab[]>([
+    { id: 'tab-1', name: 'Test 1', prompt: '', history: [] }
+  ]);
+  const [activeTestingTabId, setActiveTestingTabId] = useState('tab-1');
+  const [editingTabName, setEditingTabName] = useState<string | null>(null);
+
+  // Helper to get active tab
+  const activeTestingTab = testingTabs.find(t => t.id === activeTestingTabId) || testingTabs[0];
 
   // Feedback popup state
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
@@ -2175,11 +2188,75 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
   };
 
+  // ═══════════════════════════════════════════
+  // TESTING MODE - Multi-Tab Functions
+  // ═══════════════════════════════════════════
+
   /**
-   * Generate a test image in Testing Mode sandbox
+   * Update the prompt for the active testing tab
+   */
+  const updateActiveTabPrompt = (prompt: string) => {
+    setTestingTabs(prev => prev.map(tab =>
+      tab.id === activeTestingTabId ? { ...tab, prompt } : tab
+    ));
+  };
+
+  /**
+   * Add a new testing tab
+   */
+  const addTestingTab = () => {
+    const newId = `tab-${Date.now()}`;
+    const newTabNumber = testingTabs.length + 1;
+    const newTab = {
+      id: newId,
+      name: `Test ${newTabNumber}`,
+      prompt: '',
+      history: []
+    };
+    setTestingTabs(prev => [...prev, newTab]);
+    setActiveTestingTabId(newId);
+  };
+
+  /**
+   * Rename a testing tab
+   */
+  const renameTestingTab = (tabId: string, newName: string) => {
+    setTestingTabs(prev => prev.map(tab =>
+      tab.id === tabId ? { ...tab, name: newName.trim() || tab.name } : tab
+    ));
+    setEditingTabName(null);
+  };
+
+  /**
+   * Delete a testing tab (keep at least one)
+   */
+  const deleteTestingTab = (tabId: string) => {
+    if (testingTabs.length <= 1) {
+      showNotification('Must keep at least one tab', 'error');
+      return;
+    }
+    setTestingTabs(prev => prev.filter(t => t.id !== tabId));
+    if (activeTestingTabId === tabId) {
+      setActiveTestingTabId(testingTabs.find(t => t.id !== tabId)?.id || testingTabs[0].id);
+    }
+  };
+
+  /**
+   * Send prompt from AI Assistant directly to Testing Mode
+   */
+  const sendPromptToTestingMode = (prompt: string) => {
+    // Open testing mode if not already open
+    setTestingModeOpen(true);
+    // Update the active tab's prompt
+    updateActiveTabPrompt(prompt);
+    showNotification('Prompt sent to Testing Mode!', 'success');
+  };
+
+  /**
+   * Generate a test image in Testing Mode sandbox (multi-tab version)
    */
   const handleGenerateTestImage = async () => {
-    if (!testingModePrompt.trim()) {
+    if (!activeTestingTab.prompt.trim()) {
       showNotification('Please enter a prompt', 'error');
       return;
     }
@@ -2195,7 +2272,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: testingModePrompt,
+          prompt: activeTestingTab.prompt,
           model,
           size,
           quality: 'high'
@@ -2206,12 +2283,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       if (data.success && data.image?.url) {
         const newTestImage = {
           url: data.image.url,
-          prompt: testingModePrompt,
+          prompt: activeTestingTab.prompt,
           model,
           timestamp: new Date().toISOString()
         };
-        setTestingModeImage(newTestImage);
-        setTestingModeHistory(prev => [newTestImage, ...prev].slice(0, 20)); // Keep last 20
+        // Add to the active tab's history
+        setTestingTabs(prev => prev.map(tab =>
+          tab.id === activeTestingTabId
+            ? { ...tab, history: [newTestImage, ...tab.history].slice(0, 50) } // Keep 50 per tab
+            : tab
+        ));
         showNotification('Test image generated!', 'success');
       } else {
         showNotification(data.error || 'Failed to generate test image', 'error');
@@ -2226,21 +2307,19 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   /**
    * Save test image to the Image Bank
    */
-  const handleSaveTestImageToBank = async () => {
-    if (!testingModeImage) return;
-
+  const handleSaveTestImageToBank = async (imageUrl: string, prompt: string, model: string) => {
     try {
       // Add to image bank via API
       const response = await fetch(`/api/image-bank/${settings.workflow_id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: testingModeImage.url,
-          title: 'Test Image',
-          prompt: testingModeImage.prompt,
-          model: testingModeImage.model,
-          variation: 'Testing Mode',
-          variationId: 'testing-mode',
+          url: imageUrl,
+          title: `Test: ${activeTestingTab.name}`,
+          prompt: prompt,
+          model: model,
+          variation: `Testing - ${activeTestingTab.name}`,
+          variationId: `testing-${activeTestingTab.id}`,
           orientation: 'vertical',
           used: false,
           archived: false
@@ -2250,8 +2329,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const data = await response.json();
       if (data.success) {
         showNotification('Image saved to bank!', 'success');
-        // Clear current test image
-        setTestingModeImage(null);
       } else {
         showNotification(data.error || 'Failed to save to bank', 'error');
       }
@@ -5765,17 +5842,35 @@ Start by introducing yourself and asking about their business in a friendly way.
                                             );
                                           })}
                                         </div>
-                                        {/* Copy button for assistant messages */}
+                                        {/* Action buttons for assistant messages */}
                                         {msg.role === 'assistant' && (
-                                          <button
-                                            onClick={() => {
-                                              navigator.clipboard.writeText(msg.content);
-                                              showNotification('Copied to clipboard', 'success');
-                                            }}
-                                            className="mt-2 text-[10px] text-slate-400 hover:text-white transition"
-                                          >
-                                            Copy response
-                                          </button>
+                                          <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                            <button
+                                              onClick={() => {
+                                                navigator.clipboard.writeText(msg.content);
+                                                showNotification('Copied to clipboard', 'success');
+                                              }}
+                                              className="text-[10px] text-slate-400 hover:text-white transition"
+                                            >
+                                              Copy response
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                // Extract prompt-like content (remove explanation text)
+                                                // Look for content in quotes or code blocks, or use full content
+                                                const codeBlockMatch = msg.content.match(/```(?:prompt)?\n?([\s\S]*?)```/);
+                                                const quotedMatch = msg.content.match(/"([^"]{20,})"/);
+                                                const promptContent = codeBlockMatch?.[1] || quotedMatch?.[1] || msg.content;
+                                                sendPromptToTestingMode(promptContent.trim());
+                                              }}
+                                              className="text-[10px] text-amber-400 hover:text-amber-300 transition flex items-center gap-1"
+                                            >
+                                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                              </svg>
+                                              Use as Test Prompt
+                                            </button>
+                                          </div>
                                         )}
                                       </div>
                                     </div>
@@ -5864,161 +5959,195 @@ Start by introducing yourself and asking about their business in a friendly way.
                               )}
 
                               {/* ═══════════════════════════════════════════
-                                  TESTING MODE - Sandbox for test images
+                                  TESTING MODE - Multi-Tab Sandbox
                               ═══════════════════════════════════════════ */}
                               <div className="mt-4 border-t border-amber-500/30 pt-4">
+                                {/* Header with Title, Model dropdown, and expand toggle */}
                                 <button
                                   type="button"
                                   onClick={() => setTestingModeOpen(!testingModeOpen)}
-                                  className="w-full flex items-center justify-between p-2 bg-amber-900/30 hover:bg-amber-900/50 rounded-lg transition"
+                                  className="w-full flex items-center justify-between p-2 bg-amber-900/30 hover:bg-amber-900/50 rounded-t-lg transition"
                                 >
                                   <span className="flex items-center gap-2 text-amber-400 font-medium text-sm">
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                     </svg>
                                     Testing Mode
-                                    {testingModeHistory.length > 0 && (
-                                      <span className="px-1.5 py-0.5 bg-amber-600 text-white text-[10px] rounded-full">
-                                        {testingModeHistory.length}
-                                      </span>
-                                    )}
                                   </span>
-                                  <svg className={`w-4 h-4 text-amber-400 transition-transform ${testingModeOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                                  </svg>
+                                  <div className="flex items-center gap-2">
+                                    {/* Model selector in header - compact */}
+                                    <select
+                                      onClick={(e) => e.stopPropagation()}
+                                      value={settings.default_model || 'gpt-image-1.5'}
+                                      onChange={(e) => { e.stopPropagation(); updateSettings({ default_model: e.target.value }); }}
+                                      className="px-2 py-1 text-[10px] bg-slate-900 border border-amber-500/30 rounded text-white"
+                                    >
+                                      {IMAGE_GENERATION_MODELS.map(m => (
+                                        <option key={m.id} value={m.id}>{m.name.split(' ')[0]}</option>
+                                      ))}
+                                    </select>
+                                    <svg className={`w-4 h-4 text-amber-400 transition-transform ${testingModeOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </div>
                                 </button>
 
                                 {testingModeOpen && (
-                                  <div className="mt-3 space-y-3">
-                                    <p className="text-[10px] text-amber-300/60">
-                                      Generate test images to dial in your prompts before using them in articles. Save winners to the Image Bank.
-                                    </p>
-
-                                    {/* Model selector */}
-                                    <div className="flex items-center gap-2">
-                                      <label className="text-[10px] text-amber-400">Model:</label>
-                                      <select
-                                        value={settings.default_model || 'gpt-image-1.5'}
-                                        onChange={(e) => updateSettings({ default_model: e.target.value })}
-                                        className="flex-1 p-1.5 text-xs bg-slate-900 border border-amber-500/30 rounded text-white"
+                                  <div className="bg-slate-900/50 rounded-b-lg border border-t-0 border-amber-500/20">
+                                    {/* Tab Bar */}
+                                    <div className="flex items-center gap-1 p-1.5 bg-slate-950/50 border-b border-amber-500/20 overflow-x-auto">
+                                      {testingTabs.map((tab) => (
+                                        <div
+                                          key={tab.id}
+                                          className={`group relative flex items-center gap-1 px-2 py-1 rounded text-[10px] cursor-pointer transition-all ${
+                                            activeTestingTabId === tab.id
+                                              ? 'bg-amber-600 text-white'
+                                              : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                                          }`}
+                                          onClick={() => setActiveTestingTabId(tab.id)}
+                                        >
+                                          {editingTabName === tab.id ? (
+                                            <input
+                                              type="text"
+                                              defaultValue={tab.name}
+                                              autoFocus
+                                              onClick={(e) => e.stopPropagation()}
+                                              onBlur={(e) => renameTestingTab(tab.id, e.target.value)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') renameTestingTab(tab.id, (e.target as HTMLInputElement).value);
+                                                if (e.key === 'Escape') setEditingTabName(null);
+                                              }}
+                                              className="w-16 px-1 py-0.5 text-[10px] bg-slate-900 border border-amber-500 rounded text-white"
+                                            />
+                                          ) : (
+                                            <>
+                                              <span
+                                                onDoubleClick={(e) => { e.stopPropagation(); setEditingTabName(tab.id); }}
+                                                title="Double-click to rename"
+                                              >
+                                                {tab.name}
+                                              </span>
+                                              {tab.history.length > 0 && (
+                                                <span className="px-1 py-0.5 bg-black/30 rounded text-[8px]">
+                                                  {tab.history.length}
+                                                </span>
+                                              )}
+                                              {testingTabs.length > 1 && (
+                                                <button
+                                                  onClick={(e) => { e.stopPropagation(); deleteTestingTab(tab.id); }}
+                                                  className="ml-1 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition"
+                                                  title="Delete tab"
+                                                >
+                                                  &times;
+                                                </button>
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
+                                      ))}
+                                      {/* Add Tab Button */}
+                                      <button
+                                        onClick={addTestingTab}
+                                        className="px-2 py-1 rounded text-[10px] bg-slate-800 text-amber-400 hover:bg-amber-600 hover:text-white transition"
+                                        title="Add new test tab"
                                       >
-                                        {IMAGE_GENERATION_MODELS.map(m => (
-                                          <option key={m.id} value={m.id}>{m.name}</option>
-                                        ))}
-                                      </select>
+                                        +
+                                      </button>
                                     </div>
 
-                                    {/* Prompt input */}
-                                    <div>
-                                      <textarea
-                                        value={testingModePrompt}
-                                        onChange={(e) => setTestingModePrompt(e.target.value)}
-                                        placeholder="Enter your test prompt here... (tip: paste suggestions from the AI assistant above)"
-                                        className="w-full p-2 text-xs bg-slate-900 border border-amber-500/30 rounded-lg text-white placeholder-slate-500 resize-y min-h-[80px]"
-                                        rows={3}
-                                      />
-                                    </div>
-
-                                    {/* Generate button */}
-                                    <button
-                                      onClick={handleGenerateTestImage}
-                                      disabled={testingModeLoading || !testingModePrompt.trim()}
-                                      className="w-full p-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg text-white text-sm font-medium transition flex items-center justify-center gap-2"
-                                    >
-                                      {testingModeLoading ? (
-                                        <>
-                                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                          Generating...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                          </svg>
-                                          Generate Test Image
-                                        </>
-                                      )}
-                                    </button>
-
-                                    {/* Current test image result */}
-                                    {testingModeImage && (
-                                      <div className="bg-slate-950 rounded-lg p-3 border border-amber-500/30">
-                                        <div className="flex justify-between items-start mb-2">
-                                          <span className="text-[10px] text-amber-400 font-medium">Generated Image</span>
-                                          <span className="text-[10px] text-slate-500">{testingModeImage.model}</span>
-                                        </div>
-                                        <img
-                                          src={testingModeImage.url}
-                                          alt="Test generation"
-                                          className="w-full rounded-lg mb-3"
+                                    {/* Active Tab Content */}
+                                    <div className="p-3 space-y-3">
+                                      {/* Prompt input */}
+                                      <div className="flex gap-2">
+                                        <textarea
+                                          value={activeTestingTab.prompt}
+                                          onChange={(e) => updateActiveTabPrompt(e.target.value)}
+                                          placeholder="Enter your test prompt here... (AI Assistant can send prompts here directly)"
+                                          className="flex-1 p-2 text-xs bg-slate-900 border border-amber-500/30 rounded-lg text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                          rows={2}
                                         />
-                                        <div className="text-[10px] text-slate-400 mb-3 p-2 bg-slate-900 rounded">
-                                          <span className="text-amber-400">Prompt:</span> {testingModeImage.prompt}
-                                        </div>
-                                        <div className="flex gap-2">
-                                          <button
-                                            onClick={handleSaveTestImageToBank}
-                                            className="flex-1 p-2 bg-green-600 hover:bg-green-500 rounded-lg text-white text-xs font-medium transition flex items-center justify-center gap-1"
-                                          >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                        <button
+                                          onClick={handleGenerateTestImage}
+                                          disabled={testingModeLoading || !activeTestingTab.prompt.trim()}
+                                          className="px-4 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg text-white text-xs font-medium transition flex items-center justify-center"
+                                          title="Generate Test Image"
+                                        >
+                                          {testingModeLoading ? (
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                          ) : (
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                                             </svg>
-                                            Save to Bank
-                                          </button>
-                                          <button
-                                            onClick={() => setTestingModeImage(null)}
-                                            className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-xs transition"
-                                          >
-                                            Discard
-                                          </button>
-                                          <button
-                                            onClick={() => {
-                                              navigator.clipboard.writeText(testingModeImage.prompt);
-                                              showNotification('Prompt copied!', 'success');
-                                            }}
-                                            className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-xs transition"
-                                            title="Copy prompt"
-                                          >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                            </svg>
-                                          </button>
-                                        </div>
+                                          )}
+                                        </button>
                                       </div>
-                                    )}
 
-                                    {/* History thumbnails */}
-                                    {testingModeHistory.length > 0 && (
-                                      <div className="mt-3">
-                                        <div className="flex items-center justify-between mb-2">
-                                          <span className="text-[10px] text-slate-400">Recent Tests ({testingModeHistory.length})</span>
-                                          <button
-                                            onClick={() => setTestingModeHistory([])}
-                                            className="text-[10px] text-slate-500 hover:text-red-400 transition"
-                                          >
-                                            Clear
-                                          </button>
-                                        </div>
-                                        <div className="flex gap-2 overflow-x-auto pb-2">
-                                          {testingModeHistory.map((img, idx) => (
-                                            <div
-                                              key={idx}
-                                              className="relative group flex-shrink-0 cursor-pointer"
-                                              onClick={() => setTestingModeImage(img)}
+                                      {/* History - Scrollable list showing prompt + image pairs */}
+                                      {activeTestingTab.history.length > 0 ? (
+                                        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                                          <div className="text-[10px] text-slate-500 flex justify-between">
+                                            <span>Test History ({activeTestingTab.history.length})</span>
+                                            <button
+                                              onClick={() => setTestingTabs(prev => prev.map(tab =>
+                                                tab.id === activeTestingTabId ? { ...tab, history: [] } : tab
+                                              ))}
+                                              className="text-red-400 hover:text-red-300"
                                             >
-                                              <img
-                                                src={img.url}
-                                                alt=""
-                                                className="h-16 w-auto rounded-lg border border-slate-700 hover:border-amber-500 transition"
-                                              />
-                                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition">
-                                                <span className="text-[8px] text-white">View</span>
+                                              Clear History
+                                            </button>
+                                          </div>
+                                          {activeTestingTab.history.map((item, idx) => (
+                                            <div key={idx} className="bg-slate-950 rounded-lg p-2 border border-slate-700">
+                                              <div className="flex gap-3">
+                                                {/* Image thumbnail */}
+                                                <img
+                                                  src={item.url}
+                                                  alt=""
+                                                  className="w-24 h-auto rounded-lg flex-shrink-0"
+                                                />
+                                                {/* Prompt and actions */}
+                                                <div className="flex-1 min-w-0">
+                                                  <div className="text-[10px] text-slate-400 mb-1 line-clamp-3">
+                                                    {item.prompt}
+                                                  </div>
+                                                  <div className="text-[8px] text-slate-600 mb-2">
+                                                    {item.model} • {new Date(item.timestamp).toLocaleTimeString()}
+                                                  </div>
+                                                  <div className="flex gap-1">
+                                                    <button
+                                                      onClick={() => handleSaveTestImageToBank(item.url, item.prompt, item.model)}
+                                                      className="px-2 py-0.5 bg-green-600 hover:bg-green-500 rounded text-white text-[9px] transition"
+                                                    >
+                                                      Save
+                                                    </button>
+                                                    <button
+                                                      onClick={() => updateActiveTabPrompt(item.prompt)}
+                                                      className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-[9px] transition"
+                                                    >
+                                                      Use Prompt
+                                                    </button>
+                                                    <button
+                                                      onClick={() => {
+                                                        navigator.clipboard.writeText(item.prompt);
+                                                        showNotification('Prompt copied!', 'success');
+                                                      }}
+                                                      className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-[9px] transition"
+                                                    >
+                                                      Copy
+                                                    </button>
+                                                  </div>
+                                                </div>
                                               </div>
                                             </div>
                                           ))}
                                         </div>
-                                      </div>
-                                    )}
+                                      ) : (
+                                        <div className="text-center py-6 text-slate-500 text-xs">
+                                          <p>No test images yet in this tab.</p>
+                                          <p className="text-[10px] mt-1">Enter a prompt above and generate a test image.</p>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
                               </div>
