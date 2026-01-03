@@ -289,6 +289,18 @@ async function setup() {
       console.log('  - article push tracking columns already exist');
     }
 
+    // Migration 009: generated_images column for articles
+    const hasGeneratedImages = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'articles' AND column_name = 'generated_images'
+    `;
+    if (hasGeneratedImages.length === 0) {
+      await sql`ALTER TABLE articles ADD COLUMN generated_images JSONB DEFAULT '[]'`;
+      console.log('  ✓ Added generated_images column to articles');
+    } else {
+      console.log('  - generated_images column already exists');
+    }
+
     // Migration: prompt_problem_areas column for Image Creation
     const hasPromptProblemAreas = await sql`
       SELECT column_name FROM information_schema.columns
@@ -477,6 +489,40 @@ async function setup() {
     `;
     console.log('  ✓ feedback_settings');
 
+    // Image Versions - Track history of image replacements
+    await sql`
+      CREATE TABLE IF NOT EXISTS image_versions (
+        id SERIAL PRIMARY KEY,
+        article_id INTEGER REFERENCES articles(id) ON DELETE CASCADE,
+        elementor_widget_id VARCHAR(50) NOT NULL,
+        version INTEGER DEFAULT 1,
+        image_url TEXT NOT NULL,
+        wp_media_id INTEGER,
+        image_prompt TEXT,
+        replacement_source VARCHAR(50) DEFAULT 'upload',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ image_versions');
+
+    // WordPress Page Hierarchy - Cache page structure for site map
+    await sql`
+      CREATE TABLE IF NOT EXISTS wp_page_hierarchy (
+        id SERIAL PRIMARY KEY,
+        website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
+        wp_page_id INTEGER NOT NULL,
+        wp_parent_id INTEGER DEFAULT 0,
+        title VARCHAR(500),
+        slug VARCHAR(500),
+        status VARCHAR(50) DEFAULT 'publish',
+        page_order INTEGER DEFAULT 0,
+        elementor_data JSONB,
+        synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(website_id, wp_page_id)
+      )
+    `;
+    console.log('  ✓ wp_page_hierarchy');
+
     console.log('');
 
     // ================================
@@ -491,6 +537,10 @@ async function setup() {
     await sql`CREATE INDEX IF NOT EXISTS idx_articles_workflow_id ON articles(workflow_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_articles_website_id ON articles(website_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_image_versions_article ON image_versions(article_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_image_versions_widget ON image_versions(elementor_widget_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_wp_hierarchy_website ON wp_page_hierarchy(website_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_wp_hierarchy_parent ON wp_page_hierarchy(wp_parent_id)`;
     console.log('  ✓ All indexes created');
 
     console.log('');

@@ -1335,6 +1335,172 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                     );
                   })()}
 
+                  {/* Article Images Section - Above Meta */}
+                  <div className="mb-6 pb-4 border-b border-purple-500/30">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-sm font-semibold text-purple-400 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Article Images ({(selectedArticle.generated_images || []).length})
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        {selectedArticle.wp_post_id && (selectedArticle.generated_images || []).length > 0 && (
+                          <button
+                            onClick={pushImagesToWordPress}
+                            disabled={pushingImages}
+                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 rounded text-sm text-white font-medium flex items-center gap-1.5"
+                          >
+                            {pushingImages ? (
+                              <>
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Pushing...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                Push Images to WP
+                              </>
+                            )}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setExpandedImages(!expandedImages)}
+                          className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 bg-slate-800 px-2 py-1 rounded"
+                        >
+                          {expandedImages ? (
+                            <>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                              </svg>
+                              Collapse
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                              </svg>
+                              Expand
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {(selectedArticle.generated_images || []).length === 0 ? (
+                      <div className="bg-slate-900 rounded-lg p-6 border border-purple-500/30 text-center">
+                        <svg className="w-12 h-12 mx-auto mb-3 text-purple-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <p className="text-gray-400 text-sm mb-2">No images generated yet</p>
+                        <p className="text-gray-500 text-xs">Images will appear here once generated from the Image Creation section</p>
+                      </div>
+                    ) : (
+                      <div className={`grid gap-3 ${expandedImages ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-4 md:grid-cols-6'}`}>
+                        {(selectedArticle.generated_images || []).map((image, imgIdx) => (
+                          <div
+                            key={image.id || `img-${imgIdx}`}
+                            className={`relative group bg-slate-900 rounded-lg border border-purple-500/30 overflow-hidden ${expandedImages ? 'aspect-[4/3]' : 'aspect-square'}`}
+                          >
+                            <img
+                              src={image.url}
+                              alt={image.placement || 'Article image'}
+                              className="w-full h-full object-cover"
+                            />
+                            {/* Overlay with actions */}
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                              <span className="text-xs text-white/80 px-2 py-1 bg-black/50 rounded">
+                                {image.placement || 'Unassigned'}
+                              </span>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => setViewingImage(image)}
+                                  className="p-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white transition"
+                                  title="View full size"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => regenerateImage(image.id)}
+                                  disabled={regeneratingImage === image.id}
+                                  className="p-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 rounded text-white transition"
+                                  title="Replace this image"
+                                >
+                                  {regeneratingImage === image.id ? (
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => deleteArticleImage(image.id)}
+                                  className="p-1.5 bg-red-600 hover:bg-red-500 rounded text-white transition"
+                                  title="Remove this image"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                                {/* Push single image to WP */}
+                                {selectedArticle.wp_post_id && !image.pushedToWp && (
+                                  <button
+                                    onClick={() => pushSingleImageToWordPress(image.id)}
+                                    disabled={pushingSingleImage === image.id}
+                                    className="p-1.5 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 rounded text-white transition"
+                                    title="Push this image to WordPress"
+                                  >
+                                    {pushingSingleImage === image.id ? (
+                                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg>
+                                    ) : (
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                              {image.pushedToWp && (
+                                <span className="text-xs text-green-400 flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  In WP
+                                </span>
+                              )}
+                            </div>
+                            {/* Keywords badge */}
+                            {expandedImages && image.keywords && image.keywords.length > 0 && (
+                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                                <div className="flex flex-wrap gap-1">
+                                  {image.keywords.slice(0, 3).map((kw, idx) => (
+                                    <span key={idx} className="text-[10px] bg-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded">
+                                      {kw}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-2 gap-6">
                     {/* Meta Titles Selection */}
                     <div className="bg-slate-900 rounded-lg p-4 border border-brand-gold/30">
@@ -1463,172 +1629,6 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                         </label>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Article Images Section */}
-                  <div className="mt-6 pt-4 border-t border-purple-500/30">
-                    <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-sm font-semibold text-purple-400 flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        Article Images ({(selectedArticle.generated_images || []).length})
-                      </h4>
-                      <div className="flex items-center gap-2">
-                        {selectedArticle.wp_post_id && (selectedArticle.generated_images || []).length > 0 && (
-                          <button
-                            onClick={pushImagesToWordPress}
-                            disabled={pushingImages}
-                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 rounded text-sm text-white font-medium flex items-center gap-1.5"
-                          >
-                            {pushingImages ? (
-                              <>
-                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                Pushing...
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                </svg>
-                                Push Images to WP
-                              </>
-                            )}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setExpandedImages(!expandedImages)}
-                          className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 bg-slate-800 px-2 py-1 rounded"
-                        >
-                          {expandedImages ? (
-                            <>
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
-                              </svg>
-                              Collapse
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                              </svg>
-                              Expand
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {(selectedArticle.generated_images || []).length === 0 ? (
-                      <div className="bg-slate-900 rounded-lg p-6 border border-purple-500/30 text-center">
-                        <svg className="w-12 h-12 mx-auto mb-3 text-purple-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <p className="text-gray-400 text-sm mb-2">No images generated yet</p>
-                        <p className="text-gray-500 text-xs">Images will appear here once generated from the Image Creation section</p>
-                      </div>
-                    ) : (
-                      <div className={`grid gap-3 ${expandedImages ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-4 md:grid-cols-6'}`}>
-                        {(selectedArticle.generated_images || []).map((image) => (
-                          <div
-                            key={image.id}
-                            className={`relative group bg-slate-900 rounded-lg border border-purple-500/30 overflow-hidden ${expandedImages ? 'aspect-[4/3]' : 'aspect-square'}`}
-                          >
-                            <img
-                              src={image.url}
-                              alt={image.placement || 'Article image'}
-                              className="w-full h-full object-cover"
-                            />
-                            {/* Overlay with actions */}
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                              <span className="text-xs text-white/80 px-2 py-1 bg-black/50 rounded">
-                                {image.placement || 'Unassigned'}
-                              </span>
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={() => setViewingImage(image)}
-                                  className="p-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white transition"
-                                  title="View full size"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => regenerateImage(image.id)}
-                                  disabled={regeneratingImage === image.id}
-                                  className="p-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 rounded text-white transition"
-                                  title="Replace this image"
-                                >
-                                  {regeneratingImage === image.id ? (
-                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                  ) : (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                  )}
-                                </button>
-                                <button
-                                  onClick={() => deleteArticleImage(image.id)}
-                                  className="p-1.5 bg-red-600 hover:bg-red-500 rounded text-white transition"
-                                  title="Remove this image"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
-                                </button>
-                                {/* Push single image to WP */}
-                                {selectedArticle.wp_post_id && !image.pushedToWp && (
-                                  <button
-                                    onClick={() => pushSingleImageToWordPress(image.id)}
-                                    disabled={pushingSingleImage === image.id}
-                                    className="p-1.5 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 rounded text-white transition"
-                                    title="Push this image to WordPress"
-                                  >
-                                    {pushingSingleImage === image.id ? (
-                                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                      </svg>
-                                    ) : (
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                      </svg>
-                                    )}
-                                  </button>
-                                )}
-                              </div>
-                              {image.pushedToWp && (
-                                <span className="text-xs text-green-400 flex items-center gap-1">
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  In WP
-                                </span>
-                              )}
-                            </div>
-                            {/* Keywords badge */}
-                            {expandedImages && image.keywords && image.keywords.length > 0 && (
-                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                                <div className="flex flex-wrap gap-1">
-                                  {image.keywords.slice(0, 3).map((kw, idx) => (
-                                    <span key={idx} className="text-[10px] bg-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded">
-                                      {kw}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
                   {/* Action Buttons */}

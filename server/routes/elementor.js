@@ -825,7 +825,7 @@ router.post('/publish', async (req, res) => {
             const bodySide = bodyImageCount % 2 === 0 ? bodyStartSide : (bodyStartSide === 'left' ? 'right' : 'left');
 
             // Hero image: matches text column (50% width via Elementor flex)
-            // Body images: quarter-size (~200-250px) for word wrap around text
+            // Body images: LARGE (~400px) for prominent display, similar to hero
             const imageData = {
               url: img.url,
               wpUrl: img.wpUrl, // WordPress Media Library URL (permanent, preferred)
@@ -833,13 +833,22 @@ router.post('/publish', async (req, res) => {
               alt: img.variation || 'Article image',
               width: isHero
                 ? (img.orientation === 'vertical' ? 400 : 450)  // Hero: fills 50% column
-                : 200, // Body: quarter-size for word wrap (max ~25% of 800px content)
+                : (img.orientation === 'vertical' ? 380 : 420), // Body: similar to hero (~50% of content width)
               height: isHero
                 ? (img.orientation === 'vertical' ? 500 : 350)  // Hero: matches text height
-                : (img.orientation === 'landscape' ? 150 : 250), // Body: proportional height
+                : (img.orientation === 'vertical' ? 475 : 325), // Body: proportional to width
               side: isHero ? heroImageSide : bodySide,
               orientation: img.orientation // Pass through for debugging
             };
+
+            // Debug: Log image data structure
+            console.log(`[Image Bank] ${isHero ? 'HERO' : `BODY-${imgIdx}`} imageData:`, {
+              hasUrl: !!img.url,
+              hasWpUrl: !!img.wpUrl,
+              wpMediaId: img.wpMediaId,
+              urlPreview: (img.url || '').substring(0, 50),
+              wpUrlPreview: (img.wpUrl || '').substring(0, 50)
+            });
 
             // Log hero image details for debugging
             if (isHero) {
@@ -1106,34 +1115,71 @@ router.post('/publish', async (req, res) => {
     if (articleId && isDatabaseEnabled()) {
       try {
         // Build array of generated images to save with article
+        // Must include all fields expected by ArticleImage interface: id, url, prompt, placement, wpMediaId, createdAt, pushedToWp
         const generatedImagesData = [];
+        const timestamp = new Date().toISOString();
 
         // Hero image
-        if (chunked.intro?.imageData?.url) {
+        if (chunked.intro?.imageData?.url || chunked.intro?.imageData?.wpUrl) {
+          const heroImageData = chunked.intro.imageData;
           generatedImagesData.push({
-            url: chunked.intro.imageData.url,
-            wpMediaId: chunked.intro.imageData.wpMediaId || null,
+            id: `img-${Date.now()}-hero`,
+            url: heroImageData.wpUrl || heroImageData.url, // Prefer WordPress URL (permanent) over base64
+            wpMediaId: heroImageData.wpMediaId || null,
             placement: 'hero',
-            side: chunked.intro.imageData.side || 'right',
-            prompt: chunked.intro.imagePrompt || imageDecisionReport.images.find(i => i.type === 'hero')?.prompt || ''
+            side: heroImageData.side || 'right',
+            prompt: chunked.intro.imagePrompt || imageDecisionReport.images.find(i => i.type === 'hero')?.prompt || '',
+            createdAt: timestamp,
+            pushedToWp: !!heroImageData.wpMediaId // True if already has WordPress media ID
           });
         }
 
         // Inline images
         chunked.chunks.forEach((chunk, idx) => {
-          if (chunk.imageData?.url) {
+          if (chunk.imageData?.url || chunk.imageData?.wpUrl) {
+            const chunkImageData = chunk.imageData;
             generatedImagesData.push({
-              url: chunk.imageData.url,
-              wpMediaId: chunk.imageData.wpMediaId || null,
+              id: `img-${Date.now()}-section-${idx + 1}`,
+              url: chunkImageData.wpUrl || chunkImageData.url, // Prefer WordPress URL over base64
+              wpMediaId: chunkImageData.wpMediaId || null,
               placement: `section-${idx + 1}`,
-              side: chunk.imageData.side || 'left',
+              side: chunkImageData.side || 'left',
               heading: chunk.heading || `Section ${idx + 1}`,
-              prompt: chunk.imagePrompt || ''
+              prompt: chunk.imagePrompt || '',
+              createdAt: timestamp,
+              pushedToWp: !!chunkImageData.wpMediaId
             });
           }
         });
 
-        console.log(`[Elementor Publish] Saving ${generatedImagesData.length} images to article`);
+        console.log(`[Elementor Publish] Saving ${generatedImagesData.length} images to article ${articleId}`);
+
+        // Debug: Log what we're saving
+        if (generatedImagesData.length > 0) {
+          console.log('[Elementor Publish] Images to save:', generatedImagesData.map(img => ({
+            id: img.id,
+            placement: img.placement,
+            hasUrl: !!img.url,
+            urlType: img.url?.startsWith('data:') ? 'base64' : img.url?.startsWith('http') ? 'http' : 'unknown',
+            wpMediaId: img.wpMediaId,
+            pushedToWp: img.pushedToWp
+          })));
+        } else {
+          // Debug: Why no images?
+          console.log('[Elementor Publish] DEBUG - No images to save. Checking chunks:');
+          console.log('  - chunked.intro exists:', !!chunked.intro);
+          console.log('  - chunked.intro.imageData exists:', !!chunked.intro?.imageData);
+          console.log('  - chunked.intro.imageData.url:', chunked.intro?.imageData?.url?.substring(0, 50) || 'NONE');
+          console.log('  - chunked.intro.imageData.wpUrl:', chunked.intro?.imageData?.wpUrl?.substring(0, 50) || 'NONE');
+          console.log('  - chunked.chunks count:', chunked.chunks?.length || 0);
+          chunked.chunks?.forEach((chunk, idx) => {
+            console.log(`  - chunk[${idx}].imageData exists:`, !!chunk.imageData);
+            if (chunk.imageData) {
+              console.log(`    - url: ${chunk.imageData.url?.substring(0, 50) || 'NONE'}`);
+              console.log(`    - wpUrl: ${chunk.imageData.wpUrl?.substring(0, 50) || 'NONE'}`);
+            }
+          });
+        }
 
         // Prepare imageDecisionReport for storage (only if images were generated)
         const reportToSave = imageDecisionReport.mode !== 'none' ? imageDecisionReport : null;
