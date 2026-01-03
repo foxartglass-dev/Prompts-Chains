@@ -471,4 +471,188 @@ router.post('/chat', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/prompt-assistant/guided-generate
+ * Generate a prompt based on a message/instruction
+ * Used by Auto-Refine to create and refine prompts
+ */
+router.post('/guided-generate', async (req, res) => {
+  try {
+    const { message, workflowId, model = 'gpt-5.2-2025-12-11', context = {} } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    // Get API key
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'OpenAI API key not configured' });
+    }
+
+    // Build the system prompt for prompt generation
+    const systemPrompt = `You are an expert at writing prompts for AI image generation models. Your task is to create or refine image generation prompts that achieve specific goals.
+
+IMPORTANT RULES:
+1. Write ONLY the image prompt - no explanations, no markdown, no extra text
+2. Be specific and detailed
+3. Include style cues (photorealistic, professional, etc.)
+4. Specify camera angle, lighting, setting
+5. Avoid ambiguous terms
+6. If refining, address the specific issues mentioned
+
+Output format: Just the prompt text, nothing else.`;
+
+    // Call OpenAI
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model.startsWith('gpt-5') ? 'gpt-5.2-2025-12-11' : 'gpt-4o',
+        max_completion_tokens: 1024,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message }
+        ]
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+      throw new Error(data.error.message || 'OpenAI API error');
+    }
+
+    const generatedPrompt = data.choices?.[0]?.message?.content?.trim() || '';
+
+    res.json({
+      success: true,
+      response: generatedPrompt,
+      model
+    });
+
+  } catch (error) {
+    console.error('[Prompt Assistant - Guided Generate] Error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to generate prompt'
+    });
+  }
+});
+
+/**
+ * POST /api/prompt-assistant/evaluate-image
+ * Evaluate a generated image against a goal using vision
+ * Used by Auto-Refine to judge if an image meets criteria
+ */
+router.post('/evaluate-image', async (req, res) => {
+  try {
+    const { imageUrl, goal, prompt, workflowId, model = 'gpt-5.2-2025-12-11' } = req.body;
+
+    if (!imageUrl || !goal) {
+      return res.status(400).json({ error: 'imageUrl and goal are required' });
+    }
+
+    // Get API key
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'OpenAI API key not configured' });
+    }
+
+    // Build the evaluation prompt
+    const evaluationPrompt = `You are an expert image evaluator. Analyze this image against the specified goal and determine if it meets the criteria.
+
+GOAL/CRITERIA:
+${goal}
+
+PROMPT USED TO GENERATE:
+${prompt}
+
+EVALUATION INSTRUCTIONS:
+1. Carefully examine the image
+2. Compare it against EACH point in the goal/criteria
+3. Be strict but fair - partial matches don't count as success
+4. Identify specific issues if the goal is not met
+
+Respond in this exact JSON format (no markdown, just JSON):
+{
+  "meetsGoal": true/false,
+  "evaluation": "Brief summary of what you see in the image",
+  "refinementNotes": "If meetsGoal is false, explain specifically what's wrong and how the prompt should be changed"
+}`;
+
+    // Call OpenAI with vision
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model.startsWith('gpt-5') ? 'gpt-5.2-2025-12-11' : 'gpt-4o',
+        max_completion_tokens: 1024,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: evaluationPrompt },
+              { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } }
+            ]
+          }
+        ]
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+      throw new Error(data.error.message || 'OpenAI API error');
+    }
+
+    const responseText = data.choices?.[0]?.message?.content?.trim() || '';
+
+    // Parse the JSON response
+    let evaluation = 'Could not parse evaluation';
+    let meetsGoal = false;
+    let refinementNotes = '';
+
+    try {
+      // Try to extract JSON from the response
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        meetsGoal = parsed.meetsGoal === true;
+        evaluation = parsed.evaluation || responseText;
+        refinementNotes = parsed.refinementNotes || '';
+      } else {
+        // If no JSON, treat the whole response as evaluation
+        evaluation = responseText;
+        // Try to detect if it seems positive
+        meetsGoal = responseText.toLowerCase().includes('meets') &&
+                    !responseText.toLowerCase().includes('does not meet') &&
+                    !responseText.toLowerCase().includes('doesn\'t meet');
+      }
+    } catch (parseError) {
+      console.error('[Evaluate Image] JSON parse error:', parseError);
+      evaluation = responseText;
+    }
+
+    res.json({
+      success: true,
+      meetsGoal,
+      evaluation,
+      refinementNotes,
+      model
+    });
+
+  } catch (error) {
+    console.error('[Prompt Assistant - Evaluate Image] Error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to evaluate image'
+    });
+  }
+});
+
 export default router;

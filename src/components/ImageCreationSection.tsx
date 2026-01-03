@@ -660,6 +660,37 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [keywordRange, setKeywordRange] = useState(50); // Words to look up/down for keywords
   const [simulationRunning, setSimulationRunning] = useState(false);
 
+  // ========== AUTO-REFINE STATE ==========
+  // Autonomous refinement loop - GPT-5.2 generates, evaluates, and refines prompts
+  interface AutoRefineIteration {
+    iteration: number;
+    prompt: string;
+    imageUrl: string | null;
+    evaluation: string | null; // GPT-5.2's critique
+    meetsGoal: boolean;
+    refinementNotes: string | null; // What GPT-5.2 will try differently
+    timestamp: string;
+  }
+
+  interface AutoRefineSession {
+    id: string;
+    goal: string; // The criteria the image must meet
+    problemArea: string; // Which problem we're trying to solve
+    maxIterations: number;
+    iterations: AutoRefineIteration[];
+    status: 'idle' | 'running' | 'success' | 'failed' | 'stopped';
+    finalPrompt: string | null;
+    finalImageUrl: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+  }
+
+  const [autoRefineGoal, setAutoRefineGoal] = useState('');
+  const [autoRefineMaxIterations, setAutoRefineMaxIterations] = useState(4);
+  const [autoRefineSession, setAutoRefineSession] = useState<AutoRefineSession | null>(null);
+  const [autoRefineRunning, setAutoRefineRunning] = useState(false);
+  const [autoRefinePaused, setAutoRefinePaused] = useState(false);
+
   // Feedback popup state
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
   const [pendingFeedbackRequest, setPendingFeedbackRequest] = useState<FeedbackRequest | null>(null);
@@ -2447,6 +2478,265 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       console.error('Save to bank error:', error);
       showNotification('Failed to save to bank', 'error');
     }
+  };
+
+  // ═══════════════════════════════════════════
+  // AUTO-REFINE Functions
+  // ═══════════════════════════════════════════
+
+  /**
+   * Start an autonomous refinement session
+   * GPT-5.2 generates prompts, evaluates results, and refines until goal is met
+   */
+  const startAutoRefine = async () => {
+    if (!autoRefineGoal.trim()) {
+      showNotification('Please enter a goal/criteria for the image', 'error');
+      return;
+    }
+
+    const sessionId = `autorefine-${Date.now()}`;
+    const newSession: AutoRefineSession = {
+      id: sessionId,
+      goal: autoRefineGoal,
+      problemArea: activeTestingTab.name,
+      maxIterations: autoRefineMaxIterations,
+      iterations: [],
+      status: 'running',
+      finalPrompt: null,
+      finalImageUrl: null,
+      startedAt: new Date().toISOString(),
+      completedAt: null
+    };
+
+    setAutoRefineSession(newSession);
+    setAutoRefineRunning(true);
+    setAutoRefinePaused(false);
+
+    // Start the refinement loop
+    await runAutoRefineLoop(newSession);
+  };
+
+  /**
+   * The main auto-refine loop
+   */
+  const runAutoRefineLoop = async (session: AutoRefineSession) => {
+    let currentSession = { ...session };
+    const model = settings.default_model || 'gpt-image-1.5';
+    const size = model.startsWith('gpt-image') ? '1024x1536' : '1024x1792';
+
+    for (let i = 0; i < currentSession.maxIterations; i++) {
+      // Check if paused or stopped
+      if (autoRefinePaused) {
+        setAutoRefineSession(prev => prev ? { ...prev, status: 'idle' } : null);
+        return;
+      }
+
+      const iterationNum = i + 1;
+      console.log(`[Auto-Refine] Starting iteration ${iterationNum}/${currentSession.maxIterations}`);
+
+      // Step 1: Generate or refine the prompt using GPT-5.2
+      let promptToUse: string;
+
+      if (i === 0) {
+        // First iteration: Ask GPT-5.2 to create an initial prompt based on the goal
+        try {
+          const promptResponse = await fetch('/api/prompt-assistant/guided-generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: `Create an image generation prompt that will achieve this goal:\n\nGOAL: ${currentSession.goal}\n\nContext from current settings:\n- Problem area: ${currentSession.problemArea}\n- Current main prompt: ${settings.audience_avatars.find(a => a.id === activeAvatarId)?.mainPrompt || 'No main prompt'}\n\nWrite ONLY the image prompt, nothing else. Make it detailed and specific to achieve the goal.`,
+              workflowId: settings.workflow_id,
+              model: settings.guided_model || 'gpt-5.2',
+              context: {
+                goal: currentSession.goal,
+                problemArea: currentSession.problemArea,
+                previousAttempts: []
+              }
+            })
+          });
+          const promptData = await promptResponse.json();
+          promptToUse = promptData.response || currentSession.goal;
+        } catch (error) {
+          console.error('[Auto-Refine] Error generating initial prompt:', error);
+          promptToUse = currentSession.goal;
+        }
+      } else {
+        // Subsequent iterations: Ask GPT-5.2 to refine based on previous evaluation
+        const lastIteration = currentSession.iterations[currentSession.iterations.length - 1];
+        try {
+          const refineResponse = await fetch('/api/prompt-assistant/guided-generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: `The previous prompt didn't meet the goal. Refine it.\n\nGOAL: ${currentSession.goal}\n\nPREVIOUS PROMPT: ${lastIteration.prompt}\n\nEVALUATION OF RESULT: ${lastIteration.evaluation}\n\nWHAT WENT WRONG: ${lastIteration.refinementNotes}\n\nWrite a NEW, IMPROVED prompt that addresses these issues. Write ONLY the image prompt, nothing else.`,
+              workflowId: settings.workflow_id,
+              model: settings.guided_model || 'gpt-5.2',
+              context: {
+                goal: currentSession.goal,
+                previousAttempts: currentSession.iterations.map(it => ({
+                  prompt: it.prompt,
+                  evaluation: it.evaluation
+                }))
+              }
+            })
+          });
+          const refineData = await refineResponse.json();
+          promptToUse = refineData.response || lastIteration.prompt;
+        } catch (error) {
+          console.error('[Auto-Refine] Error refining prompt:', error);
+          promptToUse = currentSession.iterations[currentSession.iterations.length - 1].prompt;
+        }
+      }
+
+      // Clean up the prompt (remove any markdown or extra text)
+      promptToUse = promptToUse.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
+
+      // Step 2: Generate the image
+      let imageUrl: string | null = null;
+      try {
+        const imageResponse = await fetch('/api/image-creation/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: promptToUse,
+            model,
+            size,
+            quality: 'high'
+          })
+        });
+        const imageData = await imageResponse.json();
+        if (imageData.success && imageData.image?.url) {
+          imageUrl = imageData.image.url;
+        }
+      } catch (error) {
+        console.error('[Auto-Refine] Error generating image:', error);
+      }
+
+      if (!imageUrl) {
+        // Failed to generate image, record and continue
+        const failedIteration: AutoRefineIteration = {
+          iteration: iterationNum,
+          prompt: promptToUse,
+          imageUrl: null,
+          evaluation: 'Failed to generate image',
+          meetsGoal: false,
+          refinementNotes: 'Image generation failed - will retry with modified prompt',
+          timestamp: new Date().toISOString()
+        };
+        currentSession = {
+          ...currentSession,
+          iterations: [...currentSession.iterations, failedIteration]
+        };
+        setAutoRefineSession(currentSession);
+        continue;
+      }
+
+      // Step 3: Send image to GPT-5.2 for evaluation
+      let evaluation: string = '';
+      let meetsGoal = false;
+      let refinementNotes: string = '';
+
+      try {
+        const evalResponse = await fetch('/api/prompt-assistant/evaluate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl,
+            goal: currentSession.goal,
+            prompt: promptToUse,
+            workflowId: settings.workflow_id,
+            model: settings.guided_model || 'gpt-5.2'
+          })
+        });
+        const evalData = await evalResponse.json();
+
+        evaluation = evalData.evaluation || 'No evaluation received';
+        meetsGoal = evalData.meetsGoal || false;
+        refinementNotes = evalData.refinementNotes || '';
+      } catch (error) {
+        console.error('[Auto-Refine] Error evaluating image:', error);
+        evaluation = 'Evaluation failed';
+        meetsGoal = false;
+        refinementNotes = 'Could not evaluate image - will try again';
+      }
+
+      // Record this iteration
+      const newIteration: AutoRefineIteration = {
+        iteration: iterationNum,
+        prompt: promptToUse,
+        imageUrl,
+        evaluation,
+        meetsGoal,
+        refinementNotes,
+        timestamp: new Date().toISOString()
+      };
+
+      currentSession = {
+        ...currentSession,
+        iterations: [...currentSession.iterations, newIteration]
+      };
+      setAutoRefineSession(currentSession);
+
+      // Add to testing tab history
+      setTestingTabs(prev => prev.map(tab =>
+        tab.id === activeTestingTabId
+          ? { ...tab, history: [{ url: imageUrl!, prompt: promptToUse, model, timestamp: new Date().toISOString() }, ...tab.history].slice(0, 50) }
+          : tab
+      ));
+
+      // Step 4: Check if goal is met
+      if (meetsGoal) {
+        console.log(`[Auto-Refine] SUCCESS! Goal met on iteration ${iterationNum}`);
+        currentSession = {
+          ...currentSession,
+          status: 'success',
+          finalPrompt: promptToUse,
+          finalImageUrl: imageUrl,
+          completedAt: new Date().toISOString()
+        };
+        setAutoRefineSession(currentSession);
+        setAutoRefineRunning(false);
+        showNotification(`Success! Goal achieved in ${iterationNum} iteration(s)`, 'success');
+
+        // Update the testing tab prompt with the successful one
+        setTestingTabs(prev => prev.map(tab =>
+          tab.id === activeTestingTabId ? { ...tab, prompt: promptToUse } : tab
+        ));
+        return;
+      }
+
+      // Small delay before next iteration
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+
+    // Exhausted all iterations without success
+    console.log('[Auto-Refine] Max iterations reached without meeting goal');
+    currentSession = {
+      ...currentSession,
+      status: 'failed',
+      completedAt: new Date().toISOString()
+    };
+    setAutoRefineSession(currentSession);
+    setAutoRefineRunning(false);
+    showNotification(`Completed ${currentSession.maxIterations} iterations - goal not fully met`, 'info');
+  };
+
+  /**
+   * Stop the auto-refine process
+   */
+  const stopAutoRefine = () => {
+    setAutoRefinePaused(true);
+    setAutoRefineRunning(false);
+    setAutoRefineSession(prev => prev ? { ...prev, status: 'stopped', completedAt: new Date().toISOString() } : null);
+    showNotification('Auto-refine stopped', 'info');
+  };
+
+  /**
+   * Clear the auto-refine session
+   */
+  const clearAutoRefineSession = () => {
+    setAutoRefineSession(null);
+    setAutoRefineGoal('');
   };
 
   // ═══════════════════════════════════════════
@@ -6666,6 +6956,151 @@ Start by introducing yourself and asking about their business in a friendly way.
                                             </svg>
                                           )}
                                         </button>
+                                      </div>
+
+                                      {/* ═══════════════════════════════════════════ */}
+                                      {/* AUTO-REFINE Section */}
+                                      {/* ═══════════════════════════════════════════ */}
+                                      <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 rounded-lg border border-purple-500/30 p-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-purple-400 text-sm font-semibold">🤖 Auto-Refine</span>
+                                            <span className="text-[9px] text-purple-300/70 bg-purple-500/20 px-1.5 py-0.5 rounded">GPT-5.2 Vision Loop</span>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[10px] text-slate-400">Max iterations:</span>
+                                            <input
+                                              type="number"
+                                              min="1"
+                                              max="10"
+                                              value={autoRefineMaxIterations}
+                                              onChange={(e) => setAutoRefineMaxIterations(Math.min(10, Math.max(1, parseInt(e.target.value) || 4)))}
+                                              className="w-12 px-1 py-0.5 text-xs bg-slate-900 border border-purple-500/30 rounded text-white text-center"
+                                            />
+                                          </div>
+                                        </div>
+
+                                        {/* Goal/Criteria Input */}
+                                        <div className="mb-2">
+                                          <label className="text-[10px] text-purple-300 block mb-1">Goal/Criteria (what must the image show?):</label>
+                                          <textarea
+                                            value={autoRefineGoal}
+                                            onChange={(e) => setAutoRefineGoal(e.target.value)}
+                                            placeholder="Example: A single male professional cleaner in their 30s, wearing a blue polo shirt uniform, cleaning a kitchen counter. Natural lighting, residential setting. NO multiple people, NO cartoon style."
+                                            className="w-full p-2 text-xs bg-slate-900 border border-purple-500/30 rounded-lg text-white placeholder-slate-500 resize-y"
+                                            rows={2}
+                                            disabled={autoRefineRunning}
+                                          />
+                                        </div>
+
+                                        {/* Control Buttons */}
+                                        <div className="flex gap-2 mb-2">
+                                          {!autoRefineRunning ? (
+                                            <button
+                                              onClick={startAutoRefine}
+                                              disabled={!autoRefineGoal.trim()}
+                                              className="flex-1 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed rounded-lg text-white text-xs font-medium transition flex items-center justify-center gap-2"
+                                            >
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                              </svg>
+                                              Start Auto-Refine
+                                            </button>
+                                          ) : (
+                                            <button
+                                              onClick={stopAutoRefine}
+                                              className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white text-xs font-medium transition flex items-center justify-center gap-2"
+                                            >
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                                              </svg>
+                                              Stop
+                                            </button>
+                                          )}
+                                          {autoRefineSession && (
+                                            <button
+                                              onClick={clearAutoRefineSession}
+                                              disabled={autoRefineRunning}
+                                              className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg text-slate-300 text-xs transition"
+                                            >
+                                              Clear
+                                            </button>
+                                          )}
+                                        </div>
+
+                                        {/* Session Status & Log */}
+                                        {autoRefineSession && (
+                                          <div className="bg-slate-950/50 rounded-lg p-2 border border-purple-500/20">
+                                            {/* Status Bar */}
+                                            <div className="flex items-center justify-between mb-2">
+                                              <div className="flex items-center gap-2">
+                                                <span className={`w-2 h-2 rounded-full ${
+                                                  autoRefineSession.status === 'running' ? 'bg-yellow-400 animate-pulse' :
+                                                  autoRefineSession.status === 'success' ? 'bg-green-400' :
+                                                  autoRefineSession.status === 'failed' ? 'bg-red-400' :
+                                                  autoRefineSession.status === 'stopped' ? 'bg-orange-400' :
+                                                  'bg-slate-400'
+                                                }`}></span>
+                                                <span className="text-[10px] text-slate-300 capitalize">{autoRefineSession.status}</span>
+                                              </div>
+                                              <span className="text-[10px] text-slate-500">
+                                                {autoRefineSession.iterations.length}/{autoRefineSession.maxIterations} iterations
+                                              </span>
+                                            </div>
+
+                                            {/* Iterations Log */}
+                                            <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                              {autoRefineSession.iterations.map((iter, idx) => (
+                                                <div key={idx} className={`p-2 rounded border ${
+                                                  iter.meetsGoal ? 'bg-green-900/30 border-green-500/30' : 'bg-slate-900/50 border-slate-600/30'
+                                                }`}>
+                                                  <div className="flex items-start gap-2">
+                                                    <span className={`text-[10px] font-bold ${iter.meetsGoal ? 'text-green-400' : 'text-slate-400'}`}>
+                                                      #{iter.iteration}
+                                                    </span>
+                                                    {iter.imageUrl && (
+                                                      <img src={iter.imageUrl} alt="" className="w-12 h-12 object-cover rounded" />
+                                                    )}
+                                                    <div className="flex-1 min-w-0">
+                                                      <div className="text-[9px] text-slate-400 line-clamp-2">{iter.prompt}</div>
+                                                      <div className={`text-[9px] mt-1 ${iter.meetsGoal ? 'text-green-300' : 'text-orange-300'}`}>
+                                                        {iter.evaluation}
+                                                      </div>
+                                                      {!iter.meetsGoal && iter.refinementNotes && (
+                                                        <div className="text-[8px] text-purple-300 mt-1">
+                                                          → {iter.refinementNotes}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                    {iter.meetsGoal && (
+                                                      <span className="text-green-400 text-lg">✓</span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                              {autoRefineRunning && (
+                                                <div className="flex items-center justify-center py-3">
+                                                  <div className="w-5 h-5 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin"></div>
+                                                  <span className="ml-2 text-[10px] text-purple-300">Processing iteration {autoRefineSession.iterations.length + 1}...</span>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Success Result */}
+                                            {autoRefineSession.status === 'success' && autoRefineSession.finalPrompt && (
+                                              <div className="mt-2 p-2 bg-green-900/30 rounded border border-green-500/30">
+                                                <div className="text-[10px] text-green-400 font-semibold mb-1">✓ Goal Achieved!</div>
+                                                <div className="text-[9px] text-green-200">Final prompt has been copied to the prompt box above.</div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        <p className="text-[9px] text-purple-300/50 mt-2">
+                                          GPT-5.2 will generate prompts, create images, evaluate results, and refine until the goal is met or max iterations reached.
+                                        </p>
                                       </div>
 
                                       {/* History - Scrollable list showing prompt + image pairs */}
