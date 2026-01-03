@@ -593,10 +593,35 @@ Goal: Select multiple nodes and load all to workflow at once
 
 ## 🎬 CURRENT TASK
 
-**Ready for implementation.** This spec covers connecting Site Planning nodes to the existing Workflow prompt chain system with proper WordPress hierarchy publishing.
+**Status: PLANNING COMPLETE - Ready for Implementation**
 
-**Starting point**: Phase 1 - Single Node Generation
-- Add "Generate" button to SitePlanningSection.tsx
+This spec covers connecting Site Planning nodes to the existing Workflow prompt chain system with proper WordPress hierarchy publishing.
+
+### For Next Agent(s): Start Here
+
+**Read this file first**, then implement in this order:
+
+**PHASE 1** (Agent 1): Site Planning → Workflow Loader
+- File: `src/components/SitePlanningSection.tsx`
+- Add "Load to Workflow" button in header toolbar
+- Add checkbox selection to node tree
+- Export selected nodes as items with tags preserved: `{id, name: "Standard Cleaning(H)", tag: "H"}`
+- File: `App.tsx` - Add function to receive items from Site Planning
+- Store originating `site_plan_node_id` on each item for linking back
+
+**PHASE 2** (Agent 2): Article → Node Linking
+- File: `App.tsx` (around line 1203-1225 saveArticle logic)
+- Pass `site_plan_node_id` through to article save
+- File: `server/routes/articles.js`
+- After article created, update `site_plan_nodes.assigned_article_id`
+- Update node status to 'built'
+
+**PHASE 3** (Agent 3): Hierarchical WordPress Publishing
+- File: `server/routes/elementor.js`
+- Accept optional `parentWpPageId` parameter
+- When publishing, include `parent: parentWpPageId` in WordPress API call
+- File: `src/components/SitePlanningSection.tsx`
+- Resolve parent node's `wp_page_id` before publishing child
 - Create backend endpoint that reuses App.tsx prompt chain logic
 - Link generated article to site_plan_node
 
