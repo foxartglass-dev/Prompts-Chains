@@ -125,6 +125,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
 
   // Image management state
   const [pushingImages, setPushingImages] = useState(false);
+  const [pushingSingleImage, setPushingSingleImage] = useState<string | null>(null);
   const [regeneratingImage, setRegeneratingImage] = useState<string | null>(null);
   const [expandedImages, setExpandedImages] = useState(false);
   const [viewingImage, setViewingImage] = useState<ArticleImage | null>(null);
@@ -636,6 +637,59 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
       setError('Failed to push images to WordPress');
     } finally {
       setPushingImages(false);
+    }
+  };
+
+  // Push a single image to WordPress media library
+  const pushSingleImageToWordPress = async (imageId: string) => {
+    if (!selectedArticle) return;
+
+    const image = (selectedArticle.generated_images || []).find(img => img.id === imageId);
+    if (!image) {
+      setError('Image not found');
+      return;
+    }
+
+    if (!selectedArticle.wp_post_id) {
+      setError('Article must be published to WordPress first');
+      return;
+    }
+
+    const wpUrl = selectedArticle.wp_url || wpCredentials?.url;
+    const wpUser = selectedArticle.wp_user || wpCredentials?.user;
+    const wpPassword = selectedArticle.wp_app_password || wpCredentials?.password;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      setError('WordPress credentials not configured');
+      return;
+    }
+
+    setPushingSingleImage(imageId);
+    try {
+      const res = await fetch('/api/articles/push-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleId: selectedArticle.id,
+          postId: selectedArticle.wp_post_id,
+          images: [image],
+          wpUrl,
+          wpUser,
+          wpPassword
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await fetchArticle(selectedArticle.id);
+        setError(null);
+      } else {
+        setError(data.error || 'Failed to push image');
+      }
+    } catch (err) {
+      setError('Failed to push image to WordPress');
+    } finally {
+      setPushingSingleImage(null);
     }
   };
 
@@ -1313,38 +1367,36 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                             <span className="text-sm text-white">{title}</span>
                           </label>
                         ))}
-                        {/* Custom option - only show in Draft mode */}
-                        {selectedArticle.workflow_state?.metaPublishMode !== 'wordpress' && (
-                          <label
-                            className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
-                              selectedTitleIndex === -1
-                                ? 'bg-brand-gold/20 border-brand-gold'
-                                : 'bg-gray-800 border-transparent hover:border-brand-gold/50'
-                            }`}
-                          >
+                        {/* Custom option - always show */}
+                        <label
+                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
+                            selectedTitleIndex === -1
+                              ? 'bg-brand-gold/20 border-brand-gold'
+                              : 'bg-gray-800 border-transparent hover:border-brand-gold/50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="metaTitle"
+                            checked={selectedTitleIndex === -1}
+                            onChange={() => setSelectedTitleIndex(-1)}
+                            className="mt-1 accent-yellow-500"
+                          />
+                          <div className="flex-1">
+                            <span className="text-sm text-brand-gold/70 block mb-1">Custom:</span>
                             <input
-                              type="radio"
-                              name="metaTitle"
-                              checked={selectedTitleIndex === -1}
-                              onChange={() => setSelectedTitleIndex(-1)}
-                              className="mt-1 accent-yellow-500"
+                              type="text"
+                              value={customMetaTitle}
+                              onChange={(e) => {
+                                setCustomMetaTitle(e.target.value);
+                                setSelectedTitleIndex(-1);
+                              }}
+                              placeholder="Enter custom meta title..."
+                              className="w-full bg-gray-900 border border-brand-gold/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-gold transition"
+                              onClick={() => setSelectedTitleIndex(-1)}
                             />
-                            <div className="flex-1">
-                              <span className="text-sm text-brand-gold/70 block mb-1">Custom:</span>
-                              <input
-                                type="text"
-                                value={customMetaTitle}
-                                onChange={(e) => {
-                                  setCustomMetaTitle(e.target.value);
-                                  setSelectedTitleIndex(-1);
-                                }}
-                                placeholder="Enter custom meta title..."
-                                className="w-full bg-gray-900 border border-brand-gold/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-gold transition"
-                                onClick={() => setSelectedTitleIndex(-1)}
-                              />
-                            </div>
-                          </label>
-                        )}
+                          </div>
+                        </label>
                       </div>
                     </div>
 
@@ -1379,38 +1431,36 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                             <span className="text-sm text-white">{desc}</span>
                           </label>
                         ))}
-                        {/* Custom option - only show in Draft mode */}
-                        {selectedArticle.workflow_state?.metaPublishMode !== 'wordpress' && (
-                          <label
-                            className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
-                              selectedDescIndex === -1
-                                ? 'bg-brand-cyan/20 border-brand-cyan'
-                                : 'bg-gray-800 border-transparent hover:border-brand-cyan/50'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name="metaDesc"
-                              checked={selectedDescIndex === -1}
-                              onChange={() => setSelectedDescIndex(-1)}
-                              className="mt-1 accent-cyan-500"
+                        {/* Custom option - always show */}
+                        <label
+                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition border ${
+                            selectedDescIndex === -1
+                              ? 'bg-brand-cyan/20 border-brand-cyan'
+                              : 'bg-gray-800 border-transparent hover:border-brand-cyan/50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="metaDesc"
+                            checked={selectedDescIndex === -1}
+                            onChange={() => setSelectedDescIndex(-1)}
+                            className="mt-1 accent-cyan-500"
+                          />
+                          <div className="flex-1">
+                            <span className="text-sm text-brand-cyan/70 block mb-1">Custom:</span>
+                            <textarea
+                              value={customMetaDesc}
+                              onChange={(e) => {
+                                setCustomMetaDesc(e.target.value);
+                                setSelectedDescIndex(-1);
+                              }}
+                              placeholder="Enter custom meta description..."
+                              className="w-full bg-gray-900 border border-brand-cyan/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-cyan transition resize-none"
+                              rows={2}
+                              onClick={() => setSelectedDescIndex(-1)}
                             />
-                            <div className="flex-1">
-                              <span className="text-sm text-brand-cyan/70 block mb-1">Custom:</span>
-                              <textarea
-                                value={customMetaDesc}
-                                onChange={(e) => {
-                                  setCustomMetaDesc(e.target.value);
-                                  setSelectedDescIndex(-1);
-                                }}
-                                placeholder="Enter custom meta description..."
-                                className="w-full bg-gray-900 border border-brand-cyan/50 rounded px-2 py-1 text-sm text-white focus:ring-1 focus:ring-brand-cyan transition resize-none"
-                                rows={2}
-                                onClick={() => setSelectedDescIndex(-1)}
-                              />
-                            </div>
-                          </label>
-                        )}
+                          </div>
+                        </label>
                       </div>
                     </div>
                   </div>
@@ -1533,6 +1583,26 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                   </svg>
                                 </button>
+                                {/* Push single image to WP */}
+                                {selectedArticle.wp_post_id && !image.pushedToWp && (
+                                  <button
+                                    onClick={() => pushSingleImageToWordPress(image.id)}
+                                    disabled={pushingSingleImage === image.id}
+                                    className="p-1.5 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 rounded text-white transition"
+                                    title="Push this image to WordPress"
+                                  >
+                                    {pushingSingleImage === image.id ? (
+                                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg>
+                                    ) : (
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                )}
                               </div>
                               {image.pushedToWp && (
                                 <span className="text-xs text-green-400 flex items-center gap-1">
@@ -1587,10 +1657,9 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                       </button>
                     </div>
                     <div className="flex gap-3">
-                      {/* Save Selection button - shown in Draft mode when meta options exist */}
+                      {/* Save Selection button - always shown when meta options exist */}
                       {/* Button lights up (enables) only when BOTH title AND description are selected */}
-                      {selectedArticle.workflow_state?.metaPublishMode !== 'wordpress' &&
-                        (selectedArticle.meta_titles?.length > 0 || selectedArticle.meta_descriptions?.length > 0) && (
+                      {(selectedArticle.meta_titles?.length > 0 || selectedArticle.meta_descriptions?.length > 0) && (
                         <button
                           onClick={saveMetaSelection}
                           disabled={saving || selectedTitleIndex === null || selectedDescIndex === null}

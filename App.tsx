@@ -23,6 +23,7 @@ import WordPressSettings from './src/components/WordPressSettings';
 import ArticlesPage from './src/pages/ArticlesPage';
 import ImageCreationSection from './src/components/ImageCreationSection';
 import SitePlanningSection from './src/components/SitePlanningSection';
+import LocalVikingSection from './src/components/LocalVikingSection';
 import { VibeCoderToggle } from './src/components/VibeCoderNotepad';
 import HelpButton from './src/components/HelpButton';
 
@@ -214,6 +215,8 @@ const App: React.FC = () => {
     const [isWordPressOpen, setIsWordPressOpen] = useState(false);
     const [isArticlesPageOpen, setIsArticlesPageOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [globalSettings, setGlobalSettings] = useState<{local_viking_api_key?: string}>({});
+    const [globalSettingsLoading, setGlobalSettingsLoading] = useState(false);
     const [isMoreDropdownOpen, setIsMoreDropdownOpen] = useState(false);
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
     const [defaultWorkflow, setDefaultWorkflow] = useState<DefaultWorkflowConfig | null>(() => {
@@ -456,6 +459,47 @@ const App: React.FC = () => {
             }
         };
     }, [currentProject?.state, currentWorkflowId]); // Only trigger on state changes, not on currentProject change
+
+    // Load global settings when Settings modal opens
+    useEffect(() => {
+        if (isSettingsOpen) {
+            setGlobalSettingsLoading(true);
+            fetch('/api/global-settings')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.settings) {
+                        setGlobalSettings({
+                            local_viking_api_key: data.settings.local_viking_api_key || ''
+                        });
+                    }
+                })
+                .catch(err => console.error('Failed to load global settings:', err))
+                .finally(() => setGlobalSettingsLoading(false));
+        }
+    }, [isSettingsOpen]);
+
+    // Save global settings
+    const saveGlobalSettings = async () => {
+        try {
+            setGlobalSettingsLoading(true);
+            const res = await fetch('/api/global-settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(globalSettings)
+            });
+            const data = await res.json();
+            if (data.success) {
+                showNotification('Global settings saved!', 'success');
+            } else {
+                showNotification('Failed to save settings', 'error');
+            }
+        } catch (err) {
+            console.error('Failed to save global settings:', err);
+            showNotification('Failed to save settings', 'error');
+        } finally {
+            setGlobalSettingsLoading(false);
+        }
+    };
 
     // ========== CONDITIONAL RETURNS (after all hooks) ==========
 
@@ -1153,9 +1197,10 @@ const App: React.FC = () => {
                         setResults(prev => [...prev, { item: resultItem, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
                         addLog(`[${itemLabel}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
 
-                        // Save article to database
+                        // Save article to database and capture the article ID
+                        let savedArticleId: string | null = null;
                         try {
-                            await fetch('/api/articles', {
+                            const articleResponse = await fetch('/api/articles', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -1173,6 +1218,10 @@ const App: React.FC = () => {
                                     status: status.toLowerCase()
                                 })
                             });
+                            if (articleResponse.ok) {
+                                const articleData = await articleResponse.json();
+                                savedArticleId = articleData.article?.id || null;
+                            }
                             addLog(`[${itemLabel}] Article saved to database.`, LogStatus.INFO, item.id);
                         } catch (saveError) {
                             // Don't fail the whole process if saving fails
@@ -1232,6 +1281,8 @@ const App: React.FC = () => {
                                             useImageBank: includeImages,
                                             generateImages: includeImages && currentProject.state.wpPublishMode === 'wordpress', // Only generate live if WordPress mode
                                             maxImages: includeImages ? 4 : 0,
+                                            // Pass article ID so generated images are saved to the article record
+                                            articleId: savedArticleId,
                                         }),
                                     });
                                     const publishData = await publishResponse.json();
@@ -1244,6 +1295,10 @@ const App: React.FC = () => {
                                             addLog(`[${itemLabel}] Generated ${publishData.totalImages} images`, LogStatus.SUCCESS, item.id);
                                         } else {
                                             addLog(`[${itemLabel}] No images added (Image Bank empty or disabled)`, LogStatus.INFO, item.id);
+                                        }
+                                        // Log that images were saved to article record
+                                        if (savedArticleId && publishData.totalImages > 0) {
+                                            addLog(`[${itemLabel}] Images saved to article record for viewing in Articles page`, LogStatus.INFO, item.id);
                                         }
                                         addLog(`[${itemLabel}] Published to WordPress!`, LogStatus.SUCCESS, item.id);
                                         // Update result with WP link and image decision report
@@ -1813,6 +1868,34 @@ const App: React.FC = () => {
                                             className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-slate-500"
                                         />
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* Local Viking API Key (Global) */}
+                            <div className="bg-slate-800/50 p-4 rounded-lg border border-green-500/30">
+                                <h3 className="text-lg font-semibold text-green-400 mb-3">Local Viking</h3>
+                                <p className="text-xs text-slate-400 mb-3">
+                                    This API key is used for all websites. Location ID is set per-website in Agency Manager.
+                                </p>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-green-400 mb-1">Local Viking API Key</label>
+                                        <input
+                                            type="password"
+                                            placeholder="Your Local Viking API key"
+                                            value={globalSettings.local_viking_api_key || ''}
+                                            onChange={e => setGlobalSettings(prev => ({ ...prev, local_viking_api_key: e.target.value }))}
+                                            className="w-full bg-slate-700 border border-green-500/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-green-500"
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">Find this in Local Viking → Settings → API Keys</p>
+                                    </div>
+                                    <button
+                                        onClick={saveGlobalSettings}
+                                        disabled={globalSettingsLoading}
+                                        className="w-full px-4 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 rounded-lg text-white text-sm font-medium transition"
+                                    >
+                                        {globalSettingsLoading ? 'Saving...' : 'Save Local Viking Settings'}
+                                    </button>
                                 </div>
                             </div>
 
@@ -3063,6 +3146,17 @@ const App: React.FC = () => {
                         </svg>,
                         <SitePlanningSection
                             workflowId={currentWorkflowId}
+                            websiteId={currentProject?.website_id || undefined}
+                            showNotification={showNotification}
+                        />
+                    )}
+
+                    {/* 9. Local Viking - Rank Tracking & GBP Automation */}
+                    {renderSection('9. Local Viking', 'localViking',
+                        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                        </svg>,
+                        <LocalVikingSection
                             websiteId={currentProject?.website_id || undefined}
                             showNotification={showNotification}
                         />

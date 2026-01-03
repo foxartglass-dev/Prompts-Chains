@@ -27,6 +27,8 @@ import promptEngineeringRouter from './routes/prompt-engineering.js';
 import humanFeedbackRouter from './routes/human-feedback.js';
 import imageBankRouter from './routes/image-bank.js';
 import localVikingRouter from './routes/local-viking.js';
+import globalSettingsRouter from './routes/global-settings.js';
+import promptAssistantRouter from './routes/prompt-assistant.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
 dotenv.config();
@@ -193,6 +195,8 @@ app.use('/api/prompt-engineering', promptEngineeringRouter);
 app.use('/api/feedback', humanFeedbackRouter);
 app.use('/api/image-bank', imageBankRouter);
 app.use('/api/local-viking', localVikingRouter);
+app.use('/api/global-settings', globalSettingsRouter);
+app.use('/api/prompt-assistant', promptAssistantRouter);
 
 // Database status endpoint
 app.get('/api/db/status', async (req, res) => {

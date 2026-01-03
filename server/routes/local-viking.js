@@ -24,9 +24,32 @@ const requireDb = (req, res, next) => {
 };
 
 // Helper to get Local Viking credentials for a website
+// API key is stored globally (account-level), Location ID is per-website
 async function getLocalVikingCredentials(websiteId) {
+  // Get API key from global settings
+  // First ensure the table exists
+  await sql`
+    CREATE TABLE IF NOT EXISTS global_settings (
+      id SERIAL PRIMARY KEY,
+      local_viking_api_key VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `;
+
+  const globalSettings = await sql`
+    SELECT local_viking_api_key FROM global_settings WHERE id = 1
+  `;
+
+  const apiKey = globalSettings[0]?.local_viking_api_key;
+
+  if (!apiKey) {
+    throw new Error('Local Viking API key not configured. Set it in Settings.');
+  }
+
+  // Get location ID from website (per-website)
   const websites = await sql`
-    SELECT local_viking_api_key, local_viking_location_id
+    SELECT local_viking_location_id
     FROM websites
     WHERE id = ${websiteId}
   `;
@@ -35,15 +58,9 @@ async function getLocalVikingCredentials(websiteId) {
     throw new Error('Website not found');
   }
 
-  const website = websites[0];
-
-  if (!website.local_viking_api_key) {
-    throw new Error('Local Viking API key not configured for this website');
-  }
-
   return {
-    apiKey: website.local_viking_api_key,
-    locationId: website.local_viking_location_id
+    apiKey: apiKey,
+    locationId: websites[0].local_viking_location_id
   };
 }
 
@@ -51,24 +68,40 @@ async function getLocalVikingCredentials(websiteId) {
 // CONNECTION & ACCOUNT
 // ============================================================================
 
+// Helper to get just the global API key (for test-connection without websiteId)
+async function getGlobalApiKey() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS global_settings (
+      id SERIAL PRIMARY KEY,
+      local_viking_api_key VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `;
+
+  const globalSettings = await sql`
+    SELECT local_viking_api_key FROM global_settings WHERE id = 1
+  `;
+
+  return globalSettings[0]?.local_viking_api_key || null;
+}
+
 /**
  * POST /api/local-viking/test-connection
  * Test Local Viking API connection
  */
 router.post('/test-connection', requireDb, async (req, res) => {
   try {
-    const { apiKey, websiteId } = req.body;
+    const { apiKey } = req.body;
 
+    // Use provided API key or get from global settings
     let testKey = apiKey;
-
-    // If websiteId provided, get key from website settings
-    if (websiteId && !apiKey) {
-      const creds = await getLocalVikingCredentials(websiteId);
-      testKey = creds.apiKey;
+    if (!testKey) {
+      testKey = await getGlobalApiKey();
     }
 
     if (!testKey) {
-      return res.status(400).json({ error: 'API key required' });
+      return res.status(400).json({ error: 'API key required. Set it in Settings.' });
     }
 
     const result = await localViking.testConnection(testKey);
@@ -908,9 +941,18 @@ router.post('/analyze-site-plan/:planId', requireDb, async (req, res) => {
     const { planId } = req.params;
     const { scanKeywords = true, gridSize = 7 } = req.body;
 
+    // Get global API key
+    const apiKey = await getGlobalApiKey();
+    if (!apiKey) {
+      return res.status(400).json({
+        error: 'Local Viking API key not configured. Set it in Settings.',
+        needsConfiguration: true
+      });
+    }
+
     // Get site plan with website
     const plans = await sql`
-      SELECT sp.*, w.id as website_id, w.local_viking_api_key, w.local_viking_location_id
+      SELECT sp.*, w.id as website_id, w.local_viking_location_id
       FROM site_plans sp
       JOIN websites w ON sp.website_id = w.id
       WHERE sp.id = ${planId}
@@ -922,9 +964,9 @@ router.post('/analyze-site-plan/:planId', requireDb, async (req, res) => {
 
     const plan = plans[0];
 
-    if (!plan.local_viking_api_key || !plan.local_viking_location_id) {
+    if (!plan.local_viking_location_id) {
       return res.status(400).json({
-        error: 'Local Viking not configured for this website',
+        error: 'Local Viking Location ID not configured for this website',
         needsConfiguration: true
       });
     }
@@ -959,7 +1001,7 @@ router.post('/analyze-site-plan/:planId', requireDb, async (req, res) => {
       } else if (scanKeywords) {
         // Run new scan
         try {
-          const scanResult = await localViking.createGeoGridScan(plan.local_viking_api_key, {
+          const scanResult = await localViking.createGeoGridScan(apiKey, {
             locationId: plan.local_viking_location_id,
             keyword: node.target_keyword,
             gridSize

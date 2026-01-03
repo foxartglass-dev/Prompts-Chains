@@ -158,6 +158,35 @@ interface ChatMessage {
   timestamp: string;
 }
 
+// ========== PROMPT JOURNAL SYSTEM ==========
+// Save prompts, track iterations, organize with tags/files
+
+interface JournalEntry {
+  id: string;
+  prompt: string;
+  imageUrl?: string;
+  model: string;
+  notes: string;
+  tags: string[]; // For file/folder organization (e.g., ["logo", "angles"])
+  seriesId?: string; // Links entries in an iteration series
+  seriesPosition?: number; // Position in series (1, 2, 3...)
+  isFinal?: boolean; // Is this the "winner" prompt of a series?
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface JournalSeries {
+  id: string;
+  name: string;
+  description?: string;
+  tags: string[]; // Inherit tags to all entries
+  isClosed: boolean; // Series is complete
+  finalEntryId?: string; // The winning entry
+  closedNotes?: string; // Notes when closing out
+  createdAt: string;
+  closedAt?: string;
+}
+
 // Models that support vision/images (for chat assistants)
 const IMAGE_CAPABLE_MODELS = ['gpt-image-1.5', 'gpt-4o', 'gpt-5.2-2025-12-11', 'claude-sonnet-4-5-20250929', 'claude-3-5-sonnet-20241022', 'gemini-2.5-pro'];
 
@@ -451,16 +480,19 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Collapsible sections
+  // Collapsible sections - default to collapsed for cleaner UI
   const [isReferenceOpen, setIsReferenceOpen] = useState(false);
   const [isLogoOpen, setIsLogoOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isConsultantChatOpen, setIsConsultantChatOpen] = useState(false);
   const [isWorkerChatOpen, setIsWorkerChatOpen] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
-  const [isBankOpen, setIsBankOpen] = useState(true);
+  const [isBankOpen, setIsBankOpen] = useState(false); // Collapsed by default
   const [isUsedOpen, setIsUsedOpen] = useState(false);
   const [isOrderOpen, setIsOrderOpen] = useState(false);
+
+  // Tab for Reference Assets in Guided GPT section
+  const [guidedAssetsTab, setGuidedAssetsTab] = useState<'problems' | 'reference' | 'logo'>('problems');
 
   // Image preview modal
   const [previewImage, setPreviewImage] = useState<BankImage | null>(null);
@@ -536,13 +568,128 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     lastFetched: string | null;
   }>({ articles: [], workflow: null, websites: [], lastFetched: null });
   const [fetchingContext, setFetchingContext] = useState(false);
-  const [avatarsCollapsed, setAvatarsCollapsed] = useState(false);
+  const [avatarsCollapsed, setAvatarsCollapsed] = useState(true);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
 
   // Prompt Problem Areas state
-  const [problemAreasCollapsed, setProblemAreasCollapsed] = useState(false);
+  const [problemAreasCollapsed, setProblemAreasCollapsed] = useState(true);
   const [activeProblemAreaId, setActiveProblemAreaId] = useState<string | null>(null);
   const [editingProblemArea, setEditingProblemArea] = useState<PromptProblemArea | null>(null);
+
+  // Guided GPT Assistant Chat state
+  const [guidedAssistantOpen, setGuidedAssistantOpen] = useState(false);
+  const [guidedAssistantMessages, setGuidedAssistantMessages] = useState<ChatMessage[]>([]);
+  const [guidedAssistantInput, setGuidedAssistantInput] = useState('');
+  const [guidedAssistantImages, setGuidedAssistantImages] = useState<string[]>([]);
+  const [guidedAssistantLoading, setGuidedAssistantLoading] = useState(false);
+  const guidedAssistantChatRef = useRef<HTMLDivElement>(null);
+  const guidedAssistantFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Testing Mode state - sandbox for generating test images with MULTIPLE TABS
+  const [testingModeOpen, setTestingModeOpen] = useState(false);
+  const [testingModeLoading, setTestingModeLoading] = useState(false);
+
+  // Multi-tab testing system - each tab is an independent testing session
+  interface TestingTab {
+    id: string;
+    name: string;
+    prompt: string; // Current prompt in textarea
+    history: Array<{ url: string; prompt: string; model: string; timestamp: string }>;
+  }
+  const [testingTabs, setTestingTabs] = useState<TestingTab[]>([
+    { id: 'tab-1', name: 'Test 1', prompt: '', history: [] }
+  ]);
+  const [activeTestingTabId, setActiveTestingTabId] = useState('tab-1');
+  const [editingTabName, setEditingTabName] = useState<string | null>(null);
+
+  // Helper to get active tab
+  const activeTestingTab = testingTabs.find(t => t.id === activeTestingTabId) || testingTabs[0];
+
+  // ========== PROMPT JOURNAL STATE ==========
+  const [journalOpen, setJournalOpen] = useState(false);
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [journalSeries, setJournalSeries] = useState<JournalSeries[]>([]);
+  const [journalFilterTag, setJournalFilterTag] = useState<string | null>(null); // Filter by tag/file
+  const [journalActiveSeries, setJournalActiveSeries] = useState<string | null>(null); // Current working series
+  const [journalEditingEntry, setJournalEditingEntry] = useState<string | null>(null); // Entry being edited
+
+  // Get all unique tags from journal entries
+  const journalTags = useMemo(() => {
+    const tags = new Set<string>();
+    journalEntries.forEach(e => e.tags.forEach(t => tags.add(t)));
+    journalSeries.forEach(s => s.tags.forEach(t => tags.add(t)));
+    return Array.from(tags).sort();
+  }, [journalEntries, journalSeries]);
+
+  // Filtered journal entries
+  const filteredJournalEntries = useMemo(() => {
+    let entries = journalEntries;
+    if (journalFilterTag) {
+      entries = entries.filter(e => e.tags.includes(journalFilterTag));
+    }
+    return entries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [journalEntries, journalFilterTag]);
+
+  // ========== ARTICLE TESTING STATE ==========
+  // For testing full page image placement with real articles
+  interface ImagePlacement {
+    id: string;
+    position: number; // Character position in article
+    paragraphIndex: number;
+    wordsBefore: string; // The 50 (or N) words before
+    wordsAfter: string; // The 50 (or N) words after
+    matchedKeywords: string[]; // Keywords found in the zone
+    suggestedPrompt?: string;
+    generatedImage?: { url: string; prompt: string; model: string };
+    status: 'pending' | 'generating' | 'generated' | 'saved';
+  }
+
+  interface ArticleTest {
+    articleId: string;
+    title: string;
+    keyword: string;
+    content: string;
+    wordCount: number;
+    placements: ImagePlacement[];
+  }
+
+  const [articleTestOpen, setArticleTestOpen] = useState(false);
+  const [articleTestLoading, setArticleTestLoading] = useState(false);
+  const [availableArticles, setAvailableArticles] = useState<Array<{ id: string; keyword: string; title: string; wordCount: number }>>([]);
+  const [selectedArticleTest, setSelectedArticleTest] = useState<ArticleTest | null>(null);
+  const [keywordRange, setKeywordRange] = useState(50); // Words to look up/down for keywords
+  const [simulationRunning, setSimulationRunning] = useState(false);
+
+  // ========== AUTO-REFINE STATE ==========
+  // Autonomous refinement loop - GPT-5.2 generates, evaluates, and refines prompts
+  interface AutoRefineIteration {
+    iteration: number;
+    prompt: string;
+    imageUrl: string | null;
+    evaluation: string | null; // GPT-5.2's critique
+    meetsGoal: boolean;
+    refinementNotes: string | null; // What GPT-5.2 will try differently
+    timestamp: string;
+  }
+
+  interface AutoRefineSession {
+    id: string;
+    goal: string; // The criteria the image must meet
+    problemArea: string; // Which problem we're trying to solve
+    maxIterations: number;
+    iterations: AutoRefineIteration[];
+    status: 'idle' | 'running' | 'success' | 'failed' | 'stopped';
+    finalPrompt: string | null;
+    finalImageUrl: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+  }
+
+  const [autoRefineGoal, setAutoRefineGoal] = useState('');
+  const [autoRefineMaxIterations, setAutoRefineMaxIterations] = useState(4);
+  const [autoRefineSession, setAutoRefineSession] = useState<AutoRefineSession | null>(null);
+  const [autoRefineRunning, setAutoRefineRunning] = useState(false);
+  const [autoRefinePaused, setAutoRefinePaused] = useState(false);
 
   // Feedback popup state
   const [showFeedbackPopup, setShowFeedbackPopup] = useState(false);
@@ -805,17 +952,22 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       try {
         console.log('[Image Creation] Saving settings to workflow:', workflowId);
 
-        // PRE-SAVE CHECK: Calculate payload size and warn if too large
-        const payloadJson = JSON.stringify(newSettings);
+        // IMPORTANT: Exclude image_bank from save payload since it's stored in database separately
+        // This prevents the 50MB+ payload bloat issue - images are managed via /api/image-bank
+        const { image_bank, ...settingsWithoutBank } = newSettings;
+        const payloadJson = JSON.stringify(settingsWithoutBank);
         const payloadSizeMB = new Blob([payloadJson]).size / (1024 * 1024);
 
+        console.log(`[Image Creation] Payload size: ${payloadSizeMB.toFixed(2)}MB (image_bank excluded - stored in DB)`);
+
         // Warn at 50MB, block at 90MB (server limit is 100MB)
+        // These limits should rarely be hit now since image_bank is excluded
         if (payloadSizeMB > 90) {
-          showNotification(`⚠️ CANNOT SAVE: Payload is ${payloadSizeMB.toFixed(1)}MB (limit: 100MB). Delete some images from the Image Bank NOW to avoid losing work!`, 'error');
+          showNotification(`⚠️ CANNOT SAVE: Payload is ${payloadSizeMB.toFixed(1)}MB (limit: 100MB). Try clearing old chat history.`, 'error');
           setSaving(false);
           return;
         } else if (payloadSizeMB > 50) {
-          showNotification(`⚠️ WARNING: Payload is ${payloadSizeMB.toFixed(1)}MB. Consider deleting unused images from the Image Bank to prevent save failures.`, 'warning');
+          showNotification(`⚠️ WARNING: Payload is ${payloadSizeMB.toFixed(1)}MB. Consider clearing old chat history or reference images.`, 'warning');
         } else if (payloadSizeMB > 30) {
           console.log(`[Image Creation] Payload size: ${payloadSizeMB.toFixed(1)}MB - getting large`);
         }
@@ -832,7 +984,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           let errorMsg = '';
           switch (res.status) {
             case 413:
-              errorMsg = `Payload too large (${res.status}): Your image bank has too many images. Try deleting some images from the bank to reduce the save size.`;
+              errorMsg = `Payload too large (${res.status}): Settings data is too large. Try clearing old chat history or reducing reference images.`;
               break;
             case 500:
               errorMsg = `Server error (${res.status}): Database may be full or unavailable. Check your Neon dashboard.`;
@@ -905,10 +1057,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Get unique models for filtering
   const uniqueModels = [...new Set(settings.image_bank.map(img => img.model).filter(Boolean))];
 
-  // Calculate payload size for warning indicator
+  // Calculate payload size for warning indicator (excludes image_bank since it's stored in DB)
   const payloadSizeMB = useMemo(() => {
     try {
-      const size = new Blob([JSON.stringify(settings)]).size / (1024 * 1024);
+      const { image_bank, ...settingsWithoutBank } = settings;
+      const size = new Blob([JSON.stringify(settingsWithoutBank)]).size / (1024 * 1024);
       return size;
     } catch {
       return 0;
@@ -1932,6 +2085,1091 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
 
     setConsultantLoading(false);
+  };
+
+  /**
+   * Send message to Guided GPT Assistant Chat
+   * This chat helps users refine guardrails and understand prompt techniques
+   */
+  const handleSendGuidedAssistant = async () => {
+    if (!guidedAssistantInput.trim() && guidedAssistantImages.length === 0) return;
+
+    const newMessage: ChatMessage = {
+      role: 'user',
+      content: guidedAssistantInput,
+      images: guidedAssistantImages.length > 0 ? guidedAssistantImages : undefined,
+      timestamp: new Date().toISOString()
+    };
+
+    // Build message history for API
+    const historyToSend = [...guidedAssistantMessages, newMessage];
+
+    // Update local state immediately
+    setGuidedAssistantMessages(historyToSend);
+    setGuidedAssistantInput('');
+    setGuidedAssistantImages([]);
+    setGuidedAssistantLoading(true);
+
+    try {
+      // Build COMPREHENSIVE context from current settings
+      // The AI Prompt Assistant should see EVERYTHING to help craft better prompts
+      const context = {
+        // Guardrails / instructions
+        guardrails: settings.guided_guardrails,
+
+        // Main prompt template from active avatar
+        mainPrompt: activeAvatar?.mainPrompt || '',
+
+        // Placeholder categories with all options (for understanding prompt structure)
+        placeholderMode: activeAvatar?.placeholderMode || 'simple',
+        placeholderCategories: activeAvatar?.placeholderCategories?.map(cat => ({
+          name: cat.name,
+          placeholder: cat.placeholder,
+          isRandomized: cat.isRandomized,
+          options: cat.options.map(opt => ({
+            number: opt.number,
+            text: opt.text,
+            primaryKeywords: opt.primaryKeywords,
+            secondaryKeywords: opt.useSecondaryKeywords ? opt.secondaryKeywords : undefined
+          }))
+        })) || [],
+
+        // Variations (simple mode)
+        variations: activeAvatar?.variations?.map(v => ({
+          name: v.name,
+          prompt: v.prompt,
+          orientation: v.orientation
+        })) || [],
+
+        // Reference images with descriptions
+        referenceImages: settings.reference_images.map((img, idx) => ({
+          index: idx + 1,
+          filename: img.filename || `Reference ${idx + 1}`,
+          tags: img.tags || [],
+          hasUrl: !!img.url
+        })),
+
+        // Logo and action shots
+        logoImages: logoImages.map((img, idx) => ({
+          index: idx + 1,
+          filename: img.filename || `Logo ${idx + 1}`,
+          type: img.type
+        })),
+        actionShots: actionShots.map((img, idx) => ({
+          index: idx + 1,
+          filename: img.filename || `Action Shot ${idx + 1}`,
+          type: img.type
+        })),
+
+        // Image bank examples - show recent successful prompts
+        imageBankExamples: (settings.image_bank || [])
+          .slice(0, 10)
+          .map((img: BankImage) => ({
+            title: img.title,
+            prompt: img.prompt,
+            variation: img.variation,
+            model: img.model,
+            used: img.used,
+            avatarTag: img.avatarTag
+          })),
+
+        // Problem areas WITH their solution prompts (full context!)
+        problemAreas: (settings.prompt_problem_areas || [])
+          .filter((a: PromptProblemArea) => a.status === 'active')
+          .map((a: PromptProblemArea) => ({
+            name: a.name,
+            context: a.context,
+            priority: a.priority,
+            solutions: a.prompts.map(p => ({
+              miniContext: p.miniContext,
+              promptText: p.promptText,
+              status: p.status,
+              notes: p.notes
+            }))
+          })),
+
+        // Also include solved problems as reference
+        solvedProblems: (settings.prompt_problem_areas || [])
+          .filter((a: PromptProblemArea) => a.status === 'solved')
+          .map((a: PromptProblemArea) => {
+            const solvedPrompt = a.prompts.find(p => p.id === a.solvedPromptId);
+            return {
+              name: a.name,
+              context: a.context,
+              solvedWith: solvedPrompt?.promptText,
+              solvedNotes: a.solvedNotes
+            };
+          }),
+
+        // Current avatar info
+        activeAvatar: activeAvatar ? {
+          name: activeAvatar.name,
+          tag: activeAvatar.tag
+        } : null,
+
+        // All avatar names for reference
+        allAvatars: settings.audience_avatars.map(a => ({
+          name: a.name,
+          tag: a.tag,
+          hasPrompt: !!a.mainPrompt
+        })),
+
+        // TESTING MODE - Current prompt and recent history
+        // AI can edit this by outputting ```testprompt blocks
+        testingMode: {
+          isOpen: testingModeOpen,
+          activeTab: activeTestingTab.name,
+          currentPrompt: activeTestingTab.prompt,
+          // Send ALL history - no limit, AI should see the full iteration journey
+          fullHistory: activeTestingTab.history.map(h => ({
+            prompt: h.prompt,
+            model: h.model,
+            timestamp: h.timestamp
+          })),
+          model: settings.default_model || 'gpt-image-1.5'
+        }
+      };
+
+      const res = await fetch('/api/prompt-assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: settings.guided_model || 'gpt-4o',
+          messages: historyToSend.map(m => ({
+            role: m.role,
+            content: m.content,
+            images: m.images
+          })),
+          context
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const responseContent = data.response;
+
+        // Check for ```testprompt blocks - AI can directly update Testing Mode
+        const testPromptMatch = responseContent.match(/```testprompt\n?([\s\S]*?)```/);
+        if (testPromptMatch) {
+          const newPrompt = testPromptMatch[1].trim();
+          // Open Testing Mode and update the prompt
+          setTestingModeOpen(true);
+          updateActiveTabPrompt(newPrompt);
+          showNotification('Prompt updated in Testing Mode!', 'success');
+        }
+
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: responseContent,
+          timestamp: new Date().toISOString()
+        };
+        setGuidedAssistantMessages([...historyToSend, assistantMessage]);
+      } else {
+        showNotification(data.error || 'Chat failed', 'error');
+      }
+    } catch (error) {
+      console.error('Guided assistant chat error:', error);
+      showNotification('Failed to send message', 'error');
+    }
+
+    setGuidedAssistantLoading(false);
+
+    // Scroll to bottom
+    setTimeout(() => {
+      if (guidedAssistantChatRef.current) {
+        guidedAssistantChatRef.current.scrollTop = guidedAssistantChatRef.current.scrollHeight;
+      }
+    }, 100);
+  };
+
+  /**
+   * Handle image upload for Guided Assistant Chat
+   */
+  const handleGuidedAssistantImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        setGuidedAssistantImages(prev => [...prev, base64]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Reset input
+    if (e.target) e.target.value = '';
+  };
+
+  /**
+   * Extract and save guardrail suggestions from assistant response
+   */
+  const saveGuardrailFromChat = (text: string) => {
+    // Extract content from ```guardrail blocks
+    const guardrailMatch = text.match(/```guardrail\n?([\s\S]*?)```/);
+    if (guardrailMatch) {
+      const guardrailText = guardrailMatch[1].trim();
+      // Append to existing instructions
+      const currentInstructions = settings.guided_guardrails?.instructions || '';
+      const newInstructions = currentInstructions
+        ? `${currentInstructions}\n\n${guardrailText}`
+        : guardrailText;
+
+      updateSettings({
+        guided_guardrails: {
+          ...settings.guided_guardrails,
+          instructions: newInstructions
+        } as any
+      });
+      showNotification('Guardrail saved to instructions!', 'success');
+    } else {
+      // If no special block, just copy the selected text to clipboard
+      navigator.clipboard.writeText(text);
+      showNotification('Copied to clipboard', 'success');
+    }
+  };
+
+  // ═══════════════════════════════════════════
+  // TESTING MODE - Multi-Tab Functions
+  // ═══════════════════════════════════════════
+
+  /**
+   * Update the prompt for the active testing tab
+   */
+  const updateActiveTabPrompt = (prompt: string) => {
+    setTestingTabs(prev => prev.map(tab =>
+      tab.id === activeTestingTabId ? { ...tab, prompt } : tab
+    ));
+  };
+
+  /**
+   * Add a new testing tab
+   */
+  const addTestingTab = () => {
+    const newId = `tab-${Date.now()}`;
+    const newTabNumber = testingTabs.length + 1;
+    const newTab = {
+      id: newId,
+      name: `Test ${newTabNumber}`,
+      prompt: '',
+      history: []
+    };
+    setTestingTabs(prev => [...prev, newTab]);
+    setActiveTestingTabId(newId);
+  };
+
+  /**
+   * Rename a testing tab
+   */
+  const renameTestingTab = (tabId: string, newName: string) => {
+    setTestingTabs(prev => prev.map(tab =>
+      tab.id === tabId ? { ...tab, name: newName.trim() || tab.name } : tab
+    ));
+    setEditingTabName(null);
+  };
+
+  /**
+   * Delete a testing tab (keep at least one)
+   */
+  const deleteTestingTab = (tabId: string) => {
+    if (testingTabs.length <= 1) {
+      showNotification('Must keep at least one tab', 'error');
+      return;
+    }
+    setTestingTabs(prev => prev.filter(t => t.id !== tabId));
+    if (activeTestingTabId === tabId) {
+      setActiveTestingTabId(testingTabs.find(t => t.id !== tabId)?.id || testingTabs[0].id);
+    }
+  };
+
+  /**
+   * Send prompt from AI Assistant directly to Testing Mode
+   */
+  const sendPromptToTestingMode = (prompt: string) => {
+    // Open testing mode if not already open
+    setTestingModeOpen(true);
+    // Update the active tab's prompt
+    updateActiveTabPrompt(prompt);
+    showNotification('Prompt sent to Testing Mode!', 'success');
+  };
+
+  /**
+   * Generate a test image in Testing Mode sandbox (multi-tab version)
+   */
+  const handleGenerateTestImage = async () => {
+    if (!activeTestingTab.prompt.trim()) {
+      showNotification('Please enter a prompt', 'error');
+      return;
+    }
+
+    setTestingModeLoading(true);
+    try {
+      const model = settings.default_model || 'gpt-image-1.5';
+
+      // Determine size based on model - use vertical (portrait) as default
+      const size = model.startsWith('gpt-image') ? '1024x1536' : '1024x1792';
+
+      const response = await fetch('/api/image-creation/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: activeTestingTab.prompt,
+          model,
+          size,
+          quality: 'high'
+        })
+      });
+
+      const data = await response.json();
+      if (data.success && data.image?.url) {
+        const newTestImage = {
+          url: data.image.url,
+          prompt: activeTestingTab.prompt,
+          model,
+          timestamp: new Date().toISOString()
+        };
+        // Add to the active tab's history
+        setTestingTabs(prev => prev.map(tab =>
+          tab.id === activeTestingTabId
+            ? { ...tab, history: [newTestImage, ...tab.history].slice(0, 50) } // Keep 50 per tab
+            : tab
+        ));
+        showNotification('Test image generated!', 'success');
+      } else {
+        showNotification(data.error || 'Failed to generate test image', 'error');
+      }
+    } catch (error) {
+      console.error('Test image generation error:', error);
+      showNotification('Failed to generate test image', 'error');
+    }
+    setTestingModeLoading(false);
+  };
+
+  /**
+   * Save test image to the Image Bank
+   */
+  const handleSaveTestImageToBank = async (imageUrl: string, prompt: string, model: string) => {
+    try {
+      // Add to image bank via API
+      const response = await fetch(`/api/image-bank/${settings.workflow_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: imageUrl,
+          title: `Test: ${activeTestingTab.name}`,
+          prompt: prompt,
+          model: model,
+          variation: `Testing - ${activeTestingTab.name}`,
+          variationId: `testing-${activeTestingTab.id}`,
+          orientation: 'vertical',
+          used: false,
+          archived: false
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showNotification('Image saved to bank!', 'success');
+      } else {
+        showNotification(data.error || 'Failed to save to bank', 'error');
+      }
+    } catch (error) {
+      console.error('Save to bank error:', error);
+      showNotification('Failed to save to bank', 'error');
+    }
+  };
+
+  // ═══════════════════════════════════════════
+  // AUTO-REFINE Functions
+  // ═══════════════════════════════════════════
+
+  /**
+   * Start an autonomous refinement session
+   * GPT-5.2 generates prompts, evaluates results, and refines until goal is met
+   */
+  const startAutoRefine = async () => {
+    if (!autoRefineGoal.trim()) {
+      showNotification('Please enter a goal/criteria for the image', 'error');
+      return;
+    }
+
+    const sessionId = `autorefine-${Date.now()}`;
+    const newSession: AutoRefineSession = {
+      id: sessionId,
+      goal: autoRefineGoal,
+      problemArea: activeTestingTab.name,
+      maxIterations: autoRefineMaxIterations,
+      iterations: [],
+      status: 'running',
+      finalPrompt: null,
+      finalImageUrl: null,
+      startedAt: new Date().toISOString(),
+      completedAt: null
+    };
+
+    setAutoRefineSession(newSession);
+    setAutoRefineRunning(true);
+    setAutoRefinePaused(false);
+
+    // Start the refinement loop
+    await runAutoRefineLoop(newSession);
+  };
+
+  /**
+   * The main auto-refine loop
+   */
+  const runAutoRefineLoop = async (session: AutoRefineSession) => {
+    let currentSession = { ...session };
+    const model = settings.default_model || 'gpt-image-1.5';
+    const size = model.startsWith('gpt-image') ? '1024x1536' : '1024x1792';
+
+    for (let i = 0; i < currentSession.maxIterations; i++) {
+      // Check if paused or stopped
+      if (autoRefinePaused) {
+        setAutoRefineSession(prev => prev ? { ...prev, status: 'idle' } : null);
+        return;
+      }
+
+      const iterationNum = i + 1;
+      console.log(`[Auto-Refine] Starting iteration ${iterationNum}/${currentSession.maxIterations}`);
+
+      // Step 1: Generate or refine the prompt using GPT-5.2
+      let promptToUse: string;
+
+      if (i === 0) {
+        // First iteration: Ask GPT-5.2 to create an initial prompt based on the goal
+        try {
+          const promptResponse = await fetch('/api/prompt-assistant/guided-generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: `Create an image generation prompt that will achieve this goal:\n\nGOAL: ${currentSession.goal}\n\nContext from current settings:\n- Problem area: ${currentSession.problemArea}\n- Current main prompt: ${settings.audience_avatars.find(a => a.id === activeAvatarId)?.mainPrompt || 'No main prompt'}\n\nWrite ONLY the image prompt, nothing else. Make it detailed and specific to achieve the goal.`,
+              workflowId: settings.workflow_id,
+              model: settings.guided_model || 'gpt-5.2',
+              context: {
+                goal: currentSession.goal,
+                problemArea: currentSession.problemArea,
+                previousAttempts: []
+              }
+            })
+          });
+          const promptData = await promptResponse.json();
+          promptToUse = promptData.response || currentSession.goal;
+        } catch (error) {
+          console.error('[Auto-Refine] Error generating initial prompt:', error);
+          promptToUse = currentSession.goal;
+        }
+      } else {
+        // Subsequent iterations: Ask GPT-5.2 to refine based on previous evaluation
+        const lastIteration = currentSession.iterations[currentSession.iterations.length - 1];
+        try {
+          const refineResponse = await fetch('/api/prompt-assistant/guided-generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: `The previous prompt didn't meet the goal. Refine it.\n\nGOAL: ${currentSession.goal}\n\nPREVIOUS PROMPT: ${lastIteration.prompt}\n\nEVALUATION OF RESULT: ${lastIteration.evaluation}\n\nWHAT WENT WRONG: ${lastIteration.refinementNotes}\n\nWrite a NEW, IMPROVED prompt that addresses these issues. Write ONLY the image prompt, nothing else.`,
+              workflowId: settings.workflow_id,
+              model: settings.guided_model || 'gpt-5.2',
+              context: {
+                goal: currentSession.goal,
+                previousAttempts: currentSession.iterations.map(it => ({
+                  prompt: it.prompt,
+                  evaluation: it.evaluation
+                }))
+              }
+            })
+          });
+          const refineData = await refineResponse.json();
+          promptToUse = refineData.response || lastIteration.prompt;
+        } catch (error) {
+          console.error('[Auto-Refine] Error refining prompt:', error);
+          promptToUse = currentSession.iterations[currentSession.iterations.length - 1].prompt;
+        }
+      }
+
+      // Clean up the prompt (remove any markdown or extra text)
+      promptToUse = promptToUse.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
+
+      // Step 2: Generate the image
+      let imageUrl: string | null = null;
+      try {
+        const imageResponse = await fetch('/api/image-creation/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: promptToUse,
+            model,
+            size,
+            quality: 'high'
+          })
+        });
+        const imageData = await imageResponse.json();
+        if (imageData.success && imageData.image?.url) {
+          imageUrl = imageData.image.url;
+        }
+      } catch (error) {
+        console.error('[Auto-Refine] Error generating image:', error);
+      }
+
+      if (!imageUrl) {
+        // Failed to generate image, record and continue
+        const failedIteration: AutoRefineIteration = {
+          iteration: iterationNum,
+          prompt: promptToUse,
+          imageUrl: null,
+          evaluation: 'Failed to generate image',
+          meetsGoal: false,
+          refinementNotes: 'Image generation failed - will retry with modified prompt',
+          timestamp: new Date().toISOString()
+        };
+        currentSession = {
+          ...currentSession,
+          iterations: [...currentSession.iterations, failedIteration]
+        };
+        setAutoRefineSession(currentSession);
+        continue;
+      }
+
+      // Step 3: Send image to GPT-5.2 for evaluation
+      let evaluation: string = '';
+      let meetsGoal = false;
+      let refinementNotes: string = '';
+
+      try {
+        const evalResponse = await fetch('/api/prompt-assistant/evaluate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl,
+            goal: currentSession.goal,
+            prompt: promptToUse,
+            workflowId: settings.workflow_id,
+            model: settings.guided_model || 'gpt-5.2'
+          })
+        });
+        const evalData = await evalResponse.json();
+
+        evaluation = evalData.evaluation || 'No evaluation received';
+        meetsGoal = evalData.meetsGoal || false;
+        refinementNotes = evalData.refinementNotes || '';
+      } catch (error) {
+        console.error('[Auto-Refine] Error evaluating image:', error);
+        evaluation = 'Evaluation failed';
+        meetsGoal = false;
+        refinementNotes = 'Could not evaluate image - will try again';
+      }
+
+      // Record this iteration
+      const newIteration: AutoRefineIteration = {
+        iteration: iterationNum,
+        prompt: promptToUse,
+        imageUrl,
+        evaluation,
+        meetsGoal,
+        refinementNotes,
+        timestamp: new Date().toISOString()
+      };
+
+      currentSession = {
+        ...currentSession,
+        iterations: [...currentSession.iterations, newIteration]
+      };
+      setAutoRefineSession(currentSession);
+
+      // Add to testing tab history
+      setTestingTabs(prev => prev.map(tab =>
+        tab.id === activeTestingTabId
+          ? { ...tab, history: [{ url: imageUrl!, prompt: promptToUse, model, timestamp: new Date().toISOString() }, ...tab.history].slice(0, 50) }
+          : tab
+      ));
+
+      // Step 4: Check if goal is met
+      if (meetsGoal) {
+        console.log(`[Auto-Refine] SUCCESS! Goal met on iteration ${iterationNum}`);
+        currentSession = {
+          ...currentSession,
+          status: 'success',
+          finalPrompt: promptToUse,
+          finalImageUrl: imageUrl,
+          completedAt: new Date().toISOString()
+        };
+        setAutoRefineSession(currentSession);
+        setAutoRefineRunning(false);
+        showNotification(`Success! Goal achieved in ${iterationNum} iteration(s)`, 'success');
+
+        // Update the testing tab prompt with the successful one
+        setTestingTabs(prev => prev.map(tab =>
+          tab.id === activeTestingTabId ? { ...tab, prompt: promptToUse } : tab
+        ));
+        return;
+      }
+
+      // Small delay before next iteration
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+
+    // Exhausted all iterations without success
+    console.log('[Auto-Refine] Max iterations reached without meeting goal');
+    currentSession = {
+      ...currentSession,
+      status: 'failed',
+      completedAt: new Date().toISOString()
+    };
+    setAutoRefineSession(currentSession);
+    setAutoRefineRunning(false);
+    showNotification(`Completed ${currentSession.maxIterations} iterations - goal not fully met`, 'info');
+  };
+
+  /**
+   * Stop the auto-refine process
+   */
+  const stopAutoRefine = () => {
+    setAutoRefinePaused(true);
+    setAutoRefineRunning(false);
+    setAutoRefineSession(prev => prev ? { ...prev, status: 'stopped', completedAt: new Date().toISOString() } : null);
+    showNotification('Auto-refine stopped', 'info');
+  };
+
+  /**
+   * Clear the auto-refine session
+   */
+  const clearAutoRefineSession = () => {
+    setAutoRefineSession(null);
+    setAutoRefineGoal('');
+  };
+
+  // ═══════════════════════════════════════════
+  // PROMPT JOURNAL Functions
+  // ═══════════════════════════════════════════
+
+  /**
+   * Save a prompt to the journal
+   */
+  const saveToJournal = (
+    prompt: string,
+    imageUrl?: string,
+    model?: string,
+    tags?: string[],
+    notes?: string
+  ) => {
+    const newEntry: JournalEntry = {
+      id: `entry-${Date.now()}`,
+      prompt,
+      imageUrl,
+      model: model || settings.default_model || 'gpt-image-1.5',
+      notes: notes || '',
+      tags: tags || [],
+      seriesId: journalActiveSeries || undefined,
+      seriesPosition: journalActiveSeries
+        ? journalEntries.filter(e => e.seriesId === journalActiveSeries).length + 1
+        : undefined,
+      isFinal: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    setJournalEntries(prev => [newEntry, ...prev]);
+    showNotification('Saved to Journal!', 'success');
+    return newEntry.id;
+  };
+
+  /**
+   * Create a new series for tracking iterations
+   */
+  const createJournalSeries = (name: string, tags?: string[], description?: string) => {
+    const newSeries: JournalSeries = {
+      id: `series-${Date.now()}`,
+      name,
+      description,
+      tags: tags || [],
+      isClosed: false,
+      createdAt: new Date().toISOString()
+    };
+
+    setJournalSeries(prev => [newSeries, ...prev]);
+    setJournalActiveSeries(newSeries.id);
+    showNotification(`Started series: ${name}`, 'success');
+    return newSeries.id;
+  };
+
+  /**
+   * Close out a series (mark it complete with a winner)
+   */
+  const closeJournalSeries = (seriesId: string, finalEntryId?: string, notes?: string) => {
+    setJournalSeries(prev => prev.map(s =>
+      s.id === seriesId
+        ? { ...s, isClosed: true, finalEntryId, closedNotes: notes, closedAt: new Date().toISOString() }
+        : s
+    ));
+    if (finalEntryId) {
+      setJournalEntries(prev => prev.map(e =>
+        e.id === finalEntryId ? { ...e, isFinal: true } : e
+      ));
+    }
+    if (journalActiveSeries === seriesId) {
+      setJournalActiveSeries(null);
+    }
+    showNotification('Series closed!', 'success');
+  };
+
+  /**
+   * Update journal entry notes
+   */
+  const updateJournalEntryNotes = (entryId: string, notes: string) => {
+    setJournalEntries(prev => prev.map(e =>
+      e.id === entryId ? { ...e, notes, updatedAt: new Date().toISOString() } : e
+    ));
+  };
+
+  /**
+   * Add tag to journal entry
+   */
+  const addTagToJournalEntry = (entryId: string, tag: string) => {
+    const normalizedTag = tag.toLowerCase().trim();
+    if (!normalizedTag) return;
+    setJournalEntries(prev => prev.map(e =>
+      e.id === entryId && !e.tags.includes(normalizedTag)
+        ? { ...e, tags: [...e.tags, normalizedTag], updatedAt: new Date().toISOString() }
+        : e
+    ));
+  };
+
+  /**
+   * Remove tag from journal entry
+   */
+  const removeTagFromJournalEntry = (entryId: string, tag: string) => {
+    setJournalEntries(prev => prev.map(e =>
+      e.id === entryId
+        ? { ...e, tags: e.tags.filter(t => t !== tag), updatedAt: new Date().toISOString() }
+        : e
+    ));
+  };
+
+  /**
+   * Delete journal entry
+   */
+  const deleteJournalEntry = (entryId: string) => {
+    setJournalEntries(prev => prev.filter(e => e.id !== entryId));
+    showNotification('Entry deleted', 'success');
+  };
+
+  /**
+   * Load prompt from journal back to Testing Mode
+   */
+  const loadFromJournal = (entry: JournalEntry) => {
+    setTestingModeOpen(true);
+    updateActiveTabPrompt(entry.prompt);
+    showNotification('Prompt loaded to Testing Mode', 'success');
+  };
+
+  /**
+   * Start a new series from the current Testing Mode tab
+   */
+  const startSeriesFromTestingMode = (name: string, tags?: string[]) => {
+    const seriesId = createJournalSeries(name, tags);
+    // Save all current history to this series
+    activeTestingTab.history.forEach((h, idx) => {
+      const entry: JournalEntry = {
+        id: `entry-${Date.now()}-${idx}`,
+        prompt: h.prompt,
+        imageUrl: h.url,
+        model: h.model,
+        notes: '',
+        tags: tags || [],
+        seriesId,
+        seriesPosition: activeTestingTab.history.length - idx,
+        isFinal: false,
+        createdAt: h.timestamp,
+        updatedAt: h.timestamp
+      };
+      setJournalEntries(prev => [...prev, entry]);
+    });
+    showNotification(`Series created with ${activeTestingTab.history.length} entries`, 'success');
+  };
+
+  // ═══════════════════════════════════════════
+  // ARTICLE TESTING Functions
+  // ═══════════════════════════════════════════
+
+  /**
+   * Fetch available articles from the API
+   */
+  const fetchAvailableArticles = async () => {
+    try {
+      // Get the current website from settings or use default
+      const response = await fetch('/api/articles');
+      const data = await response.json();
+      if (data.articles) {
+        setAvailableArticles(data.articles.map((a: any) => ({
+          id: a.id,
+          keyword: a.keyword,
+          title: a.title || a.keyword,
+          wordCount: a.word_count || 0
+        })));
+      }
+    } catch (error) {
+      console.error('Failed to fetch articles:', error);
+    }
+  };
+
+  /**
+   * Load an article for testing and analyze image placements
+   */
+  const loadArticleForTesting = async (articleId: string) => {
+    setArticleTestLoading(true);
+    try {
+      const response = await fetch(`/api/articles/${articleId}`);
+      const data = await response.json();
+
+      if (data.article) {
+        const article = data.article;
+        const content = article.content || '';
+
+        // Parse the article to find image placement points
+        // Rule: Image at last paragraph break under 300 words since previous image
+        const placements = analyzeArticleForPlacements(content, keywordRange);
+
+        setSelectedArticleTest({
+          articleId: article.id,
+          title: article.title || article.keyword,
+          keyword: article.keyword,
+          content,
+          wordCount: content.split(/\s+/).length,
+          placements
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load article:', error);
+      showNotification('Failed to load article', 'error');
+    }
+    setArticleTestLoading(false);
+  };
+
+  /**
+   * Analyze article content to find image placement points based on rules
+   */
+  const analyzeArticleForPlacements = (content: string, wordRange: number): ImagePlacement[] => {
+    const placements: ImagePlacement[] = [];
+    const paragraphs = content.split(/\n\n+/);
+    let wordsSinceLastImage = 0;
+    let charPosition = 0;
+
+    // Get placeholder keywords from active avatar
+    const placeholderKeywords: string[] = [];
+    if (activeAvatar?.placeholderCategories) {
+      activeAvatar.placeholderCategories.forEach(cat => {
+        cat.options.forEach(opt => {
+          if (opt.primaryKeywords) placeholderKeywords.push(...opt.primaryKeywords);
+          if (opt.secondaryKeywords) placeholderKeywords.push(...opt.secondaryKeywords);
+        });
+      });
+    }
+    // Also add variation names as keywords
+    if (activeAvatar?.variations) {
+      activeAvatar.variations.forEach(v => {
+        placeholderKeywords.push(v.name.toLowerCase());
+      });
+    }
+
+    paragraphs.forEach((paragraph, pIdx) => {
+      const paragraphWords = paragraph.split(/\s+/).filter(w => w.length > 0);
+      wordsSinceLastImage += paragraphWords.length;
+
+      // Check if we should place an image (last paragraph break under 300 words)
+      if (wordsSinceLastImage >= 200 && wordsSinceLastImage <= 350) {
+        // This is a good spot for an image
+        const allWords = content.split(/\s+/);
+        const currentWordIndex = content.substring(0, charPosition).split(/\s+/).length;
+
+        // Get words before and after
+        const startIdx = Math.max(0, currentWordIndex - wordRange);
+        const endIdx = Math.min(allWords.length, currentWordIndex + wordRange);
+        const wordsBefore = allWords.slice(startIdx, currentWordIndex).join(' ');
+        const wordsAfter = allWords.slice(currentWordIndex, endIdx).join(' ');
+        const zoneText = (wordsBefore + ' ' + wordsAfter).toLowerCase();
+
+        // Find matching keywords in the zone
+        const matchedKeywords = placeholderKeywords.filter(kw =>
+          zoneText.includes(kw.toLowerCase())
+        );
+
+        placements.push({
+          id: `placement-${pIdx}`,
+          position: charPosition,
+          paragraphIndex: pIdx,
+          wordsBefore,
+          wordsAfter,
+          matchedKeywords,
+          status: 'pending'
+        });
+
+        wordsSinceLastImage = 0;
+      }
+
+      charPosition += paragraph.length + 2; // +2 for \n\n
+    });
+
+    // Always add a hero image at the start
+    if (placements.length === 0 || placements[0].paragraphIndex > 0) {
+      const firstWords = content.split(/\s+/).slice(0, wordRange).join(' ');
+      const zoneText = firstWords.toLowerCase();
+      const matchedKeywords = placeholderKeywords.filter(kw =>
+        zoneText.includes(kw.toLowerCase())
+      );
+
+      placements.unshift({
+        id: 'placement-hero',
+        position: 0,
+        paragraphIndex: 0,
+        wordsBefore: '',
+        wordsAfter: firstWords,
+        matchedKeywords,
+        status: 'pending'
+      });
+    }
+
+    return placements;
+  };
+
+  /**
+   * Re-analyze the article with new keyword range
+   */
+  const reanalyzeArticle = () => {
+    if (selectedArticleTest) {
+      const placements = analyzeArticleForPlacements(selectedArticleTest.content, keywordRange);
+      setSelectedArticleTest({
+        ...selectedArticleTest,
+        placements
+      });
+    }
+  };
+
+  /**
+   * Generate image for a single placement
+   */
+  const generatePlacementImage = async (placementId: string) => {
+    if (!selectedArticleTest) return;
+
+    const placement = selectedArticleTest.placements.find(p => p.id === placementId);
+    if (!placement) return;
+
+    // Update status to generating
+    setSelectedArticleTest(prev => prev ? {
+      ...prev,
+      placements: prev.placements.map(p =>
+        p.id === placementId ? { ...p, status: 'generating' as const } : p
+      )
+    } : null);
+
+    try {
+      const model = settings.default_model || 'gpt-image-1.5';
+
+      // Build a prompt based on matched keywords and guardrails
+      let prompt = '';
+      if (placement.matchedKeywords.length > 0) {
+        prompt = `${settings.guided_guardrails?.instructions || ''} Scene showing: ${placement.matchedKeywords.join(', ')}. ${settings.guided_guardrails?.uniformDescription || ''}`;
+      } else {
+        prompt = `${settings.guided_guardrails?.instructions || ''} Professional image for article about ${selectedArticleTest.keyword}. ${settings.guided_guardrails?.uniformDescription || ''}`;
+      }
+
+      const size = model.startsWith('gpt-image') ? '1024x1536' : '1024x1792';
+
+      const response = await fetch('/api/image-creation/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, model, size, quality: 'high' })
+      });
+
+      const data = await response.json();
+      if (data.success && data.image?.url) {
+        setSelectedArticleTest(prev => prev ? {
+          ...prev,
+          placements: prev.placements.map(p =>
+            p.id === placementId ? {
+              ...p,
+              status: 'generated' as const,
+              suggestedPrompt: prompt,
+              generatedImage: { url: data.image.url, prompt, model }
+            } : p
+          )
+        } : null);
+        showNotification('Image generated!', 'success');
+      } else {
+        throw new Error(data.error || 'Generation failed');
+      }
+    } catch (error) {
+      console.error('Image generation error:', error);
+      setSelectedArticleTest(prev => prev ? {
+        ...prev,
+        placements: prev.placements.map(p =>
+          p.id === placementId ? { ...p, status: 'pending' as const } : p
+        )
+      } : null);
+      showNotification('Failed to generate image', 'error');
+    }
+  };
+
+  /**
+   * Run full page simulation - generate all images
+   */
+  const runFullPageSimulation = async () => {
+    if (!selectedArticleTest) return;
+
+    setSimulationRunning(true);
+
+    for (const placement of selectedArticleTest.placements) {
+      if (placement.status !== 'generated' && placement.status !== 'saved') {
+        await generatePlacementImage(placement.id);
+        // Small delay between generations
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    setSimulationRunning(false);
+    showNotification('Simulation complete!', 'success');
+  };
+
+  /**
+   * Save a placement image to the Image Bank
+   */
+  const savePlacementToBank = async (placementId: string) => {
+    if (!selectedArticleTest) return;
+
+    const placement = selectedArticleTest.placements.find(p => p.id === placementId);
+    if (!placement?.generatedImage) return;
+
+    try {
+      const response = await fetch(`/api/image-bank/${settings.workflow_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: placement.generatedImage.url,
+          title: `Article Test: ${selectedArticleTest.keyword}`,
+          prompt: placement.generatedImage.prompt,
+          model: placement.generatedImage.model,
+          variation: placement.matchedKeywords.join(', ') || 'Article Test',
+          variationId: `article-test-${placementId}`,
+          orientation: 'vertical',
+          used: false,
+          archived: false
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setSelectedArticleTest(prev => prev ? {
+          ...prev,
+          placements: prev.placements.map(p =>
+            p.id === placementId ? { ...p, status: 'saved' as const } : p
+          )
+        } : null);
+        showNotification('Saved to Image Bank!', 'success');
+      }
+    } catch (error) {
+      console.error('Save to bank error:', error);
+      showNotification('Failed to save', 'error');
+    }
   };
 
   /**
@@ -5349,6 +6587,1054 @@ Start by introducing yourself and asking about their business in a friendly way.
                             className="w-full p-1.5 text-xs bg-slate-900 border border-red-500/20 rounded text-white placeholder-slate-500"
                           />
                         </div>
+
+                        {/* AI Prompt Assistant Chat */}
+                        <div className="mt-4 border-t border-emerald-500/30 pt-4">
+                          <button
+                            type="button"
+                            onClick={() => setGuidedAssistantOpen(!guidedAssistantOpen)}
+                            className="w-full flex items-center justify-between p-2 bg-emerald-900/30 hover:bg-emerald-900/50 rounded-lg transition"
+                          >
+                            <span className="flex items-center gap-2 text-emerald-400 font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                              AI Prompt Assistant
+                              {guidedAssistantMessages.length > 0 && (
+                                <span className="px-1.5 py-0.5 bg-emerald-600 text-white text-[10px] rounded-full">
+                                  {guidedAssistantMessages.length}
+                                </span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-emerald-400 transition-transform ${guidedAssistantOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {guidedAssistantOpen && (
+                            <div className="mt-3 space-y-3">
+                              <p className="text-[10px] text-emerald-300/60">
+                                Chat with AI to refine your guardrails, understand prompt techniques, and get suggestions. Upload images for visual feedback.
+                              </p>
+
+                              {/* Chat Messages */}
+                              <div
+                                ref={guidedAssistantChatRef}
+                                className="h-64 overflow-y-auto bg-slate-950 rounded-lg p-3 space-y-3 border border-emerald-500/20"
+                              >
+                                {guidedAssistantMessages.length === 0 ? (
+                                  <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                                    <div className="text-center">
+                                      <svg className="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                      </svg>
+                                      <p>Ask about prompt techniques, guardrails, or upload reference images for analysis</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  guidedAssistantMessages.map((msg, idx) => (
+                                    <div
+                                      key={idx}
+                                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                    >
+                                      <div
+                                        className={`max-w-[85%] rounded-lg p-2.5 ${
+                                          msg.role === 'user'
+                                            ? 'bg-emerald-600 text-white'
+                                            : 'bg-slate-800 text-slate-200'
+                                        }`}
+                                      >
+                                        {/* Show attached images */}
+                                        {msg.images && msg.images.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mb-2">
+                                            {msg.images.map((img, imgIdx) => (
+                                              <img key={imgIdx} src={img} alt="" className="h-16 w-auto rounded" />
+                                            ))}
+                                          </div>
+                                        )}
+                                        {/* Message content with markdown-ish rendering for special blocks */}
+                                        <div className="text-xs whitespace-pre-wrap">
+                                          {(() => {
+                                            // Parse content for both ```guardrail and ```testprompt blocks
+                                            let content = msg.content;
+                                            const elements: React.ReactNode[] = [];
+                                            let keyIdx = 0;
+
+                                            // Process ```testprompt blocks (amber)
+                                            const testPromptRegex = /```testprompt\n?([\s\S]*?)```/g;
+                                            let lastIndex = 0;
+                                            let match;
+
+                                            while ((match = testPromptRegex.exec(content)) !== null) {
+                                              // Add text before this match
+                                              if (match.index > lastIndex) {
+                                                elements.push(<span key={keyIdx++}>{content.slice(lastIndex, match.index)}</span>);
+                                              }
+                                              // Add the testprompt block
+                                              const testPrompt = match[1].trim();
+                                              elements.push(
+                                                <div key={keyIdx++} className="my-2 bg-amber-900/50 border border-amber-500/50 rounded p-2">
+                                                  <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-[10px] text-amber-400 font-medium flex items-center gap-1">
+                                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                      </svg>
+                                                      Prompt Updated in Testing Mode
+                                                    </span>
+                                                  </div>
+                                                  <code className="text-amber-300 text-[11px] block">{testPrompt}</code>
+                                                </div>
+                                              );
+                                              lastIndex = match.index + match[0].length;
+                                            }
+                                            // Add remaining content
+                                            if (lastIndex < content.length) {
+                                              const remaining = content.slice(lastIndex);
+                                              // Now process guardrail blocks in remaining content
+                                              elements.push(
+                                                ...remaining.split('```guardrail').map((part, partIdx) => {
+                                                  if (partIdx === 0) return <span key={keyIdx++}>{part}</span>;
+                                                  const [guardrail, rest] = part.split('```');
+                                                  return (
+                                                    <span key={keyIdx++}>
+                                                      <div className="my-2 bg-emerald-900/50 border border-emerald-500/50 rounded p-2">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                          <span className="text-[10px] text-emerald-400 font-medium">Suggested Guardrail:</span>
+                                                          <button
+                                                            onClick={() => saveGuardrailFromChat(`\`\`\`guardrail\n${guardrail}\`\`\``)}
+                                                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] rounded transition"
+                                                          >
+                                                            + Add to Guardrails
+                                                          </button>
+                                                        </div>
+                                                        <code className="text-emerald-300 text-[11px]">{guardrail?.trim()}</code>
+                                                      </div>
+                                                      {rest}
+                                                    </span>
+                                                  );
+                                                })
+                                              );
+                                            }
+                                            return elements.length > 0 ? elements : content;
+                                          })()}
+                                        </div>
+                                        {/* Action buttons for assistant messages */}
+                                        {msg.role === 'assistant' && (
+                                          <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                            <button
+                                              onClick={() => {
+                                                navigator.clipboard.writeText(msg.content);
+                                                showNotification('Copied to clipboard', 'success');
+                                              }}
+                                              className="text-[10px] text-slate-400 hover:text-white transition"
+                                            >
+                                              Copy response
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                // Extract prompt-like content (remove explanation text)
+                                                // Look for content in quotes or code blocks, or use full content
+                                                const codeBlockMatch = msg.content.match(/```(?:prompt)?\n?([\s\S]*?)```/);
+                                                const quotedMatch = msg.content.match(/"([^"]{20,})"/);
+                                                const promptContent = codeBlockMatch?.[1] || quotedMatch?.[1] || msg.content;
+                                                sendPromptToTestingMode(promptContent.trim());
+                                              }}
+                                              className="text-[10px] text-amber-400 hover:text-amber-300 transition flex items-center gap-1"
+                                            >
+                                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                              </svg>
+                                              Use as Test Prompt
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                                {guidedAssistantLoading && (
+                                  <div className="flex justify-start">
+                                    <div className="bg-slate-800 rounded-lg p-2.5">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Image attachments preview */}
+                              {guidedAssistantImages.length > 0 && (
+                                <div className="flex flex-wrap gap-2 p-2 bg-slate-900 rounded-lg">
+                                  {guidedAssistantImages.map((img, idx) => (
+                                    <div key={idx} className="relative group">
+                                      <img src={img} alt="" className="h-12 w-auto rounded" />
+                                      <button
+                                        onClick={() => setGuidedAssistantImages(prev => prev.filter((_, i) => i !== idx))}
+                                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                      >
+                                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Chat Input */}
+                              <div className="flex gap-2">
+                                <input
+                                  ref={guidedAssistantFileInputRef}
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={handleGuidedAssistantImageUpload}
+                                  className="hidden"
+                                />
+                                <button
+                                  onClick={() => guidedAssistantFileInputRef.current?.click()}
+                                  className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition"
+                                  title="Attach images"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                </button>
+                                <input
+                                  type="text"
+                                  value={guidedAssistantInput}
+                                  onChange={(e) => setGuidedAssistantInput(e.target.value)}
+                                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendGuidedAssistant())}
+                                  placeholder="Ask about guardrails, prompt techniques..."
+                                  className="flex-1 p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded-lg text-white placeholder-slate-500"
+                                  disabled={guidedAssistantLoading}
+                                />
+                                <button
+                                  onClick={handleSendGuidedAssistant}
+                                  disabled={guidedAssistantLoading || (!guidedAssistantInput.trim() && guidedAssistantImages.length === 0)}
+                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg text-white text-xs font-medium transition"
+                                >
+                                  {guidedAssistantLoading ? '...' : 'Send'}
+                                </button>
+                              </div>
+
+                              {/* Clear chat button */}
+                              {guidedAssistantMessages.length > 0 && (
+                                <button
+                                  onClick={() => {
+                                    setGuidedAssistantMessages([]);
+                                    showNotification('Chat cleared', 'success');
+                                  }}
+                                  className="w-full p-1.5 text-[10px] text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded transition"
+                                >
+                                  Clear conversation
+                                </button>
+                              )}
+
+                              {/* ═══════════════════════════════════════════
+                                  TESTING MODE - Multi-Tab Sandbox
+                              ═══════════════════════════════════════════ */}
+                              <div className="mt-4 border-t border-amber-500/30 pt-4">
+                                {/* Header with Title, Model dropdown, and expand toggle */}
+                                <button
+                                  type="button"
+                                  onClick={() => setTestingModeOpen(!testingModeOpen)}
+                                  className="w-full flex items-center justify-between p-2 bg-amber-900/30 hover:bg-amber-900/50 rounded-t-lg transition"
+                                >
+                                  <span className="flex items-center gap-2 text-amber-400 font-medium text-sm">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                    </svg>
+                                    Testing Mode
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    {/* Model selector in header - compact */}
+                                    <select
+                                      onClick={(e) => e.stopPropagation()}
+                                      value={settings.default_model || 'gpt-image-1.5'}
+                                      onChange={(e) => { e.stopPropagation(); updateSettings({ default_model: e.target.value }); }}
+                                      className="px-2 py-1 text-[10px] bg-slate-900 border border-amber-500/30 rounded text-white"
+                                    >
+                                      {IMAGE_GENERATION_MODELS.map(m => (
+                                        <option key={m.id} value={m.id}>{m.name.split(' ')[0]}</option>
+                                      ))}
+                                    </select>
+                                    <svg className={`w-4 h-4 text-amber-400 transition-transform ${testingModeOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </div>
+                                </button>
+
+                                {testingModeOpen && (
+                                  <div className="bg-slate-900/50 rounded-b-lg border border-t-0 border-amber-500/20">
+                                    {/* Tab Bar */}
+                                    <div className="flex items-center gap-1 p-1.5 bg-slate-950/50 border-b border-amber-500/20 overflow-x-auto">
+                                      {testingTabs.map((tab) => (
+                                        <div
+                                          key={tab.id}
+                                          className={`group relative flex items-center gap-1 px-2 py-1 rounded text-[10px] cursor-pointer transition-all ${
+                                            activeTestingTabId === tab.id
+                                              ? 'bg-amber-600 text-white'
+                                              : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                                          }`}
+                                          onClick={() => setActiveTestingTabId(tab.id)}
+                                        >
+                                          {editingTabName === tab.id ? (
+                                            <input
+                                              type="text"
+                                              defaultValue={tab.name}
+                                              autoFocus
+                                              onClick={(e) => e.stopPropagation()}
+                                              onBlur={(e) => renameTestingTab(tab.id, e.target.value)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') renameTestingTab(tab.id, (e.target as HTMLInputElement).value);
+                                                if (e.key === 'Escape') setEditingTabName(null);
+                                              }}
+                                              className="w-16 px-1 py-0.5 text-[10px] bg-slate-900 border border-amber-500 rounded text-white"
+                                            />
+                                          ) : (
+                                            <>
+                                              <span
+                                                onDoubleClick={(e) => { e.stopPropagation(); setEditingTabName(tab.id); }}
+                                                title="Double-click to rename"
+                                              >
+                                                {tab.name}
+                                              </span>
+                                              {tab.history.length > 0 && (
+                                                <span className="px-1 py-0.5 bg-black/30 rounded text-[8px]">
+                                                  {tab.history.length}
+                                                </span>
+                                              )}
+                                              {testingTabs.length > 1 && (
+                                                <button
+                                                  onClick={(e) => { e.stopPropagation(); deleteTestingTab(tab.id); }}
+                                                  className="ml-1 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition"
+                                                  title="Delete tab"
+                                                >
+                                                  &times;
+                                                </button>
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
+                                      ))}
+                                      {/* Add Tab Button */}
+                                      <button
+                                        onClick={addTestingTab}
+                                        className="px-2 py-1 rounded text-[10px] bg-slate-800 text-amber-400 hover:bg-amber-600 hover:text-white transition"
+                                        title="Add new test tab"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+
+                                    {/* Active Tab Content */}
+                                    <div className="p-3 space-y-3">
+                                      {/* Prompt input */}
+                                      <div className="flex gap-2">
+                                        <textarea
+                                          value={activeTestingTab.prompt}
+                                          onChange={(e) => updateActiveTabPrompt(e.target.value)}
+                                          placeholder="Enter your test prompt here... (AI Assistant can send prompts here directly)"
+                                          className="flex-1 p-2 text-xs bg-slate-900 border border-amber-500/30 rounded-lg text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                          rows={2}
+                                        />
+                                        <button
+                                          onClick={handleGenerateTestImage}
+                                          disabled={testingModeLoading || !activeTestingTab.prompt.trim()}
+                                          className="px-4 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg text-white text-xs font-medium transition flex items-center justify-center"
+                                          title="Generate Test Image"
+                                        >
+                                          {testingModeLoading ? (
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                          ) : (
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                            </svg>
+                                          )}
+                                        </button>
+                                      </div>
+
+                                      {/* ═══════════════════════════════════════════ */}
+                                      {/* AUTO-REFINE Section */}
+                                      {/* ═══════════════════════════════════════════ */}
+                                      <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 rounded-lg border border-purple-500/30 p-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-purple-400 text-sm font-semibold">🤖 Auto-Refine</span>
+                                            <span className="text-[9px] text-purple-300/70 bg-purple-500/20 px-1.5 py-0.5 rounded">GPT-5.2 Vision Loop</span>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[10px] text-slate-400">Max iterations:</span>
+                                            <input
+                                              type="number"
+                                              min="1"
+                                              max="10"
+                                              value={autoRefineMaxIterations}
+                                              onChange={(e) => setAutoRefineMaxIterations(Math.min(10, Math.max(1, parseInt(e.target.value) || 4)))}
+                                              className="w-12 px-1 py-0.5 text-xs bg-slate-900 border border-purple-500/30 rounded text-white text-center"
+                                            />
+                                          </div>
+                                        </div>
+
+                                        {/* Goal/Criteria Input */}
+                                        <div className="mb-2">
+                                          <label className="text-[10px] text-purple-300 block mb-1">Goal/Criteria (what must the image show?):</label>
+                                          <textarea
+                                            value={autoRefineGoal}
+                                            onChange={(e) => setAutoRefineGoal(e.target.value)}
+                                            placeholder="Example: A single male professional cleaner in their 30s, wearing a blue polo shirt uniform, cleaning a kitchen counter. Natural lighting, residential setting. NO multiple people, NO cartoon style."
+                                            className="w-full p-2 text-xs bg-slate-900 border border-purple-500/30 rounded-lg text-white placeholder-slate-500 resize-y"
+                                            rows={2}
+                                            disabled={autoRefineRunning}
+                                          />
+                                        </div>
+
+                                        {/* Control Buttons */}
+                                        <div className="flex gap-2 mb-2">
+                                          {!autoRefineRunning ? (
+                                            <button
+                                              onClick={startAutoRefine}
+                                              disabled={!autoRefineGoal.trim()}
+                                              className="flex-1 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed rounded-lg text-white text-xs font-medium transition flex items-center justify-center gap-2"
+                                            >
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                              </svg>
+                                              Start Auto-Refine
+                                            </button>
+                                          ) : (
+                                            <button
+                                              onClick={stopAutoRefine}
+                                              className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-white text-xs font-medium transition flex items-center justify-center gap-2"
+                                            >
+                                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                                              </svg>
+                                              Stop
+                                            </button>
+                                          )}
+                                          {autoRefineSession && (
+                                            <button
+                                              onClick={clearAutoRefineSession}
+                                              disabled={autoRefineRunning}
+                                              className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg text-slate-300 text-xs transition"
+                                            >
+                                              Clear
+                                            </button>
+                                          )}
+                                        </div>
+
+                                        {/* Session Status & Log */}
+                                        {autoRefineSession && (
+                                          <div className="bg-slate-950/50 rounded-lg p-2 border border-purple-500/20">
+                                            {/* Status Bar */}
+                                            <div className="flex items-center justify-between mb-2">
+                                              <div className="flex items-center gap-2">
+                                                <span className={`w-2 h-2 rounded-full ${
+                                                  autoRefineSession.status === 'running' ? 'bg-yellow-400 animate-pulse' :
+                                                  autoRefineSession.status === 'success' ? 'bg-green-400' :
+                                                  autoRefineSession.status === 'failed' ? 'bg-red-400' :
+                                                  autoRefineSession.status === 'stopped' ? 'bg-orange-400' :
+                                                  'bg-slate-400'
+                                                }`}></span>
+                                                <span className="text-[10px] text-slate-300 capitalize">{autoRefineSession.status}</span>
+                                              </div>
+                                              <span className="text-[10px] text-slate-500">
+                                                {autoRefineSession.iterations.length}/{autoRefineSession.maxIterations} iterations
+                                              </span>
+                                            </div>
+
+                                            {/* Iterations Log */}
+                                            <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                              {autoRefineSession.iterations.map((iter, idx) => (
+                                                <div key={idx} className={`p-2 rounded border ${
+                                                  iter.meetsGoal ? 'bg-green-900/30 border-green-500/30' : 'bg-slate-900/50 border-slate-600/30'
+                                                }`}>
+                                                  <div className="flex items-start gap-2">
+                                                    <span className={`text-[10px] font-bold ${iter.meetsGoal ? 'text-green-400' : 'text-slate-400'}`}>
+                                                      #{iter.iteration}
+                                                    </span>
+                                                    {iter.imageUrl && (
+                                                      <img src={iter.imageUrl} alt="" className="w-12 h-12 object-cover rounded" />
+                                                    )}
+                                                    <div className="flex-1 min-w-0">
+                                                      <div className="text-[9px] text-slate-400 line-clamp-2">{iter.prompt}</div>
+                                                      <div className={`text-[9px] mt-1 ${iter.meetsGoal ? 'text-green-300' : 'text-orange-300'}`}>
+                                                        {iter.evaluation}
+                                                      </div>
+                                                      {!iter.meetsGoal && iter.refinementNotes && (
+                                                        <div className="text-[8px] text-purple-300 mt-1">
+                                                          → {iter.refinementNotes}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                    {iter.meetsGoal && (
+                                                      <span className="text-green-400 text-lg">✓</span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                              {autoRefineRunning && (
+                                                <div className="flex items-center justify-center py-3">
+                                                  <div className="w-5 h-5 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin"></div>
+                                                  <span className="ml-2 text-[10px] text-purple-300">Processing iteration {autoRefineSession.iterations.length + 1}...</span>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Success Result */}
+                                            {autoRefineSession.status === 'success' && autoRefineSession.finalPrompt && (
+                                              <div className="mt-2 p-2 bg-green-900/30 rounded border border-green-500/30">
+                                                <div className="text-[10px] text-green-400 font-semibold mb-1">✓ Goal Achieved!</div>
+                                                <div className="text-[9px] text-green-200">Final prompt has been copied to the prompt box above.</div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        <p className="text-[9px] text-purple-300/50 mt-2">
+                                          GPT-5.2 will generate prompts, create images, evaluate results, and refine until the goal is met or max iterations reached.
+                                        </p>
+                                      </div>
+
+                                      {/* History - Scrollable list showing prompt + image pairs */}
+                                      {activeTestingTab.history.length > 0 ? (
+                                        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                                          <div className="text-[10px] text-slate-500 flex justify-between items-center">
+                                            <span>Test History ({activeTestingTab.history.length})</span>
+                                            <div className="flex gap-2">
+                                              <button
+                                                onClick={() => {
+                                                  const name = prompt('Name this series:', activeTestingTab.name);
+                                                  if (name) {
+                                                    const tag = prompt('Add a tag/file (optional):', '');
+                                                    startSeriesFromTestingMode(name, tag ? [tag.toLowerCase()] : []);
+                                                  }
+                                                }}
+                                                className="text-blue-400 hover:text-blue-300"
+                                              >
+                                                Save All to Journal
+                                              </button>
+                                              <button
+                                                onClick={() => setTestingTabs(prev => prev.map(tab =>
+                                                  tab.id === activeTestingTabId ? { ...tab, history: [] } : tab
+                                                ))}
+                                                className="text-red-400 hover:text-red-300"
+                                              >
+                                                Clear
+                                              </button>
+                                            </div>
+                                          </div>
+                                          {activeTestingTab.history.map((item, idx) => (
+                                            <div key={idx} className="bg-slate-950 rounded-lg p-2 border border-slate-700">
+                                              <div className="flex gap-3">
+                                                {/* Image thumbnail */}
+                                                <img
+                                                  src={item.url}
+                                                  alt=""
+                                                  className="w-24 h-auto rounded-lg flex-shrink-0"
+                                                />
+                                                {/* Prompt and actions */}
+                                                <div className="flex-1 min-w-0">
+                                                  <div className="text-[10px] text-slate-400 mb-1 line-clamp-3">
+                                                    {item.prompt}
+                                                  </div>
+                                                  <div className="text-[8px] text-slate-600 mb-2">
+                                                    {item.model} • {new Date(item.timestamp).toLocaleTimeString()}
+                                                  </div>
+                                                  <div className="flex gap-1 flex-wrap">
+                                                    <button
+                                                      onClick={() => handleSaveTestImageToBank(item.url, item.prompt, item.model)}
+                                                      className="px-2 py-0.5 bg-green-600 hover:bg-green-500 rounded text-white text-[9px] transition"
+                                                    >
+                                                      Bank
+                                                    </button>
+                                                    <button
+                                                      onClick={() => {
+                                                        const tag = prompt('Add tag (optional):', '');
+                                                        saveToJournal(item.prompt, item.url, item.model, tag ? [tag.toLowerCase()] : []);
+                                                      }}
+                                                      className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-[9px] transition"
+                                                    >
+                                                      Journal
+                                                    </button>
+                                                    <button
+                                                      onClick={() => updateActiveTabPrompt(item.prompt)}
+                                                      className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-[9px] transition"
+                                                    >
+                                                      Use
+                                                    </button>
+                                                    <button
+                                                      onClick={() => {
+                                                        navigator.clipboard.writeText(item.prompt);
+                                                        showNotification('Prompt copied!', 'success');
+                                                      }}
+                                                      className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-[9px] transition"
+                                                    >
+                                                      Copy
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="text-center py-6 text-slate-500 text-xs">
+                                          <p>No test images yet in this tab.</p>
+                                          <p className="text-[10px] mt-1">Enter a prompt above and generate a test image.</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* ═══════════════════════════════════════════
+                                  PROMPT JOURNAL - Save & organize prompts
+                              ═══════════════════════════════════════════ */}
+                              <div className="mt-4 border-t border-blue-500/30 pt-4">
+                                <button
+                                  type="button"
+                                  onClick={() => setJournalOpen(!journalOpen)}
+                                  className="w-full flex items-center justify-between p-2 bg-blue-900/30 hover:bg-blue-900/50 rounded-t-lg transition"
+                                >
+                                  <span className="flex items-center gap-2 text-blue-400 font-medium text-sm">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                    </svg>
+                                    Prompt Journal
+                                    {journalEntries.length > 0 && (
+                                      <span className="px-1.5 py-0.5 bg-blue-600 text-white text-[10px] rounded-full">
+                                        {journalEntries.length}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <svg className={`w-4 h-4 text-blue-400 transition-transform ${journalOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+
+                                {journalOpen && (
+                                  <div className="bg-slate-900/50 rounded-b-lg border border-t-0 border-blue-500/20 p-3">
+                                    {/* Filter by tag/file */}
+                                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                                      <span className="text-[10px] text-blue-400">Filter:</span>
+                                      <button
+                                        onClick={() => setJournalFilterTag(null)}
+                                        className={`px-2 py-0.5 rounded text-[9px] transition ${
+                                          !journalFilterTag
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                        }`}
+                                      >
+                                        All ({journalEntries.length})
+                                      </button>
+                                      {journalTags.map(tag => (
+                                        <button
+                                          key={tag}
+                                          onClick={() => setJournalFilterTag(tag)}
+                                          className={`px-2 py-0.5 rounded text-[9px] transition ${
+                                            journalFilterTag === tag
+                                              ? 'bg-blue-600 text-white'
+                                              : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                          }`}
+                                        >
+                                          {tag} ({journalEntries.filter(e => e.tags.includes(tag)).length})
+                                        </button>
+                                      ))}
+                                    </div>
+
+                                    {/* Active Series indicator */}
+                                    {journalActiveSeries && (
+                                      <div className="mb-3 p-2 bg-blue-900/30 rounded border border-blue-500/30">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[10px] text-blue-400">
+                                            Active Series: <strong>{journalSeries.find(s => s.id === journalActiveSeries)?.name}</strong>
+                                          </span>
+                                          <button
+                                            onClick={() => {
+                                              const notes = prompt('Closing notes (optional):');
+                                              closeJournalSeries(journalActiveSeries, undefined, notes || undefined);
+                                            }}
+                                            className="text-[9px] text-green-400 hover:text-green-300"
+                                          >
+                                            Close Series
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Journal entries */}
+                                    {filteredJournalEntries.length > 0 ? (
+                                      <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                        {filteredJournalEntries.map((entry) => (
+                                          <div
+                                            key={entry.id}
+                                            className={`bg-slate-950 rounded-lg p-2 border ${
+                                              entry.isFinal
+                                                ? 'border-green-500/50'
+                                                : 'border-slate-700'
+                                            }`}
+                                          >
+                                            <div className="flex gap-3">
+                                              {/* Image thumbnail */}
+                                              {entry.imageUrl && (
+                                                <img
+                                                  src={entry.imageUrl}
+                                                  alt=""
+                                                  className="w-16 h-auto rounded flex-shrink-0"
+                                                />
+                                              )}
+                                              <div className="flex-1 min-w-0">
+                                                <div className="text-[10px] text-slate-400 mb-1 line-clamp-2">
+                                                  {entry.prompt}
+                                                </div>
+                                                {/* Tags */}
+                                                <div className="flex gap-1 mb-1 flex-wrap">
+                                                  {entry.tags.map(tag => (
+                                                    <span
+                                                      key={tag}
+                                                      className="px-1 py-0.5 bg-blue-900/50 text-blue-300 text-[8px] rounded"
+                                                    >
+                                                      {tag}
+                                                    </span>
+                                                  ))}
+                                                  {entry.seriesPosition && (
+                                                    <span className="px-1 py-0.5 bg-purple-900/50 text-purple-300 text-[8px] rounded">
+                                                      #{entry.seriesPosition}
+                                                    </span>
+                                                  )}
+                                                  {entry.isFinal && (
+                                                    <span className="px-1 py-0.5 bg-green-900/50 text-green-300 text-[8px] rounded">
+                                                      WINNER
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                {/* Notes */}
+                                                {entry.notes && (
+                                                  <div className="text-[9px] text-slate-500 italic mb-1">
+                                                    {entry.notes}
+                                                  </div>
+                                                )}
+                                                <div className="text-[8px] text-slate-600 mb-1">
+                                                  {entry.model} • {new Date(entry.createdAt).toLocaleDateString()} {new Date(entry.createdAt).toLocaleTimeString()}
+                                                </div>
+                                                {/* Actions */}
+                                                <div className="flex gap-1 flex-wrap">
+                                                  <button
+                                                    onClick={() => loadFromJournal(entry)}
+                                                    className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-[9px] transition"
+                                                  >
+                                                    Load
+                                                  </button>
+                                                  <button
+                                                    onClick={() => {
+                                                      const note = prompt('Add note:', entry.notes);
+                                                      if (note !== null) updateJournalEntryNotes(entry.id, note);
+                                                    }}
+                                                    className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-[9px] transition"
+                                                  >
+                                                    Note
+                                                  </button>
+                                                  <button
+                                                    onClick={() => {
+                                                      const tag = prompt('Add tag:');
+                                                      if (tag) addTagToJournalEntry(entry.id, tag);
+                                                    }}
+                                                    className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-[9px] transition"
+                                                  >
+                                                    +Tag
+                                                  </button>
+                                                  <button
+                                                    onClick={() => deleteJournalEntry(entry.id)}
+                                                    className="px-2 py-0.5 bg-red-900/50 hover:bg-red-800 rounded text-red-300 text-[9px] transition"
+                                                  >
+                                                    Del
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-center py-6 text-slate-500 text-xs">
+                                        <p>No journal entries yet.</p>
+                                        <p className="text-[10px] mt-1">Save prompts from Testing Mode to keep track of your work.</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* ═══════════════════════════════════════════
+                                  ARTICLE TESTING - Test full page layouts
+                              ═══════════════════════════════════════════ */}
+                              <div className="mt-4 border-t border-purple-500/30 pt-4">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setArticleTestOpen(!articleTestOpen);
+                                    if (!articleTestOpen) fetchAvailableArticles();
+                                  }}
+                                  className="w-full flex items-center justify-between p-2 bg-purple-900/30 hover:bg-purple-900/50 rounded-t-lg transition"
+                                >
+                                  <span className="flex items-center gap-2 text-purple-400 font-medium text-sm">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    Article Testing
+                                    {selectedArticleTest && (
+                                      <span className="px-1.5 py-0.5 bg-purple-600 text-white text-[10px] rounded-full">
+                                        {selectedArticleTest.placements.length} spots
+                                      </span>
+                                    )}
+                                  </span>
+                                  <svg className={`w-4 h-4 text-purple-400 transition-transform ${articleTestOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+
+                                {articleTestOpen && (
+                                  <div className="bg-slate-900/50 rounded-b-lg border border-t-0 border-purple-500/20 p-3">
+                                    <p className="text-[10px] text-purple-300/60 mb-3">
+                                      Import a real article to test image placement rules. See where images would go and what keywords are matched.
+                                    </p>
+
+                                    {/* Article selector */}
+                                    <div className="flex gap-2 mb-3">
+                                      <select
+                                        value={selectedArticleTest?.articleId || ''}
+                                        onChange={(e) => e.target.value && loadArticleForTesting(e.target.value)}
+                                        className="flex-1 p-2 text-xs bg-slate-900 border border-purple-500/30 rounded text-white"
+                                        disabled={articleTestLoading}
+                                      >
+                                        <option value="">Select an article...</option>
+                                        {availableArticles.map(a => (
+                                          <option key={a.id} value={a.id}>
+                                            {a.keyword} ({a.wordCount} words)
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        onClick={fetchAvailableArticles}
+                                        className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded text-purple-400 text-xs transition"
+                                        title="Refresh article list"
+                                      >
+                                        ↻
+                                      </button>
+                                    </div>
+
+                                    {/* Keyword range slider */}
+                                    <div className="mb-3 p-2 bg-slate-950 rounded border border-purple-500/20">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <label className="text-[10px] text-purple-400">Keyword Search Range:</label>
+                                        <span className="text-[10px] text-white font-medium">{keywordRange} words each way</span>
+                                      </div>
+                                      <input
+                                        type="range"
+                                        min="10"
+                                        max="100"
+                                        value={keywordRange}
+                                        onChange={(e) => setKeywordRange(parseInt(e.target.value))}
+                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                                      />
+                                      <div className="flex justify-between text-[8px] text-slate-500 mt-1">
+                                        <span>10 words</span>
+                                        <span>50 words</span>
+                                        <span>100 words</span>
+                                      </div>
+                                      {selectedArticleTest && (
+                                        <button
+                                          onClick={reanalyzeArticle}
+                                          className="mt-2 w-full p-1.5 text-[10px] bg-purple-900/50 hover:bg-purple-800/50 text-purple-300 rounded transition"
+                                        >
+                                          Re-analyze with new range
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {articleTestLoading && (
+                                      <div className="text-center py-4">
+                                        <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mx-auto mb-2"></div>
+                                        <p className="text-[10px] text-purple-400">Loading article...</p>
+                                      </div>
+                                    )}
+
+                                    {selectedArticleTest && !articleTestLoading && (
+                                      <div className="space-y-3">
+                                        {/* Article info header */}
+                                        <div className="p-2 bg-purple-900/30 rounded border border-purple-500/30">
+                                          <div className="flex items-center justify-between">
+                                            <div>
+                                              <h4 className="text-sm text-white font-medium">{selectedArticleTest.title}</h4>
+                                              <p className="text-[10px] text-purple-300">
+                                                {selectedArticleTest.wordCount} words • {selectedArticleTest.placements.length} image placements detected
+                                              </p>
+                                            </div>
+                                            <button
+                                              onClick={runFullPageSimulation}
+                                              disabled={simulationRunning}
+                                              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 rounded text-white text-xs font-medium transition flex items-center gap-1"
+                                            >
+                                              {simulationRunning ? (
+                                                <>
+                                                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                  Running...
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                  </svg>
+                                                  Generate All
+                                                </>
+                                              )}
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {/* Image placements */}
+                                        <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                                          {selectedArticleTest.placements.map((placement, idx) => (
+                                            <div
+                                              key={placement.id}
+                                              className={`p-3 rounded-lg border ${
+                                                placement.status === 'saved'
+                                                  ? 'bg-green-900/20 border-green-500/30'
+                                                  : placement.status === 'generated'
+                                                  ? 'bg-purple-900/20 border-purple-500/30'
+                                                  : 'bg-slate-950 border-slate-700'
+                                              }`}
+                                            >
+                                              {/* Placement header */}
+                                              <div className="flex items-center justify-between mb-2">
+                                                <span className="text-xs text-purple-400 font-medium">
+                                                  {idx === 0 && placement.id === 'placement-hero' ? '🖼️ Hero Image' : `📍 Image ${idx + 1}`}
+                                                  <span className="text-[10px] text-slate-500 ml-2">
+                                                    (Paragraph {placement.paragraphIndex + 1})
+                                                  </span>
+                                                </span>
+                                                <span className={`text-[10px] px-2 py-0.5 rounded ${
+                                                  placement.status === 'saved' ? 'bg-green-600 text-white' :
+                                                  placement.status === 'generated' ? 'bg-purple-600 text-white' :
+                                                  placement.status === 'generating' ? 'bg-yellow-600 text-white' :
+                                                  'bg-slate-700 text-slate-300'
+                                                }`}>
+                                                  {placement.status}
+                                                </span>
+                                              </div>
+
+                                              {/* Keyword zone visualization */}
+                                              <div className="mb-2 p-2 bg-slate-900 rounded text-[10px]">
+                                                <div className="text-slate-500 mb-1">Keyword Search Zone ({keywordRange} words each way):</div>
+                                                <div className="text-slate-400">
+                                                  {placement.wordsBefore && (
+                                                    <span className="bg-blue-900/30 text-blue-300 px-1 rounded">
+                                                      ...{placement.wordsBefore.split(' ').slice(-10).join(' ')}
+                                                    </span>
+                                                  )}
+                                                  <span className="text-purple-400 font-bold mx-1">|IMAGE|</span>
+                                                  {placement.wordsAfter && (
+                                                    <span className="bg-green-900/30 text-green-300 px-1 rounded">
+                                                      {placement.wordsAfter.split(' ').slice(0, 10).join(' ')}...
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+
+                                              {/* Matched keywords */}
+                                              <div className="mb-2">
+                                                <span className="text-[10px] text-slate-500">Matched Keywords: </span>
+                                                {placement.matchedKeywords.length > 0 ? (
+                                                  <span className="flex flex-wrap gap-1 mt-1">
+                                                    {placement.matchedKeywords.map((kw, kwIdx) => (
+                                                      <span key={kwIdx} className="px-1.5 py-0.5 bg-purple-600 text-white text-[9px] rounded">
+                                                        {kw}
+                                                      </span>
+                                                    ))}
+                                                  </span>
+                                                ) : (
+                                                  <span className="text-[10px] text-orange-400">None found - will use general prompt</span>
+                                                )}
+                                              </div>
+
+                                              {/* Generated image */}
+                                              {placement.generatedImage && (
+                                                <div className="mb-2">
+                                                  <img
+                                                    src={placement.generatedImage.url}
+                                                    alt=""
+                                                    className="w-full max-w-[200px] rounded-lg"
+                                                  />
+                                                  <div className="text-[9px] text-slate-500 mt-1">
+                                                    Prompt: {placement.suggestedPrompt?.substring(0, 100)}...
+                                                  </div>
+                                                </div>
+                                              )}
+
+                                              {/* Actions */}
+                                              <div className="flex gap-2">
+                                                {placement.status === 'pending' && (
+                                                  <button
+                                                    onClick={() => generatePlacementImage(placement.id)}
+                                                    className="px-2 py-1 bg-purple-600 hover:bg-purple-500 rounded text-white text-[10px] transition"
+                                                  >
+                                                    Generate
+                                                  </button>
+                                                )}
+                                                {placement.status === 'generating' && (
+                                                  <span className="px-2 py-1 text-[10px] text-yellow-400 flex items-center gap-1">
+                                                    <div className="w-3 h-3 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin"></div>
+                                                    Generating...
+                                                  </span>
+                                                )}
+                                                {placement.status === 'generated' && (
+                                                  <>
+                                                    <button
+                                                      onClick={() => generatePlacementImage(placement.id)}
+                                                      className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-[10px] transition"
+                                                    >
+                                                      Regenerate
+                                                    </button>
+                                                    <button
+                                                      onClick={() => savePlacementToBank(placement.id)}
+                                                      className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-white text-[10px] transition"
+                                                    >
+                                                      Save to Bank
+                                                    </button>
+                                                  </>
+                                                )}
+                                                {placement.status === 'saved' && (
+                                                  <span className="text-[10px] text-green-400">✓ Saved to Bank</span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {!selectedArticleTest && !articleTestLoading && (
+                                      <div className="text-center py-6 text-slate-500 text-xs">
+                                        <p>Select an article to test image placement.</p>
+                                        <p className="text-[10px] mt-1">See where images would go and which keywords match.</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                     {settings.live_prompt_mode === 'smart_prompt' && (
@@ -5371,7 +7657,301 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
                 )}
 
-                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-900/50 rounded">
+                {/* ─────────────────────────────────────────────────────
+                    Reference Assets Tabs (Problem Areas, Reference Images, Logo/Action)
+                ───────────────────────────────────────────────────── */}
+                <div className="mt-4 border-t border-slate-700 pt-4">
+                  {/* Tab Buttons */}
+                  <div className="flex border-b border-slate-700">
+                    <button
+                      onClick={() => setGuidedAssetsTab('problems')}
+                      className={`flex-1 px-4 py-2.5 text-sm font-medium transition-all border-b-2 ${
+                        guidedAssetsTab === 'problems'
+                          ? 'text-orange-400 border-orange-500 bg-orange-500/10'
+                          : 'text-slate-400 border-transparent hover:text-slate-300 hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        🎯 Prompt Problem Areas
+                        {settings.prompt_problem_areas.length > 0 && (
+                          <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-300 text-[10px] rounded">
+                            {settings.prompt_problem_areas.length}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setGuidedAssetsTab('logo')}
+                      className={`flex-1 px-4 py-2.5 text-sm font-medium transition-all border-b-2 ${
+                        guidedAssetsTab === 'logo'
+                          ? 'text-brand-cyan border-brand-cyan bg-brand-cyan/10'
+                          : 'text-slate-400 border-transparent hover:text-slate-300 hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        LOGO REFERENCE
+                        {(logoImages.length > 0 || actionShots.length > 0) && (
+                          <span className="px-1.5 py-0.5 bg-brand-cyan/20 text-brand-cyan text-[10px] rounded">
+                            {logoImages.length + actionShots.length}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setGuidedAssetsTab('reference')}
+                      className={`flex-1 px-4 py-2.5 text-sm font-medium transition-all border-b-2 ${
+                        guidedAssetsTab === 'reference'
+                          ? 'text-purple-400 border-purple-500 bg-purple-500/10'
+                          : 'text-slate-400 border-transparent hover:text-slate-300 hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        Reference Images
+                        {settings.reference_images.length > 0 && (
+                          <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 text-[10px] rounded">
+                            {settings.reference_images.length}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Tab Content */}
+                  <div className="p-4 bg-slate-900/50 rounded-b-lg">
+                    {/* Prompt Problem Areas Tab */}
+                    {guidedAssetsTab === 'problems' && (
+                      <div className="space-y-3">
+                        {settings.prompt_problem_areas.length === 0 ? (
+                          <div className="text-center py-6 text-slate-500">
+                            <p className="text-sm">No problem areas yet.</p>
+                            <p className="text-xs mt-1">Add areas for issues like "Logo Visibility", "Camera Angles", etc.</p>
+                            <button
+                              onClick={handleAddProblemArea}
+                              className="mt-3 px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white text-sm rounded-lg transition"
+                            >
+                              + Add Problem Area
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Area Tabs */}
+                            <div className="flex flex-wrap gap-2">
+                              {settings.prompt_problem_areas.map(area => (
+                                <button
+                                  key={area.id}
+                                  onClick={() => setActiveProblemAreaId(activeProblemAreaId === area.id ? null : area.id)}
+                                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                                    area.status === 'solved'
+                                      ? activeProblemAreaId === area.id
+                                        ? 'bg-green-500 text-slate-900'
+                                        : 'bg-green-900/50 text-green-400 hover:bg-green-900/70 border border-green-500/50'
+                                      : activeProblemAreaId === area.id
+                                        ? 'bg-orange-500 text-slate-900'
+                                        : 'bg-slate-800 text-orange-400 hover:bg-slate-700'
+                                  }`}
+                                >
+                                  {area.status === 'solved' ? (
+                                    <span className="text-green-300">✓</span>
+                                  ) : (
+                                    <span className={`w-2 h-2 rounded-full ${
+                                      area.priority === 'high' ? 'bg-red-500' :
+                                      area.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                                    }`} />
+                                  )}
+                                  {area.name}
+                                  <span className="text-xs opacity-70">({area.prompts.length})</span>
+                                </button>
+                              ))}
+                              <button
+                                onClick={handleAddProblemArea}
+                                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 text-orange-400 hover:bg-slate-700 border border-dashed border-orange-500/50"
+                              >
+                                + New
+                              </button>
+                            </div>
+
+                            {/* Active Problem Area Editor */}
+                            {activeProblemAreaId && (() => {
+                              const area = getActiveProblemArea();
+                              if (!area) return null;
+                              return (
+                                <div className="bg-slate-800/50 rounded-lg p-3 space-y-3 border border-orange-500/20">
+                                  <div className="flex items-start gap-3">
+                                    <div className="flex-1 space-y-2">
+                                      <input
+                                        type="text"
+                                        value={area.name}
+                                        onChange={(e) => handleUpdateProblemArea(area.id, { name: e.target.value })}
+                                        className="w-full bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-white text-sm font-medium"
+                                        placeholder="Problem area name..."
+                                      />
+                                      <textarea
+                                        value={area.context}
+                                        onChange={(e) => handleUpdateProblemArea(area.id, { context: e.target.value })}
+                                        className="w-full bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-white text-xs resize-y"
+                                        rows={2}
+                                        placeholder="Context: Why is this a problem? What are you trying to solve?"
+                                      />
+                                    </div>
+                                    <select
+                                      value={area.priority}
+                                      onChange={(e) => handleUpdateProblemArea(area.id, { priority: e.target.value as any })}
+                                      className="bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-xs text-white"
+                                    >
+                                      <option value="high">🔴 High</option>
+                                      <option value="medium">🟡 Medium</option>
+                                      <option value="low">🟢 Low</option>
+                                    </select>
+                                    <button
+                                      onClick={() => handleDeleteProblemArea(area.id)}
+                                      className="text-red-400 hover:text-red-300 text-xs"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                  <div className="text-xs text-slate-400">
+                                    {area.prompts.length} solution prompts • Click "+ Add Prompt" in the original section to add more
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Logo & Action Shots Tab */}
+                    {guidedAssetsTab === 'logo' && (
+                      <div className="space-y-4">
+                        {/* Logo Image */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm text-brand-cyan font-medium">Logo Image (the actual logo)</label>
+                            <button
+                              onClick={() => logoFileInputRef.current?.click()}
+                              className="px-3 py-1 bg-brand-cyan/20 hover:bg-brand-cyan/30 text-brand-cyan text-xs rounded transition"
+                            >
+                              + Upload Logo
+                            </button>
+                          </div>
+                          {logoImages.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {logoImages.map((img, idx) => (
+                                <div key={idx} className="relative group">
+                                  <img src={img.dataUrl} alt="Logo" className="h-16 w-auto rounded border border-brand-cyan/30" />
+                                  <button
+                                    onClick={() => removeLogo(idx)}
+                                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                  >
+                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500">No logo uploaded yet</p>
+                          )}
+                        </div>
+
+                        {/* Action Shots */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm text-brand-cyan font-medium">Action Shots (logo on shirts, vehicles, etc.)</label>
+                            <button
+                              onClick={() => actionShotsInputRef.current?.click()}
+                              className="px-3 py-1 bg-brand-cyan/20 hover:bg-brand-cyan/30 text-brand-cyan text-xs rounded transition"
+                            >
+                              + Upload Action Shots
+                            </button>
+                          </div>
+                          {actionShots.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {actionShots.map((img, idx) => (
+                                <div key={idx} className="relative group">
+                                  <img src={img.dataUrl} alt="Action shot" className="h-16 w-auto rounded border border-slate-600" />
+                                  <button
+                                    onClick={() => removeActionShot(idx)}
+                                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                  >
+                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500">No action shots uploaded yet</p>
+                          )}
+                        </div>
+
+                        <p className="text-[10px] text-slate-500">
+                          Tip: These images help AI understand your brand. Use {'{logo}'} in prompts to reference the logo placement.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Reference Images Tab */}
+                    {guidedAssetsTab === 'reference' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-purple-400 font-medium">Reference Images ({settings.reference_images.length})</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              placeholder="Or paste image URL..."
+                              className="px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white placeholder-slate-500 w-48"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const url = (e.target as HTMLInputElement).value.trim();
+                                  if (url) {
+                                    updateSettings({
+                                      reference_images: [...settings.reference_images, { id: `ref-${Date.now()}`, dataUrl: url, name: 'From URL' }]
+                                    });
+                                    (e.target as HTMLInputElement).value = '';
+                                  }
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={() => fileInputRef.current?.click()}
+                              className="px-3 py-1 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 text-xs rounded transition"
+                            >
+                              ↑ Upload
+                            </button>
+                          </div>
+                        </div>
+                        {settings.reference_images.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {settings.reference_images.map((img, idx) => (
+                              <div key={img.id} className="relative group">
+                                <img src={img.dataUrl} alt={img.name} className="h-16 w-auto rounded border border-purple-500/30" />
+                                <button
+                                  onClick={() => {
+                                    const updated = settings.reference_images.filter((_, i) => i !== idx);
+                                    updateSettings({ reference_images: updated });
+                                  }}
+                                  className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                >
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500 text-center py-4">No reference images yet. Upload images that represent your desired style.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Fallback Checkbox - Now below tabs */}
+                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-900/50 rounded mt-3">
                   <input type="checkbox" checked={settings.fallback_to_live} onChange={(e) => updateSettings({ fallback_to_live: e.target.checked })} className="w-4 h-4 rounded border-amber-500 text-amber-500 focus:ring-amber-500 bg-slate-900" />
                   <span className="text-sm text-amber-400">Fallback: Generate if bank is empty or no match</span>
                 </label>
