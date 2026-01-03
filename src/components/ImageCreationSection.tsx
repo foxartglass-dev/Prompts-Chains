@@ -568,7 +568,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     lastFetched: string | null;
   }>({ articles: [], workflow: null, websites: [], lastFetched: null });
   const [fetchingContext, setFetchingContext] = useState(false);
-  const [avatarsCollapsed, setAvatarsCollapsed] = useState(false);
+  const [avatarsCollapsed, setAvatarsCollapsed] = useState(true);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
 
   // Prompt Problem Areas state
