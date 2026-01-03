@@ -572,7 +572,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
 
   // Prompt Problem Areas state
-  const [problemAreasCollapsed, setProblemAreasCollapsed] = useState(false);
+  const [problemAreasCollapsed, setProblemAreasCollapsed] = useState(true);
   const [activeProblemAreaId, setActiveProblemAreaId] = useState<string | null>(null);
   const [editingProblemArea, setEditingProblemArea] = useState<PromptProblemArea | null>(null);
 
