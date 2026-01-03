@@ -127,6 +127,9 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
   const [generating, setGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number; currentTitle: string } | null>(null);
 
+  // Plan creation state
+  const [creatingPlan, setCreatingPlan] = useState(false);
+
   // Load plan and nodes
   const loadPlan = useCallback(async () => {
     if (!workflowId && !websiteId) {
@@ -176,6 +179,12 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
 
   // Create a new plan
   const createPlan = async () => {
+    if (!workflowId && !websiteId) {
+      showNotification('Please select a workflow first to create a site plan', 'error');
+      return;
+    }
+
+    setCreatingPlan(true);
     try {
       const res = await fetch('/api/site-planning/plans', {
         method: 'POST',
@@ -190,10 +199,56 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
       if (data.success) {
         showNotification('Site plan created!', 'success');
         loadPlan();
+      } else {
+        showNotification(data.error || 'Failed to create plan', 'error');
       }
     } catch (error) {
-      showNotification('Failed to create plan', 'error');
+      console.error('Create plan error:', error);
+      showNotification('Failed to create plan - check console for details', 'error');
     }
+    setCreatingPlan(false);
+  };
+
+  // Export site plan as JSON
+  const exportSitePlan = () => {
+    if (!plan || flatNodes.length === 0) {
+      showNotification('No site plan to export', 'error');
+      return;
+    }
+
+    const exportData = {
+      plan: {
+        name: plan.name,
+        description: plan.description,
+        exportedAt: new Date().toISOString(),
+      },
+      nodes: flatNodes.map(node => ({
+        title: node.title,
+        slug: node.slug,
+        page_type: node.page_type,
+        parent_id: node.parent_id,
+        target_keyword: node.target_keyword,
+        meta_title: node.meta_title,
+        meta_description: node.meta_description,
+        content_brief: node.content_brief,
+        is_pillar_page: node.is_pillar_page,
+        is_in_menu: node.is_in_menu,
+        menu_order: node.menu_order,
+        depth: node.depth,
+        sort_order: node.sort_order,
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `site-plan-${plan.name.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showNotification('Site plan exported!', 'success');
   };
 
   // Add a new node
@@ -826,11 +881,25 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
           </svg>
           <h3 className="text-xl font-semibold text-white mb-2">No Site Plan Yet</h3>
           <p className="text-gray-400 mb-6">Create a site structure plan to organize your website pages.</p>
+          {!workflowId && !websiteId && (
+            <p className="text-orange-400 text-sm mb-4">⚠️ Please select a workflow first</p>
+          )}
           <button
             onClick={createPlan}
-            className="px-6 py-3 bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-semibold rounded-lg transition"
+            disabled={creatingPlan || (!workflowId && !websiteId)}
+            className="px-6 py-3 bg-brand-cyan hover:bg-brand-cyan/80 disabled:bg-slate-600 disabled:cursor-not-allowed text-slate-900 disabled:text-slate-400 font-semibold rounded-lg transition flex items-center gap-2 mx-auto"
           >
-            Create Site Plan
+            {creatingPlan ? (
+              <>
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Creating...
+              </>
+            ) : (
+              'Create Site Plan'
+            )}
           </button>
         </div>
       </div>
@@ -1004,6 +1073,19 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
             className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 rounded text-white text-sm transition"
           >
             CSV
+          </button>
+
+          {/* Export Site Plan button */}
+          <button
+            onClick={exportSitePlan}
+            disabled={flatNodes.length === 0}
+            className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:bg-slate-600 disabled:opacity-50 rounded text-white text-sm transition flex items-center gap-1"
+            title="Export site plan as JSON"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export
           </button>
 
           {/* Add root page */}
