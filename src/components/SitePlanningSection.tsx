@@ -1044,7 +1044,20 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
                 Cancel
               </button>
               <button
-                onClick={() => updateNode(editingNode.id, editingNode)}
+                onClick={() => updateNode(editingNode.id, {
+                  // Transform snake_case to camelCase for backend API
+                  title: editingNode.title,
+                  slug: editingNode.slug,
+                  pageType: editingNode.page_type,
+                  status: editingNode.status,
+                  targetKeyword: editingNode.target_keyword,
+                  metaTitle: editingNode.meta_title,
+                  metaDescription: editingNode.meta_description,
+                  contentBrief: editingNode.content_brief,
+                  isPillarPage: editingNode.is_pillar_page,
+                  isInMenu: editingNode.is_in_menu,
+                  assignedArticleId: editingNode.assigned_article_id,
+                })}
                 className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium transition"
               >
                 Save Changes
