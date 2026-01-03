@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import PageDetailModal from './PageDetailModal';
 
 interface SitePlanNode {
   id: number;
@@ -113,6 +114,18 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
   // Push to WordPress state
   const [pushing, setPushing] = useState(false);
   const [pushResult, setPushResult] = useState<any>(null);
+
+  // PageDetailModal state
+  const [viewingNode, setViewingNode] = useState<SitePlanNode | null>(null);
+  const [showPageDetailModal, setShowPageDetailModal] = useState(false);
+
+  // Selection state for batch generation
+  const [selectedNodes, setSelectedNodes] = useState<Set<number>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+
+  // Generation state
+  const [generating, setGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number; currentTitle: string } | null>(null);
 
   // Load plan and nodes
   const loadPlan = useCallback(async () => {
@@ -534,6 +547,85 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
     setPushing(false);
   };
 
+  // Generate content for nodes (single, selected, or all)
+  const generateContent = async (nodesToGenerate: SitePlanNode[]) => {
+    if (!workflowId || nodesToGenerate.length === 0) {
+      showNotification('No nodes selected for generation', 'info');
+      return;
+    }
+
+    setGenerating(true);
+    setGenerationProgress({ current: 0, total: nodesToGenerate.length, currentTitle: '' });
+
+    try {
+      for (let i = 0; i < nodesToGenerate.length; i++) {
+        const node = nodesToGenerate[i];
+        setGenerationProgress({ current: i + 1, total: nodesToGenerate.length, currentTitle: node.title });
+
+        // Call the workflow generation endpoint for this node
+        // This uses the existing workflow/prompt chain system
+        const res = await fetch('/api/workflows/generate-for-node', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workflowId,
+            nodeId: node.id,
+            nodeTitle: node.title,
+            targetKeyword: node.target_keyword || node.title,
+            pageType: node.page_type,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (data.success && data.articleId) {
+          // Link the article to the node
+          await fetch(`/api/site-planning/link-article/${node.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ articleId: data.articleId }),
+          });
+
+          showNotification(`Generated: ${node.title}`, 'success');
+        } else if (data.error) {
+          console.error(`Failed to generate ${node.title}:`, data.error);
+          showNotification(`Failed: ${node.title} - ${data.error}`, 'error');
+        }
+      }
+
+      showNotification(`Generation complete! ${nodesToGenerate.length} pages processed.`, 'success');
+      loadPlan(); // Refresh to show updated status
+    } catch (error: any) {
+      console.error('Generation error:', error);
+      showNotification('Generation failed: ' + error.message, 'error');
+    }
+
+    setGenerating(false);
+    setGenerationProgress(null);
+    setSelectionMode(false);
+    setSelectedNodes(new Set());
+  };
+
+  // Generate all pages
+  const generateAll = () => {
+    generateContent(flatNodes);
+  };
+
+  // Generate selected pages
+  const generateSelected = () => {
+    const selected = flatNodes.filter(n => selectedNodes.has(n.id));
+    generateContent(selected);
+  };
+
+  // Toggle all selection
+  const toggleSelectAll = () => {
+    if (selectedNodes.size === flatNodes.length) {
+      setSelectedNodes(new Set());
+    } else {
+      setSelectedNodes(new Set(flatNodes.map(n => n.id)));
+    }
+  };
+
   // Toggle node expansion
   const toggleExpand = (nodeId: number) => {
     const newExpanded = new Set(expandedNodes);
@@ -558,6 +650,24 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
           className={`flex items-center gap-2 py-2 px-3 hover:bg-slate-800/50 rounded-lg group transition ${depth > 0 ? 'ml-6' : ''}`}
           style={{ marginLeft: `${depth * 24}px` }}
         >
+          {/* Selection checkbox (when in selection mode) */}
+          {selectionMode && (
+            <input
+              type="checkbox"
+              checked={selectedNodes.has(node.id)}
+              onChange={(e) => {
+                const newSelected = new Set(selectedNodes);
+                if (e.target.checked) {
+                  newSelected.add(node.id);
+                } else {
+                  newSelected.delete(node.id);
+                }
+                setSelectedNodes(newSelected);
+              }}
+              className="w-4 h-4 rounded border-slate-500 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900"
+            />
+          )}
+
           {/* Expand/collapse */}
           <button
             onClick={() => hasChildren && toggleExpand(node.id)}
@@ -608,6 +718,28 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
 
           {/* Actions */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+            {/* View Content button */}
+            <button
+              onClick={() => { setViewingNode(node); setShowPageDetailModal(true); }}
+              className="p-1 hover:bg-slate-700 rounded text-cyan-400"
+              title="View Content"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </button>
+            {/* Generate Single button */}
+            <button
+              onClick={() => generateContent([node])}
+              disabled={generating}
+              className="p-1 hover:bg-slate-700 rounded text-purple-400"
+              title="Generate Content"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </button>
             <button
               onClick={() => { setAddingToParent(node.id); }}
               className="p-1 hover:bg-slate-700 rounded text-green-400"
@@ -764,6 +896,63 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
                 Push & Publish
               </button>
             </div>
+          </div>
+
+          {/* Generation Mode Controls */}
+          <div className="flex items-center gap-2 border-r border-slate-600 pr-4 mr-2">
+            {/* Toggle Selection Mode */}
+            <button
+              onClick={() => {
+                setSelectionMode(!selectionMode);
+                if (selectionMode) setSelectedNodes(new Set());
+              }}
+              className={`px-3 py-1.5 rounded text-white text-sm transition flex items-center gap-1 ${
+                selectionMode ? 'bg-blue-600' : 'bg-slate-600 hover:bg-slate-500'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {selectionMode ? 'Cancel' : 'Select'}
+            </button>
+
+            {/* Select All (when in selection mode) */}
+            {selectionMode && (
+              <button
+                onClick={toggleSelectAll}
+                className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-white text-sm transition"
+              >
+                {selectedNodes.size === flatNodes.length ? 'Deselect All' : 'Select All'}
+              </button>
+            )}
+
+            {/* Generate Selected (when in selection mode) */}
+            {selectionMode && selectedNodes.size > 0 && (
+              <button
+                onClick={generateSelected}
+                disabled={generating}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition flex items-center gap-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Generate {selectedNodes.size} Selected
+              </button>
+            )}
+
+            {/* Generate All (when not in selection mode) */}
+            {!selectionMode && (
+              <button
+                onClick={generateAll}
+                disabled={generating || flatNodes.length === 0}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600 rounded text-white text-sm transition flex items-center gap-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Generate All ({flatNodes.length})
+              </button>
+            )}
           </div>
 
           {/* Check sync button */}
@@ -1444,6 +1633,49 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
             </div>
           </div>
         </div>
+      )}
+
+      {/* Generation Progress Overlay */}
+      {generating && generationProgress && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9998]">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 p-8 max-w-md w-full mx-4">
+            <div className="flex items-center justify-center mb-6">
+              <svg className="animate-spin h-12 w-12 text-purple-500" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-white text-center mb-2">Generating Content</h3>
+            <p className="text-gray-400 text-center mb-4">
+              {generationProgress.current} of {generationProgress.total} pages
+            </p>
+            <div className="bg-slate-700 rounded-full h-3 mb-4 overflow-hidden">
+              <div
+                className="bg-purple-500 h-full transition-all duration-300"
+                style={{ width: `${(generationProgress.current / generationProgress.total) * 100}%` }}
+              />
+            </div>
+            {generationProgress.currentTitle && (
+              <p className="text-sm text-gray-500 text-center truncate">
+                Current: {generationProgress.currentTitle}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* PageDetailModal */}
+      {showPageDetailModal && viewingNode && (
+        <PageDetailModal
+          node={viewingNode}
+          onClose={() => { setShowPageDetailModal(false); setViewingNode(null); }}
+          onNodeUpdate={(updatedNode) => {
+            // Update the node in local state
+            setFlatNodes(prev => prev.map(n => n.id === updatedNode.id ? updatedNode : n));
+            loadPlan();
+          }}
+          showNotification={showNotification}
+        />
       )}
     </div>
   );

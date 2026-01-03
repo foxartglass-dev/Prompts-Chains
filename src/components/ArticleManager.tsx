@@ -613,13 +613,11 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
 
     setPushingImages(true);
     try {
-      const res = await fetch('/api/articles/push-images', {
+      // Fixed: Use correct endpoint with articleId in path
+      const res = await fetch(`/api/articles/${selectedArticle.id}/push-images`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          articleId: selectedArticle.id,
-          postId: selectedArticle.wp_post_id,
-          images: images,
           wpUrl,
           wpUser,
           wpPassword
@@ -666,13 +664,12 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
 
     setPushingSingleImage(imageId);
     try {
-      const res = await fetch('/api/articles/push-images', {
+      // Fixed: Use correct endpoint with articleId in path
+      // Note: Backend pushes all images from DB, not just the one specified
+      const res = await fetch(`/api/articles/${selectedArticle.id}/push-images`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          articleId: selectedArticle.id,
-          postId: selectedArticle.wp_post_id,
-          images: [image],
           wpUrl,
           wpUser,
           wpPassword
