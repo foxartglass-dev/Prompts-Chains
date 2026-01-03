@@ -1197,9 +1197,10 @@ const App: React.FC = () => {
                         setResults(prev => [...prev, { item: resultItem, finalOutput, metaTitles, metaDescriptions, aiScore, wordCount, status, timestamp, jsonContent, txtContent, allOutputs: promptOutputs, wpStatus: 'idle' }]);
                         addLog(`[${itemLabel}] Process finished. Status: ${status}`, status === 'PASSED' ? LogStatus.SUCCESS : LogStatus.ERROR, item.id);
 
-                        // Save article to database
+                        // Save article to database and capture the article ID
+                        let savedArticleId: string | null = null;
                         try {
-                            await fetch('/api/articles', {
+                            const articleResponse = await fetch('/api/articles', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
@@ -1217,6 +1218,10 @@ const App: React.FC = () => {
                                     status: status.toLowerCase()
                                 })
                             });
+                            if (articleResponse.ok) {
+                                const articleData = await articleResponse.json();
+                                savedArticleId = articleData.article?.id || null;
+                            }
                             addLog(`[${itemLabel}] Article saved to database.`, LogStatus.INFO, item.id);
                         } catch (saveError) {
                             // Don't fail the whole process if saving fails
@@ -1276,6 +1281,8 @@ const App: React.FC = () => {
                                             useImageBank: includeImages,
                                             generateImages: includeImages && currentProject.state.wpPublishMode === 'wordpress', // Only generate live if WordPress mode
                                             maxImages: includeImages ? 4 : 0,
+                                            // Pass article ID so generated images are saved to the article record
+                                            articleId: savedArticleId,
                                         }),
                                     });
                                     const publishData = await publishResponse.json();
@@ -1288,6 +1295,10 @@ const App: React.FC = () => {
                                             addLog(`[${itemLabel}] Generated ${publishData.totalImages} images`, LogStatus.SUCCESS, item.id);
                                         } else {
                                             addLog(`[${itemLabel}] No images added (Image Bank empty or disabled)`, LogStatus.INFO, item.id);
+                                        }
+                                        // Log that images were saved to article record
+                                        if (savedArticleId && publishData.totalImages > 0) {
+                                            addLog(`[${itemLabel}] Images saved to article record for viewing in Articles page`, LogStatus.INFO, item.id);
                                         }
                                         addLog(`[${itemLabel}] Published to WordPress!`, LogStatus.SUCCESS, item.id);
                                         // Update result with WP link and image decision report
