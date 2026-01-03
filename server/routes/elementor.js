@@ -1106,29 +1106,39 @@ router.post('/publish', async (req, res) => {
     if (articleId && isDatabaseEnabled()) {
       try {
         // Build array of generated images to save with article
+        // Must include all fields expected by ArticleImage interface: id, url, prompt, placement, wpMediaId, createdAt, pushedToWp
         const generatedImagesData = [];
+        const timestamp = new Date().toISOString();
 
         // Hero image
-        if (chunked.intro?.imageData?.url) {
+        if (chunked.intro?.imageData?.url || chunked.intro?.imageData?.wpUrl) {
+          const heroImageData = chunked.intro.imageData;
           generatedImagesData.push({
-            url: chunked.intro.imageData.url,
-            wpMediaId: chunked.intro.imageData.wpMediaId || null,
+            id: `img-${Date.now()}-hero`,
+            url: heroImageData.wpUrl || heroImageData.url, // Prefer WordPress URL (permanent) over base64
+            wpMediaId: heroImageData.wpMediaId || null,
             placement: 'hero',
-            side: chunked.intro.imageData.side || 'right',
-            prompt: chunked.intro.imagePrompt || imageDecisionReport.images.find(i => i.type === 'hero')?.prompt || ''
+            side: heroImageData.side || 'right',
+            prompt: chunked.intro.imagePrompt || imageDecisionReport.images.find(i => i.type === 'hero')?.prompt || '',
+            createdAt: timestamp,
+            pushedToWp: !!heroImageData.wpMediaId // True if already has WordPress media ID
           });
         }
 
         // Inline images
         chunked.chunks.forEach((chunk, idx) => {
-          if (chunk.imageData?.url) {
+          if (chunk.imageData?.url || chunk.imageData?.wpUrl) {
+            const chunkImageData = chunk.imageData;
             generatedImagesData.push({
-              url: chunk.imageData.url,
-              wpMediaId: chunk.imageData.wpMediaId || null,
+              id: `img-${Date.now()}-section-${idx + 1}`,
+              url: chunkImageData.wpUrl || chunkImageData.url, // Prefer WordPress URL over base64
+              wpMediaId: chunkImageData.wpMediaId || null,
               placement: `section-${idx + 1}`,
-              side: chunk.imageData.side || 'left',
+              side: chunkImageData.side || 'left',
               heading: chunk.heading || `Section ${idx + 1}`,
-              prompt: chunk.imagePrompt || ''
+              prompt: chunk.imagePrompt || '',
+              createdAt: timestamp,
+              pushedToWp: !!chunkImageData.wpMediaId
             });
           }
         });
