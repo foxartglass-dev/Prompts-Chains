@@ -1296,8 +1296,20 @@ const App: React.FC = () => {
                                         } else {
                                             addLog(`[${itemLabel}] No images added (Image Bank empty or disabled)`, LogStatus.INFO, item.id);
                                         }
-                                        // Log that images were saved to article record
-                                        if (savedArticleId && publishData.totalImages > 0) {
+                                        // Log actual image save status from server
+                                        if (publishData.imageSaveStatus) {
+                                            const status = publishData.imageSaveStatus;
+                                            if (status.saved && status.verifiedCount > 0) {
+                                                addLog(`[${itemLabel}] ✅ Images saved to database: ${status.verifiedCount} images (article ${status.articleId})`, LogStatus.SUCCESS, item.id);
+                                            } else if (status.saved && status.count > 0 && status.verifiedCount === 0) {
+                                                addLog(`[${itemLabel}] ⚠️ IMAGE SAVE FAILED! Tried ${status.count} images but DB has 0. Error: ${status.error || 'Unknown'}`, LogStatus.ERROR, item.id);
+                                            } else if (status.error) {
+                                                addLog(`[${itemLabel}] ❌ Image save error: ${status.error}`, LogStatus.ERROR, item.id);
+                                            } else if (!savedArticleId) {
+                                                addLog(`[${itemLabel}] ⚠️ No article ID - images not saved to database`, LogStatus.ERROR, item.id);
+                                            }
+                                        } else if (savedArticleId && publishData.totalImages > 0) {
+                                            // Fallback for older API response format
                                             addLog(`[${itemLabel}] Images saved to article record for viewing in Articles page`, LogStatus.INFO, item.id);
                                         }
                                         addLog(`[${itemLabel}] Published to WordPress!`, LogStatus.SUCCESS, item.id);

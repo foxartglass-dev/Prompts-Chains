@@ -1180,6 +1180,9 @@ router.post('/publish', async (req, res) => {
     });
     console.log('============================================\n');
 
+    // Track image save status for response
+    let imageSaveStatus = { saved: false, count: 0, articleId: null, error: null };
+
     if (articleId && isDatabaseEnabled()) {
       try {
         // Build array of generated images to save with article
@@ -1318,6 +1321,7 @@ router.post('/publish', async (req, res) => {
           console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
         }
         console.log('[SAVE] ✅ Successfully saved', generatedImagesData.length, 'images to database');
+        imageSaveStatus = { saved: true, count: generatedImagesData.length, articleId, error: null };
 
         // VERIFICATION: Query the database to confirm images were saved
         try {
@@ -1326,23 +1330,29 @@ router.post('/publish', async (req, res) => {
             const savedImages = verifyResult[0].generated_images;
             const imageCount = Array.isArray(savedImages) ? savedImages.length : 0;
             console.log('[VERIFY] ✅ Database verification: Article', articleId, 'has', imageCount, 'images saved');
+            imageSaveStatus.verifiedCount = imageCount;
             if (imageCount === 0 && generatedImagesData.length > 0) {
               console.error('[VERIFY] ❌ MISMATCH! We tried to save', generatedImagesData.length, 'but database has', imageCount);
               console.error('[VERIFY] generatedImagesData was:', JSON.stringify(generatedImagesData).substring(0, 500));
+              imageSaveStatus.error = 'MISMATCH: Saved ' + generatedImagesData.length + ' but DB has ' + imageCount;
             }
           } else {
             console.error('[VERIFY] ❌ Article', articleId, 'not found in database!');
+            imageSaveStatus.error = 'Article not found in database after save';
           }
         } catch (verifyError) {
           console.error('[VERIFY] Error checking database:', verifyError.message);
+          imageSaveStatus.verifyError = verifyError.message;
         }
       } catch (dbError) {
         console.error('[SAVE] ❌ FAILED to update article:', dbError);
         console.error('[SAVE] Error details:', dbError.message);
+        imageSaveStatus = { saved: false, count: 0, articleId, error: dbError.message };
         // Don't fail the request, page was created successfully
       }
     } else {
       console.log('[SAVE] ⚠️ SKIPPED database save - articleId:', articleId, 'dbEnabled:', isDatabaseEnabled());
+      imageSaveStatus = { saved: false, count: 0, articleId, error: 'SKIPPED: ' + (!articleId ? 'No articleId' : 'Database disabled') };
     }
 
     res.json({
@@ -1354,7 +1364,8 @@ router.post('/publish', async (req, res) => {
       imagesGenerated,
       totalImages: imagesFromBank + imagesGenerated,
       estimatedCost,
-      imageDecisionReport // Include decision report for frontend display
+      imageDecisionReport, // Include decision report for frontend display
+      imageSaveStatus // NEW: Detailed status of image save to database
     });
   } catch (error) {
     console.error('Publish error:', error);
