@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ElementorPreview from './ElementorPreview';
 
 interface ArticleImage {
   id: string;
@@ -322,127 +323,6 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     fetchArticleDetails(article.id);
     setIsEditing(false);
     setActiveTab('preview');
-  };
-
-  // Build visual preview content with images placed inline
-  const buildVisualPreview = () => {
-    if (!selectedArticle || !selectedArticle.final_content) return null;
-
-    const content = selectedArticle.final_content;
-    const images = selectedArticle.images || [];
-
-    // If no images, just return the content
-    if (images.length === 0) {
-      return (
-        <div
-          className="prose prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: content }}
-        />
-      );
-    }
-
-    // Find hero image and inline images
-    const heroImage = images.find(img => img.placement === 'hero' || img.placement?.includes('hero'));
-    const inlineImages = images.filter(img => img.placement !== 'hero' && !img.placement?.includes('hero'));
-
-    // Split content by headings to insert images
-    const sections = content.split(/<h[1-6][^>]*>/gi);
-    const headingMatches = content.match(/<h[1-6][^>]*>.*?<\/h[1-6]>/gi) || [];
-
-    return (
-      <div className="visual-preview">
-        {/* Hero Section - 50/50 layout */}
-        {heroImage && sections[0] && (
-          <div className="flex gap-6 mb-8 pb-8 border-b border-slate-700">
-            {/* Text side */}
-            <div className="flex-1">
-              <div
-                className="prose prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: sections[0] }}
-              />
-            </div>
-            {/* Image side */}
-            <div className="w-[300px] shrink-0">
-              <img
-                src={heroImage.url}
-                alt="Hero"
-                className="w-full rounded-lg shadow-lg"
-              />
-              {heroImage.keywords && heroImage.keywords.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {heroImage.keywords.map((kw, i) => (
-                    <span key={i} className="text-[10px] bg-emerald-900/40 text-emerald-400 px-1.5 py-0.5 rounded">
-                      {kw}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Remaining sections with inline images */}
-        {sections.slice(1).map((section, index) => {
-          const heading = headingMatches[index] || '';
-          const inlineImage = inlineImages[index];
-          // Alternate sides: even = left, odd = right
-          const imageSide = index % 2 === 0 ? 'left' : 'right';
-
-          return (
-            <div key={index} className="mb-6">
-              {/* Heading */}
-              {heading && (
-                <div
-                  className="prose prose-invert max-w-none"
-                  dangerouslySetInnerHTML={{ __html: heading }}
-                />
-              )}
-
-              {/* Content with optional inline image */}
-              <div className="relative">
-                {inlineImage && imageSide === 'left' && (
-                  <img
-                    src={inlineImage.url}
-                    alt={`Section ${index + 1}`}
-                    className="float-left mr-5 mb-4 w-[180px] rounded-lg shadow-md"
-                  />
-                )}
-                {inlineImage && imageSide === 'right' && (
-                  <img
-                    src={inlineImage.url}
-                    alt={`Section ${index + 1}`}
-                    className="float-right ml-5 mb-4 w-[180px] rounded-lg shadow-md"
-                  />
-                )}
-                <div
-                  className="prose prose-invert max-w-none"
-                  dangerouslySetInnerHTML={{ __html: section }}
-                />
-                <div className="clear-both"></div>
-              </div>
-            </div>
-          );
-        })}
-
-        {/* If no hero but still have content and images */}
-        {!heroImage && sections[0] && (
-          <div className="mb-6">
-            {inlineImages[0] && (
-              <img
-                src={inlineImages[0].url}
-                alt="Lead image"
-                className="float-right ml-5 mb-4 w-[180px] rounded-lg shadow-md"
-              />
-            )}
-            <div
-              className="prose prose-invert max-w-none"
-              dangerouslySetInnerHTML={{ __html: sections[0] }}
-            />
-            <div className="clear-both"></div>
-          </div>
-        )}
-      </div>
-    );
   };
 
   const closeModal = () => {
@@ -807,16 +687,16 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                 </div>
               )}
 
-              {/* Preview Tab - Visual article preview with images */}
+              {/* Preview Tab - Elementor-accurate visual preview */}
               {activeTab === 'preview' && (
-                <div className="p-6">
-                  <div className="bg-slate-800/50 rounded-lg p-8 max-w-4xl mx-auto">
-                    {/* Page Title */}
-                    <h1 className="text-3xl font-bold text-white mb-6">
-                      {selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0] || selectedArticle.keyword}
-                    </h1>
-                    {/* Visual Preview with Images */}
-                    {buildVisualPreview()}
+                <div className="p-6 bg-slate-700/30">
+                  <div className="max-w-5xl mx-auto shadow-2xl">
+                    <ElementorPreview
+                      content={selectedArticle.final_content || ''}
+                      title={selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0] || selectedArticle.keyword}
+                      images={selectedArticle.images}
+                      heroImageSide="right"
+                    />
                   </div>
                 </div>
               )}
