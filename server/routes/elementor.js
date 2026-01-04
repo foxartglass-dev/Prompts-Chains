@@ -1283,7 +1283,7 @@ router.post('/publish', async (req, res) => {
 
         if (isManualPush) {
           // Manual push: increment count and append date
-          await sql`
+          const updateResult = await sql`
             UPDATE articles
             SET wp_post_id = ${pageResult.id},
                 wp_post_url = ${pageResult.link},
@@ -1295,11 +1295,13 @@ router.post('/publish', async (req, res) => {
                 image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
+            RETURNING id, (SELECT array_length(generated_images, 1) FROM articles WHERE id = ${articleId}) as saved_count
           `;
           console.log('[SAVE] ✅ Manual push DB update completed for article', articleId);
+          console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
         } else {
           // Auto push: set auto_at timestamp (only if not already set)
-          await sql`
+          const updateResult = await sql`
             UPDATE articles
             SET wp_post_id = ${pageResult.id},
                 wp_post_url = ${pageResult.link},
@@ -1310,10 +1312,30 @@ router.post('/publish', async (req, res) => {
                 image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
+            RETURNING id, (SELECT array_length(generated_images, 1) FROM articles WHERE id = ${articleId}) as saved_count
           `;
           console.log('[SAVE] ✅ Auto push DB update completed for article', articleId);
+          console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
         }
         console.log('[SAVE] ✅ Successfully saved', generatedImagesData.length, 'images to database');
+
+        // VERIFICATION: Query the database to confirm images were saved
+        try {
+          const verifyResult = await sql`SELECT id, generated_images FROM articles WHERE id = ${articleId}`;
+          if (verifyResult.length > 0) {
+            const savedImages = verifyResult[0].generated_images;
+            const imageCount = Array.isArray(savedImages) ? savedImages.length : 0;
+            console.log('[VERIFY] ✅ Database verification: Article', articleId, 'has', imageCount, 'images saved');
+            if (imageCount === 0 && generatedImagesData.length > 0) {
+              console.error('[VERIFY] ❌ MISMATCH! We tried to save', generatedImagesData.length, 'but database has', imageCount);
+              console.error('[VERIFY] generatedImagesData was:', JSON.stringify(generatedImagesData).substring(0, 500));
+            }
+          } else {
+            console.error('[VERIFY] ❌ Article', articleId, 'not found in database!');
+          }
+        } catch (verifyError) {
+          console.error('[VERIFY] Error checking database:', verifyError.message);
+        }
       } catch (dbError) {
         console.error('[SAVE] ❌ FAILED to update article:', dbError);
         console.error('[SAVE] Error details:', dbError.message);
