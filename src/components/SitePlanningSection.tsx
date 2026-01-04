@@ -46,6 +46,13 @@ interface Props {
   workflowId?: number;
   websiteId?: number;
   showNotification: (message: string, type: 'success' | 'info' | 'error') => void;
+  onOpenArticles?: () => void;
+  imagePublishMode?: 'off' | 'draft' | 'wordpress';
+  articlePublishMode?: 'draft' | 'wordpress';
+  metaPublishMode?: 'draft' | 'wordpress';
+  onImagePublishModeChange?: (mode: 'off' | 'draft' | 'wordpress') => void;
+  onArticlePublishModeChange?: (mode: 'draft' | 'wordpress') => void;
+  onMetaPublishModeChange?: (mode: 'draft' | 'wordpress') => void;
 }
 
 const PAGE_TYPES = [
@@ -65,7 +72,18 @@ const STATUS_COLORS: Record<string, string> = {
   needs_update: 'bg-orange-500',
 };
 
-const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotification }) => {
+const SitePlanningSection: React.FC<Props> = ({
+  workflowId,
+  websiteId,
+  showNotification,
+  onOpenArticles,
+  imagePublishMode = 'draft',
+  articlePublishMode = 'draft',
+  metaPublishMode = 'draft',
+  onImagePublishModeChange,
+  onArticlePublishModeChange,
+  onMetaPublishModeChange
+}) => {
   const [plan, setPlan] = useState<SitePlan | null>(null);
   const [nodes, setNodes] = useState<SitePlanNode[]>([]);
   const [flatNodes, setFlatNodes] = useState<SitePlanNode[]>([]);
@@ -1095,6 +1113,114 @@ const SitePlanningSection: React.FC<Props> = ({ workflowId, websiteId, showNotif
           >
             + Add Page
           </button>
+        </div>
+      </div>
+
+      {/* Articles & Publish Mode Control Bar */}
+      <div className="flex items-center justify-between mb-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+        {/* Left: Articles Button */}
+        <button
+          onClick={onOpenArticles}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 border-2 border-brand-gold rounded-lg text-brand-gold font-semibold hover:shadow-glow-gold transition"
+        >
+          <svg className="w-5 h-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+          </svg>
+          Articles
+        </button>
+
+        {/* Right: Publish Mode Toggles */}
+        <div className="flex items-center gap-4">
+          {/* Image Mode */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Image:</span>
+            <div className="flex rounded-lg overflow-hidden border border-slate-600">
+              <button
+                onClick={() => onImagePublishModeChange?.('off')}
+                className={`px-2.5 py-1 text-xs font-medium transition ${
+                  imagePublishMode === 'off'
+                    ? 'bg-slate-500 text-white'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                Off
+              </button>
+              <button
+                onClick={() => onImagePublishModeChange?.('draft')}
+                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
+                  imagePublishMode === 'draft'
+                    ? 'bg-brand-gold text-slate-900'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                Draft
+              </button>
+              <button
+                onClick={() => onImagePublishModeChange?.('wordpress')}
+                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
+                  imagePublishMode === 'wordpress'
+                    ? 'bg-brand-gold text-slate-900'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                WPress
+              </button>
+            </div>
+          </div>
+
+          {/* Article Mode */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Article:</span>
+            <div className="flex rounded-lg overflow-hidden border border-slate-600">
+              <button
+                onClick={() => onArticlePublishModeChange?.('draft')}
+                className={`px-2.5 py-1 text-xs font-medium transition ${
+                  articlePublishMode === 'draft'
+                    ? 'bg-brand-gold text-slate-900'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                Draft
+              </button>
+              <button
+                onClick={() => onArticlePublishModeChange?.('wordpress')}
+                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
+                  articlePublishMode === 'wordpress'
+                    ? 'bg-brand-gold text-slate-900'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                WPress
+              </button>
+            </div>
+          </div>
+
+          {/* Meta Mode */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Meta:</span>
+            <div className="flex rounded-lg overflow-hidden border border-slate-600">
+              <button
+                onClick={() => onMetaPublishModeChange?.('draft')}
+                className={`px-2.5 py-1 text-xs font-medium transition ${
+                  metaPublishMode === 'draft'
+                    ? 'bg-brand-gold text-slate-900'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                Draft
+              </button>
+              <button
+                onClick={() => onMetaPublishModeChange?.('wordpress')}
+                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
+                  metaPublishMode === 'wordpress'
+                    ? 'bg-brand-gold text-slate-900'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                WPress
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

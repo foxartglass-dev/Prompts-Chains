@@ -3148,6 +3148,13 @@ const App: React.FC = () => {
                             workflowId={currentWorkflowId}
                             websiteId={currentProject?.website_id || undefined}
                             showNotification={showNotification}
+                            onOpenArticles={() => setIsArticlesPageOpen(true)}
+                            imagePublishMode={currentProject?.state?.imagePublishMode || 'draft'}
+                            articlePublishMode={currentProject?.state?.articlePublishMode || 'draft'}
+                            metaPublishMode={currentProject?.state?.metaPublishMode || 'draft'}
+                            onImagePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, imagePublishMode: mode }))}
+                            onArticlePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, articlePublishMode: mode }))}
+                            onMetaPublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, metaPublishMode: mode }))}
                         />
                     )}
 
