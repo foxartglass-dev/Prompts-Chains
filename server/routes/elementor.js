@@ -1167,6 +1167,19 @@ router.post('/publish', async (req, res) => {
     });
 
     // Step 8: Update article in database if articleId provided
+    console.log('\n========== IMAGE SAVE DIAGNOSTIC ==========');
+    console.log('[SAVE] articleId:', articleId);
+    console.log('[SAVE] isDatabaseEnabled():', isDatabaseEnabled());
+    console.log('[SAVE] chunked.intro exists:', !!chunked.intro);
+    console.log('[SAVE] chunked.intro.imageData:', JSON.stringify(chunked.intro?.imageData, null, 2)?.substring(0, 500));
+    console.log('[SAVE] chunked.chunks count:', chunked.chunks?.length);
+    chunked.chunks?.forEach((c, i) => {
+      if (c.imageData) {
+        console.log(`[SAVE] chunk[${i}] imageData: url=${c.imageData.url ? 'YES' : 'NO'}, wpUrl=${c.imageData.wpUrl ? 'YES' : 'NO'}`);
+      }
+    });
+    console.log('============================================\n');
+
     if (articleId && isDatabaseEnabled()) {
       try {
         // Build array of generated images to save with article
@@ -1255,6 +1268,19 @@ router.post('/publish', async (req, res) => {
         // Prepare imageDecisionReport for storage (only if images were generated)
         const reportToSave = imageDecisionReport.mode !== 'none' ? imageDecisionReport : null;
 
+        // DIAGNOSTIC: What are we about to save?
+        console.log('\n[SAVE] ========== ABOUT TO SAVE ==========');
+        console.log('[SAVE] generatedImagesData.length:', generatedImagesData.length);
+        console.log('[SAVE] isManualPush:', isManualPush);
+        if (generatedImagesData.length > 0) {
+          generatedImagesData.forEach((img, i) => {
+            console.log(`[SAVE] Image ${i}: id=${img.id}, placement=${img.placement}, hasUrl=${!!img.url}, urlStart=${img.url?.substring(0, 30)}`);
+          });
+        } else {
+          console.log('[SAVE] ⚠️ NO IMAGES IN ARRAY - This is why nothing is saved!');
+        }
+        console.log('[SAVE] ========================================\n');
+
         if (isManualPush) {
           // Manual push: increment count and append date
           await sql`
@@ -1270,6 +1296,7 @@ router.post('/publish', async (req, res) => {
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
           `;
+          console.log('[SAVE] ✅ Manual push DB update completed for article', articleId);
         } else {
           // Auto push: set auto_at timestamp (only if not already set)
           await sql`
@@ -1284,11 +1311,16 @@ router.post('/publish', async (req, res) => {
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
           `;
+          console.log('[SAVE] ✅ Auto push DB update completed for article', articleId);
         }
+        console.log('[SAVE] ✅ Successfully saved', generatedImagesData.length, 'images to database');
       } catch (dbError) {
-        console.error('Failed to update article:', dbError);
+        console.error('[SAVE] ❌ FAILED to update article:', dbError);
+        console.error('[SAVE] Error details:', dbError.message);
         // Don't fail the request, page was created successfully
       }
+    } else {
+      console.log('[SAVE] ⚠️ SKIPPED database save - articleId:', articleId, 'dbEnabled:', isDatabaseEnabled());
     }
 
     res.json({

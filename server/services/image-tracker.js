@@ -26,38 +26,38 @@ const COLORS = {
   bgCyan: '\x1b[46m',
 };
 
-function banner(text, color = COLORS.cyan) {
+export function banner(text, color = COLORS.cyan) {
   const line = '═'.repeat(70);
   console.log(`\n${color}${COLORS.bright}╔${line}╗${COLORS.reset}`);
   console.log(`${color}${COLORS.bright}║  🔍 ${text.padEnd(65)} ║${COLORS.reset}`);
   console.log(`${color}${COLORS.bright}╚${line}╝${COLORS.reset}\n`);
 }
 
-function section(title, color = COLORS.yellow) {
+export function section(title, color = COLORS.yellow) {
   console.log(`\n${color}${COLORS.bright}┌─── ${title} ${'─'.repeat(60 - title.length)}┐${COLORS.reset}`);
 }
 
-function endSection(color = COLORS.yellow) {
+export function endSection(color = COLORS.yellow) {
   console.log(`${color}${COLORS.bright}└${'─'.repeat(69)}┘${COLORS.reset}\n`);
 }
 
-function log(msg, color = COLORS.white) {
+export function log(msg, color = COLORS.white) {
   console.log(`${color}│ ${msg}${COLORS.reset}`);
 }
 
-function success(msg) {
+export function success(msg) {
   console.log(`${COLORS.green}${COLORS.bright}│ ✅ ${msg}${COLORS.reset}`);
 }
 
-function warning(msg) {
+export function warning(msg) {
   console.log(`${COLORS.yellow}${COLORS.bright}│ ⚠️  ${msg}${COLORS.reset}`);
 }
 
-function error(msg) {
+export function error(msg) {
   console.log(`${COLORS.red}${COLORS.bright}│ ❌ ${msg}${COLORS.reset}`);
 }
 
-function highlight(msg) {
+export function highlight(msg) {
   console.log(`${COLORS.cyan}${COLORS.bright}│ 🎯 ${msg}${COLORS.reset}`);
 }
 
@@ -367,24 +367,7 @@ export function megaImageStatus(articleId, articleData) {
   console.log(`${COLORS.reset}\n`);
 }
 
-// Named exports for individual functions
-export {
-  trackImageGenerated,
-  trackImagesSaved,
-  trackImagesLoaded,
-  trackImagesAttachedToChunks,
-  trackApiResponse,
-  trackDbQuery,
-  megaImageStatus,
-  banner,
-  section,
-  endSection,
-  log,
-  success,
-  warning,
-  error,
-  highlight
-};
+// Note: Functions are already exported with 'export function' syntax above
 
 // Default export for convenience
 export default {

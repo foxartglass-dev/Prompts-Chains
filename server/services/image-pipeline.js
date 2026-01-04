@@ -609,6 +609,22 @@ export async function processArticleWithImages(content, options = {}) {
       progress('uploaded', { message: 'Images uploaded to WordPress' });
     }
 
+    // DIAGNOSTIC: What are we returning from pipeline?
+    console.log('\n[PIPELINE] ========== RETURNING FROM PIPELINE ==========');
+    console.log('[PIPELINE] imageCount:', imageCount);
+    console.log('[PIPELINE] intro.imageData exists:', !!chunksWithImages.intro?.imageData);
+    if (chunksWithImages.intro?.imageData) {
+      console.log('[PIPELINE] intro.imageData.url:', chunksWithImages.intro.imageData.url ? 'YES' : 'NO');
+      console.log('[PIPELINE] intro.imageData.wpUrl:', chunksWithImages.intro.imageData.wpUrl ? 'YES' : 'NO');
+      console.log('[PIPELINE] intro.imageData.wpMediaId:', chunksWithImages.intro.imageData.wpMediaId || 'NONE');
+    }
+    chunksWithImages.chunks?.forEach((c, i) => {
+      if (c.imageData) {
+        console.log(`[PIPELINE] chunk[${i}].imageData: url=${c.imageData.url ? 'YES' : 'NO'}, wpUrl=${c.imageData.wpUrl ? 'YES' : 'NO'}`);
+      }
+    });
+    console.log('[PIPELINE] ===================================================\n');
+
     return {
       chunks: chunksWithImages,
       title: pageTitle,
