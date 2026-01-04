@@ -8,52 +8,121 @@
 import { sql, isDatabaseEnabled } from '../db/index.js';
 
 /**
- * Get all images for a workflow
+ * Get images for a workflow with pagination
+ * NOTE: Use excludeUrl=true for listings to avoid 64MB response limit
  */
 export async function getImageBank(workflowId, options = {}) {
   if (!isDatabaseEnabled()) return [];
 
-  const { used, archived, avatarTag, limit = 500 } = options;
+  const {
+    used,
+    archived,
+    avatarTag,
+    limit = 50,      // Reduced from 500 to prevent payload bloat
+    offset = 0,      // Pagination offset
+    excludeUrl = false  // Don't return URL in listing (load separately)
+  } = options;
+
+  // Select columns - exclude URL for lightweight listings
+  const columns = excludeUrl
+    ? sql`id, workflow_id, external_id, title, category, variation_name, variation_id,
+          avatar_tag, orientation, prompt, model, used, used_on, used_at, archived,
+          tags, metadata, created_at, updated_at`
+    : sql`*`;
 
   // Build query based on filters
   if (used !== undefined && archived !== undefined) {
     return await sql`
-      SELECT * FROM image_bank_items
+      SELECT ${columns} FROM image_bank_items
       WHERE workflow_id = ${workflowId}
         AND used = ${used}
         AND archived = ${archived}
       ORDER BY created_at DESC
-      LIMIT ${limit}
+      LIMIT ${limit} OFFSET ${offset}
     `;
   } else if (used !== undefined) {
     return await sql`
-      SELECT * FROM image_bank_items
+      SELECT ${columns} FROM image_bank_items
       WHERE workflow_id = ${workflowId} AND used = ${used}
       ORDER BY created_at DESC
-      LIMIT ${limit}
+      LIMIT ${limit} OFFSET ${offset}
     `;
   } else if (archived !== undefined) {
     return await sql`
-      SELECT * FROM image_bank_items
+      SELECT ${columns} FROM image_bank_items
       WHERE workflow_id = ${workflowId} AND archived = ${archived}
       ORDER BY created_at DESC
-      LIMIT ${limit}
+      LIMIT ${limit} OFFSET ${offset}
     `;
   } else if (avatarTag) {
     return await sql`
-      SELECT * FROM image_bank_items
+      SELECT ${columns} FROM image_bank_items
       WHERE workflow_id = ${workflowId} AND avatar_tag = ${avatarTag}
       ORDER BY created_at DESC
-      LIMIT ${limit}
+      LIMIT ${limit} OFFSET ${offset}
     `;
   }
 
   return await sql`
-    SELECT * FROM image_bank_items
+    SELECT ${columns} FROM image_bank_items
     WHERE workflow_id = ${workflowId}
     ORDER BY created_at DESC
-    LIMIT ${limit}
+    LIMIT ${limit} OFFSET ${offset}
   `;
+}
+
+/**
+ * Get a single image by ID (including URL)
+ */
+export async function getImageById(workflowId, imageId) {
+  if (!isDatabaseEnabled()) return null;
+
+  const isNumericId = !isNaN(parseInt(imageId));
+
+  if (isNumericId) {
+    const result = await sql`
+      SELECT * FROM image_bank_items
+      WHERE id = ${parseInt(imageId)} AND workflow_id = ${workflowId}
+    `;
+    return result[0] || null;
+  } else {
+    const result = await sql`
+      SELECT * FROM image_bank_items
+      WHERE external_id = ${imageId} AND workflow_id = ${workflowId}
+    `;
+    return result[0] || null;
+  }
+}
+
+/**
+ * Get multiple images by IDs (for batch loading)
+ */
+export async function getImagesByIds(workflowId, imageIds) {
+  if (!isDatabaseEnabled() || !imageIds?.length) return [];
+
+  // Separate numeric and string IDs
+  const numericIds = imageIds.filter(id => !isNaN(parseInt(id))).map(id => parseInt(id));
+  const stringIds = imageIds.filter(id => isNaN(parseInt(id)));
+
+  const results = [];
+
+  if (numericIds.length > 0) {
+    const numericResults = await sql`
+      SELECT * FROM image_bank_items
+      WHERE workflow_id = ${workflowId} AND id = ANY(${numericIds})
+    `;
+    results.push(...numericResults);
+  }
+
+  if (stringIds.length > 0) {
+    const stringResults = await sql`
+      SELECT * FROM image_bank_items
+      WHERE workflow_id = ${workflowId} AND external_id = ANY(${stringIds})
+    `;
+    results.push(...stringResults);
+  }
+
+  return results;
 }
 
 /**
