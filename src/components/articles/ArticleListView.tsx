@@ -84,10 +84,15 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   // Meta selection
   const [selectedTitleIndex, setSelectedTitleIndex] = useState<number | null>(null);
   const [selectedDescIndex, setSelectedDescIndex] = useState<number | null>(null);
+  const [metaSaved, setMetaSaved] = useState(false);
+  const [savingMeta, setSavingMeta] = useState(false);
 
   // Image management
   const [showImages, setShowImages] = useState(false);
   const [showImageReport, setShowImageReport] = useState(false);
+
+  // Tab state for article modal
+  const [activeTab, setActiveTab] = useState<'content' | 'preview' | 'images' | 'meta'>('preview');
   const [expandedPrompts, setExpandedPrompts] = useState<Set<number>>(new Set());
   const [pushingImages, setPushingImages] = useState(false);
   const [pushingMeta, setPushingMeta] = useState(false);
@@ -146,9 +151,52 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         } else if (article.meta_descriptions?.length > 0) {
           setSelectedDescIndex(0);
         }
+
+        // Reset meta saved state
+        setMetaSaved(false);
       }
     } catch (err) {
       setError('Failed to load article details');
+    }
+  };
+
+  // Save meta selections to database
+  const saveMetaSelections = async () => {
+    if (!selectedArticle) return;
+
+    const metaTitle = selectedTitleIndex !== null && selectedArticle.meta_titles
+      ? selectedArticle.meta_titles[selectedTitleIndex]
+      : null;
+    const metaDesc = selectedDescIndex !== null && selectedArticle.meta_descriptions
+      ? selectedArticle.meta_descriptions[selectedDescIndex]
+      : null;
+
+    if (!metaTitle && !metaDesc) {
+      setError('Please select a meta title and/or description first');
+      return;
+    }
+
+    setSavingMeta(true);
+    try {
+      const res = await fetch(`/api/articles/${selectedArticle.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedMetaTitle: metaTitle,
+          selectedMetaDescription: metaDesc
+        })
+      });
+
+      if (res.ok) {
+        setMetaSaved(true);
+        fetchArticles(); // Refresh list
+      } else {
+        setError('Failed to save meta selections');
+      }
+    } catch (err) {
+      setError('Failed to save meta selections');
+    } finally {
+      setSavingMeta(false);
     }
   };
 
@@ -273,6 +321,128 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const openArticle = (article: Article) => {
     fetchArticleDetails(article.id);
     setIsEditing(false);
+    setActiveTab('preview');
+  };
+
+  // Build visual preview content with images placed inline
+  const buildVisualPreview = () => {
+    if (!selectedArticle || !selectedArticle.final_content) return null;
+
+    const content = selectedArticle.final_content;
+    const images = selectedArticle.images || [];
+
+    // If no images, just return the content
+    if (images.length === 0) {
+      return (
+        <div
+          className="prose prose-invert max-w-none"
+          dangerouslySetInnerHTML={{ __html: content }}
+        />
+      );
+    }
+
+    // Find hero image and inline images
+    const heroImage = images.find(img => img.placement === 'hero' || img.placement?.includes('hero'));
+    const inlineImages = images.filter(img => img.placement !== 'hero' && !img.placement?.includes('hero'));
+
+    // Split content by headings to insert images
+    const sections = content.split(/<h[1-6][^>]*>/gi);
+    const headingMatches = content.match(/<h[1-6][^>]*>.*?<\/h[1-6]>/gi) || [];
+
+    return (
+      <div className="visual-preview">
+        {/* Hero Section - 50/50 layout */}
+        {heroImage && sections[0] && (
+          <div className="flex gap-6 mb-8 pb-8 border-b border-slate-700">
+            {/* Text side */}
+            <div className="flex-1">
+              <div
+                className="prose prose-invert max-w-none"
+                dangerouslySetInnerHTML={{ __html: sections[0] }}
+              />
+            </div>
+            {/* Image side */}
+            <div className="w-[300px] shrink-0">
+              <img
+                src={heroImage.url}
+                alt="Hero"
+                className="w-full rounded-lg shadow-lg"
+              />
+              {heroImage.keywords && heroImage.keywords.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {heroImage.keywords.map((kw, i) => (
+                    <span key={i} className="text-[10px] bg-emerald-900/40 text-emerald-400 px-1.5 py-0.5 rounded">
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Remaining sections with inline images */}
+        {sections.slice(1).map((section, index) => {
+          const heading = headingMatches[index] || '';
+          const inlineImage = inlineImages[index];
+          // Alternate sides: even = left, odd = right
+          const imageSide = index % 2 === 0 ? 'left' : 'right';
+
+          return (
+            <div key={index} className="mb-6">
+              {/* Heading */}
+              {heading && (
+                <div
+                  className="prose prose-invert max-w-none"
+                  dangerouslySetInnerHTML={{ __html: heading }}
+                />
+              )}
+
+              {/* Content with optional inline image */}
+              <div className="relative">
+                {inlineImage && imageSide === 'left' && (
+                  <img
+                    src={inlineImage.url}
+                    alt={`Section ${index + 1}`}
+                    className="float-left mr-5 mb-4 w-[180px] rounded-lg shadow-md"
+                  />
+                )}
+                {inlineImage && imageSide === 'right' && (
+                  <img
+                    src={inlineImage.url}
+                    alt={`Section ${index + 1}`}
+                    className="float-right ml-5 mb-4 w-[180px] rounded-lg shadow-md"
+                  />
+                )}
+                <div
+                  className="prose prose-invert max-w-none"
+                  dangerouslySetInnerHTML={{ __html: section }}
+                />
+                <div className="clear-both"></div>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* If no hero but still have content and images */}
+        {!heroImage && sections[0] && (
+          <div className="mb-6">
+            {inlineImages[0] && (
+              <img
+                src={inlineImages[0].url}
+                alt="Lead image"
+                className="float-right ml-5 mb-4 w-[180px] rounded-lg shadow-md"
+              />
+            )}
+            <div
+              className="prose prose-invert max-w-none"
+              dangerouslySetInnerHTML={{ __html: sections[0] }}
+            />
+            <div className="clear-both"></div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const closeModal = () => {
@@ -543,127 +713,80 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         {filteredArticles.length} article{filteredArticles.length !== 1 ? 's' : ''}
       </div>
 
-      {/* Article Detail Modal */}
+      {/* Article Detail Modal - Full Width Tabbed Interface */}
       {selectedArticle && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-slate-900 rounded-lg w-[90vw] max-w-5xl max-h-[90vh] flex flex-col border border-brand-cyan/30">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-slate-900 rounded-lg w-[95vw] h-[90vh] flex flex-col border border-brand-cyan/30 overflow-hidden">
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
-              <div>
-                <div className="flex items-center gap-3">
-                  <h3 className="text-lg font-semibold text-white">{selectedArticle.keyword}</h3>
-                  {/* WordPress Page Link */}
-                  {selectedArticle.wp_post_url && (
-                    <a
-                      href={selectedArticle.wp_post_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-white text-xs font-medium flex items-center gap-1 transition"
-                      title="View on WordPress"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                      View Page
-                    </a>
-                  )}
-                </div>
-                {/* Page Title - show selected or first meta title */}
-                {(selectedArticle.selected_meta_title || (selectedArticle.meta_titles && selectedArticle.meta_titles.length > 0)) && (
-                  <p className="text-sm text-brand-gold mt-0.5 truncate max-w-xl" title={selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0]}>
-                    {selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0]}
-                  </p>
-                )}
-                <div className="flex items-center gap-3 mt-1 text-sm">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(selectedArticle.status)}`}>
-                    {selectedArticle.status}
-                  </span>
-                  {selectedArticle.tag && (
-                    <span className="px-2 py-0.5 bg-brand-gold/20 text-brand-gold rounded text-xs font-medium">
-                      {selectedArticle.tag}
+            <div className="flex items-center justify-between px-6 py-3 border-b border-brand-cyan/30 bg-slate-800/50 shrink-0">
+              <div className="flex items-center gap-4">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-xl font-bold text-brand-gold">{selectedArticle.keyword}</h3>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(selectedArticle.status)}`}>
+                      {selectedArticle.status}
                     </span>
-                  )}
-                  <span className="text-gray-500">{selectedArticle.word_count || 0} words</span>
-                  <span className="text-gray-500">AI: {selectedArticle.ai_score ?? '-'}%</span>
+                    {selectedArticle.tag && (
+                      <span className="px-2 py-0.5 bg-brand-gold/20 text-brand-gold rounded text-xs font-medium">
+                        {selectedArticle.tag}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-sm text-gray-400">
+                    <span>{selectedArticle.word_count || 0} words</span>
+                    <span>AI: {selectedArticle.ai_score ?? '-'}%</span>
+                    {selectedArticle.images && selectedArticle.images.length > 0 && (
+                      <span className="text-amber-400">{selectedArticle.images.length} images</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Tab Navigation */}
+                <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1 ml-6">
+                  {[
+                    { id: 'preview', label: 'Preview', icon: '👁️' },
+                    { id: 'content', label: 'Edit', icon: '✏️' },
+                    { id: 'images', label: 'Images', icon: '🖼️' },
+                    { id: 'meta', label: 'Meta SEO', icon: '🔍' }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                        activeTab === tab.id
+                          ? 'bg-brand-cyan text-slate-900'
+                          : 'text-gray-400 hover:text-white hover:bg-slate-700'
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
+
               <div className="flex items-center gap-2">
-                {!isEditing ? (
-                  <>
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm transition"
-                    >
-                      Edit
-                    </button>
-                    {onEditVisual && selectedArticle.wp_post_id && (
-                      <button
-                        onClick={() => {
-                          closeModal();
-                          onEditVisual(selectedArticle);
-                        }}
-                        className="px-3 py-1.5 bg-brand-gold hover:bg-brand-gold/80 rounded text-slate-900 font-medium text-sm transition"
-                      >
-                        Visual Edit
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={saveArticle}
-                      disabled={saving}
-                      className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm transition disabled:opacity-50"
-                    >
-                      {saving ? 'Saving...' : 'Save'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsEditing(false);
-                        setEditContent(selectedArticle.final_content || '');
-                      }}
-                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm transition"
-                    >
-                      Cancel
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={publishToWordPress}
-                  disabled={publishing}
-                  className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
-                >
-                  {publishing ? 'Publishing...' : 'Publish to WP'}
-                </button>
-                {selectedArticle.wp_post_id && (
-                  <button
-                    onClick={pushMetaToWordPress}
-                    disabled={pushingMeta}
-                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
-                    title="Push selected meta title and description to WordPress"
-                  >
-                    {pushingMeta ? 'Pushing...' : 'Push Meta'}
-                  </button>
-                )}
-                {selectedArticle.images && selectedArticle.images.length > 0 && (
-                  <button
-                    onClick={pushImagesToWordPress}
-                    disabled={pushingImages}
-                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
-                    title="Push all images to WordPress media library"
-                  >
-                    {pushingImages ? 'Pushing...' : `Push ${selectedArticle.images.length} Images`}
-                  </button>
-                )}
+                {/* WordPress Link */}
                 {selectedArticle.wp_post_url && (
                   <a
                     href={selectedArticle.wp_post_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 rounded text-blue-400 text-sm transition"
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded text-white text-sm font-medium flex items-center gap-2 transition"
                   >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
                     View on WP
                   </a>
+                )}
+                {!selectedArticle.wp_post_id && (
+                  <button
+                    onClick={publishToWordPress}
+                    disabled={publishing}
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
+                  >
+                    {publishing ? 'Publishing...' : 'Publish to WP'}
+                  </button>
                 )}
                 <button
                   onClick={closeModal}
@@ -674,383 +797,436 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
               </div>
             </div>
 
-            {/* Modal Content */}
-            <div className="flex-1 overflow-auto p-4">
-              {/* Error in modal */}
+            {/* Modal Content - Tabbed Panels */}
+            <div className="flex-1 overflow-auto">
+              {/* Error banner */}
               {error && (
-                <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400">
-                  {error}
+                <div className="mx-6 mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 flex items-center justify-between">
+                  <span>{error}</span>
+                  <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300">&times;</button>
                 </div>
               )}
 
-              {/* Content */}
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-gray-400 mb-2">Content</h4>
-                {isEditing ? (
-                  <textarea
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                    className="w-full h-64 bg-slate-800 border border-brand-cyan/30 rounded-lg p-4 text-white font-mono text-sm resize-none focus:border-brand-cyan focus:outline-none"
-                    placeholder="Article content..."
-                  />
-                ) : (
-                  <div className="bg-slate-800 rounded-lg p-4 max-h-64 overflow-auto">
-                    <div
-                      className="prose prose-invert max-w-none text-sm"
-                      dangerouslySetInnerHTML={{ __html: selectedArticle.final_content || '<em class="text-gray-500">No content</em>' }}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Meta Titles & Descriptions */}
-              <div className="grid grid-cols-2 gap-6">
-                {/* Meta Titles */}
-                {selectedArticle.meta_titles && selectedArticle.meta_titles.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium text-brand-gold mb-2">Meta Titles</h4>
-                    <div className="space-y-2">
-                      {selectedArticle.meta_titles.map((title, i) => (
-                        <label
-                          key={i}
-                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition ${
-                            selectedTitleIndex === i
-                              ? 'bg-brand-gold/20 border-brand-gold'
-                              : 'bg-slate-800 border-transparent hover:border-brand-gold/50'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="metaTitle"
-                            checked={selectedTitleIndex === i}
-                            onChange={() => setSelectedTitleIndex(i)}
-                            className="mt-1 accent-yellow-500"
-                          />
-                          <span className="text-sm text-white">{title}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Meta Descriptions */}
-                {selectedArticle.meta_descriptions && selectedArticle.meta_descriptions.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium text-brand-cyan mb-2">Meta Descriptions</h4>
-                    <div className="space-y-2">
-                      {selectedArticle.meta_descriptions.map((desc, i) => (
-                        <label
-                          key={i}
-                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition ${
-                            selectedDescIndex === i
-                              ? 'bg-brand-cyan/20 border-brand-cyan'
-                              : 'bg-slate-800 border-transparent hover:border-brand-cyan/50'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="metaDesc"
-                            checked={selectedDescIndex === i}
-                            onChange={() => setSelectedDescIndex(i)}
-                            className="mt-1 accent-cyan-500"
-                          />
-                          <span className="text-sm text-white">{desc}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Chain Outputs */}
-              {selectedArticle.chain_outputs && Object.keys(selectedArticle.chain_outputs).length > 0 && (
-                <div className="mt-6">
-                  <h4 className="text-sm font-medium text-gray-400 mb-2">Chain Outputs</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    {Object.entries(selectedArticle.chain_outputs).map(([key, value]) => (
-                      <div key={key} className="bg-slate-800 rounded-lg p-3">
-                        <h5 className="text-xs font-medium text-brand-gold mb-1">{key}</h5>
-                        <pre className="text-xs text-gray-300 whitespace-pre-wrap max-h-32 overflow-auto">
-                          {value}
-                        </pre>
-                      </div>
-                    ))}
+              {/* Preview Tab - Visual article preview with images */}
+              {activeTab === 'preview' && (
+                <div className="p-6">
+                  <div className="bg-slate-800/50 rounded-lg p-8 max-w-4xl mx-auto">
+                    {/* Page Title */}
+                    <h1 className="text-3xl font-bold text-white mb-6">
+                      {selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0] || selectedArticle.keyword}
+                    </h1>
+                    {/* Visual Preview with Images */}
+                    {buildVisualPreview()}
                   </div>
                 </div>
               )}
 
-              {/* Article Images */}
-              <div className="mt-6">
-                <div className="flex items-center justify-between mb-2">
-                  <button
-                    onClick={() => setShowImages(!showImages)}
-                    className="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white transition"
-                  >
-                    <svg className={`w-4 h-4 transition-transform ${showImages ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                    </svg>
-                    Article Images
-                    {selectedArticle.images && selectedArticle.images.length > 0 && (
-                      <span className="bg-amber-600/30 text-amber-400 px-2 py-0.5 rounded text-xs">
-                        {selectedArticle.images.length}
-                      </span>
-                    )}
-                  </button>
-                  {selectedArticle.images && selectedArticle.images.length > 0 && showImages && (
+              {/* Content/Edit Tab */}
+              {activeTab === 'content' && (
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-medium text-white">Article Content</h4>
                     <div className="flex gap-2">
-                      <button
-                        onClick={pushImagesToWordPress}
-                        disabled={pushingImages}
-                        className="px-2 py-1 bg-amber-600 hover:bg-amber-700 rounded text-white text-xs transition disabled:opacity-50"
-                      >
-                        {pushingImages ? 'Pushing...' : 'Push All to WP'}
-                      </button>
+                      {!isEditing ? (
+                        <button
+                          onClick={() => setIsEditing(true)}
+                          className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm transition"
+                        >
+                          Edit Content
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={saveArticle}
+                            disabled={saving}
+                            className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm transition disabled:opacity-50"
+                          >
+                            {saving ? 'Saving...' : 'Save Changes'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsEditing(false);
+                              setEditContent(selectedArticle.final_content || '');
+                            }}
+                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm transition"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {isEditing ? (
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      className="w-full h-[calc(100vh-300px)] bg-slate-800 border border-brand-cyan/30 rounded-lg p-4 text-white font-mono text-sm resize-none focus:border-brand-cyan focus:outline-none"
+                      placeholder="Article content..."
+                    />
+                  ) : (
+                    <div className="bg-slate-800 rounded-lg p-6 max-h-[calc(100vh-300px)] overflow-auto">
+                      <div
+                        className="prose prose-invert max-w-none"
+                        dangerouslySetInnerHTML={{ __html: selectedArticle.final_content || '<em class="text-gray-500">No content</em>' }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Chain Outputs */}
+                  {selectedArticle.chain_outputs && Object.keys(selectedArticle.chain_outputs).length > 0 && (
+                    <div className="mt-8">
+                      <h4 className="text-sm font-medium text-gray-400 mb-3">Chain Outputs</h4>
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                        {Object.entries(selectedArticle.chain_outputs).map(([key, value]) => (
+                          <div key={key} className="bg-slate-800 rounded-lg p-3">
+                            <h5 className="text-xs font-medium text-brand-gold mb-1">{key}</h5>
+                            <pre className="text-xs text-gray-300 whitespace-pre-wrap max-h-32 overflow-auto">
+                              {value}
+                            </pre>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
+              )}
 
-                {showImages && (
-                  <div className="bg-slate-800/50 rounded-lg p-4">
-                    {selectedArticle.images && selectedArticle.images.length > 0 ? (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {selectedArticle.images.map((image) => (
-                          <div key={image.id} className="relative group bg-slate-900 rounded-lg overflow-hidden border border-slate-700">
-                            <img
-                              src={image.url}
-                              alt={image.placement || 'Article image'}
-                              className="w-full aspect-square object-cover"
-                            />
-                            {/* Overlay with info */}
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
-                              <p className="text-xs text-white truncate">{image.placement || 'No placement'}</p>
-                              {image.pushedToWp && (
-                                <span className="text-xs text-green-400">✓ In WordPress</span>
-                              )}
+              {/* Images Tab */}
+              {activeTab === 'images' && (
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-medium text-white">
+                      Article Images
+                      {selectedArticle.images && selectedArticle.images.length > 0 && (
+                        <span className="ml-2 text-sm text-gray-400">({selectedArticle.images.length} images)</span>
+                      )}
+                    </h4>
+                    {selectedArticle.images && selectedArticle.images.length > 0 && (
+                      <button
+                        onClick={pushImagesToWordPress}
+                        disabled={pushingImages}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
+                      >
+                        {pushingImages ? 'Pushing to WP...' : 'Push All to WordPress'}
+                      </button>
+                    )}
+                  </div>
+
+                  {selectedArticle.images && selectedArticle.images.length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                      {selectedArticle.images.map((image, idx) => (
+                        <div key={image.id} className="relative group bg-slate-800 rounded-lg overflow-hidden border border-slate-700 hover:border-brand-cyan/50 transition">
+                          <img
+                            src={image.url}
+                            alt={image.placement || 'Article image'}
+                            className="w-full aspect-square object-cover"
+                          />
+                          {/* Placement badge */}
+                          <div className="absolute top-2 left-2">
+                            <span className={`px-2 py-1 rounded text-[10px] font-medium ${
+                              image.placement === 'hero' || image.placement?.includes('hero')
+                                ? 'bg-brand-gold text-slate-900'
+                                : 'bg-slate-600 text-white'
+                            }`}>
+                              {image.placement || `Image ${idx + 1}`}
+                            </span>
+                          </div>
+                          {/* WP status badge */}
+                          {image.pushedToWp && (
+                            <div className="absolute top-2 right-2">
+                              <span className="px-1.5 py-0.5 bg-green-600 rounded text-white text-[10px] flex items-center gap-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                WP
+                              </span>
                             </div>
-                            {/* Action buttons */}
-                            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          )}
+                          {/* Hover overlay */}
+                          <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3">
+                            {image.keywords && image.keywords.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {image.keywords.slice(0, 3).map((kw, i) => (
+                                  <span key={i} className="text-[9px] bg-emerald-900/50 text-emerald-400 px-1 py-0.5 rounded">
+                                    {kw}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            <div className="flex gap-1">
                               <button
                                 onClick={() => regenerateImage(image.id)}
                                 disabled={regeneratingImage === image.id}
-                                className="p-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs disabled:opacity-50"
-                                title="Regenerate image"
+                                className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs font-medium disabled:opacity-50"
                               >
-                                {regeneratingImage === image.id ? (
-                                  <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                  </svg>
-                                ) : (
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                  </svg>
-                                )}
+                                {regeneratingImage === image.id ? 'Regenerating...' : 'Regenerate'}
                               </button>
                               <a
                                 href={image.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="p-1.5 bg-slate-600 hover:bg-slate-500 rounded text-white text-xs"
-                                title="View full size"
+                                className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-white text-xs"
                               >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
+                                View
                               </a>
                             </div>
-                            {/* Status badge */}
-                            {image.pushedToWp && (
-                              <div className="absolute top-2 left-2">
-                                <span className="px-1.5 py-0.5 bg-green-600 rounded text-white text-[10px]">WP</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                      <svg className="w-16 h-16 opacity-30 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <p className="text-lg">No images generated yet</p>
+                      <p className="text-sm mt-1">Generate images from the Image Creation section</p>
+                    </div>
+                  )}
+
+                  {/* Image Decision Report */}
+                  {selectedArticle.image_decision_report && (
+                    <div className="mt-8 border-t border-slate-700 pt-6">
+                      <button
+                        onClick={() => setShowImageReport(!showImageReport)}
+                        className="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white transition mb-4"
+                      >
+                        <svg className={`w-4 h-4 transition-transform ${showImageReport ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                        Image Processing Log
+                        <span className="bg-purple-600/30 text-purple-400 px-2 py-0.5 rounded text-xs">
+                          {selectedArticle.image_decision_report.images?.length || 0} decisions
+                        </span>
+                      </button>
+
+                      {showImageReport && (
+                        <div className="bg-slate-800/50 rounded-lg p-4 space-y-4">
+                          {/* Report Header */}
+                          <div className="flex items-center gap-4 text-sm flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-500">Mode:</span>
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                selectedArticle.image_decision_report.mode === 'bank' ? 'bg-blue-600/30 text-blue-400' :
+                                selectedArticle.image_decision_report.mode === 'live' ? 'bg-green-600/30 text-green-400' :
+                                'bg-gray-600/30 text-gray-400'
+                              }`}>
+                                {selectedArticle.image_decision_report.mode === 'bank' ? 'Pull from Bank' :
+                                 selectedArticle.image_decision_report.mode === 'live' ? 'Generate Live' : 'None'}
+                              </span>
+                            </div>
+                            {selectedArticle.image_decision_report.model && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-gray-500">Model:</span>
+                                <span className="text-brand-cyan text-xs">{selectedArticle.image_decision_report.model}</span>
                               </div>
                             )}
+                            {selectedArticle.image_decision_report.smartMatchingEnabled && (
+                              <span className="px-2 py-0.5 bg-emerald-600/30 text-emerald-400 rounded text-xs">
+                                Smart Matching ON
+                              </span>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-500 text-center py-8">
-                        No images generated for this article yet.
-                        <br />
-                        <span className="text-xs">Generate images from the Image Creation section.</span>
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
 
-              {/* Image Decision Report */}
-              {selectedArticle.image_decision_report && (
-                <div className="mt-6">
-                  <button
-                    onClick={() => setShowImageReport(!showImageReport)}
-                    className="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white transition"
-                  >
-                    <svg className={`w-4 h-4 transition-transform ${showImageReport ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                    </svg>
-                    Image Processing Log
-                    <span className="bg-purple-600/30 text-purple-400 px-2 py-0.5 rounded text-xs">
-                      {selectedArticle.image_decision_report.images?.length || 0} decisions
-                    </span>
-                  </button>
-
-                  {showImageReport && (
-                    <div className="mt-3 bg-slate-800/50 rounded-lg p-4 space-y-4">
-                      {/* Report Header */}
-                      <div className="flex items-center gap-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-500">Mode:</span>
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            selectedArticle.image_decision_report.mode === 'bank' ? 'bg-blue-600/30 text-blue-400' :
-                            selectedArticle.image_decision_report.mode === 'live' ? 'bg-green-600/30 text-green-400' :
-                            'bg-gray-600/30 text-gray-400'
-                          }`}>
-                            {selectedArticle.image_decision_report.mode === 'bank' ? 'Pull from Bank' :
-                             selectedArticle.image_decision_report.mode === 'live' ? 'Generate Live' : 'None'}
-                          </span>
-                        </div>
-                        {selectedArticle.image_decision_report.model && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-500">Model:</span>
-                            <span className="text-brand-cyan text-xs">{selectedArticle.image_decision_report.model}</span>
-                          </div>
-                        )}
-                        {selectedArticle.image_decision_report.quality && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-500">Quality:</span>
-                            <span className="text-brand-gold text-xs">{selectedArticle.image_decision_report.quality}</span>
-                          </div>
-                        )}
-                        {selectedArticle.image_decision_report.smartMatchingEnabled && (
-                          <span className="px-2 py-0.5 bg-emerald-600/30 text-emerald-400 rounded text-xs">
-                            Smart Matching ON
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Image Decisions */}
-                      <div className="space-y-3">
-                        {selectedArticle.image_decision_report.images?.map((img, idx) => (
-                          <div
-                            key={idx}
-                            className={`p-3 rounded-lg border ${
-                              img.source === 'bank' ? 'bg-blue-900/20 border-blue-500/30' :
-                              img.source === 'generated' ? 'bg-green-900/20 border-green-500/30' :
-                              'bg-gray-900/20 border-gray-500/30'
-                            }`}
-                          >
-                            <div className="flex items-start gap-3">
-                              {/* Position badge */}
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${
-                                img.type === 'hero' ? 'bg-brand-gold' : 'bg-slate-600'
-                              }`}>
-                                {img.position}
-                              </div>
-
-                              <div className="flex-1 min-w-0">
-                                {/* Type and Source */}
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                    img.type === 'hero' ? 'bg-brand-gold/20 text-brand-gold' : 'bg-slate-600/50 text-slate-300'
+                          {/* Image Decisions Grid */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {selectedArticle.image_decision_report.images?.map((img, idx) => (
+                              <div
+                                key={idx}
+                                className={`p-3 rounded-lg border ${
+                                  img.source === 'bank' ? 'bg-blue-900/20 border-blue-500/30' :
+                                  img.source === 'generated' ? 'bg-green-900/20 border-green-500/30' :
+                                  'bg-gray-900/20 border-gray-500/30'
+                                }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${
+                                    img.type === 'hero' ? 'bg-brand-gold' : 'bg-slate-600'
                                   }`}>
-                                    {img.type === 'hero' ? 'Hero' : 'Inline'} {img.side ? `(${img.side})` : ''}
-                                  </span>
-                                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                    img.source === 'bank' ? 'bg-blue-600/30 text-blue-400' :
-                                    img.source === 'generated' ? 'bg-green-600/30 text-green-400' :
-                                    'bg-red-600/30 text-red-400'
-                                  }`}>
-                                    {img.source === 'bank' ? 'From Bank' :
-                                     img.source === 'generated' ? 'Generated' : 'Not Found'}
-                                  </span>
-                                </div>
-
-                                {/* Matched Keywords */}
-                                {img.matchedKeywords && img.matchedKeywords.length > 0 && (
-                                  <div className="mt-2">
-                                    <span className="text-[10px] text-gray-500">Matched Keywords:</span>
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                      {img.matchedKeywords.map((kw, kwIdx) => (
-                                        <span key={kwIdx} className="text-[10px] bg-emerald-900/30 text-emerald-400 px-1.5 py-0.5 rounded">
-                                          {kw}
-                                        </span>
-                                      ))}
+                                    {img.position}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                        img.type === 'hero' ? 'bg-brand-gold/20 text-brand-gold' : 'bg-slate-600/50 text-slate-300'
+                                      }`}>
+                                        {img.type === 'hero' ? 'Hero' : 'Inline'} {img.side ? `(${img.side})` : ''}
+                                      </span>
+                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                        img.source === 'bank' ? 'bg-blue-600/30 text-blue-400' :
+                                        img.source === 'generated' ? 'bg-green-600/30 text-green-400' :
+                                        'bg-red-600/30 text-red-400'
+                                      }`}>
+                                        {img.source === 'bank' ? 'From Bank' : img.source === 'generated' ? 'Generated' : 'Not Found'}
+                                      </span>
                                     </div>
-                                  </div>
-                                )}
-
-                                {/* Variation Used */}
-                                {img.variationUsed && (
-                                  <div className="mt-1 text-xs text-gray-400">
-                                    <span className="text-gray-500">Variation:</span> {img.variationUsed}
-                                  </div>
-                                )}
-
-                                {/* Matched Keywords */}
-                                {img.matchedKeywords && img.matchedKeywords.length > 0 && (
-                                  <div className="mt-1">
-                                    <span className="text-[10px] text-gray-500">Matched:</span>
-                                    <div className="flex flex-wrap gap-1 mt-0.5">
-                                      {img.matchedKeywords.map((kw: string, kwIdx: number) => (
-                                        <span key={kwIdx} className="text-[10px] bg-emerald-900/30 text-emerald-400 px-1.5 py-0.5 rounded">
-                                          {kw}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Prompt (expandable) */}
-                                {img.prompt && img.prompt !== 'N/A' && (
-                                  <div className="mt-2">
-                                    <button
-                                      onClick={() => {
-                                        const newSet = new Set(expandedPrompts);
-                                        if (newSet.has(idx)) {
-                                          newSet.delete(idx);
-                                        } else {
-                                          newSet.add(idx);
-                                        }
-                                        setExpandedPrompts(newSet);
-                                      }}
-                                      className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1"
-                                    >
-                                      <svg className={`w-3 h-3 transition-transform ${expandedPrompts.has(idx) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                                      </svg>
-                                      View Prompt
-                                    </button>
-                                    {expandedPrompts.has(idx) && (
-                                      <div className="mt-1 p-2 bg-slate-900/50 rounded text-[11px] text-gray-300 whitespace-pre-wrap break-words">
-                                        {img.prompt}
+                                    {img.matchedKeywords && img.matchedKeywords.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-2">
+                                        {img.matchedKeywords.map((kw: string, kwIdx: number) => (
+                                          <span key={kwIdx} className="text-[10px] bg-emerald-900/30 text-emerald-400 px-1.5 py-0.5 rounded">
+                                            {kw}
+                                          </span>
+                                        ))}
                                       </div>
                                     )}
                                   </div>
-                                )}
-
-                                {/* Reason (if no image) */}
-                                {img.reason && !img.url && (
-                                  <div className="mt-1 text-xs text-red-400">
-                                    <span className="text-gray-500">Reason:</span> {img.reason}
-                                  </div>
-                                )}
+                                  {img.url && (
+                                    <img src={img.url} alt="" className="w-12 h-12 object-cover rounded shrink-0" />
+                                  )}
+                                </div>
                               </div>
-
-                              {/* Thumbnail */}
-                              {img.url && (
-                                <a href={img.url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                                  <img
-                                    src={img.url}
-                                    alt={`Position ${img.position}`}
-                                    className="w-16 h-16 object-cover rounded border border-gray-700 hover:border-brand-cyan transition"
-                                  />
-                                </a>
-                              )}
-                            </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Meta SEO Tab */}
+              {activeTab === 'meta' && (
+                <div className="p-6">
+                  <div className="max-w-4xl mx-auto">
+                    {/* Action Buttons */}
+                    <div className="flex items-center justify-between mb-6">
+                      <h4 className="text-lg font-medium text-white">Meta Title & Description</h4>
+                      <div className="flex gap-2">
+                        {!metaSaved ? (
+                          <button
+                            onClick={saveMetaSelections}
+                            disabled={savingMeta}
+                            className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm transition disabled:opacity-50"
+                          >
+                            {savingMeta ? 'Saving...' : 'Save Meta'}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={pushMetaToWordPress}
+                            disabled={pushingMeta || !selectedArticle.wp_post_id}
+                            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
+                            title={!selectedArticle.wp_post_id ? 'Publish article first' : 'Push meta to WordPress'}
+                          >
+                            {pushingMeta ? 'Pushing...' : 'Push to WordPress'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-8">
+                      {/* Meta Titles */}
+                      <div>
+                        <h5 className="text-sm font-medium text-brand-gold mb-3 flex items-center gap-2">
+                          Meta Titles
+                          {selectedTitleIndex !== null && selectedArticle.meta_titles && (
+                            <span className="text-xs text-gray-500">
+                              ({selectedArticle.meta_titles[selectedTitleIndex]?.length || 0} chars)
+                            </span>
+                          )}
+                        </h5>
+                        {selectedArticle.meta_titles && selectedArticle.meta_titles.length > 0 ? (
+                          <div className="space-y-2">
+                            {selectedArticle.meta_titles.map((title, i) => (
+                              <label
+                                key={i}
+                                className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition ${
+                                  selectedTitleIndex === i
+                                    ? 'bg-brand-gold/20 border-brand-gold'
+                                    : 'bg-slate-800 border-transparent hover:border-brand-gold/50'
+                                }`}
+                                onClick={() => { setSelectedTitleIndex(i); setMetaSaved(false); }}
+                              >
+                                <input
+                                  type="radio"
+                                  name="metaTitle"
+                                  checked={selectedTitleIndex === i}
+                                  onChange={() => { setSelectedTitleIndex(i); setMetaSaved(false); }}
+                                  className="mt-1 accent-yellow-500"
+                                />
+                                <div className="flex-1">
+                                  <span className="text-sm text-white">{title}</span>
+                                  <div className="mt-1 text-xs text-gray-500">
+                                    {title.length} characters
+                                    {title.length < 50 && <span className="text-amber-400 ml-2">Too short</span>}
+                                    {title.length > 60 && <span className="text-red-400 ml-2">Too long</span>}
+                                    {title.length >= 50 && title.length <= 60 && <span className="text-green-400 ml-2">Optimal</span>}
+                                  </div>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No meta titles generated</p>
+                        )}
+                      </div>
+
+                      {/* Meta Descriptions */}
+                      <div>
+                        <h5 className="text-sm font-medium text-brand-cyan mb-3 flex items-center gap-2">
+                          Meta Descriptions
+                          {selectedDescIndex !== null && selectedArticle.meta_descriptions && (
+                            <span className="text-xs text-gray-500">
+                              ({selectedArticle.meta_descriptions[selectedDescIndex]?.length || 0} chars)
+                            </span>
+                          )}
+                        </h5>
+                        {selectedArticle.meta_descriptions && selectedArticle.meta_descriptions.length > 0 ? (
+                          <div className="space-y-2">
+                            {selectedArticle.meta_descriptions.map((desc, i) => (
+                              <label
+                                key={i}
+                                className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition ${
+                                  selectedDescIndex === i
+                                    ? 'bg-brand-cyan/20 border-brand-cyan'
+                                    : 'bg-slate-800 border-transparent hover:border-brand-cyan/50'
+                                }`}
+                                onClick={() => { setSelectedDescIndex(i); setMetaSaved(false); }}
+                              >
+                                <input
+                                  type="radio"
+                                  name="metaDesc"
+                                  checked={selectedDescIndex === i}
+                                  onChange={() => { setSelectedDescIndex(i); setMetaSaved(false); }}
+                                  className="mt-1 accent-cyan-500"
+                                />
+                                <div className="flex-1">
+                                  <span className="text-sm text-white">{desc}</span>
+                                  <div className="mt-1 text-xs text-gray-500">
+                                    {desc.length} characters
+                                    {desc.length < 150 && <span className="text-amber-400 ml-2">Too short</span>}
+                                    {desc.length > 160 && <span className="text-red-400 ml-2">Too long</span>}
+                                    {desc.length >= 150 && desc.length <= 160 && <span className="text-green-400 ml-2">Optimal</span>}
+                                  </div>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No meta descriptions generated</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Google Preview */}
+                    <div className="mt-8 border-t border-slate-700 pt-6">
+                      <h5 className="text-sm font-medium text-gray-400 mb-3">Google Search Preview</h5>
+                      <div className="bg-white rounded-lg p-4 max-w-2xl">
+                        <div className="text-blue-800 text-lg font-medium truncate hover:underline cursor-pointer">
+                          {selectedTitleIndex !== null && selectedArticle.meta_titles
+                            ? selectedArticle.meta_titles[selectedTitleIndex]
+                            : selectedArticle.keyword}
+                        </div>
+                        <div className="text-green-700 text-sm truncate mt-1">
+                          {selectedArticle.wp_post_url || 'https://example.com/' + selectedArticle.keyword.toLowerCase().replace(/\s+/g, '-')}
+                        </div>
+                        <div className="text-gray-600 text-sm mt-1 line-clamp-2">
+                          {selectedDescIndex !== null && selectedArticle.meta_descriptions
+                            ? selectedArticle.meta_descriptions[selectedDescIndex]
+                            : 'No description selected...'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
