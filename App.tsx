@@ -1750,7 +1750,12 @@ const App: React.FC = () => {
             {/* Ideas Backlog */}
             <IdeasBacklog isOpen={isIdeasOpen} onClose={() => setIsIdeasOpen(false)} />
             <WordPressSettings isOpen={isWordPressOpen} onClose={() => setIsWordPressOpen(false)} />
-            <ArticlesPage isOpen={isArticlesPageOpen} onClose={() => setIsArticlesPageOpen(false)} />
+            <ArticlesPage
+              isOpen={isArticlesPageOpen}
+              onClose={() => setIsArticlesPageOpen(false)}
+              defaultWebsiteId={currentProject?.website_id || undefined}
+              workflowId={currentWorkflowId}
+            />
 
             {/* Settings Modal */}
             {isSettingsOpen && (

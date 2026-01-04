@@ -39,9 +39,11 @@ type ViewTab = 'list' | 'browser' | 'hierarchy' | 'media';
 interface ArticlesPageProps {
   isOpen: boolean;
   onClose: () => void;
+  defaultWebsiteId?: number;
+  workflowId?: number;
 }
 
-const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose }) => {
+const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose, defaultWebsiteId, workflowId }) => {
   const [websites, setWebsites] = useState<Website[]>([]);
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('list');
@@ -65,7 +67,15 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose }) => {
         const data = await res.json();
         const websitesList = data.websites || [];
         setWebsites(websitesList);
-        if (websitesList.length > 0) {
+        // Set default website based on prop, otherwise first in list
+        if (defaultWebsiteId) {
+          const defaultSite = websitesList.find((w: Website) => w.id === defaultWebsiteId);
+          if (defaultSite) {
+            setSelectedWebsite(defaultSite);
+          } else if (websitesList.length > 0) {
+            setSelectedWebsite(websitesList[0]);
+          }
+        } else if (websitesList.length > 0) {
           setSelectedWebsite(websitesList[0]);
         }
       }
@@ -179,8 +189,8 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 rounded-2xl w-full max-w-7xl h-[90vh] overflow-hidden border-2 border-brand-cyan shadow-glow-cyan flex flex-col">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div className="bg-slate-900 rounded-lg w-[95vw] h-[90vh] overflow-hidden border border-brand-cyan/30 flex flex-col">
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-3 border-b border-brand-cyan/30 bg-slate-800/50 flex-shrink-0">
           <div className="flex items-center gap-4">
