@@ -1001,14 +1001,47 @@ router.post('/publish', async (req, res) => {
         guidedModel
       });
 
+      // 🔍🔍🔍 CRITICAL TRACKING: What came back from pipeline?
+      banner('PIPELINE RESULT - What images came back?');
+      console.log('╔══════════════════════════════════════════════════════════════════════╗');
+      console.log('║  🔬 EXAMINING PIPELINE RESULT FOR IMAGES                            ║');
+      console.log('╠══════════════════════════════════════════════════════════════════════╣');
+      console.log(`║ pipelineResult.imagesGenerated: ${pipelineResult.imagesGenerated || 0}`.padEnd(71) + '║');
+      console.log(`║ pipelineResult.chunks.intro exists: ${!!pipelineResult.chunks.intro}`.padEnd(71) + '║');
+      console.log(`║ pipelineResult.chunks.intro.imageData exists: ${!!pipelineResult.chunks.intro?.imageData}`.padEnd(71) + '║');
+      if (pipelineResult.chunks.intro?.imageData) {
+        const id = pipelineResult.chunks.intro.imageData;
+        console.log(`║   - url: ${id.url ? 'YES (' + (id.url.startsWith('data:') ? 'BASE64' : 'HTTP') + ')' : 'NO'}`.padEnd(71) + '║');
+        console.log(`║   - wpUrl: ${id.wpUrl ? 'YES' : 'NO'}`.padEnd(71) + '║');
+        console.log(`║   - wpMediaId: ${id.wpMediaId || 'NONE'}`.padEnd(71) + '║');
+      }
+      console.log(`║ pipelineResult.chunks.chunks count: ${pipelineResult.chunks.chunks?.length || 0}`.padEnd(71) + '║');
+      let pipelineChunksWithImages = 0;
+      pipelineResult.chunks.chunks?.forEach((c, i) => {
+        if (c.imageData) {
+          pipelineChunksWithImages++;
+          console.log(`║   chunk[${i}] imageData: url=${c.imageData.url ? 'YES' : 'NO'}, wpUrl=${c.imageData.wpUrl ? 'YES' : 'NO'}`.padEnd(71) + '║');
+        }
+      });
+      console.log(`║ Pipeline chunks with imageData: ${pipelineChunksWithImages}`.padEnd(71) + '║');
+      console.log('╚══════════════════════════════════════════════════════════════════════╝');
+
       // Merge pipeline images with bank images
       if (!chunked.intro?.imageData && pipelineResult.chunks.intro?.imageData) {
         chunked.intro.imageData = pipelineResult.chunks.intro.imageData;
+        success('Merged hero image from pipeline to chunked');
       }
       pipelineResult.chunks.chunks.forEach((pChunk, idx) => {
         if (pChunk.imageData && chunked.chunks[idx] && !chunked.chunks[idx].imageData) {
           chunked.chunks[idx].imageData = pChunk.imageData;
+          success(`Merged chunk[${idx}] image from pipeline to chunked`);
         }
+      });
+
+      // 🔍 AFTER MERGE: What do we have now?
+      console.log('\n[AFTER MERGE] chunked.intro.imageData:', !!chunked.intro?.imageData);
+      chunked.chunks?.forEach((c, i) => {
+        console.log(`[AFTER MERGE] chunked.chunks[${i}].imageData:`, !!c.imageData);
       });
 
       imagesGenerated = pipelineResult.imagesGenerated || 0;
