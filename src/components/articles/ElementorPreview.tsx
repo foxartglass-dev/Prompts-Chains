@@ -2,6 +2,10 @@
  * ElementorPreview Component
  * Renders article content exactly as it will appear in WordPress/Elementor
  * Uses shared config from /shared/elementor-config.js for single source of truth
+ *
+ * Parsing Logic: Matches content-chunker.js to handle BOTH markdown and HTML formats
+ * - Markdown: ## Heading Text
+ * - HTML: <h2>Heading Text</h2>
  */
 
 import React from 'react';
@@ -23,48 +27,178 @@ interface ElementorPreviewProps {
   heroImageSide?: 'left' | 'right';
 }
 
-// Parse HTML content into sections based on headings
-function parseContentSections(html: string): { intro: string; sections: { heading: string; headingTag: string; content: string }[] } {
-  if (!html) return { intro: '', sections: [] };
+/**
+ * Count words in text (strips HTML tags first)
+ * Matches content-chunker.js countWords()
+ */
+function countWords(text: string): number {
+  if (!text) return 0;
+  const plainText = text.replace(/<[^>]*>/g, ' ');
+  return plainText.split(/\s+/).filter(word => word.length > 0).length;
+}
 
-  // Match all headings with their tags
-  const headingRegex = /<(h[1-6])[^>]*>(.*?)<\/\1>/gi;
-  const headings: { tag: string; text: string; fullMatch: string; index: number }[] = [];
+/**
+ * Calculate hero image placeholder dimensions based on intro word count
+ * Matches image-generator.js calculateHeroSize() logic
+ *
+ * Line Estimation: ~10 words per line in typical hero layout
+ */
+function calculateHeroSize(wordCount: number): { height: number; label: string; ratio: string } {
+  const WORDS_PER_LINE = 10;
+  const estimatedLines = Math.ceil(wordCount / WORDS_PER_LINE);
 
+  if (estimatedLines <= 4) {
+    return { height: 150, label: 'WIDE LANDSCAPE', ratio: '3:2' };
+  } else if (estimatedLines <= 6) {
+    return { height: 180, label: 'LANDSCAPE', ratio: '3:2' };
+  } else if (estimatedLines <= 8) {
+    return { height: 220, label: 'SLIGHT LANDSCAPE', ratio: '4:3' };
+  } else if (estimatedLines <= 11) {
+    return { height: 280, label: 'SQUARE', ratio: '1:1' };
+  } else if (estimatedLines <= 14) {
+    return { height: 340, label: 'SLIGHT PORTRAIT', ratio: '3:4' };
+  } else {
+    return { height: 400, label: 'PORTRAIT', ratio: '2:3' };
+  }
+}
+
+/**
+ * Convert markdown/plain text to HTML paragraphs
+ * - Handles markdown bold **text**
+ * - Converts double newlines to paragraph breaks
+ * - Preserves existing HTML
+ */
+function markdownToHtml(text: string): string {
+  if (!text) return '';
+
+  let html = text;
+
+  // Convert markdown bold **text** to <strong>
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  // Convert markdown italic *text* to <em> (but not ** which is bold)
+  html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+
+  // If content doesn't have HTML paragraph tags, convert newlines
+  if (!html.includes('<p>') && !html.includes('<p ')) {
+    // Split by double newlines (paragraph breaks)
+    const paragraphs = html.split(/\n\n+/);
+
+    html = paragraphs.map(para => {
+      const trimmed = para.trim();
+      if (!trimmed) return '';
+      // Check if already wrapped in a block element
+      if (trimmed.startsWith('<')) return trimmed;
+      // Convert single newlines to <br> within paragraph
+      const withBreaks = trimmed.replace(/\n/g, '<br>\n');
+      return `<p>${withBreaks}</p>`;
+    }).filter(p => p).join('\n');
+  }
+
+  return html;
+}
+
+/**
+ * Extract intro content (before first H2)
+ * Matches content-chunker.js extractIntro()
+ */
+function extractIntro(content: string): { intro: string; remaining: string } {
+  // Normalize line endings
+  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Find first H2 (HTML or markdown)
+  const h2HtmlMatch = normalized.match(/<h2[^>]*>/i);
+  const h2MdMatch = normalized.match(/^##\s+/m);
+
+  let firstH2Index = -1;
+
+  if (h2HtmlMatch && h2MdMatch) {
+    firstH2Index = Math.min(h2HtmlMatch.index!, h2MdMatch.index!);
+  } else if (h2HtmlMatch) {
+    firstH2Index = h2HtmlMatch.index!;
+  } else if (h2MdMatch) {
+    firstH2Index = h2MdMatch.index!;
+  }
+
+  if (firstH2Index === -1) {
+    return { intro: '', remaining: normalized };
+  }
+
+  const intro = normalized.substring(0, firstH2Index).trim();
+  const remaining = normalized.substring(firstH2Index).trim();
+
+  return { intro, remaining };
+}
+
+/**
+ * Split content by H2 headings
+ * Matches content-chunker.js splitByH2() - handles BOTH markdown and HTML
+ */
+function splitByH2(content: string): { heading: string; content: string }[] {
+  const sections: { heading: string; content: string }[] = [];
+
+  // Normalize line endings
+  const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Pattern to match H2 in both HTML and markdown formats
+  // HTML: <h2>Title</h2> or <h2 class="...">Title</h2>
+  // Markdown: ## Title
+  const h2Pattern = /(?:<h2[^>]*>([\s\S]*?)<\/h2>|^##\s*([^\n]+))/gim;
+
+  let lastIndex = 0;
   let match;
-  while ((match = headingRegex.exec(html)) !== null) {
-    headings.push({
-      tag: match[1],
-      text: match[2],
-      fullMatch: match[0],
-      index: match.index
-    });
+  let currentHeading: string | null = null;
+
+  while ((match = h2Pattern.exec(normalized)) !== null) {
+    // If we had a previous heading, save its content
+    if (currentHeading !== null) {
+      const sectionContent = normalized.substring(lastIndex, match.index).trim();
+      if (sectionContent) {
+        sections.push({
+          heading: currentHeading,
+          content: sectionContent
+        });
+      }
+    }
+
+    // Get heading text (from HTML or markdown capture group)
+    currentHeading = (match[1] || match[2] || '').trim();
+    lastIndex = match.index + match[0].length;
   }
 
-  // If no headings, return all as intro
-  if (headings.length === 0) {
-    return { intro: html, sections: [] };
+  // Don't forget the last section
+  if (currentHeading !== null) {
+    const sectionContent = normalized.substring(lastIndex).trim();
+    if (sectionContent) {
+      sections.push({
+        heading: currentHeading,
+        content: sectionContent
+      });
+    }
   }
 
-  // Get intro (content before first heading)
-  const intro = html.substring(0, headings[0].index).trim();
+  return sections;
+}
 
-  // Get sections (content between headings)
-  const sections: { heading: string; headingTag: string; content: string }[] = [];
+/**
+ * Clean content before parsing
+ * Matches server/routes/elementor.js cleanContent()
+ */
+function cleanContent(content: string): string {
+  if (!content) return content;
 
-  for (let i = 0; i < headings.length; i++) {
-    const startIndex = headings[i].index + headings[i].fullMatch.length;
-    const endIndex = i < headings.length - 1 ? headings[i + 1].index : html.length;
-    const content = html.substring(startIndex, endIndex).trim();
+  let cleaned = content;
 
-    sections.push({
-      heading: headings[i].text,
-      headingTag: headings[i].tag,
-      content
-    });
-  }
+  // Normalize line endings
+  cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  return { intro, sections };
+  // Remove markdown # at the very start (H1) but not ## which is H2
+  cleaned = cleaned.replace(/^#\s+[^\n]+\n?/gm, '');
+
+  // Remove trailing dashes at end of paragraphs
+  cleaned = cleaned.replace(/\s*[-–—]+\s*$/gm, '');
+
+  return cleaned;
 }
 
 const ElementorPreview: React.FC<ElementorPreviewProps> = ({
@@ -76,8 +210,17 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
   const styles = getPreviewStyles();
   const config = ELEMENTOR_CONFIG;
 
-  // Parse content into sections
-  const { intro, sections } = parseContentSections(content);
+  // Clean and parse content
+  const cleanedContent = cleanContent(content);
+  const { intro, remaining } = extractIntro(cleanedContent);
+  const sections = splitByH2(remaining);
+
+  // Convert intro markdown to HTML
+  const introHtml = markdownToHtml(intro);
+  const introWordCount = countWords(intro);
+
+  // Calculate hero image size based on intro length
+  const heroSize = calculateHeroSize(introWordCount);
 
   // Find hero image and inline images
   const heroImage = images.find(img =>
@@ -112,7 +255,7 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
       </div>
 
       {/* Hero Section - 50/50 layout */}
-      {intro && (
+      {introHtml && (
         <div style={{
           ...styles.heroSection,
           flexDirection: heroImageSide === 'left' ? 'row-reverse' : 'row',
@@ -122,7 +265,7 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
           <div style={styles.heroText}>
             <div
               className="prose-content"
-              dangerouslySetInnerHTML={{ __html: intro }}
+              dangerouslySetInnerHTML={{ __html: introHtml }}
               style={{
                 lineHeight: config.typography.body.lineHeight,
                 color: config.colors.text
@@ -146,7 +289,7 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
             ) : (
               <div style={{
                 width: '100%',
-                height: '250px',
+                height: `${heroSize.height}px`,
                 backgroundColor: '#f0f0f0',
                 borderRadius: `${config.inlineImage.borderRadius}px`,
                 display: 'flex',
@@ -162,7 +305,8 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
                 <span style={{ fontWeight: 600 }}>Hero Image</span>
-                <span style={{ fontSize: '12px' }}>Position 1</span>
+                <span style={{ fontSize: '11px', color: '#888' }}>{heroSize.label} ({heroSize.ratio})</span>
+                <span style={{ fontSize: '10px', color: '#aaa' }}>{introWordCount} words ≈ {Math.ceil(introWordCount / 10)} lines</span>
               </div>
             )}
           </div>
@@ -176,12 +320,15 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
         const imageSide = index % 2 === 0 ? inlineStartSide : heroImageSide;
         const imageStyle = imageSide === 'left' ? styles.inlineImageLeft : styles.inlineImageRight;
 
+        // Convert section content to HTML
+        const sectionHtml = markdownToHtml(section.content);
+
         return (
           <div key={index} style={styles.contentSection}>
-            {/* Section Heading */}
-            <div style={section.headingTag === 'h2' ? styles.h2 : styles.h3}>
+            {/* Section Heading - H2 */}
+            <h2 style={styles.h2}>
               {section.heading}
-            </div>
+            </h2>
 
             {/* Content with optional inline image */}
             <div style={{ overflow: 'hidden' }}>
@@ -194,7 +341,7 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
               ) : index < 3 ? (
                 // Show placeholder for first 3 potential inline image positions
                 <div style={{
-                  ...imageStyle,
+                  ...(imageStyle as React.CSSProperties),
                   width: `${config.inlineImage.maxWidth}px`,
                   height: '150px',
                   backgroundColor: '#f5f5f5',
@@ -217,7 +364,7 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
 
               <div
                 className="prose-content"
-                dangerouslySetInnerHTML={{ __html: section.content }}
+                dangerouslySetInnerHTML={{ __html: sectionHtml }}
                 style={{
                   lineHeight: config.typography.body.lineHeight,
                   color: config.colors.text
@@ -230,7 +377,7 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
       })}
 
       {/* No content fallback */}
-      {!intro && sections.length === 0 && (
+      {!introHtml && sections.length === 0 && (
         <div style={{
           padding: '60px 20px',
           textAlign: 'center',
