@@ -584,6 +584,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [guidedAssistantLoading, setGuidedAssistantLoading] = useState(false);
   const guidedAssistantChatRef = useRef<HTMLDivElement>(null);
   const guidedAssistantFileInputRef = useRef<HTMLInputElement>(null);
+  // Chat height sizes: 'sm' = 16rem, 'md' = 24rem, 'lg' = 36rem, 'xl' = 48rem, 'full' = 80vh
+  const [chatHeight, setChatHeight] = useState<'sm' | 'md' | 'lg' | 'xl' | 'full'>('md');
+  const chatHeightClasses = {
+    sm: 'h-64',      // 16rem
+    md: 'h-96',      // 24rem
+    lg: 'h-[36rem]', // 36rem
+    xl: 'h-[48rem]', // 48rem
+    full: 'h-[80vh]' // 80% viewport
+  };
 
   // Loaded articles for AI context
   interface LoadedArticle {
@@ -2342,6 +2351,76 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             } as any
           });
           updatedFields.push('Avoid List');
+        }
+
+        // Check for ```stylepreferences blocks - AI can update style preferences
+        const styleMatch = responseContent.match(/```stylepreferences\n?([\s\S]*?)```/);
+        if (styleMatch) {
+          const newStyle = styleMatch[1].trim();
+          updateSettings({
+            guided_guardrails: {
+              ...settings.guided_guardrails,
+              stylePreferences: newStyle
+            } as any
+          });
+          updatedFields.push('Style Preferences');
+        }
+
+        // Check for ```mainprompt blocks - AI can update avatar's main prompt
+        const mainPromptMatch = responseContent.match(/```mainprompt\n?([\s\S]*?)```/);
+        if (mainPromptMatch && activeAvatar) {
+          const newMainPrompt = mainPromptMatch[1].trim();
+          const updatedAvatars = settings.audience_avatars.map(a =>
+            a.tag === activeAvatar.tag ? { ...a, mainPrompt: newMainPrompt } : a
+          );
+          updateSettings({ audience_avatars: updatedAvatars });
+          updatedFields.push('Main Prompt');
+        }
+
+        // Check for ```smartprompt blocks - AI can update smart prompt guidance
+        const smartPromptMatch = responseContent.match(/```smartprompt\n?([\s\S]*?)```/);
+        if (smartPromptMatch) {
+          updateSettings({ smart_prompt_guidance: smartPromptMatch[1].trim() });
+          updatedFields.push('Smart Prompt Guidance');
+        }
+
+        // Check for ```matchingrule1-4 blocks - AI can update matching rules
+        const rule1Match = responseContent.match(/```matchingrule1\n?([\s\S]*?)```/);
+        if (rule1Match) {
+          updateSettings({ matching_rule_1: rule1Match[1].trim() });
+          updatedFields.push('Matching Rule 1');
+        }
+
+        const rule2Match = responseContent.match(/```matchingrule2\n?([\s\S]*?)```/);
+        if (rule2Match) {
+          updateSettings({ matching_rule_2: rule2Match[1].trim() });
+          updatedFields.push('Matching Rule 2');
+        }
+
+        const rule3Match = responseContent.match(/```matchingrule3\n?([\s\S]*?)```/);
+        if (rule3Match) {
+          updateSettings({ matching_rule_3: rule3Match[1].trim() });
+          updatedFields.push('Matching Rule 3');
+        }
+
+        const rule4Match = responseContent.match(/```matchingrule4\n?([\s\S]*?)```/);
+        if (rule4Match) {
+          updateSettings({ matching_rule_4: rule4Match[1].trim() });
+          updatedFields.push('Matching Rule 4');
+        }
+
+        // Check for ```placementrule blocks - AI can update placement rule
+        const placementMatch = responseContent.match(/```placementrule\n?([\s\S]*?)```/);
+        if (placementMatch) {
+          updateSettings({ placement_rule: placementMatch[1].trim() });
+          updatedFields.push('Placement Rule');
+        }
+
+        // Check for ```smartmatchingrule blocks - AI can update smart matching rule
+        const smartMatchingMatch = responseContent.match(/```smartmatchingrule\n?([\s\S]*?)```/);
+        if (smartMatchingMatch) {
+          updateSettings({ smart_matching_rule: smartMatchingMatch[1].trim() });
+          updatedFields.push('Smart Matching Rule');
         }
 
         // Show notification for all updated fields
@@ -6756,14 +6835,49 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                           {guidedAssistantOpen && (
                             <div className="mt-3 space-y-3">
-                              <p className="text-[10px] text-emerald-300/60">
-                                Chat with AI to refine your guardrails, understand prompt techniques, and get suggestions. Upload images for visual feedback.
-                              </p>
+                              <div className="flex items-center justify-between">
+                                <p className="text-[10px] text-emerald-300/60">
+                                  Chat with AI to refine your guardrails and get suggestions. AI can directly edit fields above.
+                                </p>
+                                {/* Chat Height Controls */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[9px] text-slate-500 mr-1">Size:</span>
+                                  <button
+                                    onClick={() => {
+                                      const sizes: Array<'sm' | 'md' | 'lg' | 'xl' | 'full'> = ['sm', 'md', 'lg', 'xl', 'full'];
+                                      const currentIdx = sizes.indexOf(chatHeight);
+                                      if (currentIdx > 0) setChatHeight(sizes[currentIdx - 1]);
+                                    }}
+                                    disabled={chatHeight === 'sm'}
+                                    className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed rounded text-slate-400 hover:text-white transition"
+                                    title="Shrink chat"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </button>
+                                  <span className="text-[9px] text-emerald-400 w-8 text-center">{chatHeight.toUpperCase()}</span>
+                                  <button
+                                    onClick={() => {
+                                      const sizes: Array<'sm' | 'md' | 'lg' | 'xl' | 'full'> = ['sm', 'md', 'lg', 'xl', 'full'];
+                                      const currentIdx = sizes.indexOf(chatHeight);
+                                      if (currentIdx < sizes.length - 1) setChatHeight(sizes[currentIdx + 1]);
+                                    }}
+                                    disabled={chatHeight === 'full'}
+                                    className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed rounded text-slate-400 hover:text-white transition"
+                                    title="Expand chat"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
 
                               {/* Chat Messages */}
                               <div
                                 ref={guidedAssistantChatRef}
-                                className="h-64 overflow-y-auto bg-slate-950 rounded-lg p-3 space-y-3 border border-emerald-500/20"
+                                className={`${chatHeightClasses[chatHeight]} overflow-y-auto bg-slate-950 rounded-lg p-3 space-y-3 border border-emerald-500/20 transition-all duration-300`}
                               >
                                 {guidedAssistantMessages.length === 0 ? (
                                   <div className="h-full flex items-center justify-center text-slate-500 text-xs">

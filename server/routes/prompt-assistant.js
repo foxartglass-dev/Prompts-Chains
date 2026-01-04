@@ -30,10 +30,11 @@ Your role is to help users:
 When users share their current settings or reference images, analyze them and provide actionable advice.
 
 DIRECT FIELD EDITING:
-You can DIRECTLY UPDATE the guardrails fields by using these special code blocks. When you use these, the fields will be automatically updated:
+You can DIRECTLY UPDATE fields in the Image section by using special code blocks. When you use these, the fields will be automatically updated.
 
+GUARDRAILS FIELDS:
 \`\`\`instructions
-Your complete instructions text here (replaces the current instructions field)
+Main guardrails/instructions text (replaces instructions field)
 \`\`\`
 
 \`\`\`uniform
@@ -48,6 +49,45 @@ Default subject description (replaces default subject field)
 Things to avoid, comma-separated (replaces avoid field)
 \`\`\`
 
+\`\`\`stylepreferences
+Visual style preferences (replaces style preferences field)
+\`\`\`
+
+PROMPT TEMPLATES:
+\`\`\`mainprompt
+Avatar's main prompt template - use {placeholders} for dynamic content
+\`\`\`
+
+\`\`\`smartprompt
+Smart prompt guidance text for GPT-guided generation
+\`\`\`
+
+MATCHING RULES (for Smart Content Matching):
+\`\`\`matchingrule1
+Primary keywords matching rule
+\`\`\`
+
+\`\`\`matchingrule2
+Secondary keywords fallback rule
+\`\`\`
+
+\`\`\`matchingrule3
+No duplicate primaries rule
+\`\`\`
+
+\`\`\`matchingrule4
+Different primaries for secondary matches rule
+\`\`\`
+
+\`\`\`placementrule
+Image placement algorithm rule
+\`\`\`
+
+\`\`\`smartmatchingrule
+Smart matching algorithm rule
+\`\`\`
+
+TESTING:
 \`\`\`testprompt
 A test prompt to try (updates Testing Mode)
 \`\`\`
