@@ -314,14 +314,28 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
       )}
 
       {/* Content Sections with Inline Images */}
+      {/* Image placement alternates: Hero has image, then skip, then image, skip, image...
+          So sections at index 1, 3, 5... get images (odd indices)
+          This creates: Hero(img) -> H2#1(no img) -> H2#2(img) -> H2#3(no img) -> H2#4(img) */}
       {sections.map((section, index) => {
-        const inlineImage = inlineImages[index];
-        // Alternate sides starting from opposite of hero
-        const imageSide = index % 2 === 0 ? inlineStartSide : heroImageSide;
+        // Only odd-indexed sections get images (1, 3, 5...)
+        // This creates the alternating pattern after the hero
+        const shouldHaveImage = index % 2 === 1;
+
+        // Calculate which inline image this section should use
+        // Section 1 = inlineImages[0], Section 3 = inlineImages[1], etc.
+        const imageIndex = Math.floor(index / 2);
+        const inlineImage = shouldHaveImage ? inlineImages[imageIndex] : undefined;
+
+        // Alternate sides: first inline image opposite of hero, then alternate
+        const imageSide = imageIndex % 2 === 0 ? inlineStartSide : heroImageSide;
         const imageStyle = imageSide === 'left' ? styles.inlineImageLeft : styles.inlineImageRight;
 
         // Convert section content to HTML
         const sectionHtml = markdownToHtml(section.content);
+
+        // Image position number (Hero=1, then 2, 3, 4...)
+        const imagePositionNumber = imageIndex + 2;
 
         return (
           <div key={index} style={styles.contentSection}>
@@ -330,16 +344,16 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
               {section.heading}
             </h2>
 
-            {/* Content with optional inline image */}
+            {/* Content with optional inline image - only on odd-indexed sections */}
             <div style={{ overflow: 'hidden' }}>
-              {inlineImage ? (
+              {shouldHaveImage && inlineImage ? (
                 <img
                   src={inlineImage.url}
                   alt={`Section ${index + 1}`}
                   style={imageStyle}
                 />
-              ) : index < 3 ? (
-                // Show placeholder for first 3 potential inline image positions
+              ) : shouldHaveImage && imageIndex < 3 ? (
+                // Show placeholder for sections that SHOULD have images (positions 2, 3, 4)
                 <div style={{
                   ...(imageStyle as React.CSSProperties),
                   width: `${config.inlineImage.maxWidth}px`,
@@ -357,7 +371,7 @@ const ElementorPreview: React.FC<ElementorPreviewProps> = ({
                   <svg width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  <span style={{ fontWeight: 500 }}>Image {index + 2}</span>
+                  <span style={{ fontWeight: 500 }}>Image {imagePositionNumber}</span>
                   <span style={{ fontSize: '10px', color: '#aaa' }}>{imageSide}</span>
                 </div>
               ) : null}

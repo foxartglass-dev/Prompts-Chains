@@ -27,6 +27,7 @@ const router = express.Router();
  * - Remove stray dashes/em-dashes at end of paragraphs
  * - Normalize line endings
  * - Ensure proper H2 title separation
+ * - Convert markdown bold/italic to HTML
  */
 function cleanContent(content) {
   if (!content) return content;
@@ -49,6 +50,14 @@ function cleanContent(content) {
 
   // Remove markdown # at the very start (but not ## which is H2)
   cleaned = cleaned.replace(/^#\s+/gm, '');
+
+  // Convert markdown bold **text** to <strong>text</strong>
+  // Must be done before italic to avoid conflicts
+  cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  // Convert markdown italic *text* to <em>text</em>
+  // Use negative lookbehind/lookahead to avoid matching ** (bold markers)
+  cleaned = cleaned.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
 
   // Remove trailing dashes/em-dashes at end of paragraphs
   // These often appear at the end of AI-generated content
