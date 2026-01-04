@@ -1,6 +1,7 @@
 // Articles API routes (stored outputs with full chain history)
 import express from 'express';
 import { sql, isDatabaseEnabled } from '../db/index.js';
+import { megaImageStatus, trackImagesLoaded, trackApiResponse, banner, log, warning, success, error as logError } from '../services/image-tracker.js';
 
 const router = express.Router();
 
@@ -92,6 +93,8 @@ router.get('/:id', requireDb, async (req, res) => {
   try {
     const { id } = req.params;
 
+    banner(`FETCHING ARTICLE ${id}`);
+
     const articles = await sql`
       SELECT a.*, w.name as workflow_name, w.state as workflow_state,
              ws.name as website_name, c.name as client_name,
@@ -107,7 +110,18 @@ router.get('/:id', requireDb, async (req, res) => {
       return res.status(404).json({ error: 'Article not found' });
     }
 
-    res.json({ article: articles[0] });
+    const article = articles[0];
+
+    // 🔍 MEGA IMAGE STATUS CHECK - See EVERYTHING about images for this article
+    megaImageStatus(id, article);
+
+    // Track what images we're loading
+    trackImagesLoaded('GET /api/articles/:id', article.generated_images, { articleId: id });
+
+    // Track the full API response
+    trackApiResponse('GET /api/articles/:id', { article }, { articleId: id });
+
+    res.json({ article });
   } catch (error) {
     console.error('Error fetching article:', error);
     res.status(500).json({ error: error.message });

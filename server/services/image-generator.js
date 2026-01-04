@@ -8,6 +8,7 @@
 
 import OpenAI from 'openai';
 import Replicate from 'replicate';
+import { trackImageGenerated, banner, success, warning, error as logError } from './image-tracker.js';
 
 // Default model - Flux is default since gpt-image-1.5 requires org verification
 const DEFAULT_MODEL = 'flux-1.1-pro';
@@ -370,18 +371,42 @@ export async function generateImage(prompt, options = {}, apiKey) {
   const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
   const model = mergedOptions.model || DEFAULT_MODEL;
 
+  // 🔍 TRACKING: Image generation starting
+  banner(`GENERATING IMAGE with ${model}`);
+  console.log(`[Image Generator] 🎨 Prompt: ${prompt.substring(0, 100)}...`);
+  console.log(`[Image Generator] 📐 Size: ${mergedOptions.size || 'default'}`);
+  console.log(`[Image Generator] 📊 Quality: ${mergedOptions.quality || 'default'}`);
+
   try {
+    let result;
     if (model === 'gpt-image-1.5') {
-      return await generateWithOpenAI(prompt, mergedOptions, apiKey);
+      result = await generateWithOpenAI(prompt, mergedOptions, apiKey);
     } else if (model === 'seedream-4') {
-      return await generateWithSeedream(prompt, mergedOptions, apiKey);
+      result = await generateWithSeedream(prompt, mergedOptions, apiKey);
     } else if (model === 'ideogram-v3-turbo') {
-      return await generateWithIdeogram(prompt, mergedOptions, apiKey);
+      result = await generateWithIdeogram(prompt, mergedOptions, apiKey);
     } else {
       // Default to Flux for any other model value (including 'flux-1.1-pro')
-      return await generateWithFlux(prompt, mergedOptions, apiKey);
+      result = await generateWithFlux(prompt, mergedOptions, apiKey);
     }
+
+    // 🔍 TRACKING: Image generation completed
+    trackImageGenerated('generateImage()', result, {
+      model,
+      prompt: prompt.substring(0, 100),
+      size: mergedOptions.size
+    });
+
+    if (result?.url) {
+      success(`Image generated! URL type: ${result.url.startsWith('data:') ? 'BASE64' : 'HTTP'}`);
+      console.log(`[Image Generator] ✅ URL preview: ${result.url.substring(0, 80)}...`);
+    } else {
+      logError('Image generation returned no URL!');
+    }
+
+    return result;
   } catch (error) {
+    logError(`Image generation FAILED: ${error.message}`);
     console.error(`[Image Generator] Error with ${model}:`, error.message);
     throw error;
   }
@@ -495,6 +520,12 @@ function calculateHeroSize(wordCount) {
  * @returns {Promise<object>} Chunks with imageData filled
  */
 export async function generateArticleImages(chunks, options = {}, apiKey) {
+  // 🔍 MEGA TRACKING START
+  banner('GENERATE ARTICLE IMAGES - Starting');
+  console.log('╔══════════════════════════════════════════════════════════════════════╗');
+  console.log('║  🎨🎨🎨 GENERATING IMAGES FOR ARTICLE CHUNKS 🎨🎨🎨                  ║');
+  console.log('╚══════════════════════════════════════════════════════════════════════╝');
+
   const {
     heroImage = true,
     maxImages = 4,
@@ -503,6 +534,14 @@ export async function generateArticleImages(chunks, options = {}, apiKey) {
     quality = 'low',
     heroAutoSize = true  // NEW: Auto-size hero based on intro length
   } = options;
+
+  console.log(`[generateArticleImages] Options:`, { heroImage, maxImages, model, quality });
+  console.log(`[generateArticleImages] Chunks received:`, {
+    hasIntro: !!chunks.intro,
+    introHasPrompt: !!chunks.intro?.imagePrompt,
+    bodyChunksCount: chunks.chunks?.length || 0,
+    bodyChunksWithPrompts: chunks.chunks?.filter(c => c.imagePrompt).length || 0
+  });
 
   // Collect prompts from chunks that need images
   const imageSlots = [];
@@ -583,11 +622,49 @@ export async function generateArticleImages(chunks, options = {}, apiKey) {
         };
       }
     } catch (error) {
+      logError(`Image generation FAILED for ${slot.type}: ${error.message}`);
       console.error(`[Image Generator] Failed for ${slot.type}:`, error.message);
     }
 
     imageIndex++;
   }
+
+  // 🔍 MEGA TRACKING - Final state of chunks after image generation
+  banner('GENERATE ARTICLE IMAGES - Complete');
+  console.log('╔══════════════════════════════════════════════════════════════════════╗');
+  console.log('║  📸 FINAL CHUNK STATE AFTER IMAGE GENERATION                        ║');
+  console.log('╠══════════════════════════════════════════════════════════════════════╣');
+
+  // Check intro imageData
+  if (chunks.intro) {
+    const hasImage = !!chunks.intro.imageData?.url;
+    console.log(`║ INTRO (Hero): ${hasImage ? '✅ HAS IMAGE' : '❌ NO IMAGE'}`.padEnd(71) + '║');
+    if (hasImage) {
+      const urlType = chunks.intro.imageData.url.startsWith('data:') ? 'BASE64' : 'HTTP';
+      console.log(`║   URL Type: ${urlType}`.padEnd(71) + '║');
+      console.log(`║   URL: ${chunks.intro.imageData.url.substring(0, 50)}...`.padEnd(71) + '║');
+    }
+  }
+
+  // Check body chunks
+  let chunksWithImages = 0;
+  chunks.chunks?.forEach((chunk, idx) => {
+    const hasImage = !!chunk.imageData?.url;
+    if (hasImage) chunksWithImages++;
+    console.log(`║ Chunk[${idx}] "${(chunk.heading || 'Untitled').substring(0, 20)}": ${hasImage ? '✅ HAS IMAGE' : '❌ NO IMAGE'}`.padEnd(71) + '║');
+    if (hasImage) {
+      const urlType = chunk.imageData.url.startsWith('data:') ? 'BASE64' : 'HTTP';
+      console.log(`║   URL Type: ${urlType} | Side: ${chunk.imageData.side || 'unknown'}`.padEnd(71) + '║');
+    }
+  });
+
+  console.log('╠══════════════════════════════════════════════════════════════════════╣');
+  const totalImages = (chunks.intro?.imageData?.url ? 1 : 0) + chunksWithImages;
+  console.log(`║ TOTAL IMAGES ATTACHED TO CHUNKS: ${totalImages}`.padEnd(71) + '║');
+  if (totalImages === 0) {
+    console.log(`║ ❌❌❌ NO IMAGES WERE ATTACHED! Check API keys & prompts! ❌❌❌`.padEnd(71) + '║');
+  }
+  console.log('╚══════════════════════════════════════════════════════════════════════╝');
 
   return chunks;
 }

@@ -17,6 +17,19 @@ import {
   testConnection
 } from '../services/wordpress-publisher.js';
 import { processArticleWithImages, previewPrompts } from '../services/image-pipeline.js';
+import {
+  trackImagesSaved,
+  trackImagesAttachedToChunks,
+  trackImageGenerated,
+  banner,
+  section,
+  endSection,
+  log,
+  success,
+  warning,
+  error as logError,
+  highlight
+} from '../services/image-tracker.js';
 
 const router = express.Router();
 
@@ -1161,10 +1174,24 @@ router.post('/publish', async (req, res) => {
           }
         });
 
+        // 🔍🔍🔍 MEGA IMAGE TRACKING - SEE WHERE IMAGES GO! 🔍🔍🔍
+        banner(`SAVING IMAGES TO DATABASE - Article ${articleId}`);
+
+        // Track what's in chunks BEFORE we extract images
+        trackImagesAttachedToChunks(chunked, 'BEFORE saving to DB');
+
+        // Track what we're about to save
+        trackImagesSaved('elementor.js publish endpoint', generatedImagesData, {
+          articleId,
+          isManualPush,
+          status
+        });
+
         console.log(`[Elementor Publish] Saving ${generatedImagesData.length} images to article ${articleId}`);
 
         // Debug: Log what we're saving
         if (generatedImagesData.length > 0) {
+          success(`Found ${generatedImagesData.length} images to save!`);
           console.log('[Elementor Publish] Images to save:', generatedImagesData.map(img => ({
             id: img.id,
             placement: img.placement,
@@ -1174,7 +1201,9 @@ router.post('/publish', async (req, res) => {
             pushedToWp: img.pushedToWp
           })));
         } else {
-          // Debug: Why no images?
+          // 🚨 BIG RED FLAG - NO IMAGES TO SAVE!
+          logError('NO IMAGES TO SAVE! This is the problem!');
+          warning('Checking chunks to find where images got lost...');
           console.log('[Elementor Publish] DEBUG - No images to save. Checking chunks:');
           console.log('  - chunked.intro exists:', !!chunked.intro);
           console.log('  - chunked.intro.imageData exists:', !!chunked.intro?.imageData);
