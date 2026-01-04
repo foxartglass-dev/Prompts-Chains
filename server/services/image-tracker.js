@@ -367,6 +367,26 @@ export function megaImageStatus(articleId, articleData) {
   console.log(`${COLORS.reset}\n`);
 }
 
+// Named exports for individual functions
+export {
+  trackImageGenerated,
+  trackImagesSaved,
+  trackImagesLoaded,
+  trackImagesAttachedToChunks,
+  trackApiResponse,
+  trackDbQuery,
+  megaImageStatus,
+  banner,
+  section,
+  endSection,
+  log,
+  success,
+  warning,
+  error,
+  highlight
+};
+
+// Default export for convenience
 export default {
   trackImageGenerated,
   trackImagesSaved,
