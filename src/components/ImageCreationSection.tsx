@@ -585,6 +585,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const guidedAssistantChatRef = useRef<HTMLDivElement>(null);
   const guidedAssistantFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Loaded articles for AI context
+  interface LoadedArticle {
+    id: number;
+    keyword: string;
+    tag?: string;
+    wordCount?: number;
+    content: string;
+    websiteName?: string;
+    clientName?: string;
+  }
+  const [loadedArticles, setLoadedArticles] = useState<LoadedArticle[]>([]);
+  const [loadingArticles, setLoadingArticles] = useState(false);
+  const [articleSummary, setArticleSummary] = useState<{
+    summary: Array<{ website_id: number; website_name: string; client_id: number; client_name: string; article_count: number }>;
+    recentArticles: Array<{ id: number; keyword: string; tag: string; word_count: number; status: string }>;
+  } | null>(null);
+  const [showArticleLoader, setShowArticleLoader] = useState(false);
+
   // Testing Mode state - sandbox for generating test images with MULTIPLE TABS
   const [testingModeOpen, setTestingModeOpen] = useState(false);
   const [testingModeLoading, setTestingModeLoading] = useState(false);
@@ -2227,7 +2245,22 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             timestamp: h.timestamp
           })),
           model: settings.default_model || 'gpt-image-1.5'
-        }
+        },
+
+        // LOADED ARTICLES - For image planning based on article content
+        // AI can read these to understand the content and create image plans
+        articles: loadedArticles.length > 0 ? {
+          count: loadedArticles.length,
+          items: loadedArticles.map(a => ({
+            id: a.id,
+            keyword: a.keyword,
+            tag: a.tag,
+            wordCount: a.wordCount,
+            websiteName: a.websiteName,
+            clientName: a.clientName,
+            content: a.content
+          }))
+        } : null
       };
 
       const res = await fetch('/api/prompt-assistant/chat', {
@@ -2247,6 +2280,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const data = await res.json();
       if (data.success) {
         const responseContent = data.response;
+        const updatedFields: string[] = [];
 
         // Check for ```testprompt blocks - AI can directly update Testing Mode
         const testPromptMatch = responseContent.match(/```testprompt\n?([\s\S]*?)```/);
@@ -2255,7 +2289,64 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           // Open Testing Mode and update the prompt
           setTestingModeOpen(true);
           updateActiveTabPrompt(newPrompt);
-          showNotification('Prompt updated in Testing Mode!', 'success');
+          updatedFields.push('Test Prompt');
+        }
+
+        // Check for ```instructions blocks - AI can directly update Instructions field
+        const instructionsMatch = responseContent.match(/```instructions\n?([\s\S]*?)```/);
+        if (instructionsMatch) {
+          const newInstructions = instructionsMatch[1].trim();
+          updateSettings({
+            guided_guardrails: {
+              ...settings.guided_guardrails,
+              instructions: newInstructions
+            } as any
+          });
+          updatedFields.push('Instructions');
+        }
+
+        // Check for ```uniform blocks - AI can directly update Uniform/Appearance field
+        const uniformMatch = responseContent.match(/```uniform\n?([\s\S]*?)```/);
+        if (uniformMatch) {
+          const newUniform = uniformMatch[1].trim();
+          updateSettings({
+            guided_guardrails: {
+              ...settings.guided_guardrails,
+              uniformDescription: newUniform
+            } as any
+          });
+          updatedFields.push('Uniform/Appearance');
+        }
+
+        // Check for ```subject blocks - AI can directly update Default Subject field
+        const subjectMatch = responseContent.match(/```subject\n?([\s\S]*?)```/);
+        if (subjectMatch) {
+          const newSubject = subjectMatch[1].trim();
+          updateSettings({
+            guided_guardrails: {
+              ...settings.guided_guardrails,
+              defaultSubject: newSubject
+            } as any
+          });
+          updatedFields.push('Default Subject');
+        }
+
+        // Check for ```avoid blocks - AI can directly update Avoid field
+        const avoidMatch = responseContent.match(/```avoid\n?([\s\S]*?)```/);
+        if (avoidMatch) {
+          const newAvoid = avoidMatch[1].trim();
+          updateSettings({
+            guided_guardrails: {
+              ...settings.guided_guardrails,
+              avoidList: newAvoid
+            } as any
+          });
+          updatedFields.push('Avoid List');
+        }
+
+        // Show notification for all updated fields
+        if (updatedFields.length > 0) {
+          showNotification(`✓ Updated: ${updatedFields.join(', ')}`, 'success');
         }
 
         const assistantMessage: ChatMessage = {
@@ -2280,6 +2371,58 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         guidedAssistantChatRef.current.scrollTop = guidedAssistantChatRef.current.scrollHeight;
       }
     }, 100);
+  };
+
+  /**
+   * Fetch article summary (counts by website/client) for selection UI
+   */
+  const fetchArticleSummary = async () => {
+    try {
+      const res = await fetch(`/api/prompt-assistant/articles/summary?workflowId=${workflowId}`);
+      const data = await res.json();
+      if (data.success) {
+        setArticleSummary(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch article summary:', error);
+    }
+  };
+
+  /**
+   * Load articles by filter (websiteId, clientId, or all)
+   */
+  const loadArticles = async (filter: { websiteId?: number; clientId?: number; limit?: number }) => {
+    setLoadingArticles(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('workflowId', workflowId.toString());
+      if (filter.websiteId) params.append('websiteId', filter.websiteId.toString());
+      if (filter.clientId) params.append('clientId', filter.clientId.toString());
+      if (filter.limit) params.append('limit', filter.limit.toString());
+
+      const res = await fetch(`/api/prompt-assistant/articles?${params.toString()}`);
+      const data = await res.json();
+
+      if (data.success) {
+        setLoadedArticles(data.articles);
+        showNotification(`Loaded ${data.count} articles for AI context`, 'success');
+        setShowArticleLoader(false);
+      } else {
+        showNotification(data.error || 'Failed to load articles', 'error');
+      }
+    } catch (error) {
+      console.error('Failed to load articles:', error);
+      showNotification('Failed to load articles', 'error');
+    }
+    setLoadingArticles(false);
+  };
+
+  /**
+   * Clear loaded articles
+   */
+  const clearLoadedArticles = () => {
+    setLoadedArticles([]);
+    showNotification('Articles cleared from AI context', 'success');
   };
 
   /**
@@ -6765,6 +6908,98 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 )}
                               </div>
 
+                              {/* Loaded Articles Preview */}
+                              {loadedArticles.length > 0 && (
+                                <div className="p-2 bg-blue-900/30 border border-blue-500/30 rounded-lg">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[10px] text-blue-400 font-medium flex items-center gap-1">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                      {loadedArticles.length} Articles Loaded for AI
+                                    </span>
+                                    <button
+                                      onClick={clearLoadedArticles}
+                                      className="text-[10px] text-red-400 hover:text-red-300 transition"
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {loadedArticles.slice(0, 5).map((a, idx) => (
+                                      <span key={idx} className="px-1.5 py-0.5 bg-blue-800/50 text-blue-300 text-[9px] rounded">
+                                        {a.keyword.length > 25 ? a.keyword.substring(0, 25) + '...' : a.keyword}
+                                      </span>
+                                    ))}
+                                    {loadedArticles.length > 5 && (
+                                      <span className="px-1.5 py-0.5 bg-blue-800/50 text-blue-300 text-[9px] rounded">
+                                        +{loadedArticles.length - 5} more
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Article Loader Panel */}
+                              {showArticleLoader && (
+                                <div className="p-3 bg-slate-900 border border-blue-500/30 rounded-lg space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs text-blue-400 font-medium">Load Articles for AI</span>
+                                    <button
+                                      onClick={() => setShowArticleLoader(false)}
+                                      className="text-slate-400 hover:text-white"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                  <p className="text-[10px] text-slate-400">
+                                    Load articles so the AI can read them and create image plans based on content.
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      onClick={() => loadArticles({ limit: 10 })}
+                                      disabled={loadingArticles}
+                                      className="px-2 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white text-[10px] rounded transition"
+                                    >
+                                      {loadingArticles ? 'Loading...' : 'Load 10 Recent'}
+                                    </button>
+                                    <button
+                                      onClick={() => loadArticles({ limit: 20 })}
+                                      disabled={loadingArticles}
+                                      className="px-2 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white text-[10px] rounded transition"
+                                    >
+                                      Load 20 Recent
+                                    </button>
+                                    <button
+                                      onClick={() => loadArticles({ limit: 50 })}
+                                      disabled={loadingArticles}
+                                      className="px-2 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white text-[10px] rounded transition"
+                                    >
+                                      Load All (max 50)
+                                    </button>
+                                  </div>
+                                  {articleSummary && articleSummary.summary.length > 0 && (
+                                    <div className="mt-2 pt-2 border-t border-slate-700">
+                                      <span className="text-[10px] text-slate-400 block mb-1">Or load by client/website:</span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {articleSummary.summary.map((s, idx) => (
+                                          <button
+                                            key={idx}
+                                            onClick={() => s.website_id ? loadArticles({ websiteId: s.website_id }) : loadArticles({ clientId: s.client_id })}
+                                            disabled={loadingArticles}
+                                            className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-[10px] rounded transition"
+                                          >
+                                            {s.website_name || s.client_name || 'Unknown'} ({s.article_count})
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
                               {/* Image attachments preview */}
                               {guidedAssistantImages.length > 0 && (
                                 <div className="flex flex-wrap gap-2 p-2 bg-slate-900 rounded-lg">
@@ -6801,6 +7036,22 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 >
                                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setShowArticleLoader(!showArticleLoader);
+                                    if (!articleSummary) fetchArticleSummary();
+                                  }}
+                                  className={`p-2 rounded-lg transition ${
+                                    loadedArticles.length > 0
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white'
+                                  }`}
+                                  title={loadedArticles.length > 0 ? `${loadedArticles.length} articles loaded` : 'Load articles for AI to read'}
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                   </svg>
                                 </button>
                                 <input

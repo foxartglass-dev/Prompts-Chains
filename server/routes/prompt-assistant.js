@@ -1,4 +1,5 @@
 import express from 'express';
+import { sql, isDatabaseEnabled } from '../db/index.js';
 
 const router = express.Router();
 
@@ -23,15 +24,54 @@ Your role is to help users:
 3. Suggest specific prompt techniques and wording
 4. Analyze reference images and help incorporate their style
 5. Troubleshoot common issues (logo visibility, pose consistency, style drift)
+6. Read and analyze articles to create comprehensive image generation plans
+7. Create batch image strategies based on article content
 
 When users share their current settings or reference images, analyze them and provide actionable advice.
 
-IMPORTANT FORMATTING:
-- When suggesting prompts or guardrails the user should save, wrap them in triple backticks with a "guardrail" label like this:
-\`\`\`guardrail
-Your suggested guardrail text here
+DIRECT FIELD EDITING:
+You can DIRECTLY UPDATE the guardrails fields by using these special code blocks. When you use these, the fields will be automatically updated:
+
+\`\`\`instructions
+Your complete instructions text here (replaces the current instructions field)
 \`\`\`
-This makes it easy for users to identify and save your suggestions.
+
+\`\`\`uniform
+Worker appearance description (replaces uniform/appearance field)
+\`\`\`
+
+\`\`\`subject
+Default subject description (replaces default subject field)
+\`\`\`
+
+\`\`\`avoid
+Things to avoid, comma-separated (replaces avoid field)
+\`\`\`
+
+\`\`\`testprompt
+A test prompt to try (updates Testing Mode)
+\`\`\`
+
+Use these blocks when you and the user agree on changes. You can update multiple fields in one response.
+
+SUGGESTING WITHOUT APPLYING:
+If you want to suggest something for the user to review before applying, use:
+\`\`\`guardrail
+Suggested text here (user must click "Add to Guardrails" to apply)
+\`\`\`
+
+ARTICLE ANALYSIS:
+When you receive article content in the context, analyze it to understand:
+- The main topics and services discussed
+- Visual scenarios that would complement the content
+- Consistent themes across multiple articles
+- Opportunities for hero images, inline images, and supporting visuals
+
+When creating image plans, consider:
+- Reading ALL articles first to understand the full scope
+- Creating a cohesive visual strategy across articles
+- Identifying recurring themes that need consistent imagery
+- Suggesting specific prompts for each article section
 
 Be concise but thorough. Focus on practical, actionable advice based on how modern image AI actually works.`;
 
@@ -651,6 +691,184 @@ Respond in this exact JSON format (no markdown, just JSON):
     console.error('[Prompt Assistant - Evaluate Image] Error:', error);
     res.status(500).json({
       error: error.message || 'Failed to evaluate image'
+    });
+  }
+});
+
+// ============================================
+// ARTICLE READING FOR AI ASSISTANT
+// ============================================
+
+/**
+ * GET /api/prompt-assistant/articles
+ * Fetch articles for the AI Prompt Assistant to analyze
+ * Supports filtering by workflowId, websiteId, clientId
+ */
+router.get('/articles', async (req, res) => {
+  if (!isDatabaseEnabled()) {
+    return res.status(503).json({ error: 'Database not configured' });
+  }
+
+  try {
+    const { workflowId, websiteId, clientId, limit = 20 } = req.query;
+    const parsedLimit = Math.min(parseInt(limit) || 20, 50); // Max 50 articles
+
+    let articles;
+
+    if (workflowId) {
+      articles = await sql`
+        SELECT a.id, a.keyword, a.tag, a.final_content, a.meta_titles, a.meta_descriptions,
+               a.chain_outputs, a.word_count, a.status,
+               ws.name as website_name, c.name as client_name
+        FROM articles a
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        LEFT JOIN clients c ON a.client_id = c.id
+        WHERE a.workflow_id = ${workflowId}
+        ORDER BY a.created_at DESC
+        LIMIT ${parsedLimit}
+      `;
+    } else if (websiteId) {
+      articles = await sql`
+        SELECT a.id, a.keyword, a.tag, a.final_content, a.meta_titles, a.meta_descriptions,
+               a.chain_outputs, a.word_count, a.status,
+               ws.name as website_name, c.name as client_name
+        FROM articles a
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        LEFT JOIN clients c ON a.client_id = c.id
+        WHERE a.website_id = ${websiteId}
+        ORDER BY a.created_at DESC
+        LIMIT ${parsedLimit}
+      `;
+    } else if (clientId) {
+      articles = await sql`
+        SELECT a.id, a.keyword, a.tag, a.final_content, a.meta_titles, a.meta_descriptions,
+               a.chain_outputs, a.word_count, a.status,
+               ws.name as website_name, c.name as client_name
+        FROM articles a
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        LEFT JOIN clients c ON a.client_id = c.id
+        WHERE a.client_id = ${clientId}
+        ORDER BY a.created_at DESC
+        LIMIT ${parsedLimit}
+      `;
+    } else {
+      // No filter - return recent articles
+      articles = await sql`
+        SELECT a.id, a.keyword, a.tag, a.final_content, a.meta_titles, a.meta_descriptions,
+               a.chain_outputs, a.word_count, a.status,
+               ws.name as website_name, c.name as client_name
+        FROM articles a
+        LEFT JOIN websites ws ON a.website_id = ws.id
+        LEFT JOIN clients c ON a.client_id = c.id
+        ORDER BY a.created_at DESC
+        LIMIT ${parsedLimit}
+      `;
+    }
+
+    // Format articles for AI consumption (summarized for context window efficiency)
+    const formattedArticles = articles.map(article => {
+      // Truncate content if very long (AI doesn't need full article, just enough context)
+      const content = article.final_content || '';
+      const truncatedContent = content.length > 3000
+        ? content.substring(0, 3000) + '...[truncated]'
+        : content;
+
+      return {
+        id: article.id,
+        keyword: article.keyword,
+        tag: article.tag,
+        wordCount: article.word_count,
+        status: article.status,
+        websiteName: article.website_name,
+        clientName: article.client_name,
+        content: truncatedContent,
+        metaTitles: article.meta_titles,
+        metaDescriptions: article.meta_descriptions
+      };
+    });
+
+    res.json({
+      success: true,
+      count: formattedArticles.length,
+      articles: formattedArticles
+    });
+
+  } catch (error) {
+    console.error('[Prompt Assistant - Articles] Error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to fetch articles'
+    });
+  }
+});
+
+/**
+ * GET /api/prompt-assistant/articles/summary
+ * Get a quick overview of available articles (for UI selection)
+ */
+router.get('/articles/summary', async (req, res) => {
+  if (!isDatabaseEnabled()) {
+    return res.status(503).json({ error: 'Database not configured' });
+  }
+
+  try {
+    const { workflowId } = req.query;
+
+    // Get article counts by website/client
+    const summaryQuery = workflowId
+      ? sql`
+          SELECT
+            ws.id as website_id, ws.name as website_name,
+            c.id as client_id, c.name as client_name,
+            COUNT(a.id) as article_count
+          FROM articles a
+          LEFT JOIN websites ws ON a.website_id = ws.id
+          LEFT JOIN clients c ON a.client_id = c.id
+          WHERE a.workflow_id = ${workflowId}
+          GROUP BY ws.id, ws.name, c.id, c.name
+          ORDER BY c.name, ws.name
+        `
+      : sql`
+          SELECT
+            ws.id as website_id, ws.name as website_name,
+            c.id as client_id, c.name as client_name,
+            COUNT(a.id) as article_count
+          FROM articles a
+          LEFT JOIN websites ws ON a.website_id = ws.id
+          LEFT JOIN clients c ON a.client_id = c.id
+          GROUP BY ws.id, ws.name, c.id, c.name
+          ORDER BY c.name, ws.name
+        `;
+
+    const summary = await summaryQuery;
+
+    // Also get recent article keywords for quick selection
+    const recentQuery = workflowId
+      ? sql`
+          SELECT id, keyword, tag, word_count, status
+          FROM articles
+          WHERE workflow_id = ${workflowId}
+          ORDER BY created_at DESC
+          LIMIT 20
+        `
+      : sql`
+          SELECT id, keyword, tag, word_count, status
+          FROM articles
+          ORDER BY created_at DESC
+          LIMIT 20
+        `;
+
+    const recentArticles = await recentQuery;
+
+    res.json({
+      success: true,
+      summary,
+      recentArticles
+    });
+
+  } catch (error) {
+    console.error('[Prompt Assistant - Articles Summary] Error:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to fetch articles summary'
     });
   }
 });
