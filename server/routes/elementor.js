@@ -1298,7 +1298,7 @@ router.post('/publish', async (req, res) => {
                 image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
-            RETURNING id, (SELECT array_length(generated_images, 1) FROM articles WHERE id = ${articleId}) as saved_count
+            RETURNING id
           `;
           console.log('[SAVE] ✅ Manual push DB update completed for article', articleId);
           console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
@@ -1315,7 +1315,7 @@ router.post('/publish', async (req, res) => {
                 image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
-            RETURNING id, (SELECT array_length(generated_images, 1) FROM articles WHERE id = ${articleId}) as saved_count
+            RETURNING id
           `;
           console.log('[SAVE] ✅ Auto push DB update completed for article', articleId);
           console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
