@@ -3620,13 +3620,25 @@ Start by introducing yourself and asking about their business in a friendly way.
 
           // Sync to new database API (bulk add)
           try {
-            await fetch(`/api/image-bank/${workflowId}`, {
+            console.log('[Image Bank] Saving images to database, count:', newBankImages.length);
+            console.log('[Image Bank] Sample image URL:', newBankImages[0]?.url?.substring(0, 100));
+
+            const saveRes = await fetch(`/api/image-bank/${workflowId}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ images: newBankImages })
             });
+            const saveData = await saveRes.json();
+
+            if (saveData.success) {
+              console.log('[Image Bank] Successfully saved', saveData.data?.length || 0, 'images to database');
+            } else {
+              console.error('[Image Bank] Save failed:', saveData.error);
+              showNotification('Warning: Images generated but may not be saved to database', 'warning');
+            }
           } catch (err) {
             console.error('[Image Bank] Bulk add API failed:', err);
+            showNotification('Warning: Could not save images to database', 'warning');
           }
 
           setGenerationProgress('');

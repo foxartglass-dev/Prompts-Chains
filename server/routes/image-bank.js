@@ -121,6 +121,19 @@ router.post('/:workflowId', async (req, res) => {
     const { workflowId } = req.params;
     const { image, images } = req.body;
 
+    // Debug logging
+    if (images && Array.isArray(images)) {
+      console.log(`[Image Bank] Adding ${images.length} images to workflow ${workflowId}`);
+      if (images[0]) {
+        console.log('[Image Bank] Sample image keys:', Object.keys(images[0]));
+        console.log('[Image Bank] Sample URL (first 100 chars):', images[0].url?.substring(0, 100));
+      }
+    } else if (image) {
+      console.log(`[Image Bank] Adding single image to workflow ${workflowId}`);
+      console.log('[Image Bank] Image keys:', Object.keys(image));
+      console.log('[Image Bank] URL (first 100 chars):', image.url?.substring(0, 100));
+    }
+
     let result;
     if (images && Array.isArray(images)) {
       result = await imageBankService.addImagesToBank(parseInt(workflowId), images);
@@ -130,6 +143,7 @@ router.post('/:workflowId', async (req, res) => {
       return res.status(400).json({ success: false, error: 'No image data provided' });
     }
 
+    console.log('[Image Bank] Save result count:', result?.length || (result ? 1 : 0));
     res.json({ success: true, data: result });
   } catch (error) {
     console.error('[Image Bank] Add error:', error);
