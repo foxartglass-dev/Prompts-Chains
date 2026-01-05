@@ -821,7 +821,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             // Transform from DB format to frontend format
             imageBankData = bankData.data.map((img: Record<string, unknown>) => ({
               id: img.external_id || String(img.id),
-              url: img.url,
+              url: img.url as string,
               title: img.title || '',
               category: img.category || '',
               variation: img.variation_name || '',
@@ -835,9 +835,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
               usedAt: img.used_at || '',
               archived: img.archived || false,
               tags: Array.isArray(img.tags) ? img.tags : [],
-              dbId: img.id // Keep the database ID for API calls
+              dbId: img.id, // Keep the database ID for API calls
+              createdAt: img.created_at || new Date().toISOString() // Map created_at to createdAt
             }));
             console.log(`[Image Creation] Loaded ${imageBankData.length} images from new API`);
+            if (imageBankData.length > 0) {
+              console.log('[Image Creation] Sample image URL:', imageBankData[0].url?.substring(0, 100));
+            }
           }
         } catch (bankError) {
           console.error('[Image Creation] Failed to fetch image bank:', bankError);
@@ -6317,12 +6321,25 @@ Start by introducing yourself and asking about their business in a friendly way.
                           </div>
                         )}
                         {/* Image - click to preview */}
-                        <img
-                          src={img.url}
-                          alt={img.title || img.variation}
-                          className="w-full h-24 object-cover rounded-b border border-brand-cyan/30 pt-6"
-                          onClick={() => setPreviewImage(img)}
-                        />
+                        {img.url ? (
+                          <img
+                            src={img.url}
+                            alt={img.title || img.variation}
+                            className="w-full h-24 object-cover rounded-b border border-brand-cyan/30 pt-6"
+                            onClick={() => setPreviewImage(img)}
+                            onError={(e) => {
+                              // Show placeholder if image fails to load
+                              (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect fill="%23374151" width="100" height="100"/><text x="50" y="55" fill="%239CA3AF" text-anchor="middle" font-size="12">Failed</text></svg>';
+                            }}
+                          />
+                        ) : (
+                          <div
+                            className="w-full h-24 rounded-b border border-red-500/50 pt-6 bg-slate-800 flex items-center justify-center cursor-pointer"
+                            onClick={() => setPreviewImage(img)}
+                          >
+                            <span className="text-red-400 text-xs">No URL</span>
+                          </div>
+                        )}
                         {/* Hover overlay with actions */}
                         <div className="absolute inset-0 top-6 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded-b flex flex-col items-center justify-center p-1 gap-1">
                           <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
