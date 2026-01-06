@@ -124,6 +124,8 @@ interface BankImage {
   archived?: boolean; // For archive system - keeps images for future reference
   tags?: string[]; // Tags for organization
   dbId?: number; // Database ID for API calls (new table)
+  wpUrl?: string; // WordPress Media Library URL
+  wpMediaId?: number; // WordPress Media Library ID
 }
 
 // ========== PROMPT PROBLEM AREAS ==========
@@ -3808,7 +3810,8 @@ Start by introducing yourself and asking about their business in a friendly way.
           model: settings.image_generation_model || 'gpt-image-1.5',
           quality: batchQuality, // Use batch-specific quality setting
           referenceImageUrls: settings.reference_images.map(i => i.url).filter(url => !url.startsWith('data:')),
-          quantity: batchQuantity
+          quantity: batchQuantity,
+          workflowId // Pass workflowId to lookup WP credentials and upload images
         })
       });
 
@@ -3821,7 +3824,7 @@ Start by introducing yourself and asking about their business in a friendly way.
         if (successCount > 0) {
           const newBankImages: BankImage[] = data.images.map((img: any) => ({
             id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            url: img.url,
+            url: img.wpUrl || img.url, // Prefer WordPress URL if available
             variation: img.variation,
             variationId: img.variationId,
             avatarTag: activeAvatar?.tag, // Link images to avatar's tag for routing
@@ -3829,7 +3832,9 @@ Start by introducing yourself and asking about their business in a friendly way.
             prompt: img.prompt,
             createdAt: new Date().toISOString(),
             model: img.model || settings.image_generation_model || 'flux-1.1-pro',
-            used: false
+            used: false,
+            wpUrl: img.wpUrl || null, // WordPress Media Library URL
+            wpMediaId: img.wpMediaId || null // WordPress Media Library ID
           }));
 
           updateSettings({
