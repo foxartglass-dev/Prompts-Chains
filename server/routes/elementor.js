@@ -619,6 +619,18 @@ router.post('/publish', async (req, res) => {
           const matchPlurals = config.match_plurals !== false; // Default ON
           const usedPrimaryKeywords = new Set(); // Track used primary keywords (Rule 3)
 
+          // DEBUG: Log smart matching configuration
+          console.log('\n╔══════════════════════════════════════════════════════════════╗');
+          console.log('║         SMART CONTENT MATCHING CONFIGURATION                 ║');
+          console.log('╠══════════════════════════════════════════════════════════════╣');
+          console.log(`║ smart_matching_enabled: ${String(smartMatchingEnabled).padEnd(35)} ║`);
+          console.log(`║ config.smart_matching_enabled: ${String(config.smart_matching_enabled).padEnd(28)} ║`);
+          console.log(`║ smartMatchingMode: ${smartMatchingMode.padEnd(41)} ║`);
+          console.log(`║ matchPlurals: ${String(matchPlurals).padEnd(46)} ║`);
+          console.log(`║ targetAvatar: ${(targetAvatar?.name || 'NONE').padEnd(46)} ║`);
+          console.log(`║ placeholderCategories: ${String(targetAvatar?.placeholderCategories?.length || 0).padEnd(37)} ║`);
+          console.log('╚══════════════════════════════════════════════════════════════╝\n');
+
           // Helper: Generate plural forms of a word
           const getPluralForms = (word) => {
             if (!matchPlurals) return [word];
@@ -644,7 +656,7 @@ router.post('/publish', async (req, res) => {
           };
 
           if (smartMatchingEnabled && targetAvatar?.placeholderCategories?.length > 0) {
-            console.log('[Smart Matching] Enabled, mode:', smartMatchingMode, ', plurals:', matchPlurals);
+            console.log('[Smart Matching] ✓ ACTIVE - mode:', smartMatchingMode, ', plurals:', matchPlurals);
 
             // Normalize article content for keyword matching
             const articleText = (cleanedContent || contentHtml || '').toLowerCase();
@@ -885,6 +897,7 @@ router.post('/publish', async (req, res) => {
           // Sort by variation order (if not using smart matching or as tiebreaker)
           // Apply variation order sorting only if NOT using smart matching
           if (!smartMatchingEnabled) {
+            console.log('[Image Bank] Smart Matching DISABLED - using fallback sorting:', variationOrderMode);
             if (variationOrderMode === 'manual' && manualOrder.length > 0) {
               availableImages = availableImages.sort((a, b) => {
                 const aIdx = manualOrder.indexOf(a.variationId);

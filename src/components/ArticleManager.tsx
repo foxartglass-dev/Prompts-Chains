@@ -1875,6 +1875,22 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                     </svg>
                     Replace Image
                   </button>
+                  {/* Push to WP button - shown if article is published and image not yet pushed */}
+                  {selectedArticle?.wp_post_id && !viewingImage.pushedToWp && (
+                    <button
+                      onClick={() => {
+                        pushSingleImageToWordPress(viewingImage.id);
+                        setViewingImage(null);
+                      }}
+                      disabled={pushingSingleImage === viewingImage.id}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 rounded-lg text-white font-medium flex items-center gap-2 transition"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      Push to WP
+                    </button>
+                  )}
                   <button
                     onClick={() => setViewingImage(null)}
                     className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white font-medium transition"
