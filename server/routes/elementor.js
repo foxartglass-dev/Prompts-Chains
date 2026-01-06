@@ -431,11 +431,13 @@ router.post('/publish', async (req, res) => {
           if (imageBank.length === 0) {
             console.log('[Image Bank] Old JSON blob is empty, checking new image_bank_items table...');
             try {
+              // IMPORTANT: Do NOT select URL column here - it contains huge base64 data
+              // that can exceed the 64MB response limit. We'll fetch URLs later for
+              // only the images we actually use.
               const newBankImages = await sql`
                 SELECT
                   id,
                   external_id,
-                  url,
                   title,
                   category,
                   variation_name,
@@ -460,19 +462,18 @@ router.post('/publish', async (req, res) => {
               `;
 
               if (newBankImages.length > 0) {
-                console.log(`[Image Bank] Found ${newBankImages.length} images in new table!`);
+                console.log(`[Image Bank] Found ${newBankImages.length} images in new table (without URLs to avoid 64MB limit)`);
                 // Transform to match expected format
                 // wpUrl and wpMediaId may be stored in metadata JSON
+                // URL will be fetched later for only the images we use
                 imageBank = newBankImages.map(img => {
                   const meta = img.metadata || {};
-                  // Check if URL is a WordPress URL (http) or base64
-                  const isWpUrl = img.url?.startsWith('http');
                   return {
                     id: img.external_id || String(img.id),
                     dbId: img.id,
-                    url: img.url,
-                    // wpUrl priority: metadata.wpUrl > url if http > null
-                    wpUrl: meta.wpUrl || (isWpUrl ? img.url : null),
+                    // URL will be fetched later - for now use metadata.wpUrl if available
+                    url: meta.wpUrl || null,
+                    wpUrl: meta.wpUrl || null,
                     wpMediaId: meta.wpMediaId || null,
                     title: img.title,
                     category: img.category,
@@ -487,9 +488,35 @@ router.post('/publish', async (req, res) => {
                     usedAt: img.used_at,
                     archived: img.archived,
                     tags: img.tags,
-                    createdAt: img.created_at
+                    createdAt: img.created_at,
+                    _needsUrlFetch: !meta.wpUrl // Flag to indicate URL needs to be fetched
                   };
                 });
+
+                // If images need URL fetch (no wpUrl in metadata), fetch URLs for first 10 images
+                const imagesNeedingUrls = imageBank.filter(img => img._needsUrlFetch).slice(0, 10);
+                if (imagesNeedingUrls.length > 0) {
+                  console.log(`[Image Bank] Fetching URLs for ${imagesNeedingUrls.length} images...`);
+                  const idsToFetch = imagesNeedingUrls.map(img => img.dbId);
+                  try {
+                    const urlResults = await sql`
+                      SELECT id, url FROM image_bank_items
+                      WHERE id = ANY(${idsToFetch})
+                    `;
+                    // Update imageBank with fetched URLs
+                    urlResults.forEach(result => {
+                      const img = imageBank.find(i => i.dbId === result.id);
+                      if (img) {
+                        const isWpUrl = result.url?.startsWith('http');
+                        img.url = result.url;
+                        img.wpUrl = isWpUrl ? result.url : img.wpUrl;
+                      }
+                    });
+                    console.log(`[Image Bank] Fetched ${urlResults.length} URLs`);
+                  } catch (urlFetchError) {
+                    console.error('[Image Bank] Failed to fetch URLs:', urlFetchError.message);
+                  }
+                }
               } else {
                 console.log('[Image Bank] New table also empty for this workflow');
               }
