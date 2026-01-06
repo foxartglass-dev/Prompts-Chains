@@ -131,6 +131,13 @@ export async function getImagesByIds(workflowId, imageIds) {
 export async function addImageToBank(workflowId, image) {
   if (!isDatabaseEnabled()) return null;
 
+  // Store wpUrl and wpMediaId in metadata if provided
+  const metadata = {
+    ...(image.metadata || {}),
+    wpUrl: image.wpUrl || image.metadata?.wpUrl || null,
+    wpMediaId: image.wpMediaId || image.metadata?.wpMediaId || null
+  };
+
   const result = await sql`
     INSERT INTO image_bank_items (
       workflow_id, external_id, url, title, category,
@@ -139,7 +146,7 @@ export async function addImageToBank(workflowId, image) {
     ) VALUES (
       ${workflowId},
       ${image.id || `img-${Date.now()}`},
-      ${image.url},
+      ${image.wpUrl || image.url},
       ${image.title || null},
       ${image.category || null},
       ${image.variation || null},
@@ -153,7 +160,7 @@ export async function addImageToBank(workflowId, image) {
       ${image.usedAt ? new Date(image.usedAt) : null},
       ${image.archived || false},
       ${JSON.stringify(image.tags || [])},
-      ${JSON.stringify(image.metadata || {})}
+      ${JSON.stringify(metadata)}
     )
     RETURNING *
   `;

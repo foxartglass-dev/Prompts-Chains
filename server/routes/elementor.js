@@ -421,8 +421,83 @@ router.post('/publish', async (req, res) => {
         // Note: We don't check 'enabled' here - if integration_mode is 'bank', user wants bank
         if (bankImages.length > 0) {
           const config = bankImages[0];
-          const imageBank = config.image_bank || [];
+          let imageBank = config.image_bank || [];
           const avatars = config.audience_avatars || [];
+
+          // ═══════════════════════════════════════════════════════════════════
+          // FIX: Check NEW image_bank_items table if old JSON blob is empty
+          // Images are auto-migrated to the new table when there are >20 images
+          // ═══════════════════════════════════════════════════════════════════
+          if (imageBank.length === 0) {
+            console.log('[Image Bank] Old JSON blob is empty, checking new image_bank_items table...');
+            try {
+              const newBankImages = await sql`
+                SELECT
+                  id,
+                  external_id,
+                  url,
+                  title,
+                  category,
+                  variation_name,
+                  variation_id,
+                  avatar_tag,
+                  orientation,
+                  prompt,
+                  model,
+                  used,
+                  used_on,
+                  used_at,
+                  archived,
+                  tags,
+                  metadata,
+                  created_at
+                FROM image_bank_items
+                WHERE workflow_id = ${workflowId}
+                  AND used = false
+                  AND archived = false
+                ORDER BY created_at DESC
+                LIMIT 100
+              `;
+
+              if (newBankImages.length > 0) {
+                console.log(`[Image Bank] Found ${newBankImages.length} images in new table!`);
+                // Transform to match expected format
+                // wpUrl and wpMediaId may be stored in metadata JSON
+                imageBank = newBankImages.map(img => {
+                  const meta = img.metadata || {};
+                  // Check if URL is a WordPress URL (http) or base64
+                  const isWpUrl = img.url?.startsWith('http');
+                  return {
+                    id: img.external_id || String(img.id),
+                    dbId: img.id,
+                    url: img.url,
+                    // wpUrl priority: metadata.wpUrl > url if http > null
+                    wpUrl: meta.wpUrl || (isWpUrl ? img.url : null),
+                    wpMediaId: meta.wpMediaId || null,
+                    title: img.title,
+                    category: img.category,
+                    variation: img.variation_name,
+                    variationId: img.variation_id,
+                    avatarTag: img.avatar_tag,
+                    orientation: img.orientation,
+                    prompt: img.prompt,
+                    model: img.model,
+                    used: img.used,
+                    usedOn: img.used_on,
+                    usedAt: img.used_at,
+                    archived: img.archived,
+                    tags: img.tags,
+                    createdAt: img.created_at
+                  };
+                });
+              } else {
+                console.log('[Image Bank] New table also empty for this workflow');
+              }
+            } catch (newTableError) {
+              console.error('[Image Bank] Failed to fetch from new table:', newTableError.message);
+            }
+          }
+          // ═══════════════════════════════════════════════════════════════════
 
           console.log('╔══════════════════════════════════════════════════════════════╗');
           console.log('║              IMAGE BANK SELECTION STARTING                    ║');
