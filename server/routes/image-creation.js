@@ -319,13 +319,16 @@ router.post('/batch-generate', async (req, res) => {
       wpPassword: explicitWpPassword
     } = req.body;
 
+    console.log(`[Batch Generate] Starting batch for workflow ${workflowId || 'NOT PROVIDED'}`);
+
     // Try to get WordPress credentials - first from workflow's website, then explicit params
     let wpUrl = explicitWpUrl;
     let wpUser = explicitWpUser;
     let wpPassword = explicitWpPassword;
 
     // Look up WP credentials from workflow's associated website
-    if (workflowId && isDatabaseEnabled() && (!wpUrl || !wpUser || !wpPassword)) {
+    if (workflowId && isDatabaseEnabled()) {
+      console.log(`[Batch Generate] Looking up WP credentials for workflow ${workflowId}...`);
       try {
         const workflowResult = await sql`
           SELECT w.website_id, ws.wp_url, ws.wp_user, ws.wp_app_password
@@ -333,21 +336,32 @@ router.post('/batch-generate', async (req, res) => {
           LEFT JOIN websites ws ON w.website_id = ws.id
           WHERE w.id = ${workflowId}
         `;
+        console.log(`[Batch Generate] Query result:`, {
+          found: workflowResult.length > 0,
+          website_id: workflowResult[0]?.website_id || 'NULL',
+          has_wp_url: !!workflowResult[0]?.wp_url,
+          has_wp_user: !!workflowResult[0]?.wp_user,
+          has_wp_password: !!workflowResult[0]?.wp_app_password
+        });
         if (workflowResult.length > 0 && workflowResult[0].wp_url) {
           wpUrl = workflowResult[0].wp_url;
           wpUser = workflowResult[0].wp_user;
           wpPassword = workflowResult[0].wp_app_password;
-          console.log(`[Batch Generate] Found WP credentials from workflow ${workflowId} website`);
+          console.log(`[Batch Generate] ✓ Found WP credentials from workflow ${workflowId} website: ${wpUrl}`);
+        } else {
+          console.log(`[Batch Generate] ⚠️ Workflow ${workflowId} has no linked website or website has no WP credentials`);
         }
       } catch (dbError) {
         console.error('[Batch Generate] Failed to lookup WP credentials:', dbError.message);
       }
+    } else {
+      console.log(`[Batch Generate] Skipping WP lookup: workflowId=${workflowId}, dbEnabled=${isDatabaseEnabled()}`);
     }
 
     // Check if we should upload to WordPress
     const shouldUploadToWp = wpUrl && wpUser && wpPassword;
     if (shouldUploadToWp) {
-      console.log('[Batch Generate] WordPress credentials available - will upload images to WP Media Library');
+      console.log('[Batch Generate] ✓ WordPress credentials available - will upload images to WP Media Library');
     } else {
       console.log('[Batch Generate] ⚠️ No WP credentials - returning base64 (not recommended for production)');
     }
