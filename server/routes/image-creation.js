@@ -470,11 +470,13 @@ router.post('/batch-generate', async (req, res) => {
                     { alt: item.variation || 'AI Generated Image' }
                   );
 
-                  if (wpResult && wpResult.source_url) {
+                  if (wpResult && wpResult.url) {
                     wpMediaId = wpResult.id;
-                    wpMediaUrl = wpResult.source_url;
-                    finalUrl = wpResult.source_url; // Use WP URL instead of base64
-                    console.log(`[Batch Generate] ✓ Uploaded to WP: ${wpResult.source_url}`);
+                    wpMediaUrl = wpResult.url;
+                    finalUrl = wpResult.url; // Use WP URL instead of base64
+                    console.log(`[Batch Generate] ✓ Uploaded to WP: ${wpResult.url}`);
+                  } else {
+                    console.log(`[Batch Generate] ⚠️ Upload returned but no URL:`, JSON.stringify(wpResult));
                   }
                 } else if (result.url.startsWith('http')) {
                   // Already a URL (from Flux/Replicate) - still upload to our WP
@@ -493,11 +495,13 @@ router.post('/batch-generate', async (req, res) => {
                       { alt: item.variation || 'AI Generated Image' }
                     );
 
-                    if (wpResult && wpResult.source_url) {
+                    if (wpResult && wpResult.url) {
                       wpMediaId = wpResult.id;
-                      wpMediaUrl = wpResult.source_url;
-                      finalUrl = wpResult.source_url;
-                      console.log(`[Batch Generate] ✓ Re-uploaded to WP: ${wpResult.source_url}`);
+                      wpMediaUrl = wpResult.url;
+                      finalUrl = wpResult.url;
+                      console.log(`[Batch Generate] ✓ Re-uploaded to WP: ${wpResult.url}`);
+                    } else {
+                      console.log(`[Batch Generate] ⚠️ Re-upload returned but no URL:`, JSON.stringify(wpResult));
                     }
                   } catch (reuploadErr) {
                     console.error(`[Batch Generate] Failed to re-upload external URL:`, reuploadErr.message);
