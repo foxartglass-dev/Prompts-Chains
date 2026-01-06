@@ -126,12 +126,16 @@ router.post('/:workflowId', async (req, res) => {
       console.log(`[Image Bank] Adding ${images.length} images to workflow ${workflowId}`);
       if (images[0]) {
         console.log('[Image Bank] Sample image keys:', Object.keys(images[0]));
-        console.log('[Image Bank] Sample URL (first 100 chars):', images[0].url?.substring(0, 100));
+        console.log('[Image Bank] Sample URL type:', images[0].url?.startsWith('http') ? 'HTTP' : images[0].url?.startsWith('data:') ? 'BASE64' : 'UNKNOWN');
+        console.log('[Image Bank] Sample wpUrl:', images[0].wpUrl || 'NOT SET');
+        console.log('[Image Bank] Sample wpMediaId:', images[0].wpMediaId || 'NOT SET');
       }
     } else if (image) {
       console.log(`[Image Bank] Adding single image to workflow ${workflowId}`);
       console.log('[Image Bank] Image keys:', Object.keys(image));
-      console.log('[Image Bank] URL (first 100 chars):', image.url?.substring(0, 100));
+      console.log('[Image Bank] URL type:', image.url?.startsWith('http') ? 'HTTP' : image.url?.startsWith('data:') ? 'BASE64' : 'UNKNOWN');
+      console.log('[Image Bank] wpUrl:', image.wpUrl || 'NOT SET');
+      console.log('[Image Bank] wpMediaId:', image.wpMediaId || 'NOT SET');
     }
 
     let result;

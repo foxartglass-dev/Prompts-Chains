@@ -493,29 +493,46 @@ router.post('/publish', async (req, res) => {
                   };
                 });
 
-                // If images need URL fetch (no wpUrl in metadata), fetch URLs for first 10 images
-                const imagesNeedingUrls = imageBank.filter(img => img._needsUrlFetch).slice(0, 10);
+                // If images need URL fetch (no wpUrl in metadata), fetch URLs in batches
+                const imagesNeedingUrls = imageBank.filter(img => img._needsUrlFetch);
                 if (imagesNeedingUrls.length > 0) {
-                  console.log(`[Image Bank] Fetching URLs for ${imagesNeedingUrls.length} images...`);
-                  const idsToFetch = imagesNeedingUrls.map(img => img.dbId);
-                  try {
-                    const urlResults = await sql`
-                      SELECT id, url FROM image_bank_items
-                      WHERE id = ANY(${idsToFetch})
-                    `;
-                    // Update imageBank with fetched URLs
-                    urlResults.forEach(result => {
-                      const img = imageBank.find(i => i.dbId === result.id);
-                      if (img) {
-                        const isWpUrl = result.url?.startsWith('http');
-                        img.url = result.url;
-                        img.wpUrl = isWpUrl ? result.url : img.wpUrl;
-                      }
-                    });
-                    console.log(`[Image Bank] Fetched ${urlResults.length} URLs`);
-                  } catch (urlFetchError) {
-                    console.error('[Image Bank] Failed to fetch URLs:', urlFetchError.message);
+                  console.log(`[Image Bank] ${imagesNeedingUrls.length} images need URL fetch...`);
+
+                  // Process in batches of 20 to avoid query size limits
+                  const batchSize = 20;
+                  let httpUrlCount = 0;
+                  let base64Count = 0;
+
+                  for (let i = 0; i < imagesNeedingUrls.length; i += batchSize) {
+                    const batch = imagesNeedingUrls.slice(i, i + batchSize);
+                    const idsToFetch = batch.map(img => img.dbId);
+
+                    try {
+                      const urlResults = await sql`
+                        SELECT id, url FROM image_bank_items
+                        WHERE id = ANY(${idsToFetch})
+                      `;
+
+                      // Update imageBank with fetched URLs
+                      urlResults.forEach(result => {
+                        const img = imageBank.find(im => im.dbId === result.id);
+                        if (img) {
+                          const isWpUrl = result.url?.startsWith('http');
+                          img.url = result.url;
+                          if (isWpUrl) {
+                            img.wpUrl = result.url;
+                            httpUrlCount++;
+                          } else {
+                            base64Count++;
+                          }
+                        }
+                      });
+                    } catch (urlFetchError) {
+                      console.error('[Image Bank] Failed to fetch URL batch:', urlFetchError.message);
+                    }
                   }
+
+                  console.log(`[Image Bank] URL fetch complete: ${httpUrlCount} HTTP URLs, ${base64Count} base64 (unusable)`);
                 }
               } else {
                 console.log('[Image Bank] New table also empty for this workflow');
