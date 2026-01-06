@@ -109,6 +109,8 @@ interface AudienceAvatar {
 interface BankImage {
   id: string;
   url: string;
+  wpUrl?: string; // WordPress Media Library URL (preferred over base64)
+  wpMediaId?: number; // WordPress Media ID for proper linking
   title?: string; // Editable title shown on image
   category?: string; // Custom sorting category
   variation: string;
@@ -3590,7 +3592,9 @@ Start by introducing yourself and asking about their business in a friendly way.
           model: settings.image_generation_model || 'gpt-image-1.5',
           quality: batchQuality, // Use batch-specific quality setting
           referenceImageUrls: settings.reference_images.map(i => i.url).filter(url => !url.startsWith('data:')),
-          quantity: batchQuantity
+          quantity: batchQuantity,
+          // Pass workflowId so server can auto-upload to WP Media Library
+          workflowId
         })
       });
 
@@ -3603,7 +3607,9 @@ Start by introducing yourself and asking about their business in a friendly way.
         if (successCount > 0) {
           const newBankImages: BankImage[] = data.images.map((img: any) => ({
             id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            url: img.url,
+            url: img.wpUrl || img.url, // Prefer wpUrl (small) over base64 (huge)
+            wpUrl: img.wpUrl || null, // WordPress Media Library URL
+            wpMediaId: img.wpMediaId || null, // WordPress Media ID
             variation: img.variation,
             variationId: img.variationId,
             avatarTag: activeAvatar?.tag, // Link images to avatar's tag for routing

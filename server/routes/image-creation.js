@@ -295,6 +295,10 @@ Generate an image that matches the described style exactly while depicting the c
 /**
  * POST /api/image-creation/batch-generate
  * Generate multiple images from prompts + variations
+ *
+ * IMPORTANT: If workflowId is provided, images are automatically uploaded to the
+ * associated WordPress Media Library and wpUrl is returned instead of base64.
+ * This is the preferred approach to avoid storing huge base64 data in the database.
  */
 router.post('/batch-generate', async (req, res) => {
   try {
@@ -306,8 +310,47 @@ router.post('/batch-generate', async (req, res) => {
       model = 'flux-1.1-pro', // Default to Flux (gpt-image-1.5 requires org verification)
       quality = 'low',
       openaiApiKey,
-      replicateApiKey
+      replicateApiKey,
+      // WorkflowId to auto-lookup WP credentials (preferred)
+      workflowId,
+      // Or explicit WordPress credentials (fallback)
+      wpUrl: explicitWpUrl,
+      wpUser: explicitWpUser,
+      wpPassword: explicitWpPassword
     } = req.body;
+
+    // Try to get WordPress credentials - first from workflow's website, then explicit params
+    let wpUrl = explicitWpUrl;
+    let wpUser = explicitWpUser;
+    let wpPassword = explicitWpPassword;
+
+    // Look up WP credentials from workflow's associated website
+    if (workflowId && isDatabaseEnabled() && (!wpUrl || !wpUser || !wpPassword)) {
+      try {
+        const workflowResult = await sql`
+          SELECT w.website_id, ws.wp_url, ws.wp_user, ws.wp_app_password
+          FROM workflows w
+          LEFT JOIN websites ws ON w.website_id = ws.id
+          WHERE w.id = ${workflowId}
+        `;
+        if (workflowResult.length > 0 && workflowResult[0].wp_url) {
+          wpUrl = workflowResult[0].wp_url;
+          wpUser = workflowResult[0].wp_user;
+          wpPassword = workflowResult[0].wp_app_password;
+          console.log(`[Batch Generate] Found WP credentials from workflow ${workflowId} website`);
+        }
+      } catch (dbError) {
+        console.error('[Batch Generate] Failed to lookup WP credentials:', dbError.message);
+      }
+    }
+
+    // Check if we should upload to WordPress
+    const shouldUploadToWp = wpUrl && wpUser && wpPassword;
+    if (shouldUploadToWp) {
+      console.log('[Batch Generate] WordPress credentials available - will upload images to WP Media Library');
+    } else {
+      console.log('[Batch Generate] ⚠️ No WP credentials - returning base64 (not recommended for production)');
+    }
 
     // Select correct API key based on model
     const apiKey = model === 'gpt-image-1.5'
@@ -391,9 +434,73 @@ router.post('/batch-generate', async (req, res) => {
               size: item.size
             }, apiKey);
 
+            let finalUrl = result.url;
+            let wpMediaId = null;
+            let wpMediaUrl = null;
+
+            // Upload to WordPress if credentials provided
+            if (shouldUploadToWp && result.url) {
+              try {
+                // Extract base64 data from data URL
+                const base64Match = result.url.match(/^data:image\/\w+;base64,(.+)$/);
+                if (base64Match) {
+                  const base64Data = base64Match[1];
+                  const filename = `generated-${item.variation || 'image'}-${Date.now()}.png`;
+
+                  console.log(`[Batch Generate] Uploading to WordPress: ${filename}`);
+
+                  const wpResult = await uploadMedia(
+                    { url: wpUrl, user: wpUser, password: wpPassword },
+                    base64Data,
+                    filename,
+                    { alt: item.variation || 'AI Generated Image' }
+                  );
+
+                  if (wpResult && wpResult.source_url) {
+                    wpMediaId = wpResult.id;
+                    wpMediaUrl = wpResult.source_url;
+                    finalUrl = wpResult.source_url; // Use WP URL instead of base64
+                    console.log(`[Batch Generate] ✓ Uploaded to WP: ${wpResult.source_url}`);
+                  }
+                } else if (result.url.startsWith('http')) {
+                  // Already a URL (from Flux/Replicate) - still upload to our WP
+                  try {
+                    const imageRes = await fetch(result.url);
+                    const arrayBuffer = await imageRes.arrayBuffer();
+                    const base64Data = Buffer.from(arrayBuffer).toString('base64');
+                    const filename = `generated-${item.variation || 'image'}-${Date.now()}.png`;
+
+                    console.log(`[Batch Generate] Re-uploading external URL to WordPress: ${filename}`);
+
+                    const wpResult = await uploadMedia(
+                      { url: wpUrl, user: wpUser, password: wpPassword },
+                      base64Data,
+                      filename,
+                      { alt: item.variation || 'AI Generated Image' }
+                    );
+
+                    if (wpResult && wpResult.source_url) {
+                      wpMediaId = wpResult.id;
+                      wpMediaUrl = wpResult.source_url;
+                      finalUrl = wpResult.source_url;
+                      console.log(`[Batch Generate] ✓ Re-uploaded to WP: ${wpResult.source_url}`);
+                    }
+                  } catch (reuploadErr) {
+                    console.error(`[Batch Generate] Failed to re-upload external URL:`, reuploadErr.message);
+                    // Keep original URL as fallback
+                  }
+                }
+              } catch (uploadError) {
+                console.error(`[Batch Generate] WP upload failed:`, uploadError.message);
+                // Continue with base64 URL as fallback
+              }
+            }
+
             return {
               success: true,
-              url: result.url,
+              url: finalUrl,
+              wpUrl: wpMediaUrl,
+              wpMediaId: wpMediaId,
               prompt: item.prompt,
               revisedPrompt: result.revisedPrompt,
               variation: item.variation,
