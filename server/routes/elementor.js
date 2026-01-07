@@ -1062,17 +1062,54 @@ router.post('/publish', async (req, res) => {
       console.log(`║ Pipeline chunks with imageData: ${pipelineChunksWithImages}`.padEnd(71) + '║');
       console.log('╚══════════════════════════════════════════════════════════════════════╝');
 
-      // Merge pipeline images with bank images
-      if (!chunked.intro?.imageData && pipelineResult.chunks.intro?.imageData) {
-        chunked.intro.imageData = pipelineResult.chunks.intro.imageData;
-        success('Merged hero image from pipeline to chunked');
-      }
-      pipelineResult.chunks.chunks.forEach((pChunk, idx) => {
-        if (pChunk.imageData && chunked.chunks[idx] && !chunked.chunks[idx].imageData) {
-          chunked.chunks[idx].imageData = pChunk.imageData;
-          success(`Merged chunk[${idx}] image from pipeline to chunked`);
+      // Merge pipeline images with bank images (only if NOT in draft mode)
+      if (!imageDraftMode) {
+        if (!chunked.intro?.imageData && pipelineResult.chunks.intro?.imageData) {
+          chunked.intro.imageData = pipelineResult.chunks.intro.imageData;
+          success('Merged hero image from pipeline to chunked');
         }
-      });
+        pipelineResult.chunks.chunks.forEach((pChunk, idx) => {
+          if (pChunk.imageData && chunked.chunks[idx] && !chunked.chunks[idx].imageData) {
+            chunked.chunks[idx].imageData = pChunk.imageData;
+            success(`Merged chunk[${idx}] image from pipeline to chunked`);
+          }
+        });
+      } else {
+        // In draft mode: save generated images to draftModeImages for article record
+        console.log('[Image Draft Mode] NOT embedding live-generated images in page - saving for review');
+        const timestamp = new Date().toISOString();
+
+        if (pipelineResult.chunks.intro?.imageData) {
+          const heroImg = pipelineResult.chunks.intro.imageData;
+          draftModeImages.push({
+            id: `img-${Date.now()}-hero`,
+            url: heroImg.wpUrl || heroImg.url,
+            wpMediaId: heroImg.wpMediaId || null,
+            placement: 'hero',
+            side: heroImg.side || 'right',
+            prompt: pipelineResult.chunks.intro.imagePrompt || '',
+            createdAt: timestamp,
+            pushedToWp: false
+          });
+        }
+
+        pipelineResult.chunks.chunks.forEach((pChunk, idx) => {
+          if (pChunk.imageData) {
+            draftModeImages.push({
+              id: `img-${Date.now()}-section-${idx + 1}`,
+              url: pChunk.imageData.wpUrl || pChunk.imageData.url,
+              wpMediaId: pChunk.imageData.wpMediaId || null,
+              placement: `section-${idx + 1}`,
+              side: pChunk.imageData.side || 'left',
+              prompt: pChunk.imagePrompt || '',
+              createdAt: timestamp,
+              pushedToWp: false
+            });
+          }
+        });
+
+        console.log(`[Image Draft Mode] Saved ${draftModeImages.length} generated images for review`);
+      }
 
       // 🔍 AFTER MERGE: What do we have now?
       console.log('\n[AFTER MERGE] chunked.intro.imageData:', !!chunked.intro?.imageData);
