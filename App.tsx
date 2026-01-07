@@ -1283,6 +1283,8 @@ const App: React.FC = () => {
                                             maxImages: includeImages ? 4 : 0,
                                             // Pass article ID so generated images are saved to the article record
                                             articleId: savedArticleId,
+                                            // Image Draft Mode: match images and save to article, but DON'T embed in WP page
+                                            imageDraftMode: currentProject.state.wpPublishMode === 'draft',
                                         }),
                                     });
                                     const publishData = await publishResponse.json();
