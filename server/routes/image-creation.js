@@ -2120,6 +2120,188 @@ router.post('/smart-match-batch', requireDb, async (req, res) => {
 });
 
 // ========================================
+// MATCH IMAGES FOR ARTICLE (DRAFT MODE)
+// ========================================
+
+/**
+ * POST /api/image-creation/match-for-article
+ * Match images from Image Bank and save to article record WITHOUT publishing
+ * Used when articlePublishMode is 'draft' - images are matched and saved for review
+ */
+router.post('/match-for-article', requireDb, async (req, res) => {
+  try {
+    const {
+      articleId,
+      workflowId,
+      content,
+      keyword,
+      maxImages = 4
+    } = req.body;
+
+    if (!articleId || !workflowId) {
+      return res.status(400).json({ error: 'articleId and workflowId are required' });
+    }
+
+    console.log(`[Match for Article] Starting image matching for article ${articleId}, workflow ${workflowId}`);
+
+    // Load image creation settings
+    const settings = await sql`
+      SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+    `;
+
+    if (settings.length === 0) {
+      return res.json({ success: true, imagesMatched: 0, message: 'No image settings found' });
+    }
+
+    const config = settings[0];
+    let imageBank = config.image_bank || [];
+    const avatars = config.audience_avatars || [];
+    const smartMatchingEnabled = config.smart_matching_enabled ?? false;
+    const matchPlurals = config.match_plurals !== false;
+
+    // Check new image_bank_items table if old JSON blob is empty
+    if (imageBank.length === 0) {
+      console.log('[Match for Article] Checking image_bank_items table...');
+      const newBankImages = await sql`
+        SELECT id, external_id, variation_name, variation_id, avatar_tag, orientation, prompt, model, url, metadata
+        FROM image_bank_items
+        WHERE workflow_id = ${workflowId}
+          AND used = false
+          AND archived = false
+        ORDER BY created_at DESC
+        LIMIT 100
+      `;
+
+      if (newBankImages.length > 0) {
+        imageBank = newBankImages.map(img => {
+          const meta = img.metadata || {};
+          return {
+            id: img.external_id || String(img.id),
+            dbId: img.id,
+            url: meta.wpUrl || img.url,
+            wpUrl: meta.wpUrl || (img.url?.startsWith('http') ? img.url : null),
+            wpMediaId: meta.wpMediaId || null,
+            variation: img.variation_name,
+            variationId: img.variation_id,
+            avatarTag: img.avatar_tag,
+            orientation: img.orientation,
+            prompt: img.prompt,
+            model: img.model
+          };
+        });
+      }
+    }
+
+    // Filter to images with valid URLs (wpUrl preferred)
+    let availableImages = imageBank.filter(img => {
+      const hasWpUrl = img.wpUrl && img.wpUrl.startsWith('http');
+      return hasWpUrl;
+    });
+
+    console.log(`[Match for Article] Available images with wpUrl: ${availableImages.length}`);
+
+    if (availableImages.length === 0) {
+      return res.json({ success: true, imagesMatched: 0, message: 'No images with WordPress URLs in bank' });
+    }
+
+    // Find target avatar from keyword tag
+    const tagMatch = keyword.match(/\(([^)]+)\)$/);
+    const targetTag = tagMatch ? tagMatch[1] : null;
+    const targetAvatar = targetTag ? avatars.find(a => a.tag === targetTag) : null;
+
+    console.log(`[Match for Article] Target tag: ${targetTag}, Avatar: ${targetAvatar?.name || 'NONE'}`);
+
+    // Filter by avatar tag if available
+    if (targetTag) {
+      const taggedImages = availableImages.filter(img => img.avatarTag === targetTag);
+      if (taggedImages.length > 0) {
+        availableImages = taggedImages;
+        console.log(`[Match for Article] Filtered to ${availableImages.length} images for tag ${targetTag}`);
+      }
+    }
+
+    // Apply smart matching if enabled
+    if (smartMatchingEnabled && targetAvatar?.placeholderCategories?.length > 0) {
+      console.log('[Match for Article] Smart matching ENABLED');
+      const articleText = (content || '').toLowerCase();
+
+      // Simple scoring based on primary keywords
+      availableImages = availableImages.map(img => {
+        let score = 0;
+        const variationStr = img.variation || '';
+
+        targetAvatar.placeholderCategories.forEach(cat => {
+          if (cat.isRandomized) return;
+          const catInitial = cat.name.charAt(0).toUpperCase();
+          const parts = variationStr.split(/[·\-\s]+/).filter(Boolean);
+          const matchingPart = parts.find(p => p.match(/^([A-Z])(\d+)$/i)?.[1]?.toUpperCase() === catInitial);
+
+          if (matchingPart) {
+            const optionNum = parseInt(matchingPart.slice(1));
+            const option = cat.options?.find(o => o.number === optionNum);
+            if (option) {
+              (option.primaryKeywords || []).forEach(kw => {
+                if (articleText.includes(kw.toLowerCase())) {
+                  score += 10;
+                }
+              });
+            }
+          }
+        });
+
+        return { ...img, matchScore: score };
+      });
+
+      // Sort by score
+      availableImages.sort((a, b) => b.matchScore - a.matchScore);
+    }
+
+    // Select images (hero + body)
+    const selectedImages = availableImages.slice(0, maxImages);
+
+    if (selectedImages.length === 0) {
+      return res.json({ success: true, imagesMatched: 0, message: 'No matching images found' });
+    }
+
+    console.log(`[Match for Article] Selected ${selectedImages.length} images`);
+
+    // Format images for article record
+    const articleImages = selectedImages.map((img, idx) => ({
+      id: `img-${Date.now()}-${idx}`,
+      url: img.wpUrl || img.url,
+      prompt: img.prompt || '',
+      placement: idx === 0 ? 'hero' : `section-${idx}`,
+      wpMediaId: img.wpMediaId || null,
+      keywords: [],
+      createdAt: new Date().toISOString(),
+      pushedToWp: false, // NOT pushed to WP page yet, just matched
+      bankImageId: img.id,
+      variation: img.variation
+    }));
+
+    // Save to article record
+    await sql`
+      UPDATE articles
+      SET generated_images = ${JSON.stringify(articleImages)}::jsonb,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${articleId}
+    `;
+
+    console.log(`[Match for Article] ✓ Saved ${articleImages.length} images to article ${articleId}`);
+
+    res.json({
+      success: true,
+      imagesMatched: articleImages.length,
+      images: articleImages
+    });
+
+  } catch (error) {
+    console.error('Match for article error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
 // STAGING WORDPRESS UPLOAD
 // ========================================
 

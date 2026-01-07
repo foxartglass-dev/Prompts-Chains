@@ -1228,6 +1228,38 @@ const App: React.FC = () => {
                             console.error('Failed to save article:', saveError);
                         }
 
+                        // ═══════════════════════════════════════════════════════════════
+                        // DRAFT MODE: Match images from bank and save to article record
+                        // This happens regardless of whether we publish to WP
+                        // ═══════════════════════════════════════════════════════════════
+                        const shouldMatchImages = currentProject.state.wpPublishMode !== 'off' && savedArticleId;
+                        if (shouldMatchImages && currentProject.state.articlePublishMode === 'draft') {
+                            // In full draft mode: match images and save to article, but don't publish anything
+                            try {
+                                addLog(`[${itemLabel}] Matching images from Image Bank (draft mode)...`, LogStatus.WORKING, item.id);
+                                const matchResponse = await fetch('/api/image-creation/match-for-article', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        articleId: savedArticleId,
+                                        workflowId: currentWorkflowId,
+                                        content: finalOutput,
+                                        keyword: item.name,
+                                        maxImages: 4
+                                    })
+                                });
+                                const matchData = await matchResponse.json();
+                                if (matchData.success && matchData.imagesMatched > 0) {
+                                    addLog(`[${itemLabel}] ✓ Matched ${matchData.imagesMatched} images (saved to article for review)`, LogStatus.SUCCESS, item.id);
+                                } else if (matchData.imagesMatched === 0) {
+                                    addLog(`[${itemLabel}] No matching images found in Image Bank`, LogStatus.INFO, item.id);
+                                }
+                            } catch (matchError) {
+                                console.error('Image matching failed:', matchError);
+                                addLog(`[${itemLabel}] Image matching failed (article saved without images)`, LogStatus.ERROR, item.id);
+                            }
+                        }
+
                         // Auto-publish to WordPress if articlePublishMode is 'wordpress'
                         // (Image toggle is independent - only controls images, not article publishing)
                         if (currentProject.state.articlePublishMode === 'wordpress') {
@@ -1283,6 +1315,9 @@ const App: React.FC = () => {
                                             maxImages: includeImages ? 4 : 0,
                                             // Pass article ID so generated images are saved to the article record
                                             articleId: savedArticleId,
+                                            // Image Draft Mode: match images and save to article, but DON'T embed in WP page
+                                            // User can review in ArticleManager and push when ready
+                                            imageDraftMode: currentProject.state.wpPublishMode === 'draft',
                                         }),
                                     });
                                     const publishData = await publishResponse.json();

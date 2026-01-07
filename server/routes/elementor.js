@@ -288,6 +288,7 @@ router.post('/publish', async (req, res) => {
       // Image options
       useImageBank = true, // NEW: Pull from Image Bank by tag
       generateImages = false, // Fallback to live generation
+      imageDraftMode = false, // If true: match images, save to article DB, but DON'T embed in WP page
       styleDNA = null,
       referenceImages = null,
       openaiApiKey = null,
@@ -316,6 +317,9 @@ router.post('/publish', async (req, res) => {
     let imagesGenerated = 0;
     let imagesFromBank = 0;
     let estimatedCost = null;
+
+    // Track images for draft mode (when images are matched but not embedded in page)
+    let draftModeImages = [];
 
     // Image Decision Report - collect data to return to frontend
     let imageDecisionReport = {
@@ -991,16 +995,48 @@ router.post('/publish', async (req, res) => {
               console.log('  - Orientation:', img.orientation);
             }
 
-            if (isHero && chunked.intro) {
-              chunked.intro.imageData = imageData;
-            } else {
-              // placementIndex is 1-based for chunks (0 = intro), so subtract 1
-              const chunkIdx = placementIndex - 1;
-              if (chunked.chunks[chunkIdx]) {
-                chunked.chunks[chunkIdx].imageData = imageData;
+            // Only embed images in the page if NOT in imageDraftMode
+            // In imageDraftMode: images are saved to article record but NOT embedded in WP page
+            if (!imageDraftMode) {
+              if (isHero && chunked.intro) {
+                chunked.intro.imageData = imageData;
+              } else {
+                // placementIndex is 1-based for chunks (0 = intro), so subtract 1
+                const chunkIdx = placementIndex - 1;
+                if (chunked.chunks[chunkIdx]) {
+                  chunked.chunks[chunkIdx].imageData = imageData;
+                }
               }
             }
           });
+
+          // Log if images were matched but not embedded (draft mode)
+          if (imageDraftMode && imagesToUse.length > 0) {
+            console.log(`[Image Bank] IMAGE DRAFT MODE: ${imagesToUse.length} images matched but NOT embedded in page`);
+            console.log('[Image Bank] Images will be saved to article record for review');
+
+            // Store matched images for saving to article record later
+            const timestamp = new Date().toISOString();
+            imagesToUse.forEach((img, imgIdx) => {
+              const isHero = imgIdx === 0;
+              const placementIndex = imagePlacementIndices[imgIdx];
+              const bodyImageCount = imagePlacementIndices.filter((idx, i) => i < imgIdx && idx > 0).length;
+              const bodySide = bodyImageCount % 2 === 0 ? bodyStartSide : (bodyStartSide === 'left' ? 'right' : 'left');
+
+              draftModeImages.push({
+                id: `img-${Date.now()}-${isHero ? 'hero' : `section-${imgIdx}`}`,
+                url: img.wpUrl || img.url,
+                wpMediaId: img.wpMediaId || null,
+                placement: isHero ? 'hero' : `section-${imgIdx}`,
+                side: isHero ? heroImageSide : bodySide,
+                prompt: img.prompt || '',
+                variation: img.variation,
+                bankImageId: img.id,
+                createdAt: timestamp,
+                pushedToWp: false // NOT pushed to WP page, just matched for review
+              });
+            });
+          }
 
           imagesFromBank = imagesToUse.length;
 
@@ -1251,38 +1287,45 @@ router.post('/publish', async (req, res) => {
         const generatedImagesData = [];
         const timestamp = new Date().toISOString();
 
-        // Hero image
-        if (chunked.intro?.imageData?.url || chunked.intro?.imageData?.wpUrl) {
-          const heroImageData = chunked.intro.imageData;
-          generatedImagesData.push({
-            id: `img-${Date.now()}-hero`,
-            url: heroImageData.wpUrl || heroImageData.url, // Prefer WordPress URL (permanent) over base64
-            wpMediaId: heroImageData.wpMediaId || null,
-            placement: 'hero',
-            side: heroImageData.side || 'right',
-            prompt: chunked.intro.imagePrompt || imageDecisionReport.images.find(i => i.type === 'hero')?.prompt || '',
-            createdAt: timestamp,
-            pushedToWp: !!heroImageData.wpMediaId // True if already has WordPress media ID
-          });
-        }
-
-        // Inline images
-        chunked.chunks.forEach((chunk, idx) => {
-          if (chunk.imageData?.url || chunk.imageData?.wpUrl) {
-            const chunkImageData = chunk.imageData;
+        // Use draft mode images if available (images matched but not embedded in page)
+        if (imageDraftMode && draftModeImages.length > 0) {
+          console.log(`[Elementor Publish] Using ${draftModeImages.length} draft mode images for article`);
+          generatedImagesData.push(...draftModeImages);
+        } else {
+          // Normal mode: get images from embedded chunk data
+          // Hero image
+          if (chunked.intro?.imageData?.url || chunked.intro?.imageData?.wpUrl) {
+            const heroImageData = chunked.intro.imageData;
             generatedImagesData.push({
-              id: `img-${Date.now()}-section-${idx + 1}`,
-              url: chunkImageData.wpUrl || chunkImageData.url, // Prefer WordPress URL over base64
-              wpMediaId: chunkImageData.wpMediaId || null,
-              placement: `section-${idx + 1}`,
-              side: chunkImageData.side || 'left',
-              heading: chunk.heading || `Section ${idx + 1}`,
-              prompt: chunk.imagePrompt || '',
+              id: `img-${Date.now()}-hero`,
+              url: heroImageData.wpUrl || heroImageData.url, // Prefer WordPress URL (permanent) over base64
+              wpMediaId: heroImageData.wpMediaId || null,
+              placement: 'hero',
+              side: heroImageData.side || 'right',
+              prompt: chunked.intro.imagePrompt || imageDecisionReport.images.find(i => i.type === 'hero')?.prompt || '',
               createdAt: timestamp,
-              pushedToWp: !!chunkImageData.wpMediaId
+              pushedToWp: !!heroImageData.wpMediaId // True if already has WordPress media ID
             });
           }
-        });
+
+          // Inline images
+          chunked.chunks.forEach((chunk, idx) => {
+            if (chunk.imageData?.url || chunk.imageData?.wpUrl) {
+              const chunkImageData = chunk.imageData;
+              generatedImagesData.push({
+                id: `img-${Date.now()}-section-${idx + 1}`,
+                url: chunkImageData.wpUrl || chunkImageData.url, // Prefer WordPress URL over base64
+                wpMediaId: chunkImageData.wpMediaId || null,
+                placement: `section-${idx + 1}`,
+                side: chunkImageData.side || 'left',
+                heading: chunk.heading || `Section ${idx + 1}`,
+                prompt: chunk.imagePrompt || '',
+                createdAt: timestamp,
+                pushedToWp: !!chunkImageData.wpMediaId
+              });
+            }
+          });
+        }
 
         console.log(`[Elementor Publish] Saving ${generatedImagesData.length} images to article ${articleId}`);
 
