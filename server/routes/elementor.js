@@ -1366,10 +1366,14 @@ router.post('/publish', async (req, res) => {
         if (skipWpPageCreation) {
           // DRAFT MODE: Save images to article record WITHOUT WordPress data
           // pageResult is null here, so we only update generated_images
+          // IMPORTANT: Only update generated_images if we have new images, otherwise preserve existing
           console.log('[SAVE] Draft mode - saving images without WP page data');
           const updateResult = await sql`
             UPDATE articles
-            SET generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+            SET generated_images = CASE
+                  WHEN ${generatedImagesData.length} > 0 THEN ${JSON.stringify(generatedImagesData)}::jsonb
+                  ELSE generated_images
+                END,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
             RETURNING id
@@ -1378,6 +1382,7 @@ router.post('/publish', async (req, res) => {
           console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
         } else if (isManualPush) {
           // Manual push: increment count and append date
+          // IMPORTANT: Only update generated_images if we have new images, otherwise preserve existing
           const updateResult = await sql`
             UPDATE articles
             SET wp_post_id = ${pageResult.id},
@@ -1386,7 +1391,10 @@ router.post('/publish', async (req, res) => {
                 status = ${status === 'publish' ? 'published' : 'draft'},
                 article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
                 article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-                generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                generated_images = CASE
+                  WHEN ${generatedImagesData.length} > 0 THEN ${JSON.stringify(generatedImagesData)}::jsonb
+                  ELSE generated_images
+                END,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
             RETURNING id
@@ -1395,6 +1403,7 @@ router.post('/publish', async (req, res) => {
           console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
         } else {
           // Auto push: set auto_at timestamp (only if not already set)
+          // IMPORTANT: Only update generated_images if we have new images, otherwise preserve existing
           const updateResult = await sql`
             UPDATE articles
             SET wp_post_id = ${pageResult.id},
@@ -1402,7 +1411,10 @@ router.post('/publish', async (req, res) => {
                 wp_published_at = CURRENT_TIMESTAMP,
                 status = ${status === 'publish' ? 'published' : 'draft'},
                 article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
-                generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                generated_images = CASE
+                  WHEN ${generatedImagesData.length} > 0 THEN ${JSON.stringify(generatedImagesData)}::jsonb
+                  ELSE generated_images
+                END,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
             RETURNING id
