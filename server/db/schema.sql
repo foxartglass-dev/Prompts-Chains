@@ -185,6 +185,11 @@ CREATE TABLE IF NOT EXISTS articles (
   wp_post_id INTEGER,
   wp_post_url VARCHAR(500),
   wp_published_at TIMESTAMP,
+  -- Selected meta (user's final choice)
+  selected_meta_title TEXT,
+  selected_meta_description TEXT,
+  meta_wp_pushed_at TIMESTAMP, -- When meta was pushed to WordPress
+  images_wp_pushed_at TIMESTAMP, -- When images were pushed to WordPress
   -- Version tracking
   version INTEGER DEFAULT 1,
   parent_article_id INTEGER REFERENCES articles(id) ON DELETE SET NULL, -- For version history
@@ -461,3 +466,26 @@ CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
 CREATE INDEX IF NOT EXISTS idx_gbp_oauth_location ON gbp_oauth_tokens(location_id);
 CREATE INDEX IF NOT EXISTS idx_wp_hierarchy_website ON wp_page_hierarchy(website_id);
 CREATE INDEX IF NOT EXISTS idx_wp_hierarchy_parent ON wp_page_hierarchy(wp_parent_id);
+
+
+-- ============================================
+-- MIGRATIONS: Add columns if they don't exist
+-- ============================================
+
+-- Add meta tracking columns to articles table
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='articles' AND column_name='selected_meta_title') THEN
+        ALTER TABLE articles ADD COLUMN selected_meta_title TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='articles' AND column_name='selected_meta_description') THEN
+        ALTER TABLE articles ADD COLUMN selected_meta_description TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='articles' AND column_name='meta_wp_pushed_at') THEN
+        ALTER TABLE articles ADD COLUMN meta_wp_pushed_at TIMESTAMP;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='articles' AND column_name='images_wp_pushed_at') THEN
+        ALTER TABLE articles ADD COLUMN images_wp_pushed_at TIMESTAMP;
+    END IF;
+END
+$$;
