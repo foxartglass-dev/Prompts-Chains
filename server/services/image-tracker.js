@@ -27,38 +27,37 @@ const COLORS = {
 };
 
 export function banner(text, color = COLORS.cyan) {
-  const line = '═'.repeat(70);
-  console.log(`\n${color}${COLORS.bright}╔${line}╗${COLORS.reset}`);
-  console.log(`${color}${COLORS.bright}║  🔍 ${text.padEnd(65)} ║${COLORS.reset}`);
-  console.log(`${color}${COLORS.bright}╚${line}╝${COLORS.reset}\n`);
+  // Simplified: No ASCII art
+  console.log(`${color}[${text}]${COLORS.reset}`);
 }
 
 export function section(title, color = COLORS.yellow) {
-  console.log(`\n${color}${COLORS.bright}┌─── ${title} ${'─'.repeat(60 - title.length)}┐${COLORS.reset}`);
+  // Simplified: No ASCII art
+  console.log(`${color}--- ${title} ---${COLORS.reset}`);
 }
 
 export function endSection(color = COLORS.yellow) {
-  console.log(`${color}${COLORS.bright}└${'─'.repeat(69)}┘${COLORS.reset}\n`);
+  // Simplified: No ASCII art (do nothing)
 }
 
 export function log(msg, color = COLORS.white) {
-  console.log(`${color}│ ${msg}${COLORS.reset}`);
+  console.log(`${color}  ${msg}${COLORS.reset}`);
 }
 
 export function success(msg) {
-  console.log(`${COLORS.green}${COLORS.bright}│ ✅ ${msg}${COLORS.reset}`);
+  console.log(`${COLORS.green}[OK] ${msg}${COLORS.reset}`);
 }
 
 export function warning(msg) {
-  console.log(`${COLORS.yellow}${COLORS.bright}│ ⚠️  ${msg}${COLORS.reset}`);
+  console.log(`${COLORS.yellow}[WARN] ${msg}${COLORS.reset}`);
 }
 
 export function error(msg) {
-  console.log(`${COLORS.red}${COLORS.bright}│ ❌ ${msg}${COLORS.reset}`);
+  console.log(`${COLORS.red}[ERR] ${msg}${COLORS.reset}`);
 }
 
 export function highlight(msg) {
-  console.log(`${COLORS.cyan}${COLORS.bright}│ 🎯 ${msg}${COLORS.reset}`);
+  console.log(`${COLORS.cyan}[*] ${msg}${COLORS.reset}`);
 }
 
 function imageInfo(img, index) {
@@ -266,105 +265,20 @@ export function trackDbQuery(operation, table, data, context = {}) {
  * MEGA STATUS CHECK - Call this to see EVERYTHING about images for an article
  */
 export function megaImageStatus(articleId, articleData) {
-  console.log('\n');
-  console.log(`${COLORS.bgMagenta}${COLORS.white}${COLORS.bright}`);
-  console.log('╔══════════════════════════════════════════════════════════════════════╗');
-  console.log('║                                                                      ║');
-  console.log('║   🔍🔍🔍  MEGA IMAGE STATUS CHECK  🔍🔍🔍                           ║');
-  console.log('║                                                                      ║');
-  console.log(`║   Article ID: ${String(articleId).padEnd(55)}║`);
-  console.log('║                                                                      ║');
-  console.log('╚══════════════════════════════════════════════════════════════════════╝');
-  console.log(`${COLORS.reset}\n`);
+  console.log(`[Image Status] Article ${articleId}`);
 
-  section('Raw Data Check', COLORS.magenta);
-  log(`typeof articleData: ${typeof articleData}`);
-  log(`articleData is null: ${articleData === null}`);
-  log(`articleData is undefined: ${articleData === undefined}`);
-
-  if (articleData) {
-    log('\nAll keys in articleData:');
-    Object.keys(articleData).forEach(key => {
-      const val = articleData[key];
-      const type = Array.isArray(val) ? `Array(${val.length})` : typeof val;
-      if (key.toLowerCase().includes('image')) {
-        highlight(`${key}: ${type}`);
-      } else {
-        log(`  ${key}: ${type}`);
-      }
-    });
-  }
-
-  section('Image Fields Check', COLORS.magenta);
-
-  // Check generated_images
   const genImages = articleData?.generated_images;
-  log(`generated_images exists: ${genImages !== undefined}`);
-  log(`generated_images type: ${typeof genImages}`);
-  log(`generated_images is array: ${Array.isArray(genImages)}`);
-  if (Array.isArray(genImages)) {
-    log(`generated_images length: ${genImages.length}`);
-    if (genImages.length > 0) {
-      success('FOUND IMAGES IN generated_images!');
-      genImages.forEach((img, idx) => imageInfo(img, idx));
-    } else {
-      error('generated_images is EMPTY ARRAY');
-    }
-  } else if (typeof genImages === 'string') {
-    try {
-      const parsed = JSON.parse(genImages);
-      log(`Parsed as JSON, length: ${parsed.length}`);
-      if (parsed.length > 0) {
-        success('FOUND IMAGES after JSON parse!');
-      }
-    } catch (e) {
-      error('Failed to parse generated_images as JSON');
-    }
-  }
-
-  // Check images (frontend uses this)
   const images = articleData?.images;
-  log(`\nimages exists: ${images !== undefined}`);
-  log(`images type: ${typeof images}`);
-  log(`images is array: ${Array.isArray(images)}`);
-  if (Array.isArray(images) && images.length > 0) {
-    success('FOUND IMAGES IN images field!');
-  }
-
-  // Check image_decision_report
-  const report = articleData?.image_decision_report;
-  log(`\nimage_decision_report exists: ${report !== undefined}`);
-  if (report) {
-    log(`report.mode: ${report.mode}`);
-    log(`report.images count: ${report.images?.length || 0}`);
-  }
-
-  endSection(COLORS.magenta);
-
-  // VERDICT
-  console.log('\n');
-  console.log(`${COLORS.bgYellow}${COLORS.bright}`);
-  console.log('╔══════════════════════════════════════════════════════════════════════╗');
-
   const hasGenImages = Array.isArray(genImages) && genImages.length > 0;
   const hasImages = Array.isArray(images) && images.length > 0;
 
   if (hasGenImages || hasImages) {
-    console.log('║                     ✅ IMAGES FOUND!                                ║');
-    console.log(`║   Location: ${hasGenImages ? 'generated_images' : 'images'}                                          ║`);
-    console.log(`║   Count: ${String(hasGenImages ? genImages.length : images.length).padEnd(59)}║`);
+    const count = hasGenImages ? genImages.length : images.length;
+    const field = hasGenImages ? 'generated_images' : 'images';
+    console.log(`[Image Status] FOUND ${count} images in ${field}`);
   } else {
-    console.log('║                     ❌ NO IMAGES FOUND!                             ║');
-    console.log('║                                                                      ║');
-    console.log('║   Possible causes:                                                   ║');
-    console.log('║   1. Images were never generated                                     ║');
-    console.log('║   2. Images were generated but not saved to DB                       ║');
-    console.log('║   3. Images are in a different field                                 ║');
-    console.log('║   4. Database update failed silently                                 ║');
+    console.log(`[Image Status] NO IMAGES FOUND`);
   }
-
-  console.log('╚══════════════════════════════════════════════════════════════════════╝');
-  console.log(`${COLORS.reset}\n`);
 }
 
 // Note: Functions are already exported with 'export function' syntax above

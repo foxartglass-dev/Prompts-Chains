@@ -466,15 +466,9 @@ router.post('/publish', async (req, res) => {
           const imageBank = config.image_bank || [];
           const avatars = config.audience_avatars || [];
 
-          console.log('╔══════════════════════════════════════════════════════════════╗');
-          console.log('║              IMAGE BANK SELECTION STARTING                    ║');
-          console.log('╠══════════════════════════════════════════════════════════════╣');
-          console.log(`║ Bank size: ${String(imageBank.length).padEnd(5)} images                                  ║`);
-          console.log(`║ Avatars configured: ${String(avatars.length).padEnd(3)}                                   ║`);
-
+          console.log(`[Image Bank] Starting selection - Bank: ${imageBank.length} images, Avatars: ${avatars.length}`);
           if (imageBank.length === 0) {
-            console.log('║ ⚠️  WARNING: Image Bank is EMPTY - no images to select!       ║');
-            console.log('╚══════════════════════════════════════════════════════════════╝');
+            console.log('[Image Bank] WARNING: Bank is empty!');
           }
           const variationOrderMode = config.variation_order_mode || 'sequential';
           const manualOrder = config.manual_variation_order || [];
@@ -751,37 +745,13 @@ router.post('/publish', async (req, res) => {
 
             availableImages = selectedImages;
 
-            // ═══════════════════════════════════════════════════════════════
-            // SMART MATCHING DECISION REPORT - Show why each image was chosen
-            // ═══════════════════════════════════════════════════════════════
-            console.log('\n╔══════════════════════════════════════════════════════════════╗');
-            console.log('║         SMART CONTENT MATCHING DECISION REPORT               ║');
-            console.log('╠══════════════════════════════════════════════════════════════╣');
-            console.log(`║ Article: ${(keyword || title || 'Untitled').substring(0, 50).padEnd(50)} ║`);
-            console.log(`║ Avatar: ${(targetAvatar?.name || 'None').padEnd(52)} ║`);
-            console.log(`║ Mode: Pull from Bank | Plurals: ${matchPlurals ? 'ON' : 'OFF'}                       ║`);
-            console.log('╠══════════════════════════════════════════════════════════════╣');
-            console.log('║ MATCHING RULES APPLIED:                                      ║');
-            console.log('║  1. Always try primary keywords first                        ║');
-            console.log('║  2. Fall back to secondary keywords if enabled               ║');
-            console.log('║  3. Never duplicate primary keywords on a page               ║');
-            console.log('║  4. Secondary matches must have different primaries          ║');
-            console.log('╠══════════════════════════════════════════════════════════════╣');
-
+            // Smart matching decision report
+            console.log(`[Smart Match] Article: ${keyword || title} | Avatar: ${targetAvatar?.name || 'None'} | Plurals: ${matchPlurals ? 'ON' : 'OFF'}`);
+            console.log(`[Smart Match] Matched ${availableImages.length} images:`);
             availableImages.slice(0, 5).forEach((img, idx) => {
-              console.log(`║ IMAGE #${idx + 1}: ${(img.variation || img.id).substring(0, 50).padEnd(50)} ║`);
-              console.log(`║   Primary Score: ${String(img.primaryScore || 0).padEnd(5)} | Secondary Score: ${String(img.secondaryScore || 0).padEnd(12)} ║`);
-              if (img.matchedPrimary?.length > 0) {
-                console.log(`║   Primary Keywords: ${img.matchedPrimary.slice(0, 3).join(', ').substring(0, 40).padEnd(40)} ║`);
-              }
-              if (img.matchedSecondary?.length > 0) {
-                console.log(`║   Secondary Keywords: ${img.matchedSecondary.slice(0, 3).join(', ').substring(0, 38).padEnd(38)} ║`);
-              }
-              console.log('╠──────────────────────────────────────────────────────────────╣');
+              const primaryKw = img.matchedPrimary?.slice(0, 2).join(', ') || 'none';
+              console.log(`  #${idx + 1}: ${(img.variation || img.id).substring(0, 40)} (primary: ${primaryKw})`);
             });
-
-            console.log(`║ Total Matched: ${String(availableImages.length).padEnd(3)} images                                  ║`);
-            console.log('╚══════════════════════════════════════════════════════════════╝\n');
 
             // Populate image decision report for frontend
             imageDecisionReport.mode = 'bank';
@@ -946,11 +916,7 @@ router.post('/publish', async (req, res) => {
           }
 
           imagesFromBank = imagesToUse.length;
-
-          console.log('╠══════════════════════════════════════════════════════════════╣');
-          console.log(`║ IMAGES SELECTED FROM BANK: ${String(imagesFromBank).padEnd(3)}                             ║`);
-          console.log(`║ (Hero: 1, Body: ${String(imagesFromBank - 1).padEnd(2)})                                       ║`);
-          console.log('╚══════════════════════════════════════════════════════════════╝');
+          console.log(`[Image Bank] Selected ${imagesFromBank} images (Hero: 1, Body: ${imagesFromBank - 1})`);
 
           // Session log for bank selection
           sessionLogger.logSuccess('BANK', `Selected ${imagesFromBank} images from Image Bank`, {
@@ -1062,30 +1028,11 @@ router.post('/publish', async (req, res) => {
         guidedModel
       });
 
-      // 🔍🔍🔍 CRITICAL TRACKING: What came back from pipeline?
-      banner('PIPELINE RESULT - What images came back?');
-      console.log('╔══════════════════════════════════════════════════════════════════════╗');
-      console.log('║  🔬 EXAMINING PIPELINE RESULT FOR IMAGES                            ║');
-      console.log('╠══════════════════════════════════════════════════════════════════════╣');
-      console.log(`║ pipelineResult.imagesGenerated: ${pipelineResult.imagesGenerated || 0}`.padEnd(71) + '║');
-      console.log(`║ pipelineResult.chunks.intro exists: ${!!pipelineResult.chunks.intro}`.padEnd(71) + '║');
-      console.log(`║ pipelineResult.chunks.intro.imageData exists: ${!!pipelineResult.chunks.intro?.imageData}`.padEnd(71) + '║');
-      if (pipelineResult.chunks.intro?.imageData) {
-        const id = pipelineResult.chunks.intro.imageData;
-        console.log(`║   - url: ${id.url ? 'YES (' + (id.url.startsWith('data:') ? 'BASE64' : 'HTTP') + ')' : 'NO'}`.padEnd(71) + '║');
-        console.log(`║   - wpUrl: ${id.wpUrl ? 'YES' : 'NO'}`.padEnd(71) + '║');
-        console.log(`║   - wpMediaId: ${id.wpMediaId || 'NONE'}`.padEnd(71) + '║');
-      }
-      console.log(`║ pipelineResult.chunks.chunks count: ${pipelineResult.chunks.chunks?.length || 0}`.padEnd(71) + '║');
+      // Pipeline result summary
       let pipelineChunksWithImages = 0;
-      pipelineResult.chunks.chunks?.forEach((c, i) => {
-        if (c.imageData) {
-          pipelineChunksWithImages++;
-          console.log(`║   chunk[${i}] imageData: url=${c.imageData.url ? 'YES' : 'NO'}, wpUrl=${c.imageData.wpUrl ? 'YES' : 'NO'}`.padEnd(71) + '║');
-        }
-      });
-      console.log(`║ Pipeline chunks with imageData: ${pipelineChunksWithImages}`.padEnd(71) + '║');
-      console.log('╚══════════════════════════════════════════════════════════════════════╝');
+      pipelineResult.chunks.chunks?.forEach((c) => { if (c.imageData) pipelineChunksWithImages++; });
+      const heroHasImage = !!pipelineResult.chunks.intro?.imageData;
+      console.log(`[Pipeline] Generated: ${pipelineResult.imagesGenerated || 0} | Hero: ${heroHasImage ? 'YES' : 'NO'} | Body: ${pipelineChunksWithImages}`);
 
       // Merge pipeline images with bank images (only if NOT in draft mode)
       if (!imageDraftMode) {
@@ -1148,53 +1095,21 @@ router.post('/publish', async (req, res) => {
       estimatedCost = pipelineResult.estimatedCost;
       console.log(`[Elementor Publish] Generated ${imagesGenerated} images`);
 
-      // ═══════════════════════════════════════════════════════════════
-      // IMAGE DECISION REPORT - Log what was generated and why
-      // ═══════════════════════════════════════════════════════════════
-      console.log('\n╔══════════════════════════════════════════════════════════════╗');
-      console.log('║          IMAGE GENERATION DECISION REPORT                    ║');
-      console.log('╠══════════════════════════════════════════════════════════════╣');
-      console.log(`║ Article: ${(title || keyword || 'Untitled').substring(0, 50).padEnd(50)} ║`);
-      console.log(`║ Mode: Generate Live | Model: ${imageGenModel.padEnd(28)} ║`);
-      console.log(`║ Quality: ${imageQuality.padEnd(10)} | Images Generated: ${String(imagesGenerated).padEnd(14)} ║`);
-      console.log('╠══════════════════════════════════════════════════════════════╣');
-
-      // Log hero image if present
+      // Image generation summary
+      console.log(`[Generate Live] Article: ${title || keyword} | Model: ${imageGenModel} | Quality: ${imageQuality} | Total: ${imagesGenerated}`);
       if (pipelineResult.chunks.intro?.imageData) {
-        const heroAction = pipelineResult.chunks.intro.extractedAction || {};
         const heroData = pipelineResult.chunks.intro.imageData;
-        const introWords = pipelineResult.chunks.intro.wordCount || 0;
-        const estimatedLines = Math.ceil(introWords / 10); // ~10 words per line in hero layout
-        const sizeLabel = heroData.requestedSize === '1536x1024' ? 'LANDSCAPE' :
-                          heroData.requestedSize === '1024x1024' ? 'SQUARE' : 'PORTRAIT';
-        console.log('║ HERO IMAGE:                                                  ║');
-        console.log(`║   Auto-Size: ${introWords} words ≈ ${estimatedLines} lines → ${sizeLabel} (${heroData.requestedSize || 'N/A'})`.padEnd(62) + '║');
-        console.log(`║   Action: ${(heroAction.action || 'N/A').substring(0, 50).padEnd(50)} ║`);
-        console.log(`║   Mood: ${(heroAction.mood || 'N/A').padEnd(52)} ║`);
-        console.log(`║   Setting: ${(heroAction.setting || 'N/A').substring(0, 48).padEnd(48)} ║`);
-        if (pipelineResult.chunks.intro.imagePrompt) {
-          console.log(`║   Prompt: ${pipelineResult.chunks.intro.imagePrompt.substring(0, 50).padEnd(50)} ║`);
-        }
+        console.log(`  Hero: ${heroData.requestedSize || 'default'} | wpUrl: ${heroData.wpUrl ? 'YES' : 'NO'}`);
       }
-
-      // Log inline images
       let inlineCount = 0;
       pipelineResult.chunks.chunks.forEach((chunk, idx) => {
         if (chunk.imageData) {
           inlineCount++;
-          const action = chunk.extractedAction || {};
-          console.log('╠──────────────────────────────────────────────────────────────╣');
-          console.log(`║ IMAGE #${inlineCount} (Section ${idx + 1}):                                       ║`);
-          console.log(`║   Heading: ${(chunk.heading || 'No heading').substring(0, 48).padEnd(48)} ║`);
-          console.log(`║   Word Count: ${String(chunk.wordCount || 0).padEnd(5)} | Side: ${(chunk.imageData.side || 'N/A').padEnd(25)} ║`);
-          console.log(`║   Action: ${(action.action || 'N/A').substring(0, 50).padEnd(50)} ║`);
-          if (chunk.imagePrompt) {
-            console.log(`║   Prompt: ${chunk.imagePrompt.substring(0, 50).padEnd(50)} ║`);
-          }
         }
       });
-
-      console.log('╚══════════════════════════════════════════════════════════════╝\n');
+      if (inlineCount > 0) {
+        console.log(`  Body images: ${inlineCount}`);
+      }
 
       // Session logging for live generation
       const liveGenCount = (pipelineResult.chunks.intro?.imageData ? 1 : 0) +

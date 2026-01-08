@@ -520,11 +520,7 @@ function calculateHeroSize(wordCount) {
  * @returns {Promise<object>} Chunks with imageData filled
  */
 export async function generateArticleImages(chunks, options = {}, apiKey) {
-  // 🔍 MEGA TRACKING START
-  banner('GENERATE ARTICLE IMAGES - Starting');
-  console.log('╔══════════════════════════════════════════════════════════════════════╗');
-  console.log('║  🎨🎨🎨 GENERATING IMAGES FOR ARTICLE CHUNKS 🎨🎨🎨                  ║');
-  console.log('╚══════════════════════════════════════════════════════════════════════╝');
+  console.log('[Image Generator] Starting article image generation');
 
   const {
     heroImage = true,
@@ -629,42 +625,11 @@ export async function generateArticleImages(chunks, options = {}, apiKey) {
     imageIndex++;
   }
 
-  // 🔍 MEGA TRACKING - Final state of chunks after image generation
-  banner('GENERATE ARTICLE IMAGES - Complete');
-  console.log('╔══════════════════════════════════════════════════════════════════════╗');
-  console.log('║  📸 FINAL CHUNK STATE AFTER IMAGE GENERATION                        ║');
-  console.log('╠══════════════════════════════════════════════════════════════════════╣');
-
-  // Check intro imageData
-  if (chunks.intro) {
-    const hasImage = !!chunks.intro.imageData?.url;
-    console.log(`║ INTRO (Hero): ${hasImage ? '✅ HAS IMAGE' : '❌ NO IMAGE'}`.padEnd(71) + '║');
-    if (hasImage) {
-      const urlType = chunks.intro.imageData.url.startsWith('data:') ? 'BASE64' : 'HTTP';
-      console.log(`║   URL Type: ${urlType}`.padEnd(71) + '║');
-      console.log(`║   URL: ${chunks.intro.imageData.url.substring(0, 50)}...`.padEnd(71) + '║');
-    }
-  }
-
-  // Check body chunks
+  // Final state summary
   let chunksWithImages = 0;
-  chunks.chunks?.forEach((chunk, idx) => {
-    const hasImage = !!chunk.imageData?.url;
-    if (hasImage) chunksWithImages++;
-    console.log(`║ Chunk[${idx}] "${(chunk.heading || 'Untitled').substring(0, 20)}": ${hasImage ? '✅ HAS IMAGE' : '❌ NO IMAGE'}`.padEnd(71) + '║');
-    if (hasImage) {
-      const urlType = chunk.imageData.url.startsWith('data:') ? 'BASE64' : 'HTTP';
-      console.log(`║   URL Type: ${urlType} | Side: ${chunk.imageData.side || 'unknown'}`.padEnd(71) + '║');
-    }
-  });
-
-  console.log('╠══════════════════════════════════════════════════════════════════════╣');
+  chunks.chunks?.forEach((chunk) => { if (chunk.imageData?.url) chunksWithImages++; });
   const totalImages = (chunks.intro?.imageData?.url ? 1 : 0) + chunksWithImages;
-  console.log(`║ TOTAL IMAGES ATTACHED TO CHUNKS: ${totalImages}`.padEnd(71) + '║');
-  if (totalImages === 0) {
-    console.log(`║ ❌❌❌ NO IMAGES WERE ATTACHED! Check API keys & prompts! ❌❌❌`.padEnd(71) + '║');
-  }
-  console.log('╚══════════════════════════════════════════════════════════════════════╝');
+  console.log(`[Image Generator] Complete: ${totalImages} images (Hero: ${chunks.intro?.imageData?.url ? 'YES' : 'NO'}, Body: ${chunksWithImages})`);
 
   return chunks;
 }

@@ -6804,7 +6804,11 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
                           <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
                           {img.avatarTag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatarTag}</span>}
-                          {img.usedOn && <a href={img.usedOn} target="_blank" rel="noopener noreferrer" className="text-[9px] text-brand-cyan underline">View Page</a>}
+                          {img.usedOn && (
+                            img.usedOn.startsWith('http')
+                              ? <a href={img.usedOn} target="_blank" rel="noopener noreferrer" className="text-[9px] text-brand-cyan underline">View Page</a>
+                              : <span className="text-[9px] text-purple-300">Used on: {img.usedOn}</span>
+                          )}
                           <button onClick={() => handleRestoreFromUsed(img.id)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Restore</button>
                         </div>
                       </div>
