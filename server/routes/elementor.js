@@ -1513,10 +1513,20 @@ router.post('/publish', async (req, res) => {
     sessionLogger.endSession();
 
     // Push logs to GitHub (non-blocking, fire and forget)
+    console.log('[GitHub Logger] Checking if configured...');
+    console.log('[GitHub Logger] isConfigured:', githubLogger.isConfigured());
+    console.log('[GitHub Logger] Status:', JSON.stringify(githubLogger.getStatus()));
     if (githubLogger.isConfigured()) {
-      githubLogger.pushLogsToGitHub('publish-complete').catch(err => {
-        console.error('[GitHub Logger] Background push failed:', err.message);
-      });
+      console.log('[GitHub Logger] Attempting push to GitHub...');
+      githubLogger.pushLogsToGitHub('publish-complete')
+        .then(result => {
+          console.log('[GitHub Logger] Push result:', JSON.stringify(result));
+        })
+        .catch(err => {
+          console.error('[GitHub Logger] Background push failed:', err.message);
+        });
+    } else {
+      console.log('[GitHub Logger] SKIPPED - not configured (check GITHUB_TOKEN env var)');
     }
 
     res.json({
@@ -1539,10 +1549,18 @@ router.post('/publish', async (req, res) => {
     sessionLogger.endSession();
 
     // Push logs to GitHub on error too (helps debugging)
+    console.log('[GitHub Logger] Error path - checking if configured...');
     if (githubLogger.isConfigured()) {
-      githubLogger.pushLogsToGitHub('publish-error').catch(err => {
-        console.error('[GitHub Logger] Background push failed:', err.message);
-      });
+      console.log('[GitHub Logger] Attempting error push to GitHub...');
+      githubLogger.pushLogsToGitHub('publish-error')
+        .then(result => {
+          console.log('[GitHub Logger] Error push result:', JSON.stringify(result));
+        })
+        .catch(err => {
+          console.error('[GitHub Logger] Background push failed:', err.message);
+        });
+    } else {
+      console.log('[GitHub Logger] SKIPPED on error - not configured');
     }
 
     res.status(500).json({ error: error.message });
