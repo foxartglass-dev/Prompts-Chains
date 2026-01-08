@@ -2664,12 +2664,16 @@ const App: React.FC = () => {
                                         </button>
                                         <button
                                             type="button"
+                                            disabled={(currentProject.state.articlePublishMode || 'draft') === 'draft'}
                                             onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'wordpress'}))}
                                             className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 currentProject.state.wpPublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
-                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                                    : (currentProject.state.articlePublishMode || 'draft') === 'draft'
+                                                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                                        : 'bg-slate-900 text-white hover:bg-slate-800'
                                             }`}
+                                            title={(currentProject.state.articlePublishMode || 'draft') === 'draft' ? 'Article must be in WordPress mode first' : ''}
                                         >
                                             <span className="block">Word</span>
                                             <span className="block">Press</span>
@@ -2717,7 +2721,13 @@ const App: React.FC = () => {
                                     <div className="flex rounded-lg overflow-hidden border-2 border-brand-gold">
                                         <button
                                             type="button"
-                                            onClick={() => setCurrentProjectState(p => ({...p, articlePublishMode: 'draft'}))}
+                                            onClick={() => setCurrentProjectState(p => ({
+                                                ...p,
+                                                articlePublishMode: 'draft',
+                                                // CASCADE: When Article goes to Draft, Image and Meta must also go to Draft
+                                                wpPublishMode: p.wpPublishMode === 'wordpress' ? 'draft' : p.wpPublishMode,
+                                                metaPublishMode: 'draft'
+                                            }))}
                                             className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 (currentProject.state.articlePublishMode || 'draft') === 'draft'
                                                     ? 'bg-brand-gold text-black'
@@ -2756,12 +2766,16 @@ const App: React.FC = () => {
                                         </button>
                                         <button
                                             type="button"
+                                            disabled={(currentProject.state.articlePublishMode || 'draft') === 'draft'}
                                             onClick={() => setCurrentProjectState(p => ({...p, metaPublishMode: 'wordpress'}))}
                                             className={`px-2 py-1.5 text-xs font-medium transition-all leading-tight ${
                                                 currentProject.state.metaPublishMode === 'wordpress'
                                                     ? 'bg-green-600 text-white'
-                                                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                                                    : (currentProject.state.articlePublishMode || 'draft') === 'draft'
+                                                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                                        : 'bg-slate-900 text-white hover:bg-slate-800'
                                             }`}
+                                            title={(currentProject.state.articlePublishMode || 'draft') === 'draft' ? 'Article must be in WordPress mode first' : ''}
                                         >
                                             <span className="block">Word</span>
                                             <span className="block">Press</span>

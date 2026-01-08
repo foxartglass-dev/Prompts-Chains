@@ -6662,7 +6662,11 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'bank' ? 'bg-brand-gold/20 border-2 border-brand-gold' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
-                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'bank'} onChange={() => updateSettings({ integration_mode: 'bank' })} className="hidden" />
+                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'bank'} onChange={() => updateSettings({
+                      integration_mode: 'bank',
+                      // AUTO-SWITCH: When switching to Bank mode, ensure matching strategy is a bank option
+                      smart_matching_mode: (settings.smart_matching_mode === 'generate_first' || settings.smart_matching_mode === 'generate_only') ? 'bank_first' : settings.smart_matching_mode
+                    })} className="hidden" />
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'bank' ? 'bg-brand-gold text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
                     </div>
@@ -6673,7 +6677,11 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </label>
 
                   <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'live' ? 'bg-brand-cyan/20 border-2 border-brand-cyan' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
-                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'live'} onChange={() => updateSettings({ integration_mode: 'live' })} className="hidden" />
+                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'live'} onChange={() => updateSettings({
+                      integration_mode: 'live',
+                      // AUTO-SWITCH: When switching to Live mode, ensure matching strategy is a generate option
+                      smart_matching_mode: (settings.smart_matching_mode === 'bank_first' || settings.smart_matching_mode === 'bank_only') ? 'generate_first' : settings.smart_matching_mode
+                    })} className="hidden" />
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'live' ? 'bg-brand-cyan text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                     </div>
@@ -8320,11 +8328,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
                 </div>
 
-                {/* Fallback Checkbox - Now below tabs */}
-                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-900/50 rounded mt-3">
-                  <input type="checkbox" checked={settings.fallback_to_live} onChange={(e) => updateSettings({ fallback_to_live: e.target.checked })} className="w-4 h-4 rounded border-amber-500 text-amber-500 focus:ring-amber-500 bg-slate-900" />
-                  <span className="text-sm text-amber-400">Fallback: Generate if bank is empty or no match</span>
-                </label>
+                {/* REMOVED: Redundant fallback checkbox - functionality now handled by "Bank First" matching strategy */}
               </div>
 
               {/* ─────────────────────────────────────────────────────
@@ -8351,16 +8355,23 @@ Start by introducing yourself and asking about their business in a friendly way.
                       AI analyzes article text and matches images based on keywords. Define keywords in each placeholder option above.
                     </p>
 
-                    {/* Matching Strategy */}
+                    {/* Matching Strategy - CONSTRAINED by Image Source (integration_mode) */}
                     <div>
-                      <label className="text-xs text-purple-400 mb-2 block font-medium">Matching Strategy:</label>
+                      <label className="text-xs text-purple-400 mb-2 block font-medium">
+                        Matching Strategy:
+                        <span className="ml-2 text-[10px] text-slate-500">
+                          ({settings.integration_mode === 'bank' ? 'Bank options only' : 'Generate options only'})
+                        </span>
+                      </label>
                       <div className="grid grid-cols-2 gap-2">
-                        {[
+                        {/* Show only Bank options when integration_mode is 'bank', only Generate options when 'live' */}
+                        {(settings.integration_mode === 'bank' ? [
                           { value: 'bank_first', label: 'Bank First', desc: 'Search bank → Generate if no match' },
+                          { value: 'bank_only', label: 'Bank Only', desc: 'Only use existing bank images' }
+                        ] : [
                           { value: 'generate_first', label: 'Generate First', desc: 'Always fresh → Save to bank' },
-                          { value: 'bank_only', label: 'Bank Only', desc: 'Only use existing bank images' },
                           { value: 'generate_only', label: 'Generate Only', desc: 'Always new → Skip bank' }
-                        ].map(opt => (
+                        ]).map(opt => (
                           <label key={opt.value} className={`flex flex-col p-2 rounded cursor-pointer transition ${settings.smart_matching_mode === opt.value ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
                             <input type="radio" name="smart_mode" checked={settings.smart_matching_mode === opt.value} onChange={() => updateSettings({ smart_matching_mode: opt.value as any })} className="hidden" />
                             <span className="text-xs font-medium">{opt.label}</span>
@@ -8448,83 +8459,113 @@ Start by introducing yourself and asking about their business in a friendly way.
               </div>
 
               {/* ─────────────────────────────────────────────────────
-                  SECTION 3: Matching Rules (Numbered)
+                  SECTION 3: Matching Rules - CONDITIONAL based on Smart Matching toggle
               ───────────────────────────────────────────────────── */}
-              <div className="bg-slate-800/50 rounded-lg p-4 border border-emerald-500/30">
+              <div className={`rounded-lg p-4 border ${settings.smart_matching_enabled ? 'bg-slate-800/50 border-emerald-500/30' : 'bg-slate-800/30 border-cyan-500/30'}`}>
                 <div className="flex items-center gap-2 mb-4">
-                  <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`w-5 h-5 ${settings.smart_matching_enabled ? 'text-emerald-400' : 'text-cyan-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                   </svg>
-                  <h3 className="text-emerald-400 font-semibold">Smart Matching Rules</h3>
+                  <h3 className={`font-semibold ${settings.smart_matching_enabled ? 'text-emerald-400' : 'text-cyan-400'}`}>
+                    {settings.smart_matching_enabled ? 'Smart Matching Rules' : 'Static Matching Rules'}
+                  </h3>
+                  <span className={`text-[10px] px-2 py-0.5 rounded ${settings.smart_matching_enabled ? 'bg-emerald-600/30 text-emerald-300' : 'bg-cyan-600/30 text-cyan-300'}`}>
+                    {settings.smart_matching_enabled ? 'Smart Matching ON' : 'Smart Matching OFF'}
+                  </span>
                 </div>
 
-                {/* Numbered Rules List - EDITABLE */}
-                <div className="space-y-3">
-                  {/* Rule 1 */}
-                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-emerald-500">
-                    <span className="w-6 h-6 flex items-center justify-center bg-emerald-600 rounded-full text-white text-xs font-bold shrink-0">1</span>
-                    <div className="flex-1">
-                      <label className="text-xs text-emerald-400 font-semibold mb-1 block">Primary Keywords Rule</label>
-                      <textarea
-                        value={settings.matching_rule_1 || 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.'}
-                        onChange={(e) => updateSettings({ matching_rule_1: e.target.value })}
-                        className="w-full bg-slate-800 border border-emerald-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-emerald-500"
-                        rows={2}
-                        placeholder="Rule for primary keyword matching..."
-                      />
-                    </div>
-                  </div>
+                {/* 4 COLORED RULES - Only show when Smart Matching is ON */}
+                {settings.smart_matching_enabled ? (
+                  <>
+                    {/* Numbered Rules List - EDITABLE */}
+                    <div className="space-y-3">
+                      {/* Rule 1 - Emerald */}
+                      <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-emerald-500">
+                        <span className="w-6 h-6 flex items-center justify-center bg-emerald-600 rounded-full text-white text-xs font-bold shrink-0">1</span>
+                        <div className="flex-1">
+                          <label className="text-xs text-emerald-400 font-semibold mb-1 block">Primary Keywords Rule</label>
+                          <textarea
+                            value={settings.matching_rule_1 || 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.'}
+                            onChange={(e) => updateSettings({ matching_rule_1: e.target.value })}
+                            className="w-full bg-slate-800 border border-emerald-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-emerald-500"
+                            rows={2}
+                            placeholder="Rule for primary keyword matching..."
+                          />
+                        </div>
+                      </div>
 
-                  {/* Rule 2 */}
-                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-amber-500">
-                    <span className="w-6 h-6 flex items-center justify-center bg-amber-600 rounded-full text-white text-xs font-bold shrink-0">2</span>
-                    <div className="flex-1">
-                      <label className="text-xs text-amber-400 font-semibold mb-1 block">Secondary Keywords Fallback Rule</label>
-                      <textarea
-                        value={settings.matching_rule_2 || 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.'}
-                        onChange={(e) => updateSettings({ matching_rule_2: e.target.value })}
-                        className="w-full bg-slate-800 border border-amber-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-amber-500"
-                        rows={2}
-                        placeholder="Rule for secondary keyword fallback..."
-                      />
-                    </div>
-                  </div>
+                      {/* Rule 2 - Amber */}
+                      <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-amber-500">
+                        <span className="w-6 h-6 flex items-center justify-center bg-amber-600 rounded-full text-white text-xs font-bold shrink-0">2</span>
+                        <div className="flex-1">
+                          <label className="text-xs text-amber-400 font-semibold mb-1 block">Secondary Keywords Fallback Rule</label>
+                          <textarea
+                            value={settings.matching_rule_2 || 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.'}
+                            onChange={(e) => updateSettings({ matching_rule_2: e.target.value })}
+                            className="w-full bg-slate-800 border border-amber-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-amber-500"
+                            rows={2}
+                            placeholder="Rule for secondary keyword fallback..."
+                          />
+                        </div>
+                      </div>
 
-                  {/* Rule 3 */}
-                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-red-500">
-                    <span className="w-6 h-6 flex items-center justify-center bg-red-600 rounded-full text-white text-xs font-bold shrink-0">3</span>
-                    <div className="flex-1">
-                      <label className="text-xs text-red-400 font-semibold mb-1 block">No Duplicate Primaries Rule</label>
-                      <textarea
-                        value={settings.matching_rule_3 || 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).'}
-                        onChange={(e) => updateSettings({ matching_rule_3: e.target.value })}
-                        className="w-full bg-slate-800 border border-red-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-red-500"
-                        rows={2}
-                        placeholder="Rule for preventing duplicate primary keywords..."
-                      />
-                    </div>
-                  </div>
+                      {/* Rule 3 - Red */}
+                      <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-red-500">
+                        <span className="w-6 h-6 flex items-center justify-center bg-red-600 rounded-full text-white text-xs font-bold shrink-0">3</span>
+                        <div className="flex-1">
+                          <label className="text-xs text-red-400 font-semibold mb-1 block">No Duplicate Primaries Rule</label>
+                          <textarea
+                            value={settings.matching_rule_3 || 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).'}
+                            onChange={(e) => updateSettings({ matching_rule_3: e.target.value })}
+                            className="w-full bg-slate-800 border border-red-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-red-500"
+                            rows={2}
+                            placeholder="Rule for preventing duplicate primary keywords..."
+                          />
+                        </div>
+                      </div>
 
-                  {/* Rule 4 */}
-                  <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-purple-500">
-                    <span className="w-6 h-6 flex items-center justify-center bg-purple-600 rounded-full text-white text-xs font-bold shrink-0">4</span>
-                    <div className="flex-1">
-                      <label className="text-xs text-purple-400 font-semibold mb-1 block">Different Primaries for Secondary Matches Rule</label>
-                      <textarea
-                        value={settings.matching_rule_4 || 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).'}
-                        onChange={(e) => updateSettings({ matching_rule_4: e.target.value })}
-                        className="w-full bg-slate-800 border border-purple-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-purple-500"
-                        rows={2}
-                        placeholder="Rule for secondary keyword primary diversity..."
-                      />
+                      {/* Rule 4 - Purple */}
+                      <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-purple-500">
+                        <span className="w-6 h-6 flex items-center justify-center bg-purple-600 rounded-full text-white text-xs font-bold shrink-0">4</span>
+                        <div className="flex-1">
+                          <label className="text-xs text-purple-400 font-semibold mb-1 block">Different Primaries for Secondary Matches Rule</label>
+                          <textarea
+                            value={settings.matching_rule_4 || 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).'}
+                            onChange={(e) => updateSettings({ matching_rule_4: e.target.value })}
+                            className="w-full bg-slate-800 border border-purple-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-purple-500"
+                            rows={2}
+                            placeholder="Rule for secondary keyword primary diversity..."
+                          />
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Editable Parameters */}
-                <div className="mt-4 pt-4 border-t border-slate-700">
-                  <label className="text-xs text-slate-400 mb-3 block">Matching Parameters (use {"{placeholders}"} for dynamic values):</label>
+                    {/* Plurals Toggle - Only with Smart Matching */}
+                    <div className="mt-4 flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-emerald-500/30">
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg">📝</span>
+                        <div>
+                          <span className="text-sm text-white font-medium">Auto-Match Plurals</span>
+                          <p className="text-[10px] text-slate-400">counter → counters, sink → sinks, countertop → countertops</p>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.match_plurals !== false}
+                          onChange={(e) => updateSettings({ match_plurals: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                      </label>
+                    </div>
+                  </>
+                ) : (
+                  /* 2 BLUE RULES - Only show when Smart Matching is OFF (static fallback) */
                   <div className="space-y-3">
+                    <p className="text-xs text-cyan-300/70 mb-3">
+                      Smart Matching is OFF. These static rules will be used for all image placements.
+                    </p>
                     <div>
                       <label className="text-xs text-cyan-400 font-semibold block mb-1">Image Placement Rule</label>
                       <textarea
@@ -8546,27 +8587,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       />
                     </div>
                   </div>
-
-                  {/* Plurals Toggle */}
-                  <div className="mt-3 flex items-center justify-between bg-slate-900/50 p-3 rounded-lg border border-cyan-500/30">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg">📝</span>
-                      <div>
-                        <span className="text-sm text-white font-medium">Auto-Match Plurals</span>
-                        <p className="text-[10px] text-slate-400">counter → counters, sink → sinks, countertop → countertops</p>
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={settings.match_plurals !== false}
-                        onChange={(e) => updateSettings({ match_plurals: e.target.checked })}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
-                    </label>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* ─────────────────────────────────────────────────────

@@ -613,12 +613,188 @@ let effectiveUseBank = integrationMode === 'bank';
 
 ## Summary: Priority Order for Fixes
 
-1. **HIGH:** Implement WordPress toggle dependencies (Article controls Image/Meta)
-2. **HIGH:** Constrain matching strategy options by image source
-3. **MEDIUM:** Remove redundant fallback checkbox
-4. **MEDIUM:** Fix Generate Live not actually generating
-5. **LOW:** Fix Smart Matching toggle state display in article detail
+1. ✅ **DONE:** Implement WordPress toggle dependencies (Article controls Image/Meta)
+2. ✅ **DONE:** Constrain matching strategy options by image source
+3. ✅ **DONE:** Remove redundant fallback checkbox
+4. ✅ **DONE:** Fix Smart Matching rules visibility (4 colored when ON, 2 blue when OFF)
+5. **PENDING:** Fix Generate Live not actually generating (backend logic)
+6. **PENDING:** Fix Smart Matching toggle state display in article detail
 
 ---
 
-*Document last updated: 2026-01-08*
+## 8. IMPLEMENTED: Comprehensive Toggle Combination Matrix
+
+### 8.1 WordPress Publishing Toggles (IMPLEMENTED)
+
+| Article Mode | Image Options | Meta Options | What Happens |
+|--------------|---------------|--------------|--------------|
+| **Draft** | Off, Draft | Draft only | Everything stays in Article DB. WordPress button disabled for Image/Meta. |
+| **WordPress** | Off, Draft, WordPress | Draft, WordPress | Article to WP. Image/Meta follow their individual settings. |
+
+**Auto-Cascade Behavior:**
+- When Article switches from WordPress → Draft:
+  - Image automatically switches to Draft (if it was WordPress)
+  - Meta automatically switches to Draft (always)
+
+### 8.2 Image Source & Matching Strategy (IMPLEMENTED)
+
+| Image Source | Available Matching Strategies | Auto-Switch |
+|--------------|-------------------------------|-------------|
+| **Pull from Bank** | Bank First, Bank Only | If was generate_first/only → switches to bank_first |
+| **Generate Live** | Generate First, Generate Only | If was bank_first/only → switches to generate_first |
+
+### 8.3 Smart Matching Rules Visibility (IMPLEMENTED)
+
+| Smart Matching Toggle | Rules Shown | Color Scheme |
+|-----------------------|-------------|--------------|
+| **ON** | 4 Colored Rules (Primary Keywords, Secondary Fallback, No Duplicates, Different Primaries) + Plurals Toggle | Emerald border |
+| **OFF** | 2 Static Rules (Image Placement Rule, Smart Matching Rule) | Cyan border |
+
+### 8.4 Complete Toggle Combination Matrix
+
+This table shows every valid combination after implementation:
+
+| # | Article | Image | Meta | Image Source | Matching Strategy | Smart Match | Rules Shown | Result |
+|---|---------|-------|------|--------------|-------------------|-------------|-------------|--------|
+| 1 | Draft | Off | Draft | Bank | Bank First | OFF | 2 Blue | Article DB only, no images |
+| 2 | Draft | Off | Draft | Bank | Bank First | ON | 4 Colored | Article DB only, no images |
+| 3 | Draft | Off | Draft | Bank | Bank Only | OFF | 2 Blue | Article DB only, no images |
+| 4 | Draft | Off | Draft | Bank | Bank Only | ON | 4 Colored | Article DB only, no images |
+| 5 | Draft | Off | Draft | Live | Generate First | OFF | 2 Blue | Article DB only, no images |
+| 6 | Draft | Off | Draft | Live | Generate First | ON | 4 Colored | Article DB only, no images |
+| 7 | Draft | Off | Draft | Live | Generate Only | OFF | 2 Blue | Article DB only, no images |
+| 8 | Draft | Off | Draft | Live | Generate Only | ON | 4 Colored | Article DB only, no images |
+| 9 | Draft | Draft | Draft | Bank | Bank First | OFF | 2 Blue | Article + images in DB, static rules |
+| 10 | Draft | Draft | Draft | Bank | Bank First | ON | 4 Colored | Article + images in DB, smart matched |
+| 11 | Draft | Draft | Draft | Bank | Bank Only | OFF | 2 Blue | Article + bank images only |
+| 12 | Draft | Draft | Draft | Bank | Bank Only | ON | 4 Colored | Article + smart matched bank images |
+| 13 | Draft | Draft | Draft | Live | Generate First | OFF | 2 Blue | Article + new images, saved to bank |
+| 14 | Draft | Draft | Draft | Live | Generate First | ON | 4 Colored | Article + smart generated, saved to bank |
+| 15 | Draft | Draft | Draft | Live | Generate Only | OFF | 2 Blue | Article + fresh images, skip bank |
+| 16 | Draft | Draft | Draft | Live | Generate Only | ON | 4 Colored | Article + smart generated, skip bank |
+| 17 | WordPress | Off | Draft | Any | Any | Any | Any | Article to WP, no images, meta in DB |
+| 18 | WordPress | Off | WordPress | Any | Any | Any | Any | Article + meta to WP, no images |
+| 19 | WordPress | Draft | Draft | Any | Any | Any | Any | Article to WP, images + meta in DB |
+| 20 | WordPress | Draft | WordPress | Any | Any | Any | Any | Article + meta to WP, images in DB |
+| 21 | WordPress | WordPress | Draft | Bank | Bank First | OFF | 2 Blue | Full WP publish with bank images, meta in DB |
+| 22 | WordPress | WordPress | Draft | Bank | Bank First | ON | 4 Colored | Full WP publish with smart bank images |
+| 23 | WordPress | WordPress | Draft | Live | Generate First | ON | 4 Colored | Full WP publish with live generated images |
+| 24 | WordPress | WordPress | WordPress | Bank | Bank First | ON | 4 Colored | FULL PUBLISH: Article + smart images + meta to WP |
+| 25 | WordPress | WordPress | WordPress | Live | Generate First | ON | 4 Colored | FULL PUBLISH: Article + live images + meta to WP |
+
+### 8.5 Visual Flow Diagram (After Implementation)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    IMPLEMENTED TOGGLE FLOW                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  START: User configures toggles
+           │
+           ▼
+  ┌────────────────────────────────────────────────────────────────┐
+  │                    WORDPRESS PUBLISHING                         │
+  │                                                                 │
+  │   ARTICLE: [Draft] ←→ [WordPress]   ← MASTER CONTROL           │
+  │              │              │                                   │
+  │              │              │                                   │
+  │      ┌──────┴──────┐      ┌┴─────────────────────────┐         │
+  │      │ IMAGE:      │      │ IMAGE:                   │         │
+  │      │ [Off][Draft]│      │ [Off][Draft][WordPress]  │         │
+  │      │ (WP locked) │      │ (all available)          │         │
+  │      └─────────────┘      └──────────────────────────┘         │
+  │      ┌─────────────┐      ┌──────────────────────────┐         │
+  │      │ META:       │      │ META:                    │         │
+  │      │ [Draft]     │      │ [Draft][WordPress]       │         │
+  │      │ (WP locked) │      │ (all available)          │         │
+  │      └─────────────┘      └──────────────────────────┘         │
+  └────────────────────────────────────────────────────────────────┘
+           │
+           ▼
+  ┌────────────────────────────────────────────────────────────────┐
+  │                    IMAGE SOURCE                                 │
+  │                                                                 │
+  │   [Pull from Bank]              [Generate Live]                 │
+  │         │                              │                        │
+  │         ▼                              ▼                        │
+  │   ┌─────────────────┐           ┌─────────────────┐            │
+  │   │ MATCHING:       │           │ MATCHING:       │            │
+  │   │ • Bank First    │           │ • Generate First│            │
+  │   │ • Bank Only     │           │ • Generate Only │            │
+  │   └─────────────────┘           └─────────────────┘            │
+  │                                        │                        │
+  │                              ┌─────────┴─────────┐             │
+  │                              │ PROMPT MODE:      │             │
+  │                              │ • Main Prompt     │             │
+  │                              │ • Guided GPT      │             │
+  │                              │ • Smart Prompt    │             │
+  │                              └───────────────────┘             │
+  └────────────────────────────────────────────────────────────────┘
+           │
+           ▼
+  ┌────────────────────────────────────────────────────────────────┐
+  │                    SMART MATCHING                               │
+  │                                                                 │
+  │   Toggle: [OFF] ←→ [ON]                                        │
+  │              │         │                                        │
+  │              ▼         ▼                                        │
+  │   ┌─────────────┐  ┌─────────────────────────────────────┐     │
+  │   │ 2 CYAN RULES│  │ 4 COLORED RULES                     │     │
+  │   │ (Static)    │  │ 1. Primary Keywords (emerald)       │     │
+  │   │             │  │ 2. Secondary Fallback (amber)       │     │
+  │   │ • Placement │  │ 3. No Duplicates (red)              │     │
+  │   │ • Matching  │  │ 4. Different Primaries (purple)     │     │
+  │   └─────────────┘  │ + Plurals Toggle                    │     │
+  │                    └─────────────────────────────────────┘     │
+  └────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 9. Changes Made (Implementation Log)
+
+### File: `App.tsx`
+
+**Lines 2715-2751:** Article toggle now cascades to Image and Meta
+```javascript
+onClick={() => setCurrentProjectState(p => ({
+  ...p,
+  articlePublishMode: 'draft',
+  // CASCADE: When Article goes to Draft, Image and Meta must also go to Draft
+  wpPublishMode: p.wpPublishMode === 'wordpress' ? 'draft' : p.wpPublishMode,
+  metaPublishMode: 'draft'
+}))}
+```
+
+**Lines 2665-2680:** Image WordPress button disabled when Article is Draft
+```javascript
+disabled={(currentProject.state.articlePublishMode || 'draft') === 'draft'}
+title="Article must be in WordPress mode first"
+```
+
+**Lines 2769-2782:** Meta WordPress button disabled when Article is Draft
+
+### File: `ImageCreationSection.tsx`
+
+**Lines 6665-6693:** Integration mode now auto-switches matching strategy
+```javascript
+onChange={() => updateSettings({
+  integration_mode: 'bank',
+  // AUTO-SWITCH: When switching to Bank mode, ensure matching strategy is a bank option
+  smart_matching_mode: (settings.smart_matching_mode === 'generate_first' || settings.smart_matching_mode === 'generate_only') ? 'bank_first' : settings.smart_matching_mode
+})}
+```
+
+**Lines 8354-8377:** Matching strategy now filtered by integration_mode
+- Bank mode: Only shows Bank First, Bank Only
+- Live mode: Only shows Generate First, Generate Only
+
+**Line 8331:** Removed redundant fallback checkbox
+
+**Lines 8461-8591:** Rules section now conditional
+- Smart Matching ON: Shows 4 colored rules + plurals toggle
+- Smart Matching OFF: Shows 2 cyan static rules
+
+---
+
+*Document last updated: 2026-01-08 (Post-Implementation)*
