@@ -141,7 +141,8 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
         // Map database field names to our interface
         // DB uses 'generated_images', interface uses 'images'
-        if (article.generated_images && !article.images) {
+        // Always use generated_images as the source of truth
+        if (article.generated_images) {
           article.images = article.generated_images;
         }
 
@@ -163,8 +164,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           setSelectedDescIndex(0);
         }
 
-        // Reset meta saved state
-        setMetaSaved(false);
+        // Only reset metaSaved if meta hasn't been saved to DB
+        // If article has selected_meta_title, it means meta was previously saved
+        if (article.selected_meta_title || article.selected_meta_description) {
+          setMetaSaved(true);
+        } else {
+          setMetaSaved(false);
+        }
       }
     } catch (err) {
       setError('Failed to load article details');
@@ -381,10 +387,15 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     setPushingAll(true);
     setError(null);
 
+    const errors: string[] = [];
+
     try {
       // Step 1: Publish article if not already published
       let wpPostId = selectedArticle.wp_post_id;
+      console.log('[Push All] Starting - Article ID:', selectedArticle.id, 'WP Post ID:', wpPostId);
+
       if (!wpPostId) {
+        console.log('[Push All] Publishing article...');
         const articleRes = await fetch('/api/elementor/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -402,6 +413,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         const articleData = await articleRes.json();
         if (articleData.success && articleData.page) {
           wpPostId = articleData.page.id;
+          console.log('[Push All] Article published, WP Post ID:', wpPostId);
           await fetch(`/api/articles/${selectedArticle.id}/wp-status`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -417,6 +429,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       }
 
       // Step 2: Push meta to SEO plugin
+      console.log('[Push All] Pushing meta - Title:', selectedArticle.selected_meta_title?.substring(0, 30));
       if (wpPostId && (selectedArticle.selected_meta_title || selectedArticle.selected_meta_description)) {
         const metaRes = await fetch('/api/seo/push-direct', {
           method: 'POST',
@@ -433,28 +446,45 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         });
         const metaData = await metaRes.json();
         if (!metaData.success) {
-          console.warn('Meta push warning:', metaData.error);
+          console.error('[Push All] Meta push failed:', metaData.error);
+          errors.push(`Meta: ${metaData.error}`);
+        } else {
+          console.log('[Push All] Meta pushed successfully');
         }
       }
 
       // Step 3: Push images to WordPress
-      if (selectedArticle.images && selectedArticle.images.length > 0) {
-        const imagesRes = await fetch(`/api/articles/${selectedArticle.id}/push-images`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wpUrl, wpUser, wpPassword })
-        });
-        const imagesData = await imagesRes.json();
-        if (!imagesData.success) {
-          console.warn('Images push warning:', imagesData.error);
+      // Always call the endpoint - let the backend check if there are images
+      console.log('[Push All] Pushing images - Count from state:', selectedArticle.images?.length || 0);
+      const imagesRes = await fetch(`/api/articles/${selectedArticle.id}/push-images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wpUrl, wpUser, wpPassword })
+      });
+      const imagesData = await imagesRes.json();
+      if (!imagesData.success) {
+        // Only add error if it's not "No images to push"
+        if (imagesData.error !== 'No images to push') {
+          console.error('[Push All] Images push failed:', imagesData.error);
+          errors.push(`Images: ${imagesData.error}`);
+        } else {
+          console.log('[Push All] No images to push (article has no images)');
         }
+      } else {
+        console.log('[Push All] Images pushed:', imagesData.pushed, 'skipped:', imagesData.skipped);
       }
 
       // Refresh article data
-      fetchArticleDetails(selectedArticle.id);
+      await fetchArticleDetails(selectedArticle.id);
       fetchArticles();
-      setError(null);
+
+      if (errors.length > 0) {
+        setError(`Partial success. Issues: ${errors.join('; ')}`);
+      } else {
+        setError(null);
+      }
     } catch (err: any) {
+      console.error('[Push All] Error:', err);
       setError(err.message || 'Failed to push all to WordPress');
     } finally {
       setPushingAll(false);
