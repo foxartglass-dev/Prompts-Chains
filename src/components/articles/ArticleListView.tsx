@@ -556,6 +556,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
       const data = await res.json();
       if (data.success) {
+        // Refresh article data to update Live tracker badges
+        await fetchArticles();
+        // Update selected article with new meta_wp_pushed_at timestamp
+        setSelectedArticle(prev => prev ? {
+          ...prev,
+          meta_wp_pushed_at: new Date().toISOString()
+        } : null);
         alert('Meta data pushed to WordPress!');
       } else {
         setError(data.error || 'Failed to push meta');
@@ -869,48 +876,68 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       </span>
                     )}
                   </div>
-                  {/* Status Badges Row */}
-                  <div className="flex items-center gap-2 mt-1 text-xs font-mono">
-                    {/* Article: Draft/WP */}
-                    <span className={`px-2 py-0.5 rounded font-medium ${
-                      selectedArticle.wp_post_id ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
-                    }`}>
-                      Article: {selectedArticle.wp_post_id ? 'WP' : 'Draft'}
-                    </span>
-                    {/* Meta: Draft/WP */}
-                    <span className={`px-2 py-0.5 rounded font-medium ${
-                      selectedArticle.selected_meta_title ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
-                    }`}>
-                      Meta: {selectedArticle.selected_meta_title ? 'WP' : 'Draft'}
-                    </span>
-                    {/* Image: Draft/WP/Off */}
-                    <span className={`px-2 py-0.5 rounded font-medium ${
-                      !selectedArticle.images || selectedArticle.images.length === 0
-                        ? 'bg-slate-600/30 text-slate-400'
-                        : selectedArticle.images.some(img => img.pushedToWp)
-                          ? 'bg-green-600/30 text-green-400'
-                          : 'bg-amber-600/30 text-amber-400'
-                    }`}>
-                      Image: {!selectedArticle.images || selectedArticle.images.length === 0
-                        ? 'Off'
-                        : selectedArticle.images.some(img => img.pushedToWp)
-                          ? 'WP'
-                          : 'Draft'}
-                    </span>
-                    {/* Bank Count */}
-                    <span className={`px-2 py-0.5 rounded font-medium ${
-                      (selectedArticle.image_decision_report?.images?.filter(img => img.source === 'bank').length || 0) > 0
-                        ? 'bg-brand-gold/30 text-brand-gold' : 'bg-slate-600/30 text-slate-400'
-                    }`}>
-                      📦 Bank: {selectedArticle.image_decision_report?.images?.filter(img => img.source === 'bank').length || 0}
-                    </span>
-                    {/* Live Count */}
-                    <span className={`px-2 py-0.5 rounded font-medium ${
-                      (selectedArticle.image_decision_report?.images?.filter(img => img.source === 'generated').length || 0) > 0
-                        ? 'bg-brand-cyan/30 text-brand-cyan' : 'bg-slate-600/30 text-slate-400'
-                    }`}>
-                      ⚡ Live: {selectedArticle.image_decision_report?.images?.filter(img => img.source === 'generated').length || 0}
-                    </span>
+                  {/* Status Badges Row - Two sections: Created (original) and Live (current) */}
+                  <div className="flex items-center gap-4 mt-1 text-xs font-mono">
+                    {/* CREATED (Original status - static, never changes) */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-500 mr-1">Created:</span>
+                      <span className="px-2 py-0.5 rounded font-medium bg-amber-600/30 text-amber-400">
+                        Article: Draft
+                      </span>
+                      <span className="px-2 py-0.5 rounded font-medium bg-amber-600/30 text-amber-400">
+                        Meta: Draft
+                      </span>
+                      <span className="px-2 py-0.5 rounded font-medium bg-amber-600/30 text-amber-400">
+                        Image: Draft
+                      </span>
+                    </div>
+
+                    {/* LIVE TRACKER (Current real-time status) */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-brand-cyan mr-1">Live:</span>
+                      {/* Article: Draft/WP */}
+                      <span className={`px-2 py-0.5 rounded font-medium ${
+                        selectedArticle.wp_post_id ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
+                      }`}>
+                        Article: {selectedArticle.wp_post_id ? 'WP' : 'Draft'}
+                      </span>
+                      {/* Meta: Draft/WP - Only WP if article is on WP AND meta_wp_pushed_at exists */}
+                      <span className={`px-2 py-0.5 rounded font-medium ${
+                        selectedArticle.meta_wp_pushed_at ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
+                      }`}>
+                        Meta: {selectedArticle.meta_wp_pushed_at ? 'WP' : 'Draft'}
+                      </span>
+                      {/* Image: Draft/WP/Off */}
+                      <span className={`px-2 py-0.5 rounded font-medium ${
+                        !selectedArticle.images || selectedArticle.images.length === 0
+                          ? 'bg-slate-600/30 text-slate-400'
+                          : selectedArticle.images.some(img => img.pushedToWp)
+                            ? 'bg-green-600/30 text-green-400'
+                            : 'bg-amber-600/30 text-amber-400'
+                      }`}>
+                        Image: {!selectedArticle.images || selectedArticle.images.length === 0
+                          ? 'Off'
+                          : selectedArticle.images.some(img => img.pushedToWp)
+                            ? 'WP'
+                            : 'Draft'}
+                      </span>
+                    </div>
+
+                    {/* Bank/Live Counts */}
+                    <div className="flex items-center gap-1">
+                      <span className={`px-2 py-0.5 rounded font-medium ${
+                        (selectedArticle.image_decision_report?.images?.filter(img => img.source === 'bank').length || 0) > 0
+                          ? 'bg-brand-gold/30 text-brand-gold' : 'bg-slate-600/30 text-slate-400'
+                      }`}>
+                        📦 Bank: {selectedArticle.image_decision_report?.images?.filter(img => img.source === 'bank').length || 0}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded font-medium ${
+                        (selectedArticle.image_decision_report?.images?.filter(img => img.source === 'generated').length || 0) > 0
+                          ? 'bg-brand-cyan/30 text-brand-cyan' : 'bg-slate-600/30 text-slate-400'
+                      }`}>
+                        ⚡ Live: {selectedArticle.image_decision_report?.images?.filter(img => img.source === 'generated').length || 0}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -1340,14 +1367,21 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                             {savingMeta ? 'Saving...' : 'Save Meta'}
                           </button>
                         ) : (
-                          <button
-                            onClick={pushMetaToWordPress}
-                            disabled={pushingMeta || !selectedArticle.wp_post_id}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
-                            title={!selectedArticle.wp_post_id ? 'Publish article first' : 'Push meta to WordPress'}
-                          >
-                            {pushingMeta ? 'Pushing...' : 'Push to WordPress'}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {!selectedArticle.wp_post_id && (
+                              <span className="text-xs text-amber-400 bg-amber-500/20 px-2 py-1 rounded">
+                                ⚠️ Publish article first
+                              </span>
+                            )}
+                            <button
+                              onClick={pushMetaToWordPress}
+                              disabled={pushingMeta || !selectedArticle.wp_post_id}
+                              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              title={!selectedArticle.wp_post_id ? 'Article must be published to WordPress before pushing meta' : 'Push meta title & description to WordPress'}
+                            >
+                              {pushingMeta ? 'Pushing...' : 'Push to WordPress'}
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>

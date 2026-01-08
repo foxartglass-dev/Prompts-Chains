@@ -656,11 +656,12 @@ router.post('/:articleId/push-meta', requireDb, async (req, res) => {
       return res.status(updateRes.status).json({ error: `WordPress error: ${errorText}` });
     }
 
-    // Update article with selected meta
+    // Update article with selected meta and mark as pushed to WP
     await sql`
       UPDATE articles
       SET selected_meta_title = ${metaTitle || null},
           selected_meta_description = ${metaDescription || null},
+          meta_wp_pushed_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${articleId}
     `;
