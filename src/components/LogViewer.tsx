@@ -306,7 +306,7 @@ export default function LogViewer({ isOpen, onClose }: LogViewerProps) {
                       className="text-slate-500 hover:text-slate-300 shrink-0"
                       title="Copy data"
                     >
-                      {...}
+                      [+]
                     </button>
                   )}
                 </div>
