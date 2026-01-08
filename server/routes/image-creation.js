@@ -969,6 +969,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       // Generate Live prompt mode
       live_prompt_mode,
       smart_prompt_guidance,
+      // Guided GPT guardrails (instructions, uniformDescription, defaultSubject, avoidList)
+      guided_guardrails,
       // Prompt Problem Areas
       prompt_problem_areas
     } = req.body;
@@ -1011,6 +1013,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               manual_variation_order,
               live_prompt_mode,
               smart_prompt_guidance,
+              guided_guardrails,
               prompt_problem_areas
             ) VALUES (
               ${workflowId},
@@ -1036,6 +1039,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               ${JSON.stringify(manual_variation_order ?? [])},
               ${live_prompt_mode ?? 'smart_prompt'},
               ${smart_prompt_guidance ?? ''},
+              ${JSON.stringify(guided_guardrails ?? {})},
               ${JSON.stringify(prompt_problem_areas ?? [])}
             )
             RETURNING id
@@ -1125,13 +1129,14 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
               live_prompt_mode = COALESCE(${live_prompt_mode}, live_prompt_mode),
               smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
+              guided_guardrails = COALESCE(${guided_guardrails ? JSON.stringify(guided_guardrails) : null}::jsonb, guided_guardrails),
               prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
               updated_at = CURRENT_TIMESTAMP
             WHERE workflow_id = ${workflowId}
           `;
         } catch (updateErr) {
           // If it failed due to missing column, try without live_prompt_mode columns
-          if (updateErr.message?.includes('live_prompt_mode') || updateErr.message?.includes('smart_prompt_guidance')) {
+          if (updateErr.message?.includes('live_prompt_mode') || updateErr.message?.includes('smart_prompt_guidance') || updateErr.message?.includes('guided_guardrails')) {
             console.log('[Image Creation API] Falling back to UPDATE without live_prompt columns');
             await sql`
               UPDATE image_creation_settings
