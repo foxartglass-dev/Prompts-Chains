@@ -612,40 +612,58 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-sm text-gray-400">
+                  <div className="flex items-center gap-2 mt-1 text-sm text-gray-400">
                     <span>{selectedArticle.word_count || 0} words</span>
                     <span>AI: {selectedArticle.ai_score ?? '-'}%</span>
                     {selectedArticle.images && selectedArticle.images.length > 0 && (
                       <span className="text-amber-400">{selectedArticle.images.length} images</span>
                     )}
-                    {/* Image Mode & Bank/Live Counts */}
-                    {selectedArticle.image_decision_report && (
-                      <>
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          selectedArticle.image_decision_report.mode === 'bank' ? 'bg-blue-600/30 text-blue-400' :
-                          selectedArticle.image_decision_report.mode === 'live' ? 'bg-green-600/30 text-green-400' :
-                          'bg-slate-600/30 text-slate-400'
-                        }`}>
-                          Image: {selectedArticle.image_decision_report.mode === 'bank' ? 'Bank' :
-                                  selectedArticle.image_decision_report.mode === 'live' ? 'Live' : 'Off'}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          (selectedArticle.image_decision_report.images?.filter(img => img.source === 'bank').length || 0) > 0
-                            ? 'bg-brand-gold/30 text-brand-gold' : 'bg-slate-600/30 text-slate-400'
-                        }`}>
-                          📦 Bank: {selectedArticle.image_decision_report.images?.filter(img => img.source === 'bank').length || 0}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          (selectedArticle.image_decision_report.images?.filter(img => img.source === 'generated').length || 0) > 0
-                            ? 'bg-brand-cyan/30 text-brand-cyan' : 'bg-slate-600/30 text-slate-400'
-                        }`}>
-                          ⚡ Live: {selectedArticle.image_decision_report.images?.filter(img => img.source === 'generated').length || 0}
-                        </span>
-                      </>
-                    )}
+                  </div>
+                  {/* Status Badges Row - Always show all 5 */}
+                  <div className="flex items-center gap-2 mt-1.5 text-xs font-mono">
+                    {/* Article: Draft/WP */}
+                    <span className={`px-2 py-0.5 rounded font-medium ${
+                      selectedArticle.wp_post_id ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
+                    }`}>
+                      Article: {selectedArticle.wp_post_id ? 'WP' : 'Draft'}
+                    </span>
+                    {/* Meta: Draft/WP */}
+                    <span className={`px-2 py-0.5 rounded font-medium ${
+                      selectedArticle.selected_meta_title ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
+                    }`}>
+                      Meta: {selectedArticle.selected_meta_title ? 'WP' : 'Draft'}
+                    </span>
+                    {/* Image: Draft/WP/Off */}
+                    <span className={`px-2 py-0.5 rounded font-medium ${
+                      !selectedArticle.images || selectedArticle.images.length === 0
+                        ? 'bg-slate-600/30 text-slate-400'
+                        : selectedArticle.images.some(img => img.pushedToWp)
+                          ? 'bg-green-600/30 text-green-400'
+                          : 'bg-amber-600/30 text-amber-400'
+                    }`}>
+                      Image: {!selectedArticle.images || selectedArticle.images.length === 0
+                        ? 'Off'
+                        : selectedArticle.images.some(img => img.pushedToWp)
+                          ? 'WP'
+                          : 'Draft'}
+                    </span>
+                    {/* Bank Count */}
+                    <span className={`px-2 py-0.5 rounded font-medium ${
+                      (selectedArticle.image_decision_report?.images?.filter(img => img.source === 'bank').length || 0) > 0
+                        ? 'bg-brand-gold/30 text-brand-gold' : 'bg-slate-600/30 text-slate-400'
+                    }`}>
+                      📦 Bank: {selectedArticle.image_decision_report?.images?.filter(img => img.source === 'bank').length || 0}
+                    </span>
+                    {/* Live Count */}
+                    <span className={`px-2 py-0.5 rounded font-medium ${
+                      (selectedArticle.image_decision_report?.images?.filter(img => img.source === 'generated').length || 0) > 0
+                        ? 'bg-brand-cyan/30 text-brand-cyan' : 'bg-slate-600/30 text-slate-400'
+                    }`}>
+                      ⚡ Live: {selectedArticle.image_decision_report?.images?.filter(img => img.source === 'generated').length || 0}
+                    </span>
                     {/* Created Date/Time */}
                     {selectedArticle.created_at && (
-                      <span className="text-gray-500">
+                      <span className="text-gray-500 ml-2">
                         {new Date(selectedArticle.created_at).toLocaleDateString('en-US', {
                           month: 'short', day: 'numeric', year: 'numeric'
                         })} {new Date(selectedArticle.created_at).toLocaleTimeString('en-US', {
