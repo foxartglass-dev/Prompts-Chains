@@ -4878,1952 +4878,6 @@ Start by introducing yourself and asking about their business in a friendly way.
           <span className="text-yellow-400 text-sm">{generationProgress}</span>
         </div>
       )}
-
-      {/* ========== PROMPT PROBLEM AREAS ========== */}
-      <div className="bg-slate-900 rounded-lg border border-orange-500/50 overflow-hidden">
-        <div
-          className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-800/50 transition"
-          onClick={() => setProblemAreasCollapsed(!problemAreasCollapsed)}
-        >
-          <div className="flex items-center gap-2">
-            <span className={`text-orange-400 transition-transform ${problemAreasCollapsed ? '' : 'rotate-90'}`}>▶</span>
-            <span className="text-orange-400 font-semibold">🎯 Prompt Problem Areas</span>
-            {settings.prompt_problem_areas.length > 0 && (
-              <span className="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded">
-                {settings.prompt_problem_areas.length} areas • {settings.prompt_problem_areas.flatMap(a => a.prompts.filter(p => p.status === 'working')).length} working
-              </span>
-            )}
-          </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); handleAddProblemArea(); }}
-            className="text-orange-400 hover:text-orange-300 text-sm font-medium transition"
-          >
-            + Add Area
-          </button>
-        </div>
-
-        {!problemAreasCollapsed && (
-          <div className="p-3 border-t border-orange-500/30 space-y-3">
-            {settings.prompt_problem_areas.length === 0 ? (
-              <div className="text-center py-6 text-slate-500">
-                <p className="text-sm">No problem areas yet.</p>
-                <p className="text-xs mt-1">Add areas for issues like "Logo Visibility", "Camera Angles", etc.</p>
-              </div>
-            ) : (
-              <>
-                {/* Area Tabs */}
-                <div className="flex flex-wrap gap-2">
-                  {settings.prompt_problem_areas.map(area => (
-                    <button
-                      key={area.id}
-                      onClick={() => setActiveProblemAreaId(activeProblemAreaId === area.id ? null : area.id)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
-                        area.status === 'solved'
-                          ? activeProblemAreaId === area.id
-                            ? 'bg-green-500 text-slate-900'
-                            : 'bg-green-900/50 text-green-400 hover:bg-green-900/70 border border-green-500/50'
-                          : activeProblemAreaId === area.id
-                            ? 'bg-orange-500 text-slate-900'
-                            : 'bg-slate-800 text-orange-400 hover:bg-slate-700'
-                      }`}
-                    >
-                      {area.status === 'solved' ? (
-                        <span className="text-green-300">✓</span>
-                      ) : (
-                        <span className={`w-2 h-2 rounded-full ${
-                          area.priority === 'high' ? 'bg-red-500' :
-                          area.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
-                        }`} />
-                      )}
-                      {area.name}
-                      {area.status === 'solved' ? (
-                        <span className="text-xs opacity-70">SOLVED</span>
-                      ) : (
-                        <span className="text-xs opacity-70">({area.prompts.length})</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Active Area Editor */}
-                {activeProblemAreaId && (() => {
-                  const area = getActiveProblemArea();
-                  if (!area) return null;
-                  return (
-                    <div className="bg-slate-800/50 rounded-lg p-3 space-y-3 border border-orange-500/20">
-                      {/* Area Header */}
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1 space-y-2">
-                          <input
-                            type="text"
-                            value={area.name}
-                            onChange={(e) => handleUpdateProblemArea(area.id, { name: e.target.value })}
-                            className="w-full bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-white text-sm font-medium"
-                            placeholder="Problem area name..."
-                          />
-                          <textarea
-                            value={area.context}
-                            onChange={(e) => handleUpdateProblemArea(area.id, { context: e.target.value })}
-                            className="w-full bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-white text-xs resize-y"
-                            rows={2}
-                            placeholder="Context: Why is this a problem? What are you trying to solve?"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          {area.status === 'solved' ? (
-                            <div className="bg-green-900/50 border border-green-500 rounded px-2 py-1 text-xs text-green-300 text-center">
-                              ✓ SOLVED
-                            </div>
-                          ) : (
-                            <>
-                              <select
-                                value={area.priority}
-                                onChange={(e) => handleUpdateProblemArea(area.id, { priority: e.target.value as 'high' | 'medium' | 'low' })}
-                                className="bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-xs text-white"
-                              >
-                                <option value="high">🔴 High</option>
-                                <option value="medium">🟡 Medium</option>
-                                <option value="low">🟢 Low</option>
-                              </select>
-                              <button
-                                onClick={() => {
-                                  const workingPrompt = area.prompts.find(p => p.status === 'working');
-                                  handleUpdateProblemArea(area.id, {
-                                    status: 'solved',
-                                    solvedPromptId: workingPrompt?.id
-                                  });
-                                  log(`Problem area "${area.name}" marked as SOLVED!`, LogStatus.SUCCESS);
-                                }}
-                                disabled={!area.prompts.some(p => p.status === 'working')}
-                                className={`text-xs transition px-2 py-1 rounded ${
-                                  area.prompts.some(p => p.status === 'working')
-                                    ? 'bg-green-600 hover:bg-green-500 text-white'
-                                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                                }`}
-                                title={area.prompts.some(p => p.status === 'working') ? 'Mark as solved' : 'Need at least one working prompt'}
-                              >
-                                ✓ Solved
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={() => area.status === 'solved'
-                              ? handleUpdateProblemArea(area.id, { status: 'active' })
-                              : handleRemoveProblemArea(area.id)
-                            }
-                            className="text-xs text-red-400 hover:text-red-300 transition"
-                          >
-                            {area.status === 'solved' ? 'Reopen' : 'Delete'}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Prompts Within This Area */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-orange-300 font-medium">Solution Prompts:</span>
-                          <button
-                            onClick={() => handleAddPromptToArea(area.id)}
-                            className="text-xs text-orange-400 hover:text-orange-300 transition"
-                          >
-                            + Add Prompt
-                          </button>
-                        </div>
-
-                        {area.prompts.length === 0 ? (
-                          <p className="text-xs text-slate-500 text-center py-2">No prompts yet. Add prompts that might solve this problem.</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {area.prompts.map((prompt, idx) => (
-                              <div key={prompt.id} className="bg-slate-900/50 rounded p-2 space-y-1.5 border border-slate-700">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-slate-500 font-mono">#{idx + 1}</span>
-                                  <input
-                                    type="text"
-                                    value={prompt.miniContext}
-                                    onChange={(e) => handleUpdatePromptInArea(area.id, prompt.id, { miniContext: e.target.value })}
-                                    className="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-white text-xs"
-                                    placeholder="Brief context for this prompt..."
-                                  />
-                                  <select
-                                    value={prompt.status}
-                                    onChange={(e) => handleUpdatePromptInArea(area.id, prompt.id, { status: e.target.value as 'testing' | 'working' | 'failed' })}
-                                    className={`text-xs rounded px-2 py-0.5 border ${
-                                      prompt.status === 'working' ? 'bg-green-900/50 border-green-500 text-green-300' :
-                                      prompt.status === 'failed' ? 'bg-red-900/50 border-red-500 text-red-300' :
-                                      'bg-yellow-900/50 border-yellow-500 text-yellow-300'
-                                    }`}
-                                  >
-                                    <option value="testing">🧪 Testing</option>
-                                    <option value="working">✅ Working</option>
-                                    <option value="failed">❌ Failed</option>
-                                  </select>
-                                  <button
-                                    onClick={() => handleRemovePromptFromArea(area.id, prompt.id)}
-                                    className="text-red-400 hover:text-red-300 text-xs"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                                <textarea
-                                  value={prompt.promptText}
-                                  onChange={(e) => handleUpdatePromptInArea(area.id, prompt.id, { promptText: e.target.value })}
-                                  className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white text-xs font-mono resize-y"
-                                  rows={2}
-                                  placeholder="The actual prompt technique to try..."
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Working Prompts Summary */}
-                      {area.prompts.filter(p => p.status === 'working').length > 0 && (
-                        <div className="bg-green-900/20 border border-green-500/30 rounded p-2">
-                          <span className="text-xs text-green-400 font-medium">
-                            ✅ {area.prompts.filter(p => p.status === 'working').length} working prompt(s) - AI will use these
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Reference Images (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-brand-gold/50 overflow-hidden">
-            <button
-              onClick={() => setIsReferenceOpen(!isReferenceOpen)}
-              className="w-full flex items-center justify-between p-3 text-brand-gold hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Reference Images ({settings.reference_images.length})
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isReferenceOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {isReferenceOpen && (
-              <div className="p-4 border-t border-brand-gold/30 space-y-3">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-sm transition"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    Upload
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={(e) => handleUploadReference(e.target.files)}
-                    className="hidden"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Or paste image URL..."
-                    className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleAddReferenceUrl((e.target as HTMLInputElement).value);
-                        (e.target as HTMLInputElement).value = '';
-                      }
-                    }}
-                  />
-                </div>
-                {settings.reference_images.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-2">
-                    {settings.reference_images.map((img, idx) => (
-                      <div key={idx} className="relative group">
-                        <img src={img.url} alt={img.filename || `Ref ${idx + 1}`} className="w-full h-24 object-cover rounded border border-brand-gold/30" />
-                        <button onClick={() => handleRemoveReference(idx)} className="absolute top-1 right-1 p-1 bg-red-600/80 rounded opacity-0 group-hover:opacity-100 transition">
-                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-center text-brand-gold/50 py-4">No reference images yet.</p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Logo & Action Shots (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-pink-500/50 overflow-hidden">
-            <button
-              onClick={() => setIsLogoOpen(!isLogoOpen)}
-              className="w-full flex items-center justify-between p-3 text-pink-400 hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                </svg>
-                Logo & Action Shots ({logoImages.length} logo, {actionShots.length} action)
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isLogoOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {isLogoOpen && (
-              <div className="p-4 border-t border-pink-500/30 space-y-4">
-                {/* Logo Upload */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm text-pink-300 font-medium">Logo Image (the actual logo)</label>
-                    <button
-                      onClick={() => logoFileInputRef.current?.click()}
-                      className="flex items-center gap-1 px-3 py-1 bg-pink-600 hover:bg-pink-500 rounded text-white text-xs transition"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                      </svg>
-                      Upload Logo
-                    </button>
-                    <input
-                      ref={logoFileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleUploadLogo(e.target.files, 'logo')}
-                      className="hidden"
-                    />
-                  </div>
-                  {logoImages.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {logoImages.map((img, idx) => {
-                        const globalIdx = settings.logo_images.findIndex(i => i === img);
-                        return (
-                          <div key={idx} className="relative group">
-                            <img src={img.url} alt={img.filename || 'Logo'} className="h-20 w-auto object-contain rounded border-2 border-pink-500/50 bg-white p-1" />
-                            <button onClick={() => handleRemoveLogo(globalIdx)} className="absolute -top-2 -right-2 p-1 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition">
-                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-pink-300/50 italic">No logo uploaded. Use {'{logo}'} placeholder in prompts.</p>
-                  )}
-                </div>
-
-                {/* Action Shots */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm text-pink-300 font-medium">Action Shots (logo on shirts, vehicles, etc.)</label>
-                    <button
-                      onClick={() => actionShotsInputRef.current?.click()}
-                      className="flex items-center gap-1 px-3 py-1 bg-pink-600 hover:bg-pink-500 rounded text-white text-xs transition"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                      </svg>
-                      Upload Action Shots
-                    </button>
-                    <input
-                      ref={actionShotsInputRef}
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={(e) => handleUploadLogo(e.target.files, 'action')}
-                      className="hidden"
-                    />
-                  </div>
-                  {actionShots.length > 0 ? (
-                    <div className="grid grid-cols-4 gap-2">
-                      {actionShots.map((img, idx) => {
-                        const globalIdx = settings.logo_images.findIndex(i => i === img);
-                        return (
-                          <div key={idx} className="relative group">
-                            <img src={img.url} alt={img.filename || `Action ${idx + 1}`} className="w-full h-20 object-cover rounded border border-pink-500/30" />
-                            <button onClick={() => handleRemoveLogo(globalIdx)} className="absolute top-1 right-1 p-1 bg-red-600/80 rounded opacity-0 group-hover:opacity-100 transition">
-                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-pink-300/50 italic">Upload photos showing the logo on dark blue shirts from different angles.</p>
-                  )}
-                </div>
-
-                <p className="text-xs text-pink-300/70 bg-pink-900/30 p-2 rounded">
-                  <strong>Tip:</strong> These images help AI understand your brand. Use <code className="bg-pink-900/50 px-1 rounded">{'{logo}'}</code> in prompts to reference the logo placement.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Audience Avatars */}
-          <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50">
-            <div
-              className="flex items-center justify-between cursor-pointer"
-              onClick={() => setAvatarsCollapsed(!avatarsCollapsed)}
-            >
-              <div className="flex items-center gap-3">
-                <span className={`text-brand-gold transition-transform ${avatarsCollapsed ? '' : 'rotate-90'}`}>▶</span>
-                <h3 className="text-brand-gold font-semibold">Audience Avatars</h3>
-                {tags.length > 0 && (
-                  <span className="text-xs text-brand-cyan/70 bg-brand-cyan/10 px-2 py-0.5 rounded">
-                    Synced with Tag Manager: {tags.map(t => t.name).join(', ')}
-                  </span>
-                )}
-                {avatarsCollapsed && activeAvatar && (
-                  <span className="text-xs text-brand-gold/50 bg-slate-800 px-2 py-0.5 rounded">
-                    Active: {activeAvatar.name}
-                  </span>
-                )}
-              </div>
-              <button onClick={(e) => { e.stopPropagation(); handleAddAvatar(); }} className="text-brand-cyan hover:text-brand-cyan-light text-sm font-medium transition">+ Add Avatar</button>
-            </div>
-
-            {!avatarsCollapsed && <div className="mt-3">
-
-            <div className="flex flex-wrap gap-2 mb-4">
-              {settings.audience_avatars.map((avatar) => (
-                <button
-                  key={avatar.id}
-                  onClick={() => setActiveAvatarId(avatar.id)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${activeAvatarId === avatar.id ? 'bg-brand-gold text-slate-900' : 'bg-slate-800 text-brand-gold hover:bg-slate-700'}`}
-                >
-                  <span>{avatar.name}{avatar.tag ? ` (${avatar.tag})` : ''}</span>
-                  {settings.audience_avatars.length > 1 && !avatar.tag && (
-                    <span onClick={(e) => { e.stopPropagation(); handleRemoveAvatar(avatar.id); }} className="hover:text-red-500 cursor-pointer">&times;</span>
-                  )}
-                  {avatar.tag && (
-                    <span className="bg-brand-cyan/20 text-brand-cyan text-[10px] px-1.5 rounded">TAG</span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {activeAvatar && (
-              <div className="space-y-3">
-                <div className="flex gap-3 items-end">
-                  <div className="flex-1">
-                    <label className="block text-xs text-brand-gold/70 mb-1">Avatar Name</label>
-                    <input
-                      type="text"
-                      value={activeAvatar.name}
-                      onChange={(e) => handleUpdateAvatar(activeAvatar.id, { name: e.target.value })}
-                      className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm"
-                    />
-                  </div>
-                  {/* Mode Toggle */}
-                  <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1">
-                    <button
-                      onClick={() => handleUpdateAvatar(activeAvatar.id, { placeholderMode: 'simple' })}
-                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${(activeAvatar.placeholderMode || 'simple') === 'simple' ? 'bg-brand-cyan text-slate-900' : 'text-brand-gold/70 hover:text-brand-gold'}`}
-                    >
-                      Simple
-                    </button>
-                    <button
-                      onClick={() => handleUpdateAvatar(activeAvatar.id, { placeholderMode: 'advanced' })}
-                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${activeAvatar.placeholderMode === 'advanced' ? 'bg-purple-600 text-white' : 'text-brand-gold/70 hover:text-brand-gold'}`}
-                    >
-                      Advanced
-                    </button>
-                  </div>
-                </div>
-
-                {/* Main Prompt - shown in both modes */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs text-brand-gold/70">
-                      Main Prompt {(activeAvatar.placeholderMode || 'simple') === 'simple' ? `(use {'{variation}'} placeholder)` : '(use placeholder categories below)'}
-                    </label>
-                    {(activeAvatar.placeholderMode || 'simple') === 'simple' && (
-                      <button onClick={insertVariationPlaceholder} className="text-xs text-brand-cyan hover:text-brand-cyan-light">+ Insert {'{variation}'}</button>
-                    )}
-                  </div>
-                  <textarea
-                    ref={mainPromptRef}
-                    value={activeAvatar.mainPrompt}
-                    onChange={(e) => handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value })}
-                    rows={4}
-                    className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y"
-                    placeholder={activeAvatar.placeholderMode === 'advanced'
-                      ? "Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
-                      : "Professional cleaning photo, {variation}, bright natural lighting..."}
-                  />
-                  {/* Insert placeholder tags */}
-                  {(activeAvatar.placeholderMode || 'simple') === 'simple' && activeAvatar.variations.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      <span className="text-xs text-brand-gold/50">Click to insert:</span>
-                      {activeAvatar.variations.map(v => (
-                        <button
-                          key={v.id}
-                          onClick={() => insertVariationTag(v.name)}
-                          className="px-2 py-0.5 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 rounded text-purple-300 text-xs transition"
-                        >
-                          {`{${v.name}}`}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {/* Insert placeholder category tags for advanced mode */}
-                  {activeAvatar.placeholderMode === 'advanced' && (activeAvatar.placeholderCategories || []).length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      <span className="text-xs text-brand-gold/50">Click to insert:</span>
-                      {(activeAvatar.placeholderCategories || []).map(cat => (
-                        <button
-                          key={cat.id}
-                          onClick={() => {
-                            if (!mainPromptRef.current) return;
-                            const textarea = mainPromptRef.current;
-                            const start = textarea.selectionStart;
-                            const text = activeAvatar.mainPrompt;
-                            const newText = text.substring(0, start) + cat.placeholder + text.substring(start);
-                            handleUpdateAvatar(activeAvatar.id, { mainPrompt: newText });
-                          }}
-                          className="px-2 py-0.5 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 rounded text-purple-300 text-xs transition"
-                        >
-                          {cat.placeholder}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* ========== ADVANCED MODE: Placeholder Categories ========== */}
-                {activeAvatar.placeholderMode === 'advanced' && (
-                  <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 space-y-3">
-                    <div
-                      className="flex items-center justify-between cursor-pointer"
-                      onClick={() => setCategoriesCollapsed(!categoriesCollapsed)}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={`text-purple-400 transition-transform ${categoriesCollapsed ? '' : 'rotate-90'}`}>▶</span>
-                        <label className="text-sm text-purple-300 font-medium cursor-pointer">Placeholder Categories</label>
-                        {categoriesCollapsed && (activeAvatar.placeholderCategories || []).length > 0 && (
-                          <span className="text-xs text-purple-400/70 bg-slate-800 px-2 py-0.5 rounded">
-                            {(activeAvatar.placeholderCategories || []).length} categories
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleAddPlaceholderCategory(); }}
-                        className="px-2 py-1 bg-purple-600/50 hover:bg-purple-600 rounded text-white text-xs transition"
-                      >
-                        + Add Category
-                      </button>
-                    </div>
-
-                    {/* Category List */}
-                    {!categoriesCollapsed && (<>
-                    {(activeAvatar.placeholderCategories || []).map((category, catIndex) => (
-                      <div key={category.id} className="bg-slate-800/50 rounded-lg p-3 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={category.name}
-                            onChange={(e) => handleUpdatePlaceholderCategory(category.id, { name: e.target.value, placeholder: `{${e.target.value.replace(/\s+/g, '_')}}` })}
-                            className="flex-1 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
-                            placeholder="Category name (e.g., Cleaning_Item)"
-                          />
-                          <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
-                          <button
-                            onClick={() => handleRemovePlaceholderCategory(category.id)}
-                            className="p-1 bg-red-600/50 hover:bg-red-600 rounded text-white transition"
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
-
-                        {/* Options for this category - Stacked Layout */}
-                        <div className="pl-2 space-y-3">
-                          {category.options.map((option, optIndex) => (
-                            <div key={option.number} className="bg-slate-900/50 rounded-lg border border-slate-700 overflow-hidden">
-                              {/* Row 1: Keywords */}
-                              <div className="p-2 bg-slate-800/50 border-b border-slate-700">
-                                <div className="flex items-start gap-4">
-                                  {/* Option Number */}
-                                  <span className="w-6 h-6 flex items-center justify-center bg-purple-600 rounded text-white text-xs font-bold">{option.number}</span>
-
-                                  {/* Primary Keywords */}
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wide">Primary</span>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-1">
-                                      {(option.primaryKeywords || []).map((kw, kwIdx) => {
-                                        const sharedWith = isSharedKeyword(kw);
-                                        const isShared = sharedWith && sharedWith.length > 1;
-                                        return (
-                                          <span
-                                            key={kwIdx}
-                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
-                                              isShared
-                                                ? 'bg-orange-600/30 border border-orange-500 text-orange-300'
-                                                : 'bg-emerald-600/30 border border-emerald-500 text-emerald-300'
-                                            }`}
-                                            title={isShared ? `⚠️ Shared across: ${sharedWith.join(', ')} - requires category keyword in article` : undefined}
-                                          >
-                                            {isShared && <span className="text-orange-400">⚠️</span>}
-                                            {kw}
-                                            <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'primary')} className={`${isShared ? 'text-orange-400' : 'text-emerald-400'} hover:text-red-400`}>×</button>
-                                          </span>
-                                        );
-                                      })}
-                                      <input
-                                        type="text"
-                                        className="w-20 bg-slate-900 border border-emerald-500/30 rounded px-1.5 py-0.5 text-emerald-300 text-xs placeholder-emerald-700"
-                                        placeholder="+ add"
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                                            handleAddKeyword(category.id, option.number, e.currentTarget.value, 'primary');
-                                            e.currentTarget.value = '';
-                                          }
-                                        }}
-                                      />
-                                    </div>
-                                  </div>
-
-                                  {/* Secondary Keywords */}
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <span className="text-[10px] text-amber-400 font-semibold uppercase tracking-wide">Secondary</span>
-                                      <label className="flex items-center gap-1 cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          checked={option.useSecondaryKeywords !== false}
-                                          onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { useSecondaryKeywords: e.target.checked })}
-                                          className="w-3 h-3 rounded border-amber-500 text-amber-500 focus:ring-amber-500 bg-slate-900"
-                                        />
-                                        <span className="text-[9px] text-amber-400/70">ON</span>
-                                      </label>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-1">
-                                      {/* Auto-add category name as first secondary keyword (shown as locked) */}
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/20 border border-amber-500/50 rounded text-amber-300/70 text-xs italic">
-                                        {category.name.toLowerCase()}
-                                        <svg className="w-2.5 h-2.5 text-amber-500/50" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
-                                      </span>
-                                      {(option.secondaryKeywords || []).map((kw, kwIdx) => (
-                                        <span key={kwIdx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/30 border border-amber-500 rounded text-amber-300 text-xs">
-                                          {kw}
-                                          <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'secondary')} className="text-amber-400 hover:text-red-400">×</button>
-                                        </span>
-                                      ))}
-                                      <input
-                                        type="text"
-                                        className="w-20 bg-slate-900 border border-amber-500/30 rounded px-1.5 py-0.5 text-amber-300 text-xs placeholder-amber-700"
-                                        placeholder="+ add"
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                                            handleAddKeyword(category.id, option.number, e.currentTarget.value, 'secondary');
-                                            e.currentTarget.value = '';
-                                          }
-                                        }}
-                                      />
-                                    </div>
-                                  </div>
-
-                                  {/* Delete Option */}
-                                  <button
-                                    onClick={() => handleRemovePlaceholderOption(category.id, option.number)}
-                                    className="p-1 text-red-400 hover:text-red-300 hover:bg-red-600/20 rounded transition"
-                                  >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Row 2: Prompt Text */}
-                              <div className="p-2">
-                                <input
-                                  type="text"
-                                  value={option.text}
-                                  onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { text: e.target.value })}
-                                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm"
-                                  placeholder={`Prompt text for option ${option.number}...`}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                          <button
-                            onClick={() => handleAddPlaceholderOption(category.id)}
-                            className="w-full py-2 border-2 border-dashed border-purple-500/30 rounded-lg text-purple-400 hover:border-purple-500 hover:text-purple-300 text-xs transition"
-                          >
-                            + Add Option
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-
-                    {(activeAvatar.placeholderCategories || []).length === 0 && (
-                      <p className="text-xs text-purple-400/50 text-center py-2">No categories yet. Add one to get started.</p>
-                    )}
-
-                    {/* Generation Mode Controls */}
-                    {(activeAvatar.placeholderCategories || []).length > 0 && (
-                      <div className="border-t border-purple-500/30 pt-3 space-y-2">
-                        <label className="text-xs text-purple-300 font-medium">Generation Mode</label>
-                        <div className="flex flex-wrap gap-2">
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'one_of_each'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'one_of_each' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">1 of Each</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'sequential'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'sequential' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">Sequential</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'random'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'random' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">Random</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'specific'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'specific' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">Specific</span>
-                          </label>
-                        </div>
-
-                        {/* Specific Combinations Table */}
-                        {activeAvatar.generationMode === 'specific' && (
-                          <div className="bg-slate-900/50 rounded p-2 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-purple-400">Specific Combinations</span>
-                              <button
-                                onClick={() => handleAddSpecificCombination()}
-                                className="text-xs text-purple-400 hover:text-purple-300"
-                              >
-                                + Add Combination
-                              </button>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {(activeAvatar.specificCombinations || []).map((combo, idx) => (
-                                <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-600/30 rounded text-xs text-white">
-                                  ({combo.join(', ')})
-                                  <button
-                                    onClick={() => handleRemoveSpecificCombination(idx)}
-                                    className="text-red-400 hover:text-red-300"
-                                  >
-                                    ×
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                            {/* Quick add input */}
-                            <input
-                              type="text"
-                              placeholder="Add combo (e.g., 3,2) and press Enter"
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const input = e.target as HTMLInputElement;
-                                  const combo = input.value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
-                                  if (combo.length > 0) {
-                                    handleAddSpecificCombination(combo);
-                                    input.value = '';
-                                  }
-                                }
-                              }}
-                              className="w-full bg-slate-900 border border-purple-500/30 rounded px-2 py-1 text-white text-xs"
-                            />
-                          </div>
-                        )}
-
-                        {/* Random count */}
-                        {activeAvatar.generationMode === 'random' && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-purple-400">Generate count:</span>
-                            <input
-                              type="number"
-                              min="1"
-                              value={activeAvatar.randomCount || 5}
-                              onChange={(e) => handleUpdateAvatar(activeAvatar.id, { randomCount: parseInt(e.target.value) || 5 })}
-                              className="w-16 bg-slate-900 border border-purple-500/30 rounded px-2 py-1 text-white text-xs"
-                            />
-                          </div>
-                        )}
-
-                        {/* Preview of combinations */}
-                        <div className="text-xs text-purple-400/70">
-                          {getAdvancedCombinationsPreview()}
-                        </div>
-                      </div>
-                    )}
-                    </>)}
-                  </div>
-                )}
-
-                {/* ========== SIMPLE MODE: Variations ========== */}
-                {(activeAvatar.placeholderMode || 'simple') === 'simple' && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-xs text-brand-gold/70">Variations</label>
-                    <button onClick={handleAddVariation} className="text-brand-cyan hover:text-brand-cyan-light text-xs font-medium transition">+ Add Variation</button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {activeAvatar.variations.map((v) => (
-                      <button
-                        key={v.id}
-                        onClick={() => setActiveVariationId(activeVariationId === v.id ? null : v.id)}
-                        className={`px-3 py-1.5 rounded text-xs font-medium transition ${activeVariationId === v.id ? 'bg-brand-cyan text-slate-900' : 'bg-slate-800 text-brand-gold hover:bg-slate-700'}`}
-                      >
-                        {v.name} ({v.orientation === 'vertical' ? 'V' : v.orientation === 'landscape' ? 'L' : 'B'})
-                      </button>
-                    ))}
-                  </div>
-
-                  {activeVariationId && (() => {
-                    const variation = activeAvatar.variations.find(v => v.id === activeVariationId);
-                    if (!variation) return null;
-                    return (
-                      <div className="bg-slate-800 p-3 rounded-lg space-y-2">
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={variation.name}
-                            onChange={(e) => handleUpdateVariation(variation.id, { name: e.target.value })}
-                            className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-2 py-1.5 text-white text-sm"
-                          />
-                          <select
-                            value={variation.orientation}
-                            onChange={(e) => handleUpdateVariation(variation.id, { orientation: e.target.value as any })}
-                            className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1.5 text-white text-sm"
-                          >
-                            <option value="landscape">Landscape</option>
-                            <option value="vertical">Vertical</option>
-                            <option value="both">Both</option>
-                          </select>
-                          <button onClick={() => handleCopyMainToVariation(variation.id)} className="px-2 py-1.5 bg-purple-600/50 hover:bg-purple-600 rounded text-white text-xs transition" title="Copy main prompt">
-                            Copy Main
-                          </button>
-                          <button onClick={() => handleRemoveVariation(variation.id)} className="p-1.5 bg-red-600/50 hover:bg-red-600 rounded text-white transition">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                        <textarea
-                          value={variation.prompt}
-                          onChange={(e) => handleUpdateVariation(variation.id, { prompt: e.target.value })}
-                          rows={2}
-                          className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y"
-                          placeholder="Variation-specific text (e.g., person cleaning kitchen sink)"
-                        />
-                        <div className="text-xs text-brand-gold/50 bg-slate-900/50 p-2 rounded">
-                          <strong>Preview:</strong> {buildFinalPrompt(activeAvatar.mainPrompt, variation.prompt).substring(0, 100)}...
-                        </div>
-                        <button
-                          onClick={() => handleGenerateSingle(variation)}
-                          disabled={generating}
-                          className="w-full py-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded text-white text-sm font-medium transition"
-                        >
-                          {generating ? 'Generating...' : 'Generate This Variation'}
-                        </button>
-                      </div>
-                    );
-                  })()}
-                </div>
-                )}
-              </div>
-            )}
-            </div>}
-          </div>
-
-          {/* Chat Interface (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-brand-gold/50 overflow-hidden">
-            <button
-              onClick={() => setIsChatOpen(!isChatOpen)}
-              className="w-full flex items-center justify-between p-3 text-brand-gold hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                Image Prompt Chat
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {isChatOpen && (
-              <div className="border-t border-brand-gold/30">
-                <div ref={chatContainerRef} className="h-64 overflow-y-auto p-4 space-y-3">
-                  {settings.chat_history.length === 0 ? (
-                    <p className="text-center text-brand-gold/50 py-8">Chat with AI to help craft prompts.</p>
-                  ) : (
-                    settings.chat_history.map((msg, idx) => (
-                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-brand-cyan/20 border border-brand-cyan/50' : 'bg-slate-800 border border-brand-gold/30'}`}>
-                          {msg.images && msg.images.length > 0 && (
-                            <div className="flex gap-2 mb-2">
-                              {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
-                            </div>
-                          )}
-                          <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  {chatLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-slate-800 border border-brand-gold/30 rounded-lg p-3">
-                        <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {chatImages.length > 0 && (
-                  <div className="px-4 py-2 border-t border-brand-gold/30 flex gap-2">
-                    {chatImages.map((img, idx) => (
-                      <div key={idx} className="relative">
-                        <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
-                        <button onClick={() => setChatImages(chatImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="p-4 border-t border-brand-gold/30 flex gap-2">
-                  <button onClick={() => chatFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-brand-gold transition" title="Attach Image">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                  </button>
-                  <input ref={chatFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
-                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()} placeholder="Ask about image prompts..." className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm" />
-                  <button onClick={handleSendChat} disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 font-medium text-sm transition">Send</button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ========== DUAL CHAT SYSTEM ========== */}
-
-          {/* Consultant Chat - Strategic Partner with Vision */}
-          <div className="bg-slate-900 rounded-lg border-2 border-indigo-500/70 overflow-hidden">
-            <button
-              onClick={() => setIsConsultantChatOpen(!isConsultantChatOpen)}
-              className="w-full flex items-center justify-between p-3 text-indigo-400 hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-                Consultant Chat (Vision AI)
-                {IMAGE_CAPABLE_MODELS.includes(settings.consultant_model) && (
-                  <span className="bg-indigo-600/40 text-indigo-300 text-[10px] px-1.5 py-0.5 rounded">CAN SEE IMAGES</span>
-                )}
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-indigo-300/70">{settings.consultant_chat_history.length} msgs</span>
-                <svg className={`w-5 h-5 transition-transform ${isConsultantChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
-
-            {isConsultantChatOpen && (
-              <div className="border-t border-indigo-500/30">
-                {/* Model selector and controls */}
-                <div className="p-3 bg-indigo-900/20 border-b border-indigo-500/30 flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-indigo-300">Model:</label>
-                    <select
-                      value={settings.consultant_model}
-                      onChange={(e) => updateSettings({ consultant_model: e.target.value })}
-                      className="bg-slate-800 border border-indigo-500/50 rounded px-2 py-1 text-white text-xs"
-                    >
-                      {AVAILABLE_MODELS.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} {IMAGE_CAPABLE_MODELS.includes(m.id) ? '👁️' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {!isPromptPlanningSession ? (
-                      <button
-                        onClick={startPromptPlanningSession}
-                        disabled={consultantLoading}
-                        className="px-2 py-1 bg-purple-600/50 hover:bg-purple-600 disabled:opacity-50 rounded text-white text-xs transition flex items-center gap-1"
-                        title="Start a guided prompt planning session"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                        Prompt Planning
-                      </button>
-                    ) : (
-                      <button
-                        onClick={endPromptPlanningSession}
-                        disabled={consultantLoading}
-                        className="px-2 py-1 bg-amber-600/50 hover:bg-amber-600 disabled:opacity-50 rounded text-white text-xs transition flex items-center gap-1 animate-pulse"
-                        title="End session and export prompts"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                        </svg>
-                        End & Export
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleSyncConsultantToWorker()}
-                      className="px-2 py-1 bg-emerald-600/50 hover:bg-emerald-600 rounded text-white text-xs transition flex items-center gap-1"
-                      title="Sync consultant decisions to worker chat"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                      </svg>
-                      Sync to Worker
-                    </button>
-                    <button
-                      onClick={() => handleClearChatHistory('consultant')}
-                      className="px-2 py-1 bg-red-600/50 hover:bg-red-600 rounded text-white text-xs transition"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-
-                {/* Context info panel - Enhanced visibility */}
-                <div className="px-3 py-2 bg-indigo-900/20 border-b border-indigo-500/20 text-xs">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-3 text-indigo-300/80">
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
-                        <strong>AI Sees:</strong>
-                      </span>
-                      {consultantContext.workflow && (
-                        <span title="Workflow info">📁 {consultantContext.workflow.name}</span>
-                      )}
-                      {consultantContext.articles.length > 0 && (
-                        <span title="Articles">📝 {consultantContext.articles.length} articles</span>
-                      )}
-                      {consultantContext.websites.length > 0 && (
-                        <span title="Websites">🌐 {consultantContext.websites.length} sites</span>
-                      )}
-                      <span title="Reference images">📷 {settings.reference_images.length}</span>
-                      <span title="Image bank">🏦 {availableImages.length}</span>
-                      <span title="Avatars">👥 {settings.audience_avatars.length}</span>
-                      {tags.length > 0 && <span title="Tags">🏷️ {tags.length}</span>}
-                    </div>
-                    <button
-                      onClick={() => fetchConsultantContext()}
-                      disabled={fetchingContext}
-                      className="px-2 py-0.5 bg-indigo-600/30 hover:bg-indigo-600/50 rounded text-indigo-300 transition flex items-center gap-1"
-                      title="Refresh context data"
-                    >
-                      <svg className={`w-3 h-3 ${fetchingContext ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      {fetchingContext ? 'Loading...' : 'Refresh'}
-                    </button>
-                  </div>
-                  <div className="mt-1 text-indigo-400/60">
-                    Full context: workflow details, all articles, prompts, placeholders, image bank, branding, and settings
-                  </div>
-                </div>
-
-                {/* Prompt Planning Session Banner */}
-                {isPromptPlanningSession && (
-                  <div className="px-3 py-2 bg-purple-900/40 border-b border-purple-500/50 text-xs text-purple-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span>
-                      <strong>PROMPT PLANNING SESSION</strong> - Building your image prompt library
-                    </div>
-                    <span className="text-purple-300/70">Click "End & Export" when ready</span>
-                  </div>
-                )}
-
-                {/* Chat messages */}
-                <div ref={consultantChatRef} className="h-72 overflow-y-auto p-4 space-y-3">
-                  {settings.consultant_chat_history.length === 0 ? (
-                    <div className="text-center text-indigo-300/50 py-6 space-y-3">
-                      <p className="text-lg">🎨 Full-Context Consultant</p>
-                      <p className="text-sm">I can see everything in your system and answer any question.</p>
-                      <div className="text-xs text-indigo-400/60 space-y-1">
-                        <p>Ask me about:</p>
-                        <p>• Image prompts, variations, and style strategy</p>
-                        <p>• Your articles, keywords, and content planning</p>
-                        <p>• Which images would work best for specific content</p>
-                        <p>• SEO optimization and brand consistency</p>
-                      </div>
-                      <div className="pt-2">
-                        <button
-                          onClick={startPromptPlanningSession}
-                          disabled={consultantLoading}
-                          className="px-4 py-2 bg-purple-600/50 hover:bg-purple-600 rounded-lg text-white text-sm transition"
-                        >
-                          Or start a Prompt Planning Session
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    settings.consultant_chat_history.filter(m => m.role !== 'system').map((msg, idx) => (
-                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-indigo-600/30 border border-indigo-500/50' : 'bg-slate-800 border border-indigo-400/30'}`}>
-                          {msg.images && msg.images.length > 0 && (
-                            <div className="flex gap-2 mb-2 flex-wrap">
-                              {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
-                            </div>
-                          )}
-                          <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  {consultantLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-slate-800 border border-indigo-400/30 rounded-lg p-3">
-                        <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Attached images preview */}
-                {consultantImages.length > 0 && (
-                  <div className="px-4 py-2 border-t border-indigo-500/30 flex gap-2 flex-wrap">
-                    {consultantImages.map((img, idx) => (
-                      <div key={idx} className="relative">
-                        <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
-                        <button onClick={() => setConsultantImages(consultantImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Input area */}
-                <div className="p-4 border-t border-indigo-500/30 flex gap-2">
-                  <button onClick={() => consultantFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-indigo-400 transition" title="Attach Image">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                  </button>
-                  <input ref={consultantFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'consultant')} className="hidden" />
-                  <textarea
-                    value={consultantInput}
-                    onChange={(e) => {
-                      setConsultantInput(e.target.value);
-                      // Auto-resize textarea
-                      e.target.style.height = 'auto';
-                      e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
-                    }}
-                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendConsultantChat())}
-                    placeholder="Discuss image style, branding, composition, SEO strategy..."
-                    rows={1}
-                    className="flex-1 bg-slate-900 border border-indigo-500/50 rounded px-3 py-2 text-white text-sm resize-none overflow-hidden min-h-[38px] max-h-[200px]"
-                  />
-                  <button
-                    onClick={handleSendConsultantChat}
-                    disabled={consultantLoading || (!consultantInput.trim() && consultantImages.length === 0)}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-600 rounded text-white font-medium text-sm transition"
-                  >
-                    Send
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Worker Chat - Operational Helper */}
-          <div className="bg-slate-900 rounded-lg border-2 border-emerald-500/70 overflow-hidden">
-            <button
-              onClick={() => setIsWorkerChatOpen(!isWorkerChatOpen)}
-              className="w-full flex items-center justify-between p-3 text-emerald-400 hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Worker Chat (Operations)
-                {settings.consultant_chat_history.length > 0 && (
-                  <span className="bg-emerald-600/40 text-emerald-300 text-[10px] px-1.5 py-0.5 rounded">SEES CONSULTANT</span>
-                )}
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-emerald-300/70">{settings.worker_chat_history.length} msgs</span>
-                <svg className={`w-5 h-5 transition-transform ${isWorkerChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
-
-            {isWorkerChatOpen && (
-              <div className="border-t border-emerald-500/30">
-                {/* Model selector and controls */}
-                <div className="p-3 bg-emerald-900/20 border-b border-emerald-500/30 flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-emerald-300">Model:</label>
-                    <select
-                      value={settings.worker_model}
-                      onChange={(e) => updateSettings({ worker_model: e.target.value })}
-                      className="bg-slate-800 border border-emerald-500/50 rounded px-2 py-1 text-white text-xs"
-                    >
-                      {AVAILABLE_MODELS.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} {IMAGE_CAPABLE_MODELS.includes(m.id) ? '👁️' : ''}
-                        </option>
-                      ))}
-                    </select>
-                    {settings.consultant_chat_history.length > 0 && (
-                      <span className="text-xs text-emerald-400/60">
-                        (has {settings.consultant_chat_history.length} consultant messages for context)
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handleClearChatHistory('worker')}
-                    className="px-2 py-1 bg-red-600/50 hover:bg-red-600 rounded text-white text-xs transition"
-                  >
-                    Clear
-                  </button>
-                </div>
-
-                {/* Context info panel */}
-                <div className="px-3 py-2 bg-emerald-900/10 border-b border-emerald-500/20 text-xs text-emerald-300/70">
-                  <strong>Setup:</strong> {activeAvatar?.name || 'No avatar'} with {activeAvatar?.variations.length || 0} variations •
-                  {availableImages.length} images in bank •
-                  This AI helps organize and distribute prompts.
-                </div>
-
-                {/* Chat messages */}
-                <div ref={workerChatRef} className="h-72 overflow-y-auto p-4 space-y-3">
-                  {settings.worker_chat_history.length === 0 ? (
-                    <div className="text-center text-emerald-300/50 py-8 space-y-2">
-                      <p className="text-lg">⚙️ Operations Worker</p>
-                      <p className="text-sm">Organize prompts, schedule variations, and manage the workflow.</p>
-                      <p className="text-xs text-emerald-400/50">This chat has access to your consultant's decisions and full setup.</p>
-                    </div>
-                  ) : (
-                    settings.worker_chat_history.filter(m => m.role !== 'system').map((msg, idx) => (
-                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-emerald-600/30 border border-emerald-500/50' : 'bg-slate-800 border border-emerald-400/30'}`}>
-                          {msg.images && msg.images.length > 0 && (
-                            <div className="flex gap-2 mb-2 flex-wrap">
-                              {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
-                            </div>
-                          )}
-                          <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  {workerLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-slate-800 border border-emerald-400/30 rounded-lg p-3">
-                        <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Attached images preview */}
-                {workerImages.length > 0 && (
-                  <div className="px-4 py-2 border-t border-emerald-500/30 flex gap-2 flex-wrap">
-                    {workerImages.map((img, idx) => (
-                      <div key={idx} className="relative">
-                        <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
-                        <button onClick={() => setWorkerImages(workerImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Input area */}
-                <div className="p-4 border-t border-emerald-500/30 flex gap-2">
-                  <button onClick={() => workerFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-emerald-400 transition" title="Attach Image">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                  </button>
-                  <input ref={workerFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'worker')} className="hidden" />
-                  <input
-                    type="text"
-                    value={workerInput}
-                    onChange={(e) => setWorkerInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendWorkerChat()}
-                    placeholder="Organize prompts, plan variations, manage workflow..."
-                    className="flex-1 bg-slate-900 border border-emerald-500/50 rounded px-3 py-2 text-white text-sm"
-                  />
-                  <button
-                    onClick={handleSendWorkerChat}
-                    disabled={workerLoading || (!workerInput.trim() && workerImages.length === 0)}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 rounded text-white font-medium text-sm transition"
-                  >
-                    Send
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Batch Generate (Collapsible) - Supports Simple and Advanced modes */}
-          <div className="bg-slate-900 rounded-lg border border-green-500/50 overflow-hidden">
-            <button onClick={() => setIsBatchOpen(!isBatchOpen)} className="w-full flex items-center justify-between p-3 text-green-400 hover:bg-slate-800/50 transition">
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                Batch Generate Images
-                {activeAvatar?.placeholderMode === 'advanced' && (
-                  <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-[10px] rounded">ADVANCED</span>
-                )}
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isBatchOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {isBatchOpen && (
-              <div className="p-4 border-t border-green-500/30 space-y-3">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <label className="text-xs text-brand-gold/70">Quantity per {activeAvatar?.placeholderMode === 'advanced' ? 'combination' : 'variation'}:</label>
-                  <input type="range" min="1" max="20" value={batchQuantity} onChange={(e) => setBatchQuantity(parseInt(e.target.value))} className="flex-1 min-w-[100px] accent-green-500" />
-                  <span className="text-green-400 font-bold w-8 text-center">{batchQuantity}</span>
-
-                  {/* Quality selector for batch generation */}
-                  <div className="flex items-center gap-2 ml-4 pl-4 border-l border-green-500/30">
-                    <label className="text-xs text-brand-gold/70">Quality:</label>
-                    <select
-                      value={batchQuality}
-                      onChange={(e) => setBatchQuality(e.target.value as 'low' | 'medium' | 'high')}
-                      className="bg-slate-800 border border-green-500/50 rounded px-2 py-1 text-white text-xs"
-                    >
-                      <option value="low">Low ($0.01) - Web</option>
-                      <option value="medium">Medium ($0.04)</option>
-                      <option value="high">High ($0.17) - Print</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Advanced Mode: Category-based filtering */}
-                {activeAvatar?.placeholderMode === 'advanced' ? (
-                  <div className="space-y-3">
-                    {/* Category Filter Dropdowns */}
-                    {activeAvatar?.placeholderCategories && activeAvatar.placeholderCategories.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs text-brand-gold/70 font-medium">Filter by Category:</label>
-                          <span className="text-xs text-green-400">
-                            {filteredCombinations.length} of {placeholderCombinations.length} combinations
-                          </span>
-                        </div>
-
-                        {/* Category filter rows */}
-                        <div className="space-y-1">
-                          {activeAvatar.placeholderCategories.map((category) => (
-                            <div key={category.id} className="bg-slate-800/50 rounded border border-purple-500/30">
-                              {/* Category header - clickable to expand */}
-                              <button
-                                onClick={() => toggleCategoryFilter(category.id)}
-                                className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-700/50 transition"
-                              >
-                                <span className="flex items-center gap-2">
-                                  <svg className={`w-4 h-4 text-purple-400 transition-transform ${categoryFiltersOpen.has(category.id) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                                  </svg>
-                                  <span className="text-sm text-white font-medium">{category.name}</span>
-                                  <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
-                                </span>
-                                <span className="text-xs px-2 py-0.5 rounded bg-purple-600/50 text-purple-200">
-                                  {getSelectedCountForCategory(category.id) || 'All'} / {category.options.length}
-                                </span>
-                              </button>
-
-                              {/* Expanded options */}
-                              {categoryFiltersOpen.has(category.id) && (
-                                <div className="px-3 pb-3 pt-1 border-t border-purple-500/20">
-                                  <div className="flex gap-2 mb-2">
-                                    <button
-                                      onClick={() => selectAllCategoryOptions(category.id, category.options)}
-                                      className="text-[10px] text-brand-cyan hover:text-brand-cyan-light"
-                                    >
-                                      Select All
-                                    </button>
-                                    <button
-                                      onClick={() => clearCategoryOptions(category.id)}
-                                      className="text-[10px] text-red-400 hover:text-red-300"
-                                    >
-                                      Clear
-                                    </button>
-                                  </div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {category.options.map((option) => (
-                                      <label
-                                        key={option.number}
-                                        className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer transition ${
-                                          isOptionSelected(category.id, option.number)
-                                            ? 'bg-green-500 text-slate-900 font-medium'
-                                            : 'bg-slate-700 text-brand-gold hover:bg-slate-600 border border-slate-600'
-                                        }`}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={isOptionSelected(category.id, option.number)}
-                                          onChange={() => toggleCategoryOption(category.id, option.number)}
-                                          className="hidden"
-                                        />
-                                        <span className="font-mono text-[9px] opacity-70">#{option.number}</span>
-                                        <span className="truncate max-w-[150px]" title={option.text}>
-                                          {option.text.substring(0, 25)}{option.text.length > 25 ? '...' : ''}
-                                        </span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Select from filtered combinations */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs text-brand-gold/70">
-                          Select Combinations ({filteredCombinations.length} shown):
-                        </label>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => setSelectedCombinations(new Set(filteredCombinations.map(c => c.id)))}
-                            className="text-xs text-brand-cyan hover:text-brand-cyan-light"
-                          >
-                            Select Filtered
-                          </button>
-                          <button onClick={selectAllCombinations} className="text-xs text-green-400 hover:text-green-300">Select All ({placeholderCombinations.length})</button>
-                        </div>
-                      </div>
-                      <div className="max-h-48 overflow-y-auto space-y-1 bg-slate-800/50 p-2 rounded">
-                        {filteredCombinations.map((combo) => (
-                          <label
-                            key={combo.id}
-                            className={`flex items-center gap-2 px-3 py-2 rounded text-xs cursor-pointer transition ${
-                              selectedCombinations.has(combo.id)
-                                ? 'bg-green-500 text-slate-900'
-                                : 'bg-slate-700 text-brand-gold hover:bg-slate-600'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedCombinations.has(combo.id)}
-                              onChange={() => toggleCombinationSelection(combo.id)}
-                              className="hidden"
-                            />
-                            <span className="font-mono text-[10px] text-purple-300 mr-2">{combo.shortLabel}</span>
-                            <span className="truncate">{combo.label}</span>
-                          </label>
-                        ))}
-                        {filteredCombinations.length === 0 && (
-                          <p className="text-xs text-brand-gold/50 italic text-center py-2">No combinations match the current filters</p>
-                        )}
-                      </div>
-                    </div>
-                    {placeholderCombinations.length === 0 && (
-                      <p className="text-xs text-brand-gold/50 italic">Add placeholder categories above to generate combinations</p>
-                    )}
-                  </div>
-                ) : (
-                  /* Simple Mode: Show variations */
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs text-brand-gold/70">Select Variations:</label>
-                      <button onClick={selectAllVariations} className="text-xs text-brand-cyan hover:text-brand-cyan-light">Select All</button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {activeAvatar?.variations.map((v) => (
-                        <label key={v.id} className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs cursor-pointer transition ${selectedVariations.has(v.id) ? 'bg-green-500 text-slate-900' : 'bg-slate-800 text-brand-gold border border-brand-gold/50'}`}>
-                          <input type="checkbox" checked={selectedVariations.has(v.id)} onChange={() => toggleVariationSelection(v.id)} className="hidden" />
-                          {v.name}
-                        </label>
-                      ))}
-                      {(!activeAvatar?.variations || activeAvatar.variations.length === 0) && (
-                        <p className="text-xs text-brand-gold/50 italic">Add variations above first, or switch to Advanced mode</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  onClick={handleBatchGenerate}
-                  disabled={generating || (activeAvatar?.placeholderMode === 'advanced' ? selectedCombinations.size === 0 : selectedVariations.size === 0)}
-                  className="w-full py-3 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded text-white font-bold transition"
-                >
-                  {generating ? 'Generating...' : `Generate ${(activeAvatar?.placeholderMode === 'advanced' ? selectedCombinations.size : selectedVariations.size) * batchQuantity} Images`}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Image Bank (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-brand-cyan/50 overflow-hidden">
-            <button onClick={() => setIsBankOpen(!isBankOpen)} className="w-full flex items-center justify-between p-3 text-brand-cyan hover:bg-slate-800/50 transition">
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                Image Bank ({availableImages.length} available)
-                {/* Storage size indicator */}
-                <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
-                  payloadSizeMB > 70 ? 'bg-red-600 text-white animate-pulse' :
-                  payloadSizeMB > 50 ? 'bg-amber-600 text-white' :
-                  payloadSizeMB > 30 ? 'bg-yellow-600 text-white' :
-                  'bg-slate-700 text-slate-300'
-                }`}>
-                  {payloadSizeMB.toFixed(1)}MB / 100MB
-                </span>
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {isBankOpen && (
-              <div className="p-4 border-t border-brand-cyan/30 space-y-3">
-                {/* Upload and Auto-tag Controls */}
-                <div className="flex gap-3 flex-wrap items-center justify-between bg-slate-800/50 p-3 rounded-lg border border-brand-cyan/20">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => bankUploadInputRef.current?.click()}
-                      disabled={uploadingToBank}
-                      className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 text-xs font-medium transition flex items-center gap-1"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                      {uploadingToBank ? 'Uploading...' : 'Upload Images'}
-                    </button>
-                    <input
-                      ref={bankUploadInputRef}
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={(e) => handleBankUpload(e.target.files)}
-                      className="hidden"
-                    />
-                    <button
-                      onClick={() => setShowCategoryManager(!showCategoryManager)}
-                      className="px-2 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition flex items-center gap-1"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" /></svg>
-                      Categories
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-brand-gold/70">Auto-tag:</label>
-                    <button
-                      onClick={() => updateSettings({ auto_tag_enabled: !settings.auto_tag_enabled })}
-                      className={`relative w-10 h-5 rounded-full transition ${settings.auto_tag_enabled ? 'bg-brand-cyan' : 'bg-slate-600'}`}
-                    >
-                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.auto_tag_enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                    </button>
-                    {autoTagging && <span className="text-xs text-brand-cyan animate-pulse">Tagging...</span>}
-                  </div>
-                </div>
-
-                {/* Category Manager (collapsible) */}
-                {showCategoryManager && (
-                  <div className="bg-slate-800/30 p-3 rounded-lg border border-brand-gold/20 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-brand-gold font-medium">Manage Categories</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={newCategoryInput}
-                          onChange={(e) => setNewCategoryInput(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-                          placeholder="New category..."
-                          className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs w-32"
-                        />
-                        <button onClick={handleAddCategory} className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-white text-xs">Add</button>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {settings.image_categories.map(cat => (
-                        <span key={cat} className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 rounded text-xs text-white">
-                          {cat}
-                          {cat !== 'Other' && (
-                            <button onClick={() => handleRemoveCategory(cat)} className="text-red-400 hover:text-red-300">&times;</button>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Filter and Sort Controls */}
-                <div className="flex gap-3 flex-wrap items-center justify-between">
-                  <div className="flex gap-3 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-brand-gold/70">Variation:</label>
-                      <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
-                        <option value="all">All</option>
-                        {uniqueVariations.map(v => (<option key={v} value={v}>{v}</option>))}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-brand-gold/70">Category:</label>
-                      <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
-                        <option value="all">All</option>
-                        {settings.image_categories.map(c => (<option key={c} value={c}>{c}</option>))}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-brand-gold/70">Model:</label>
-                      <select value={modelFilter} onChange={(e) => setModelFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
-                        <option value="all">All</option>
-                        {uniqueModels.map(m => (<option key={m} value={m}>{m}</option>))}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-brand-gold/70">Sort:</label>
-                      <select value={bankSort} onChange={(e) => setBankSort(e.target.value as any)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
-                        <option value="newest">Newest</option>
-                        <option value="oldest">Oldest</option>
-                        <option value="variation">Variation</option>
-                      </select>
-                    </div>
-                    {/* Archive toggle */}
-                    <button
-                      onClick={() => setShowArchived(!showArchived)}
-                      className={`px-2 py-1 rounded text-xs transition flex items-center gap-1 ${showArchived ? 'bg-amber-600 text-white' : 'bg-slate-700 text-white/70 hover:bg-slate-600'}`}
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-                      {showArchived ? 'Archived' : 'Archive'}
-                    </button>
-                  </div>
-                  {/* Right side controls */}
-                  <div className="flex items-center gap-2">
-                    {/* Fullscreen toggle */}
-                    <button
-                      onClick={() => setBankFullscreen(true)}
-                      className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition flex items-center gap-1"
-                      title="Expand to fullscreen"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-                      Expand
-                    </button>
-                    {/* Bulk Download Controls */}
-                    {selectedForDownload.size > 0 ? (
-                      <>
-                        <span className="text-xs text-brand-cyan">{selectedForDownload.size} selected</span>
-                        <button onClick={handleBulkDownload} className="px-2 py-1 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 text-xs font-medium transition flex items-center gap-1">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                          Download
-                        </button>
-                        <button onClick={clearDownloadSelection} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition">Clear</button>
-                      </>
-                    ) : (
-                      <button onClick={selectAllForDownload} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition">Select All</button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Image Grid */}
-                {availableImages.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-3">
-                    {availableImages.map((img) => (
-                      <div key={img.id} className={`relative group cursor-pointer ${selectedForDownload.has(img.id) ? 'ring-2 ring-brand-cyan' : ''}`}>
-                        {/* Title label at top with model badge */}
-                        <div
-                          className="absolute top-0 left-0 right-0 z-10 bg-slate-900/90 border-b border-brand-cyan/30 px-1.5 py-0.5 rounded-t"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center justify-between gap-1">
-                            {editingImageId === img.id ? (
-                              <input
-                                type="text"
-                                value={editingTitle}
-                                onChange={(e) => setEditingTitle(e.target.value)}
-                                onBlur={() => handleUpdateImageTitle(img.id, editingTitle)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleUpdateImageTitle(img.id, editingTitle);
-                                  if (e.key === 'Escape') { setEditingImageId(null); setEditingTitle(''); }
-                                }}
-                                autoFocus
-                                className="flex-1 bg-transparent border-none text-[10px] text-white focus:outline-none"
-                              />
-                            ) : (
-                              <div
-                                onClick={() => { setEditingImageId(img.id); setEditingTitle(img.title || ''); }}
-                                className="text-[10px] text-white truncate cursor-text hover:text-brand-cyan flex-1"
-                                title="Click to edit title"
-                              >
-                                {img.title || img.variation}
-                              </div>
-                            )}
-                            {/* Model badge */}
-                            {img.model && (
-                              <span className={`text-[8px] px-1 py-0.5 rounded font-medium ${
-                                img.model === 'seedream-4' ? 'bg-green-600/80 text-white' :
-                                img.model === 'ideogram-v3-turbo' ? 'bg-purple-600/80 text-white' :
-                                img.model === 'flux-1.1-pro' ? 'bg-blue-600/80 text-white' :
-                                img.model.startsWith('gpt') ? 'bg-emerald-600/80 text-white' :
-                                'bg-slate-600/80 text-white'
-                              }`}>
-                                {img.model.replace('-1.1-pro', '').replace('-v3-turbo', '').replace('-4', '4').replace('gpt-image-', 'gpt')}
-                              </span>
-                            )}
-                          </div>
-                          {/* Timestamp */}
-                          <div className="text-[8px] text-brand-gold/50">
-                            {new Date(img.createdAt).toLocaleDateString()} {new Date(img.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                          </div>
-                        </div>
-                        {/* Selection checkbox */}
-                        <div className="absolute top-7 left-1 z-10">
-                          <input
-                            type="checkbox"
-                            checked={selectedForDownload.has(img.id)}
-                            onChange={() => toggleDownloadSelection(img.id)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-4 h-4 rounded border-2 border-brand-cyan text-brand-cyan focus:ring-brand-cyan bg-slate-900/80"
-                          />
-                        </div>
-                        {/* Category badge */}
-                        {img.category && img.category !== 'Other' && (
-                          <div className="absolute top-7 right-1 z-10">
-                            <select
-                              value={img.category || 'Other'}
-                              onChange={(e) => { e.stopPropagation(); handleUpdateImageCategory(img.id, e.target.value); }}
-                              onClick={(e) => e.stopPropagation()}
-                              className="bg-purple-600/80 text-white text-[9px] px-1 py-0.5 rounded border-none cursor-pointer appearance-none"
-                              style={{ minWidth: 'auto', paddingRight: '0.5rem' }}
-                            >
-                              {settings.image_categories.map(c => (<option key={c} value={c}>{c}</option>))}
-                            </select>
-                          </div>
-                        )}
-                        {/* Image - click to preview */}
-                        <img
-                          src={img.url}
-                          alt={img.title || img.variation}
-                          className="w-full h-24 object-cover rounded-b border border-brand-cyan/30 pt-6"
-                          onClick={() => setPreviewImage(img)}
-                        />
-                        {/* Hover overlay with actions */}
-                        <div className="absolute inset-0 top-6 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded-b flex flex-col items-center justify-center p-1 gap-1">
-                          <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
-                          {img.avatarTag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatarTag}</span>}
-                          <div className="flex gap-1 flex-wrap justify-center">
-                            <button onClick={() => setPreviewImage(img)} className="px-2 py-0.5 bg-blue-600/80 rounded text-white text-[10px]">Expand</button>
-                            <button onClick={() => handleDownloadImage(img)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Download</button>
-                          </div>
-                          <div className="flex gap-1">
-                            <button onClick={() => handleMarkAsUsed(img.id, 'manual')} className="px-2 py-0.5 bg-green-600/80 rounded text-white text-[10px]">Used</button>
-                            <button onClick={() => handleArchiveImage(img.id)} className="px-2 py-0.5 bg-amber-600/80 rounded text-white text-[10px]">Archive</button>
-                            <button onClick={() => handleRemoveFromBank(img.id)} className="px-2 py-0.5 bg-red-600/80 rounded text-white text-[10px]">Delete</button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-brand-gold/50 mb-2">No available images.</p>
-                    <button
-                      onClick={() => bankUploadInputRef.current?.click()}
-                      className="px-4 py-2 bg-brand-cyan/20 hover:bg-brand-cyan/30 border border-brand-cyan/50 rounded text-brand-cyan text-sm transition"
-                    >
-                      Upload your first images
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Draft Image Bank (Collapsible) - In-transit images for pages */}
-          <div className="bg-slate-900 rounded-lg border border-amber-500/50 overflow-hidden">
-            <button onClick={() => setIsDraftBankOpen(!isDraftBankOpen)} className="w-full flex items-center justify-between p-3 text-amber-400 hover:bg-slate-800/50 transition">
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-                Draft Image Bank ({draftBankStats.draft} in draft)
-                {/* Stats badges */}
-                <span className="ml-2 text-[10px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">
-                  Made: {draftBankStats.totalMade} | Replaced: {draftBankStats.totalReplaced}
-                </span>
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isDraftBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {isDraftBankOpen && (
-              <div className="p-4 border-t border-amber-500/30 space-y-3">
-                {/* Stats Overview */}
-                <div className="grid grid-cols-4 gap-3">
-                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
-                    <div className="text-2xl font-bold text-white">{draftBankStats.draft}</div>
-                    <div className="text-xs text-amber-400">Draft</div>
-                  </div>
-                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
-                    <div className="text-2xl font-bold text-green-400">{draftBankStats.sent}</div>
-                    <div className="text-xs text-green-400/70">Sent</div>
-                  </div>
-                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
-                    <div className="text-2xl font-bold text-slate-400">{draftBankStats.totalMade}</div>
-                    <div className="text-xs text-slate-400/70">Total Made</div>
-                  </div>
-                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
-                    <div className="text-2xl font-bold text-red-400">{draftBankStats.totalReplaced}</div>
-                    <div className="text-xs text-red-400/70">Replaced</div>
-                  </div>
-                </div>
-
-                {/* Filter Controls */}
-                <div className="flex gap-3 flex-wrap items-center bg-slate-800/50 p-3 rounded-lg border border-amber-500/20">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-amber-400/70">Status:</label>
-                    <select
-                      value={draftBankFilter}
-                      onChange={(e) => setDraftBankFilter(e.target.value as any)}
-                      className="bg-slate-800 border border-amber-500/50 rounded px-2 py-1 text-white text-xs"
-                    >
-                      <option value="all">All Images</option>
-                      <option value="draft">Draft Only</option>
-                      <option value="sent">Sent Only</option>
-                    </select>
-                  </div>
-                  {draftBankItemTypes.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-amber-400/70">Item Type:</label>
-                      <select
-                        value={draftBankItemTypeFilter}
-                        onChange={(e) => setDraftBankItemTypeFilter(e.target.value)}
-                        className="bg-slate-800 border border-amber-500/50 rounded px-2 py-1 text-white text-xs"
-                      >
-                        <option value="all">All Types</option>
-                        {draftBankItemTypes.map(t => (
-                          <option key={t.item_type} value={t.item_type}>{t.item_type} ({t.count})</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  {draftBankLoading && (
-                    <span className="text-xs text-amber-400 animate-pulse">Loading...</span>
-                  )}
-                </div>
-
-                {/* Image Grid */}
-                {draftBankImages.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-3">
-                    {draftBankImages.map((img) => (
-                      <div key={img.id} className="relative group">
-                        {/* Status badge */}
-                        <div className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded text-[9px] text-white ${
-                          img.status === 'draft' ? 'bg-amber-600/90' :
-                          img.status === 'sent' ? 'bg-green-600/90' :
-                          'bg-red-600/90'
-                        }`}>
-                          {img.status.toUpperCase()}
-                        </div>
-                        {/* Item type tag */}
-                        {img.item_type && (
-                          <div className="absolute top-1 right-1 z-10 px-1.5 py-0.5 bg-slate-900/90 rounded text-[9px] text-amber-300">
-                            {img.item_type}
-                          </div>
-                        )}
-                        <img
-                          src={img.url}
-                          alt={img.item_type || 'Draft image'}
-                          className={`w-full h-24 object-cover rounded border ${
-                            img.status === 'draft' ? 'border-amber-500/30' :
-                            img.status === 'sent' ? 'border-green-500/30 opacity-70' :
-                            'border-red-500/30 opacity-50'
-                          }`}
-                        />
-                        {/* Hover overlay */}
-                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
-                          <span className="text-xs text-white font-medium">{img.page_keyword || 'No page'}</span>
-                          {img.item_category && <span className="text-[9px] text-amber-300">{img.item_category}</span>}
-                          {img.avatar_tag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatar_tag}</span>}
-                          <div className="text-[8px] text-slate-400 mt-1">
-                            {new Date(img.created_at).toLocaleDateString()}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-amber-400/50 mb-2">No draft images yet.</p>
-                    <p className="text-xs text-slate-500">Images will appear here when generated for specific pages.</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Used/Archive (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-purple-500/50 overflow-hidden">
-            <button onClick={() => setIsUsedOpen(!isUsedOpen)} className="w-full flex items-center justify-between p-3 text-purple-400 hover:bg-slate-800/50 transition">
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-                Used/Archive ({usedImages.length})
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isUsedOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {isUsedOpen && (
-              <div className="p-4 border-t border-purple-500/30 space-y-3">
-                {usedImages.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-3">
-                    {usedImages.map((img) => (
-                      <div key={img.id} className="relative group">
-                        <img src={img.url} alt={img.variation} className="w-full h-24 object-cover rounded border border-purple-500/30 opacity-70" />
-                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-purple-600/90 rounded text-[9px] text-white">USED</div>
-                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
-                          <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
-                          {img.avatarTag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatarTag}</span>}
-                          {img.usedOn && (
-                            img.usedOn.startsWith('http')
-                              ? <a href={img.usedOn} target="_blank" rel="noopener noreferrer" className="text-[9px] text-brand-cyan underline">View Page</a>
-                              : <span className="text-[9px] text-purple-300">Used on: {img.usedOn}</span>
-                          )}
-                          <button onClick={() => handleRestoreFromUsed(img.id)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Restore</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-center text-brand-gold/50 py-4">No used images.</p>
-                )}
-              </div>
-            )}
-          </div>
-
           {/* ═══════════════════════════════════════════════════════════════════
               UNIFIED IMAGE INTEGRATION SETTINGS DASHBOARD
               All page integration, smart matching, and ordering in ONE place
@@ -9160,6 +7214,1952 @@ Start by introducing yourself and asking about their business in a friendly way.
             </div>
             )}
           </div>
+
+      {/* ========== PROMPT PROBLEM AREAS ========== */}
+      <div className="bg-slate-900 rounded-lg border border-orange-500/50 overflow-hidden">
+        <div
+          className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-800/50 transition"
+          onClick={() => setProblemAreasCollapsed(!problemAreasCollapsed)}
+        >
+          <div className="flex items-center gap-2">
+            <span className={`text-orange-400 transition-transform ${problemAreasCollapsed ? '' : 'rotate-90'}`}>▶</span>
+            <span className="text-orange-400 font-semibold">🎯 Prompt Problem Areas</span>
+            {settings.prompt_problem_areas.length > 0 && (
+              <span className="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded">
+                {settings.prompt_problem_areas.length} areas • {settings.prompt_problem_areas.flatMap(a => a.prompts.filter(p => p.status === 'working')).length} working
+              </span>
+            )}
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleAddProblemArea(); }}
+            className="text-orange-400 hover:text-orange-300 text-sm font-medium transition"
+          >
+            + Add Area
+          </button>
+        </div>
+
+        {!problemAreasCollapsed && (
+          <div className="p-3 border-t border-orange-500/30 space-y-3">
+            {settings.prompt_problem_areas.length === 0 ? (
+              <div className="text-center py-6 text-slate-500">
+                <p className="text-sm">No problem areas yet.</p>
+                <p className="text-xs mt-1">Add areas for issues like "Logo Visibility", "Camera Angles", etc.</p>
+              </div>
+            ) : (
+              <>
+                {/* Area Tabs */}
+                <div className="flex flex-wrap gap-2">
+                  {settings.prompt_problem_areas.map(area => (
+                    <button
+                      key={area.id}
+                      onClick={() => setActiveProblemAreaId(activeProblemAreaId === area.id ? null : area.id)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                        area.status === 'solved'
+                          ? activeProblemAreaId === area.id
+                            ? 'bg-green-500 text-slate-900'
+                            : 'bg-green-900/50 text-green-400 hover:bg-green-900/70 border border-green-500/50'
+                          : activeProblemAreaId === area.id
+                            ? 'bg-orange-500 text-slate-900'
+                            : 'bg-slate-800 text-orange-400 hover:bg-slate-700'
+                      }`}
+                    >
+                      {area.status === 'solved' ? (
+                        <span className="text-green-300">✓</span>
+                      ) : (
+                        <span className={`w-2 h-2 rounded-full ${
+                          area.priority === 'high' ? 'bg-red-500' :
+                          area.priority === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+                        }`} />
+                      )}
+                      {area.name}
+                      {area.status === 'solved' ? (
+                        <span className="text-xs opacity-70">SOLVED</span>
+                      ) : (
+                        <span className="text-xs opacity-70">({area.prompts.length})</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Active Area Editor */}
+                {activeProblemAreaId && (() => {
+                  const area = getActiveProblemArea();
+                  if (!area) return null;
+                  return (
+                    <div className="bg-slate-800/50 rounded-lg p-3 space-y-3 border border-orange-500/20">
+                      {/* Area Header */}
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 space-y-2">
+                          <input
+                            type="text"
+                            value={area.name}
+                            onChange={(e) => handleUpdateProblemArea(area.id, { name: e.target.value })}
+                            className="w-full bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-white text-sm font-medium"
+                            placeholder="Problem area name..."
+                          />
+                          <textarea
+                            value={area.context}
+                            onChange={(e) => handleUpdateProblemArea(area.id, { context: e.target.value })}
+                            className="w-full bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-white text-xs resize-y"
+                            rows={2}
+                            placeholder="Context: Why is this a problem? What are you trying to solve?"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          {area.status === 'solved' ? (
+                            <div className="bg-green-900/50 border border-green-500 rounded px-2 py-1 text-xs text-green-300 text-center">
+                              ✓ SOLVED
+                            </div>
+                          ) : (
+                            <>
+                              <select
+                                value={area.priority}
+                                onChange={(e) => handleUpdateProblemArea(area.id, { priority: e.target.value as 'high' | 'medium' | 'low' })}
+                                className="bg-slate-900 border border-orange-500/30 rounded px-2 py-1 text-xs text-white"
+                              >
+                                <option value="high">🔴 High</option>
+                                <option value="medium">🟡 Medium</option>
+                                <option value="low">🟢 Low</option>
+                              </select>
+                              <button
+                                onClick={() => {
+                                  const workingPrompt = area.prompts.find(p => p.status === 'working');
+                                  handleUpdateProblemArea(area.id, {
+                                    status: 'solved',
+                                    solvedPromptId: workingPrompt?.id
+                                  });
+                                  log(`Problem area "${area.name}" marked as SOLVED!`, LogStatus.SUCCESS);
+                                }}
+                                disabled={!area.prompts.some(p => p.status === 'working')}
+                                className={`text-xs transition px-2 py-1 rounded ${
+                                  area.prompts.some(p => p.status === 'working')
+                                    ? 'bg-green-600 hover:bg-green-500 text-white'
+                                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                }`}
+                                title={area.prompts.some(p => p.status === 'working') ? 'Mark as solved' : 'Need at least one working prompt'}
+                              >
+                                ✓ Solved
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => area.status === 'solved'
+                              ? handleUpdateProblemArea(area.id, { status: 'active' })
+                              : handleRemoveProblemArea(area.id)
+                            }
+                            className="text-xs text-red-400 hover:text-red-300 transition"
+                          >
+                            {area.status === 'solved' ? 'Reopen' : 'Delete'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Prompts Within This Area */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-orange-300 font-medium">Solution Prompts:</span>
+                          <button
+                            onClick={() => handleAddPromptToArea(area.id)}
+                            className="text-xs text-orange-400 hover:text-orange-300 transition"
+                          >
+                            + Add Prompt
+                          </button>
+                        </div>
+
+                        {area.prompts.length === 0 ? (
+                          <p className="text-xs text-slate-500 text-center py-2">No prompts yet. Add prompts that might solve this problem.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {area.prompts.map((prompt, idx) => (
+                              <div key={prompt.id} className="bg-slate-900/50 rounded p-2 space-y-1.5 border border-slate-700">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-500 font-mono">#{idx + 1}</span>
+                                  <input
+                                    type="text"
+                                    value={prompt.miniContext}
+                                    onChange={(e) => handleUpdatePromptInArea(area.id, prompt.id, { miniContext: e.target.value })}
+                                    className="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-white text-xs"
+                                    placeholder="Brief context for this prompt..."
+                                  />
+                                  <select
+                                    value={prompt.status}
+                                    onChange={(e) => handleUpdatePromptInArea(area.id, prompt.id, { status: e.target.value as 'testing' | 'working' | 'failed' })}
+                                    className={`text-xs rounded px-2 py-0.5 border ${
+                                      prompt.status === 'working' ? 'bg-green-900/50 border-green-500 text-green-300' :
+                                      prompt.status === 'failed' ? 'bg-red-900/50 border-red-500 text-red-300' :
+                                      'bg-yellow-900/50 border-yellow-500 text-yellow-300'
+                                    }`}
+                                  >
+                                    <option value="testing">🧪 Testing</option>
+                                    <option value="working">✅ Working</option>
+                                    <option value="failed">❌ Failed</option>
+                                  </select>
+                                  <button
+                                    onClick={() => handleRemovePromptFromArea(area.id, prompt.id)}
+                                    className="text-red-400 hover:text-red-300 text-xs"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                                <textarea
+                                  value={prompt.promptText}
+                                  onChange={(e) => handleUpdatePromptInArea(area.id, prompt.id, { promptText: e.target.value })}
+                                  className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white text-xs font-mono resize-y"
+                                  rows={2}
+                                  placeholder="The actual prompt technique to try..."
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Working Prompts Summary */}
+                      {area.prompts.filter(p => p.status === 'working').length > 0 && (
+                        <div className="bg-green-900/20 border border-green-500/30 rounded p-2">
+                          <span className="text-xs text-green-400 font-medium">
+                            ✅ {area.prompts.filter(p => p.status === 'working').length} working prompt(s) - AI will use these
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Reference Images (Collapsible) */}
+          <div className="bg-slate-900 rounded-lg border border-brand-gold/50 overflow-hidden">
+            <button
+              onClick={() => setIsReferenceOpen(!isReferenceOpen)}
+              className="w-full flex items-center justify-between p-3 text-brand-gold hover:bg-slate-800/50 transition"
+            >
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Reference Images ({settings.reference_images.length})
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isReferenceOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {isReferenceOpen && (
+              <div className="p-4 border-t border-brand-gold/30 space-y-3">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-sm transition"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Upload
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => handleUploadReference(e.target.files)}
+                    className="hidden"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Or paste image URL..."
+                    className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddReferenceUrl((e.target as HTMLInputElement).value);
+                        (e.target as HTMLInputElement).value = '';
+                      }
+                    }}
+                  />
+                </div>
+                {settings.reference_images.length > 0 ? (
+                  <div className="grid grid-cols-4 gap-2">
+                    {settings.reference_images.map((img, idx) => (
+                      <div key={idx} className="relative group">
+                        <img src={img.url} alt={img.filename || `Ref ${idx + 1}`} className="w-full h-24 object-cover rounded border border-brand-gold/30" />
+                        <button onClick={() => handleRemoveReference(idx)} className="absolute top-1 right-1 p-1 bg-red-600/80 rounded opacity-0 group-hover:opacity-100 transition">
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-brand-gold/50 py-4">No reference images yet.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Logo & Action Shots (Collapsible) */}
+          <div className="bg-slate-900 rounded-lg border border-pink-500/50 overflow-hidden">
+            <button
+              onClick={() => setIsLogoOpen(!isLogoOpen)}
+              className="w-full flex items-center justify-between p-3 text-pink-400 hover:bg-slate-800/50 transition"
+            >
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                </svg>
+                Logo & Action Shots ({logoImages.length} logo, {actionShots.length} action)
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isLogoOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {isLogoOpen && (
+              <div className="p-4 border-t border-pink-500/30 space-y-4">
+                {/* Logo Upload */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm text-pink-300 font-medium">Logo Image (the actual logo)</label>
+                    <button
+                      onClick={() => logoFileInputRef.current?.click()}
+                      className="flex items-center gap-1 px-3 py-1 bg-pink-600 hover:bg-pink-500 rounded text-white text-xs transition"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Upload Logo
+                    </button>
+                    <input
+                      ref={logoFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleUploadLogo(e.target.files, 'logo')}
+                      className="hidden"
+                    />
+                  </div>
+                  {logoImages.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {logoImages.map((img, idx) => {
+                        const globalIdx = settings.logo_images.findIndex(i => i === img);
+                        return (
+                          <div key={idx} className="relative group">
+                            <img src={img.url} alt={img.filename || 'Logo'} className="h-20 w-auto object-contain rounded border-2 border-pink-500/50 bg-white p-1" />
+                            <button onClick={() => handleRemoveLogo(globalIdx)} className="absolute -top-2 -right-2 p-1 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition">
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-pink-300/50 italic">No logo uploaded. Use {'{logo}'} placeholder in prompts.</p>
+                  )}
+                </div>
+
+                {/* Action Shots */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm text-pink-300 font-medium">Action Shots (logo on shirts, vehicles, etc.)</label>
+                    <button
+                      onClick={() => actionShotsInputRef.current?.click()}
+                      className="flex items-center gap-1 px-3 py-1 bg-pink-600 hover:bg-pink-500 rounded text-white text-xs transition"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Upload Action Shots
+                    </button>
+                    <input
+                      ref={actionShotsInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => handleUploadLogo(e.target.files, 'action')}
+                      className="hidden"
+                    />
+                  </div>
+                  {actionShots.length > 0 ? (
+                    <div className="grid grid-cols-4 gap-2">
+                      {actionShots.map((img, idx) => {
+                        const globalIdx = settings.logo_images.findIndex(i => i === img);
+                        return (
+                          <div key={idx} className="relative group">
+                            <img src={img.url} alt={img.filename || `Action ${idx + 1}`} className="w-full h-20 object-cover rounded border border-pink-500/30" />
+                            <button onClick={() => handleRemoveLogo(globalIdx)} className="absolute top-1 right-1 p-1 bg-red-600/80 rounded opacity-0 group-hover:opacity-100 transition">
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-pink-300/50 italic">Upload photos showing the logo on dark blue shirts from different angles.</p>
+                  )}
+                </div>
+
+                <p className="text-xs text-pink-300/70 bg-pink-900/30 p-2 rounded">
+                  <strong>Tip:</strong> These images help AI understand your brand. Use <code className="bg-pink-900/50 px-1 rounded">{'{logo}'}</code> in prompts to reference the logo placement.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Audience Avatars */}
+          <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50">
+            <div
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => setAvatarsCollapsed(!avatarsCollapsed)}
+            >
+              <div className="flex items-center gap-3">
+                <span className={`text-brand-gold transition-transform ${avatarsCollapsed ? '' : 'rotate-90'}`}>▶</span>
+                <h3 className="text-brand-gold font-semibold">Audience Avatars</h3>
+                {tags.length > 0 && (
+                  <span className="text-xs text-brand-cyan/70 bg-brand-cyan/10 px-2 py-0.5 rounded">
+                    Synced with Tag Manager: {tags.map(t => t.name).join(', ')}
+                  </span>
+                )}
+                {avatarsCollapsed && activeAvatar && (
+                  <span className="text-xs text-brand-gold/50 bg-slate-800 px-2 py-0.5 rounded">
+                    Active: {activeAvatar.name}
+                  </span>
+                )}
+              </div>
+              <button onClick={(e) => { e.stopPropagation(); handleAddAvatar(); }} className="text-brand-cyan hover:text-brand-cyan-light text-sm font-medium transition">+ Add Avatar</button>
+            </div>
+
+            {!avatarsCollapsed && <div className="mt-3">
+
+            <div className="flex flex-wrap gap-2 mb-4">
+              {settings.audience_avatars.map((avatar) => (
+                <button
+                  key={avatar.id}
+                  onClick={() => setActiveAvatarId(avatar.id)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${activeAvatarId === avatar.id ? 'bg-brand-gold text-slate-900' : 'bg-slate-800 text-brand-gold hover:bg-slate-700'}`}
+                >
+                  <span>{avatar.name}{avatar.tag ? ` (${avatar.tag})` : ''}</span>
+                  {settings.audience_avatars.length > 1 && !avatar.tag && (
+                    <span onClick={(e) => { e.stopPropagation(); handleRemoveAvatar(avatar.id); }} className="hover:text-red-500 cursor-pointer">&times;</span>
+                  )}
+                  {avatar.tag && (
+                    <span className="bg-brand-cyan/20 text-brand-cyan text-[10px] px-1.5 rounded">TAG</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {activeAvatar && (
+              <div className="space-y-3">
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs text-brand-gold/70 mb-1">Avatar Name</label>
+                    <input
+                      type="text"
+                      value={activeAvatar.name}
+                      onChange={(e) => handleUpdateAvatar(activeAvatar.id, { name: e.target.value })}
+                      className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm"
+                    />
+                  </div>
+                  {/* Mode Toggle */}
+                  <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1">
+                    <button
+                      onClick={() => handleUpdateAvatar(activeAvatar.id, { placeholderMode: 'simple' })}
+                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${(activeAvatar.placeholderMode || 'simple') === 'simple' ? 'bg-brand-cyan text-slate-900' : 'text-brand-gold/70 hover:text-brand-gold'}`}
+                    >
+                      Simple
+                    </button>
+                    <button
+                      onClick={() => handleUpdateAvatar(activeAvatar.id, { placeholderMode: 'advanced' })}
+                      className={`px-3 py-1.5 rounded text-xs font-medium transition ${activeAvatar.placeholderMode === 'advanced' ? 'bg-purple-600 text-white' : 'text-brand-gold/70 hover:text-brand-gold'}`}
+                    >
+                      Advanced
+                    </button>
+                  </div>
+                </div>
+
+                {/* Main Prompt - shown in both modes */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs text-brand-gold/70">
+                      Main Prompt {(activeAvatar.placeholderMode || 'simple') === 'simple' ? `(use {'{variation}'} placeholder)` : '(use placeholder categories below)'}
+                    </label>
+                    {(activeAvatar.placeholderMode || 'simple') === 'simple' && (
+                      <button onClick={insertVariationPlaceholder} className="text-xs text-brand-cyan hover:text-brand-cyan-light">+ Insert {'{variation}'}</button>
+                    )}
+                  </div>
+                  <textarea
+                    ref={mainPromptRef}
+                    value={activeAvatar.mainPrompt}
+                    onChange={(e) => handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value })}
+                    rows={4}
+                    className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y"
+                    placeholder={activeAvatar.placeholderMode === 'advanced'
+                      ? "Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
+                      : "Professional cleaning photo, {variation}, bright natural lighting..."}
+                  />
+                  {/* Insert placeholder tags */}
+                  {(activeAvatar.placeholderMode || 'simple') === 'simple' && activeAvatar.variations.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      <span className="text-xs text-brand-gold/50">Click to insert:</span>
+                      {activeAvatar.variations.map(v => (
+                        <button
+                          key={v.id}
+                          onClick={() => insertVariationTag(v.name)}
+                          className="px-2 py-0.5 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 rounded text-purple-300 text-xs transition"
+                        >
+                          {`{${v.name}}`}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {/* Insert placeholder category tags for advanced mode */}
+                  {activeAvatar.placeholderMode === 'advanced' && (activeAvatar.placeholderCategories || []).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      <span className="text-xs text-brand-gold/50">Click to insert:</span>
+                      {(activeAvatar.placeholderCategories || []).map(cat => (
+                        <button
+                          key={cat.id}
+                          onClick={() => {
+                            if (!mainPromptRef.current) return;
+                            const textarea = mainPromptRef.current;
+                            const start = textarea.selectionStart;
+                            const text = activeAvatar.mainPrompt;
+                            const newText = text.substring(0, start) + cat.placeholder + text.substring(start);
+                            handleUpdateAvatar(activeAvatar.id, { mainPrompt: newText });
+                          }}
+                          className="px-2 py-0.5 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 rounded text-purple-300 text-xs transition"
+                        >
+                          {cat.placeholder}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ========== ADVANCED MODE: Placeholder Categories ========== */}
+                {activeAvatar.placeholderMode === 'advanced' && (
+                  <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 space-y-3">
+                    <div
+                      className="flex items-center justify-between cursor-pointer"
+                      onClick={() => setCategoriesCollapsed(!categoriesCollapsed)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`text-purple-400 transition-transform ${categoriesCollapsed ? '' : 'rotate-90'}`}>▶</span>
+                        <label className="text-sm text-purple-300 font-medium cursor-pointer">Placeholder Categories</label>
+                        {categoriesCollapsed && (activeAvatar.placeholderCategories || []).length > 0 && (
+                          <span className="text-xs text-purple-400/70 bg-slate-800 px-2 py-0.5 rounded">
+                            {(activeAvatar.placeholderCategories || []).length} categories
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleAddPlaceholderCategory(); }}
+                        className="px-2 py-1 bg-purple-600/50 hover:bg-purple-600 rounded text-white text-xs transition"
+                      >
+                        + Add Category
+                      </button>
+                    </div>
+
+                    {/* Category List */}
+                    {!categoriesCollapsed && (<>
+                    {(activeAvatar.placeholderCategories || []).map((category, catIndex) => (
+                      <div key={category.id} className="bg-slate-800/50 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={category.name}
+                            onChange={(e) => handleUpdatePlaceholderCategory(category.id, { name: e.target.value, placeholder: `{${e.target.value.replace(/\s+/g, '_')}}` })}
+                            className="flex-1 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
+                            placeholder="Category name (e.g., Cleaning_Item)"
+                          />
+                          <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
+                          <button
+                            onClick={() => handleRemovePlaceholderCategory(category.id)}
+                            className="p-1 bg-red-600/50 hover:bg-red-600 rounded text-white transition"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+
+                        {/* Options for this category - Stacked Layout */}
+                        <div className="pl-2 space-y-3">
+                          {category.options.map((option, optIndex) => (
+                            <div key={option.number} className="bg-slate-900/50 rounded-lg border border-slate-700 overflow-hidden">
+                              {/* Row 1: Keywords */}
+                              <div className="p-2 bg-slate-800/50 border-b border-slate-700">
+                                <div className="flex items-start gap-4">
+                                  {/* Option Number */}
+                                  <span className="w-6 h-6 flex items-center justify-center bg-purple-600 rounded text-white text-xs font-bold">{option.number}</span>
+
+                                  {/* Primary Keywords */}
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wide">Primary</span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      {(option.primaryKeywords || []).map((kw, kwIdx) => {
+                                        const sharedWith = isSharedKeyword(kw);
+                                        const isShared = sharedWith && sharedWith.length > 1;
+                                        return (
+                                          <span
+                                            key={kwIdx}
+                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
+                                              isShared
+                                                ? 'bg-orange-600/30 border border-orange-500 text-orange-300'
+                                                : 'bg-emerald-600/30 border border-emerald-500 text-emerald-300'
+                                            }`}
+                                            title={isShared ? `⚠️ Shared across: ${sharedWith.join(', ')} - requires category keyword in article` : undefined}
+                                          >
+                                            {isShared && <span className="text-orange-400">⚠️</span>}
+                                            {kw}
+                                            <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'primary')} className={`${isShared ? 'text-orange-400' : 'text-emerald-400'} hover:text-red-400`}>×</button>
+                                          </span>
+                                        );
+                                      })}
+                                      <input
+                                        type="text"
+                                        className="w-20 bg-slate-900 border border-emerald-500/30 rounded px-1.5 py-0.5 text-emerald-300 text-xs placeholder-emerald-700"
+                                        placeholder="+ add"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                            handleAddKeyword(category.id, option.number, e.currentTarget.value, 'primary');
+                                            e.currentTarget.value = '';
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Secondary Keywords */}
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="text-[10px] text-amber-400 font-semibold uppercase tracking-wide">Secondary</span>
+                                      <label className="flex items-center gap-1 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={option.useSecondaryKeywords !== false}
+                                          onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { useSecondaryKeywords: e.target.checked })}
+                                          className="w-3 h-3 rounded border-amber-500 text-amber-500 focus:ring-amber-500 bg-slate-900"
+                                        />
+                                        <span className="text-[9px] text-amber-400/70">ON</span>
+                                      </label>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      {/* Auto-add category name as first secondary keyword (shown as locked) */}
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/20 border border-amber-500/50 rounded text-amber-300/70 text-xs italic">
+                                        {category.name.toLowerCase()}
+                                        <svg className="w-2.5 h-2.5 text-amber-500/50" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                                      </span>
+                                      {(option.secondaryKeywords || []).map((kw, kwIdx) => (
+                                        <span key={kwIdx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/30 border border-amber-500 rounded text-amber-300 text-xs">
+                                          {kw}
+                                          <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'secondary')} className="text-amber-400 hover:text-red-400">×</button>
+                                        </span>
+                                      ))}
+                                      <input
+                                        type="text"
+                                        className="w-20 bg-slate-900 border border-amber-500/30 rounded px-1.5 py-0.5 text-amber-300 text-xs placeholder-amber-700"
+                                        placeholder="+ add"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                            handleAddKeyword(category.id, option.number, e.currentTarget.value, 'secondary');
+                                            e.currentTarget.value = '';
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Delete Option */}
+                                  <button
+                                    onClick={() => handleRemovePlaceholderOption(category.id, option.number)}
+                                    className="p-1 text-red-400 hover:text-red-300 hover:bg-red-600/20 rounded transition"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Prompt Text */}
+                              <div className="p-2">
+                                <input
+                                  type="text"
+                                  value={option.text}
+                                  onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { text: e.target.value })}
+                                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm"
+                                  placeholder={`Prompt text for option ${option.number}...`}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => handleAddPlaceholderOption(category.id)}
+                            className="w-full py-2 border-2 border-dashed border-purple-500/30 rounded-lg text-purple-400 hover:border-purple-500 hover:text-purple-300 text-xs transition"
+                          >
+                            + Add Option
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {(activeAvatar.placeholderCategories || []).length === 0 && (
+                      <p className="text-xs text-purple-400/50 text-center py-2">No categories yet. Add one to get started.</p>
+                    )}
+
+                    {/* Generation Mode Controls */}
+                    {(activeAvatar.placeholderCategories || []).length > 0 && (
+                      <div className="border-t border-purple-500/30 pt-3 space-y-2">
+                        <label className="text-xs text-purple-300 font-medium">Generation Mode</label>
+                        <div className="flex flex-wrap gap-2">
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={activeAvatar.generationMode === 'one_of_each'}
+                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'one_of_each' })}
+                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
+                            />
+                            <span className="text-xs text-white">1 of Each</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={activeAvatar.generationMode === 'sequential'}
+                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'sequential' })}
+                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
+                            />
+                            <span className="text-xs text-white">Sequential</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={activeAvatar.generationMode === 'random'}
+                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'random' })}
+                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
+                            />
+                            <span className="text-xs text-white">Random</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={activeAvatar.generationMode === 'specific'}
+                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'specific' })}
+                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
+                            />
+                            <span className="text-xs text-white">Specific</span>
+                          </label>
+                        </div>
+
+                        {/* Specific Combinations Table */}
+                        {activeAvatar.generationMode === 'specific' && (
+                          <div className="bg-slate-900/50 rounded p-2 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-purple-400">Specific Combinations</span>
+                              <button
+                                onClick={() => handleAddSpecificCombination()}
+                                className="text-xs text-purple-400 hover:text-purple-300"
+                              >
+                                + Add Combination
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {(activeAvatar.specificCombinations || []).map((combo, idx) => (
+                                <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-600/30 rounded text-xs text-white">
+                                  ({combo.join(', ')})
+                                  <button
+                                    onClick={() => handleRemoveSpecificCombination(idx)}
+                                    className="text-red-400 hover:text-red-300"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                            {/* Quick add input */}
+                            <input
+                              type="text"
+                              placeholder="Add combo (e.g., 3,2) and press Enter"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const input = e.target as HTMLInputElement;
+                                  const combo = input.value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+                                  if (combo.length > 0) {
+                                    handleAddSpecificCombination(combo);
+                                    input.value = '';
+                                  }
+                                }
+                              }}
+                              className="w-full bg-slate-900 border border-purple-500/30 rounded px-2 py-1 text-white text-xs"
+                            />
+                          </div>
+                        )}
+
+                        {/* Random count */}
+                        {activeAvatar.generationMode === 'random' && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-purple-400">Generate count:</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={activeAvatar.randomCount || 5}
+                              onChange={(e) => handleUpdateAvatar(activeAvatar.id, { randomCount: parseInt(e.target.value) || 5 })}
+                              className="w-16 bg-slate-900 border border-purple-500/30 rounded px-2 py-1 text-white text-xs"
+                            />
+                          </div>
+                        )}
+
+                        {/* Preview of combinations */}
+                        <div className="text-xs text-purple-400/70">
+                          {getAdvancedCombinationsPreview()}
+                        </div>
+                      </div>
+                    )}
+                    </>)}
+                  </div>
+                )}
+
+                {/* ========== SIMPLE MODE: Variations ========== */}
+                {(activeAvatar.placeholderMode || 'simple') === 'simple' && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs text-brand-gold/70">Variations</label>
+                    <button onClick={handleAddVariation} className="text-brand-cyan hover:text-brand-cyan-light text-xs font-medium transition">+ Add Variation</button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {activeAvatar.variations.map((v) => (
+                      <button
+                        key={v.id}
+                        onClick={() => setActiveVariationId(activeVariationId === v.id ? null : v.id)}
+                        className={`px-3 py-1.5 rounded text-xs font-medium transition ${activeVariationId === v.id ? 'bg-brand-cyan text-slate-900' : 'bg-slate-800 text-brand-gold hover:bg-slate-700'}`}
+                      >
+                        {v.name} ({v.orientation === 'vertical' ? 'V' : v.orientation === 'landscape' ? 'L' : 'B'})
+                      </button>
+                    ))}
+                  </div>
+
+                  {activeVariationId && (() => {
+                    const variation = activeAvatar.variations.find(v => v.id === activeVariationId);
+                    if (!variation) return null;
+                    return (
+                      <div className="bg-slate-800 p-3 rounded-lg space-y-2">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={variation.name}
+                            onChange={(e) => handleUpdateVariation(variation.id, { name: e.target.value })}
+                            className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-2 py-1.5 text-white text-sm"
+                          />
+                          <select
+                            value={variation.orientation}
+                            onChange={(e) => handleUpdateVariation(variation.id, { orientation: e.target.value as any })}
+                            className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1.5 text-white text-sm"
+                          >
+                            <option value="landscape">Landscape</option>
+                            <option value="vertical">Vertical</option>
+                            <option value="both">Both</option>
+                          </select>
+                          <button onClick={() => handleCopyMainToVariation(variation.id)} className="px-2 py-1.5 bg-purple-600/50 hover:bg-purple-600 rounded text-white text-xs transition" title="Copy main prompt">
+                            Copy Main
+                          </button>
+                          <button onClick={() => handleRemoveVariation(variation.id)} className="p-1.5 bg-red-600/50 hover:bg-red-600 rounded text-white transition">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                        <textarea
+                          value={variation.prompt}
+                          onChange={(e) => handleUpdateVariation(variation.id, { prompt: e.target.value })}
+                          rows={2}
+                          className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y"
+                          placeholder="Variation-specific text (e.g., person cleaning kitchen sink)"
+                        />
+                        <div className="text-xs text-brand-gold/50 bg-slate-900/50 p-2 rounded">
+                          <strong>Preview:</strong> {buildFinalPrompt(activeAvatar.mainPrompt, variation.prompt).substring(0, 100)}...
+                        </div>
+                        <button
+                          onClick={() => handleGenerateSingle(variation)}
+                          disabled={generating}
+                          className="w-full py-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded text-white text-sm font-medium transition"
+                        >
+                          {generating ? 'Generating...' : 'Generate This Variation'}
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+                )}
+              </div>
+            )}
+            </div>}
+          </div>
+
+          {/* Chat Interface (Collapsible) */}
+          <div className="bg-slate-900 rounded-lg border border-brand-gold/50 overflow-hidden">
+            <button
+              onClick={() => setIsChatOpen(!isChatOpen)}
+              className="w-full flex items-center justify-between p-3 text-brand-gold hover:bg-slate-800/50 transition"
+            >
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                Image Prompt Chat
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {isChatOpen && (
+              <div className="border-t border-brand-gold/30">
+                <div ref={chatContainerRef} className="h-64 overflow-y-auto p-4 space-y-3">
+                  {settings.chat_history.length === 0 ? (
+                    <p className="text-center text-brand-gold/50 py-8">Chat with AI to help craft prompts.</p>
+                  ) : (
+                    settings.chat_history.map((msg, idx) => (
+                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-brand-cyan/20 border border-brand-cyan/50' : 'bg-slate-800 border border-brand-gold/30'}`}>
+                          {msg.images && msg.images.length > 0 && (
+                            <div className="flex gap-2 mb-2">
+                              {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
+                            </div>
+                          )}
+                          <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {chatLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-slate-800 border border-brand-gold/30 rounded-lg p-3">
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {chatImages.length > 0 && (
+                  <div className="px-4 py-2 border-t border-brand-gold/30 flex gap-2">
+                    {chatImages.map((img, idx) => (
+                      <div key={idx} className="relative">
+                        <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
+                        <button onClick={() => setChatImages(chatImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="p-4 border-t border-brand-gold/30 flex gap-2">
+                  <button onClick={() => chatFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-brand-gold transition" title="Attach Image">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                  </button>
+                  <input ref={chatFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
+                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()} placeholder="Ask about image prompts..." className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm" />
+                  <button onClick={handleSendChat} disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 font-medium text-sm transition">Send</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ========== DUAL CHAT SYSTEM ========== */}
+
+          {/* Consultant Chat - Strategic Partner with Vision */}
+          <div className="bg-slate-900 rounded-lg border-2 border-indigo-500/70 overflow-hidden">
+            <button
+              onClick={() => setIsConsultantChatOpen(!isConsultantChatOpen)}
+              className="w-full flex items-center justify-between p-3 text-indigo-400 hover:bg-slate-800/50 transition"
+            >
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                Consultant Chat (Vision AI)
+                {IMAGE_CAPABLE_MODELS.includes(settings.consultant_model) && (
+                  <span className="bg-indigo-600/40 text-indigo-300 text-[10px] px-1.5 py-0.5 rounded">CAN SEE IMAGES</span>
+                )}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-indigo-300/70">{settings.consultant_chat_history.length} msgs</span>
+                <svg className={`w-5 h-5 transition-transform ${isConsultantChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {isConsultantChatOpen && (
+              <div className="border-t border-indigo-500/30">
+                {/* Model selector and controls */}
+                <div className="p-3 bg-indigo-900/20 border-b border-indigo-500/30 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-indigo-300">Model:</label>
+                    <select
+                      value={settings.consultant_model}
+                      onChange={(e) => updateSettings({ consultant_model: e.target.value })}
+                      className="bg-slate-800 border border-indigo-500/50 rounded px-2 py-1 text-white text-xs"
+                    >
+                      {AVAILABLE_MODELS.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} {IMAGE_CAPABLE_MODELS.includes(m.id) ? '👁️' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {!isPromptPlanningSession ? (
+                      <button
+                        onClick={startPromptPlanningSession}
+                        disabled={consultantLoading}
+                        className="px-2 py-1 bg-purple-600/50 hover:bg-purple-600 disabled:opacity-50 rounded text-white text-xs transition flex items-center gap-1"
+                        title="Start a guided prompt planning session"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        Prompt Planning
+                      </button>
+                    ) : (
+                      <button
+                        onClick={endPromptPlanningSession}
+                        disabled={consultantLoading}
+                        className="px-2 py-1 bg-amber-600/50 hover:bg-amber-600 disabled:opacity-50 rounded text-white text-xs transition flex items-center gap-1 animate-pulse"
+                        title="End session and export prompts"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        End & Export
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleSyncConsultantToWorker()}
+                      className="px-2 py-1 bg-emerald-600/50 hover:bg-emerald-600 rounded text-white text-xs transition flex items-center gap-1"
+                      title="Sync consultant decisions to worker chat"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                      </svg>
+                      Sync to Worker
+                    </button>
+                    <button
+                      onClick={() => handleClearChatHistory('consultant')}
+                      className="px-2 py-1 bg-red-600/50 hover:bg-red-600 rounded text-white text-xs transition"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {/* Context info panel - Enhanced visibility */}
+                <div className="px-3 py-2 bg-indigo-900/20 border-b border-indigo-500/20 text-xs">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3 text-indigo-300/80">
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                        <strong>AI Sees:</strong>
+                      </span>
+                      {consultantContext.workflow && (
+                        <span title="Workflow info">📁 {consultantContext.workflow.name}</span>
+                      )}
+                      {consultantContext.articles.length > 0 && (
+                        <span title="Articles">📝 {consultantContext.articles.length} articles</span>
+                      )}
+                      {consultantContext.websites.length > 0 && (
+                        <span title="Websites">🌐 {consultantContext.websites.length} sites</span>
+                      )}
+                      <span title="Reference images">📷 {settings.reference_images.length}</span>
+                      <span title="Image bank">🏦 {availableImages.length}</span>
+                      <span title="Avatars">👥 {settings.audience_avatars.length}</span>
+                      {tags.length > 0 && <span title="Tags">🏷️ {tags.length}</span>}
+                    </div>
+                    <button
+                      onClick={() => fetchConsultantContext()}
+                      disabled={fetchingContext}
+                      className="px-2 py-0.5 bg-indigo-600/30 hover:bg-indigo-600/50 rounded text-indigo-300 transition flex items-center gap-1"
+                      title="Refresh context data"
+                    >
+                      <svg className={`w-3 h-3 ${fetchingContext ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {fetchingContext ? 'Loading...' : 'Refresh'}
+                    </button>
+                  </div>
+                  <div className="mt-1 text-indigo-400/60">
+                    Full context: workflow details, all articles, prompts, placeholders, image bank, branding, and settings
+                  </div>
+                </div>
+
+                {/* Prompt Planning Session Banner */}
+                {isPromptPlanningSession && (
+                  <div className="px-3 py-2 bg-purple-900/40 border-b border-purple-500/50 text-xs text-purple-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span>
+                      <strong>PROMPT PLANNING SESSION</strong> - Building your image prompt library
+                    </div>
+                    <span className="text-purple-300/70">Click "End & Export" when ready</span>
+                  </div>
+                )}
+
+                {/* Chat messages */}
+                <div ref={consultantChatRef} className="h-72 overflow-y-auto p-4 space-y-3">
+                  {settings.consultant_chat_history.length === 0 ? (
+                    <div className="text-center text-indigo-300/50 py-6 space-y-3">
+                      <p className="text-lg">🎨 Full-Context Consultant</p>
+                      <p className="text-sm">I can see everything in your system and answer any question.</p>
+                      <div className="text-xs text-indigo-400/60 space-y-1">
+                        <p>Ask me about:</p>
+                        <p>• Image prompts, variations, and style strategy</p>
+                        <p>• Your articles, keywords, and content planning</p>
+                        <p>• Which images would work best for specific content</p>
+                        <p>• SEO optimization and brand consistency</p>
+                      </div>
+                      <div className="pt-2">
+                        <button
+                          onClick={startPromptPlanningSession}
+                          disabled={consultantLoading}
+                          className="px-4 py-2 bg-purple-600/50 hover:bg-purple-600 rounded-lg text-white text-sm transition"
+                        >
+                          Or start a Prompt Planning Session
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    settings.consultant_chat_history.filter(m => m.role !== 'system').map((msg, idx) => (
+                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-indigo-600/30 border border-indigo-500/50' : 'bg-slate-800 border border-indigo-400/30'}`}>
+                          {msg.images && msg.images.length > 0 && (
+                            <div className="flex gap-2 mb-2 flex-wrap">
+                              {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
+                            </div>
+                          )}
+                          <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {consultantLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-slate-800 border border-indigo-400/30 rounded-lg p-3">
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Attached images preview */}
+                {consultantImages.length > 0 && (
+                  <div className="px-4 py-2 border-t border-indigo-500/30 flex gap-2 flex-wrap">
+                    {consultantImages.map((img, idx) => (
+                      <div key={idx} className="relative">
+                        <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
+                        <button onClick={() => setConsultantImages(consultantImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input area */}
+                <div className="p-4 border-t border-indigo-500/30 flex gap-2">
+                  <button onClick={() => consultantFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-indigo-400 transition" title="Attach Image">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                  </button>
+                  <input ref={consultantFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'consultant')} className="hidden" />
+                  <textarea
+                    value={consultantInput}
+                    onChange={(e) => {
+                      setConsultantInput(e.target.value);
+                      // Auto-resize textarea
+                      e.target.style.height = 'auto';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendConsultantChat())}
+                    placeholder="Discuss image style, branding, composition, SEO strategy..."
+                    rows={1}
+                    className="flex-1 bg-slate-900 border border-indigo-500/50 rounded px-3 py-2 text-white text-sm resize-none overflow-hidden min-h-[38px] max-h-[200px]"
+                  />
+                  <button
+                    onClick={handleSendConsultantChat}
+                    disabled={consultantLoading || (!consultantInput.trim() && consultantImages.length === 0)}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-600 rounded text-white font-medium text-sm transition"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Worker Chat - Operational Helper */}
+          <div className="bg-slate-900 rounded-lg border-2 border-emerald-500/70 overflow-hidden">
+            <button
+              onClick={() => setIsWorkerChatOpen(!isWorkerChatOpen)}
+              className="w-full flex items-center justify-between p-3 text-emerald-400 hover:bg-slate-800/50 transition"
+            >
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Worker Chat (Operations)
+                {settings.consultant_chat_history.length > 0 && (
+                  <span className="bg-emerald-600/40 text-emerald-300 text-[10px] px-1.5 py-0.5 rounded">SEES CONSULTANT</span>
+                )}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-emerald-300/70">{settings.worker_chat_history.length} msgs</span>
+                <svg className={`w-5 h-5 transition-transform ${isWorkerChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {isWorkerChatOpen && (
+              <div className="border-t border-emerald-500/30">
+                {/* Model selector and controls */}
+                <div className="p-3 bg-emerald-900/20 border-b border-emerald-500/30 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-emerald-300">Model:</label>
+                    <select
+                      value={settings.worker_model}
+                      onChange={(e) => updateSettings({ worker_model: e.target.value })}
+                      className="bg-slate-800 border border-emerald-500/50 rounded px-2 py-1 text-white text-xs"
+                    >
+                      {AVAILABLE_MODELS.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} {IMAGE_CAPABLE_MODELS.includes(m.id) ? '👁️' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {settings.consultant_chat_history.length > 0 && (
+                      <span className="text-xs text-emerald-400/60">
+                        (has {settings.consultant_chat_history.length} consultant messages for context)
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleClearChatHistory('worker')}
+                    className="px-2 py-1 bg-red-600/50 hover:bg-red-600 rounded text-white text-xs transition"
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                {/* Context info panel */}
+                <div className="px-3 py-2 bg-emerald-900/10 border-b border-emerald-500/20 text-xs text-emerald-300/70">
+                  <strong>Setup:</strong> {activeAvatar?.name || 'No avatar'} with {activeAvatar?.variations.length || 0} variations •
+                  {availableImages.length} images in bank •
+                  This AI helps organize and distribute prompts.
+                </div>
+
+                {/* Chat messages */}
+                <div ref={workerChatRef} className="h-72 overflow-y-auto p-4 space-y-3">
+                  {settings.worker_chat_history.length === 0 ? (
+                    <div className="text-center text-emerald-300/50 py-8 space-y-2">
+                      <p className="text-lg">⚙️ Operations Worker</p>
+                      <p className="text-sm">Organize prompts, schedule variations, and manage the workflow.</p>
+                      <p className="text-xs text-emerald-400/50">This chat has access to your consultant's decisions and full setup.</p>
+                    </div>
+                  ) : (
+                    settings.worker_chat_history.filter(m => m.role !== 'system').map((msg, idx) => (
+                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-emerald-600/30 border border-emerald-500/50' : 'bg-slate-800 border border-emerald-400/30'}`}>
+                          {msg.images && msg.images.length > 0 && (
+                            <div className="flex gap-2 mb-2 flex-wrap">
+                              {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
+                            </div>
+                          )}
+                          <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {workerLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-slate-800 border border-emerald-400/30 rounded-lg p-3">
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Attached images preview */}
+                {workerImages.length > 0 && (
+                  <div className="px-4 py-2 border-t border-emerald-500/30 flex gap-2 flex-wrap">
+                    {workerImages.map((img, idx) => (
+                      <div key={idx} className="relative">
+                        <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
+                        <button onClick={() => setWorkerImages(workerImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input area */}
+                <div className="p-4 border-t border-emerald-500/30 flex gap-2">
+                  <button onClick={() => workerFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-emerald-400 transition" title="Attach Image">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                  </button>
+                  <input ref={workerFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'worker')} className="hidden" />
+                  <input
+                    type="text"
+                    value={workerInput}
+                    onChange={(e) => setWorkerInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendWorkerChat()}
+                    placeholder="Organize prompts, plan variations, manage workflow..."
+                    className="flex-1 bg-slate-900 border border-emerald-500/50 rounded px-3 py-2 text-white text-sm"
+                  />
+                  <button
+                    onClick={handleSendWorkerChat}
+                    disabled={workerLoading || (!workerInput.trim() && workerImages.length === 0)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 rounded text-white font-medium text-sm transition"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Batch Generate (Collapsible) - Supports Simple and Advanced modes */}
+          <div className="bg-slate-900 rounded-lg border border-green-500/50 overflow-hidden">
+            <button onClick={() => setIsBatchOpen(!isBatchOpen)} className="w-full flex items-center justify-between p-3 text-green-400 hover:bg-slate-800/50 transition">
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                Batch Generate Images
+                {activeAvatar?.placeholderMode === 'advanced' && (
+                  <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-[10px] rounded">ADVANCED</span>
+                )}
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isBatchOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isBatchOpen && (
+              <div className="p-4 border-t border-green-500/30 space-y-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <label className="text-xs text-brand-gold/70">Quantity per {activeAvatar?.placeholderMode === 'advanced' ? 'combination' : 'variation'}:</label>
+                  <input type="range" min="1" max="20" value={batchQuantity} onChange={(e) => setBatchQuantity(parseInt(e.target.value))} className="flex-1 min-w-[100px] accent-green-500" />
+                  <span className="text-green-400 font-bold w-8 text-center">{batchQuantity}</span>
+
+                  {/* Quality selector for batch generation */}
+                  <div className="flex items-center gap-2 ml-4 pl-4 border-l border-green-500/30">
+                    <label className="text-xs text-brand-gold/70">Quality:</label>
+                    <select
+                      value={batchQuality}
+                      onChange={(e) => setBatchQuality(e.target.value as 'low' | 'medium' | 'high')}
+                      className="bg-slate-800 border border-green-500/50 rounded px-2 py-1 text-white text-xs"
+                    >
+                      <option value="low">Low ($0.01) - Web</option>
+                      <option value="medium">Medium ($0.04)</option>
+                      <option value="high">High ($0.17) - Print</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Advanced Mode: Category-based filtering */}
+                {activeAvatar?.placeholderMode === 'advanced' ? (
+                  <div className="space-y-3">
+                    {/* Category Filter Dropdowns */}
+                    {activeAvatar?.placeholderCategories && activeAvatar.placeholderCategories.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs text-brand-gold/70 font-medium">Filter by Category:</label>
+                          <span className="text-xs text-green-400">
+                            {filteredCombinations.length} of {placeholderCombinations.length} combinations
+                          </span>
+                        </div>
+
+                        {/* Category filter rows */}
+                        <div className="space-y-1">
+                          {activeAvatar.placeholderCategories.map((category) => (
+                            <div key={category.id} className="bg-slate-800/50 rounded border border-purple-500/30">
+                              {/* Category header - clickable to expand */}
+                              <button
+                                onClick={() => toggleCategoryFilter(category.id)}
+                                className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-700/50 transition"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <svg className={`w-4 h-4 text-purple-400 transition-transform ${categoryFiltersOpen.has(category.id) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                                  </svg>
+                                  <span className="text-sm text-white font-medium">{category.name}</span>
+                                  <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
+                                </span>
+                                <span className="text-xs px-2 py-0.5 rounded bg-purple-600/50 text-purple-200">
+                                  {getSelectedCountForCategory(category.id) || 'All'} / {category.options.length}
+                                </span>
+                              </button>
+
+                              {/* Expanded options */}
+                              {categoryFiltersOpen.has(category.id) && (
+                                <div className="px-3 pb-3 pt-1 border-t border-purple-500/20">
+                                  <div className="flex gap-2 mb-2">
+                                    <button
+                                      onClick={() => selectAllCategoryOptions(category.id, category.options)}
+                                      className="text-[10px] text-brand-cyan hover:text-brand-cyan-light"
+                                    >
+                                      Select All
+                                    </button>
+                                    <button
+                                      onClick={() => clearCategoryOptions(category.id)}
+                                      className="text-[10px] text-red-400 hover:text-red-300"
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {category.options.map((option) => (
+                                      <label
+                                        key={option.number}
+                                        className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs cursor-pointer transition ${
+                                          isOptionSelected(category.id, option.number)
+                                            ? 'bg-green-500 text-slate-900 font-medium'
+                                            : 'bg-slate-700 text-brand-gold hover:bg-slate-600 border border-slate-600'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isOptionSelected(category.id, option.number)}
+                                          onChange={() => toggleCategoryOption(category.id, option.number)}
+                                          className="hidden"
+                                        />
+                                        <span className="font-mono text-[9px] opacity-70">#{option.number}</span>
+                                        <span className="truncate max-w-[150px]" title={option.text}>
+                                          {option.text.substring(0, 25)}{option.text.length > 25 ? '...' : ''}
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Select from filtered combinations */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs text-brand-gold/70">
+                          Select Combinations ({filteredCombinations.length} shown):
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedCombinations(new Set(filteredCombinations.map(c => c.id)))}
+                            className="text-xs text-brand-cyan hover:text-brand-cyan-light"
+                          >
+                            Select Filtered
+                          </button>
+                          <button onClick={selectAllCombinations} className="text-xs text-green-400 hover:text-green-300">Select All ({placeholderCombinations.length})</button>
+                        </div>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-1 bg-slate-800/50 p-2 rounded">
+                        {filteredCombinations.map((combo) => (
+                          <label
+                            key={combo.id}
+                            className={`flex items-center gap-2 px-3 py-2 rounded text-xs cursor-pointer transition ${
+                              selectedCombinations.has(combo.id)
+                                ? 'bg-green-500 text-slate-900'
+                                : 'bg-slate-700 text-brand-gold hover:bg-slate-600'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedCombinations.has(combo.id)}
+                              onChange={() => toggleCombinationSelection(combo.id)}
+                              className="hidden"
+                            />
+                            <span className="font-mono text-[10px] text-purple-300 mr-2">{combo.shortLabel}</span>
+                            <span className="truncate">{combo.label}</span>
+                          </label>
+                        ))}
+                        {filteredCombinations.length === 0 && (
+                          <p className="text-xs text-brand-gold/50 italic text-center py-2">No combinations match the current filters</p>
+                        )}
+                      </div>
+                    </div>
+                    {placeholderCombinations.length === 0 && (
+                      <p className="text-xs text-brand-gold/50 italic">Add placeholder categories above to generate combinations</p>
+                    )}
+                  </div>
+                ) : (
+                  /* Simple Mode: Show variations */
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-brand-gold/70">Select Variations:</label>
+                      <button onClick={selectAllVariations} className="text-xs text-brand-cyan hover:text-brand-cyan-light">Select All</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {activeAvatar?.variations.map((v) => (
+                        <label key={v.id} className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs cursor-pointer transition ${selectedVariations.has(v.id) ? 'bg-green-500 text-slate-900' : 'bg-slate-800 text-brand-gold border border-brand-gold/50'}`}>
+                          <input type="checkbox" checked={selectedVariations.has(v.id)} onChange={() => toggleVariationSelection(v.id)} className="hidden" />
+                          {v.name}
+                        </label>
+                      ))}
+                      {(!activeAvatar?.variations || activeAvatar.variations.length === 0) && (
+                        <p className="text-xs text-brand-gold/50 italic">Add variations above first, or switch to Advanced mode</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleBatchGenerate}
+                  disabled={generating || (activeAvatar?.placeholderMode === 'advanced' ? selectedCombinations.size === 0 : selectedVariations.size === 0)}
+                  className="w-full py-3 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded text-white font-bold transition"
+                >
+                  {generating ? 'Generating...' : `Generate ${(activeAvatar?.placeholderMode === 'advanced' ? selectedCombinations.size : selectedVariations.size) * batchQuantity} Images`}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Image Bank (Collapsible) */}
+          <div className="bg-slate-900 rounded-lg border border-brand-cyan/50 overflow-hidden">
+            <button onClick={() => setIsBankOpen(!isBankOpen)} className="w-full flex items-center justify-between p-3 text-brand-cyan hover:bg-slate-800/50 transition">
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                Image Bank ({availableImages.length} available)
+                {/* Storage size indicator */}
+                <span className={`ml-2 text-xs px-2 py-0.5 rounded ${
+                  payloadSizeMB > 70 ? 'bg-red-600 text-white animate-pulse' :
+                  payloadSizeMB > 50 ? 'bg-amber-600 text-white' :
+                  payloadSizeMB > 30 ? 'bg-yellow-600 text-white' :
+                  'bg-slate-700 text-slate-300'
+                }`}>
+                  {payloadSizeMB.toFixed(1)}MB / 100MB
+                </span>
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isBankOpen && (
+              <div className="p-4 border-t border-brand-cyan/30 space-y-3">
+                {/* Upload and Auto-tag Controls */}
+                <div className="flex gap-3 flex-wrap items-center justify-between bg-slate-800/50 p-3 rounded-lg border border-brand-cyan/20">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => bankUploadInputRef.current?.click()}
+                      disabled={uploadingToBank}
+                      className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 text-xs font-medium transition flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                      {uploadingToBank ? 'Uploading...' : 'Upload Images'}
+                    </button>
+                    <input
+                      ref={bankUploadInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => handleBankUpload(e.target.files)}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => setShowCategoryManager(!showCategoryManager)}
+                      className="px-2 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" /></svg>
+                      Categories
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-brand-gold/70">Auto-tag:</label>
+                    <button
+                      onClick={() => updateSettings({ auto_tag_enabled: !settings.auto_tag_enabled })}
+                      className={`relative w-10 h-5 rounded-full transition ${settings.auto_tag_enabled ? 'bg-brand-cyan' : 'bg-slate-600'}`}
+                    >
+                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${settings.auto_tag_enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    </button>
+                    {autoTagging && <span className="text-xs text-brand-cyan animate-pulse">Tagging...</span>}
+                  </div>
+                </div>
+
+                {/* Category Manager (collapsible) */}
+                {showCategoryManager && (
+                  <div className="bg-slate-800/30 p-3 rounded-lg border border-brand-gold/20 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-brand-gold font-medium">Manage Categories</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newCategoryInput}
+                          onChange={(e) => setNewCategoryInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                          placeholder="New category..."
+                          className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs w-32"
+                        />
+                        <button onClick={handleAddCategory} className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-white text-xs">Add</button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {settings.image_categories.map(cat => (
+                        <span key={cat} className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-700 rounded text-xs text-white">
+                          {cat}
+                          {cat !== 'Other' && (
+                            <button onClick={() => handleRemoveCategory(cat)} className="text-red-400 hover:text-red-300">&times;</button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Filter and Sort Controls */}
+                <div className="flex gap-3 flex-wrap items-center justify-between">
+                  <div className="flex gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-brand-gold/70">Variation:</label>
+                      <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
+                        <option value="all">All</option>
+                        {uniqueVariations.map(v => (<option key={v} value={v}>{v}</option>))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-brand-gold/70">Category:</label>
+                      <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
+                        <option value="all">All</option>
+                        {settings.image_categories.map(c => (<option key={c} value={c}>{c}</option>))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-brand-gold/70">Model:</label>
+                      <select value={modelFilter} onChange={(e) => setModelFilter(e.target.value)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
+                        <option value="all">All</option>
+                        {uniqueModels.map(m => (<option key={m} value={m}>{m}</option>))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-brand-gold/70">Sort:</label>
+                      <select value={bankSort} onChange={(e) => setBankSort(e.target.value as any)} className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs">
+                        <option value="newest">Newest</option>
+                        <option value="oldest">Oldest</option>
+                        <option value="variation">Variation</option>
+                      </select>
+                    </div>
+                    {/* Archive toggle */}
+                    <button
+                      onClick={() => setShowArchived(!showArchived)}
+                      className={`px-2 py-1 rounded text-xs transition flex items-center gap-1 ${showArchived ? 'bg-amber-600 text-white' : 'bg-slate-700 text-white/70 hover:bg-slate-600'}`}
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                      {showArchived ? 'Archived' : 'Archive'}
+                    </button>
+                  </div>
+                  {/* Right side controls */}
+                  <div className="flex items-center gap-2">
+                    {/* Fullscreen toggle */}
+                    <button
+                      onClick={() => setBankFullscreen(true)}
+                      className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition flex items-center gap-1"
+                      title="Expand to fullscreen"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                      Expand
+                    </button>
+                    {/* Bulk Download Controls */}
+                    {selectedForDownload.size > 0 ? (
+                      <>
+                        <span className="text-xs text-brand-cyan">{selectedForDownload.size} selected</span>
+                        <button onClick={handleBulkDownload} className="px-2 py-1 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 text-xs font-medium transition flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                          Download
+                        </button>
+                        <button onClick={clearDownloadSelection} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition">Clear</button>
+                      </>
+                    ) : (
+                      <button onClick={selectAllForDownload} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition">Select All</button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Image Grid */}
+                {availableImages.length > 0 ? (
+                  <div className="grid grid-cols-4 gap-3">
+                    {availableImages.map((img) => (
+                      <div key={img.id} className={`relative group cursor-pointer ${selectedForDownload.has(img.id) ? 'ring-2 ring-brand-cyan' : ''}`}>
+                        {/* Title label at top with model badge */}
+                        <div
+                          className="absolute top-0 left-0 right-0 z-10 bg-slate-900/90 border-b border-brand-cyan/30 px-1.5 py-0.5 rounded-t"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            {editingImageId === img.id ? (
+                              <input
+                                type="text"
+                                value={editingTitle}
+                                onChange={(e) => setEditingTitle(e.target.value)}
+                                onBlur={() => handleUpdateImageTitle(img.id, editingTitle)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleUpdateImageTitle(img.id, editingTitle);
+                                  if (e.key === 'Escape') { setEditingImageId(null); setEditingTitle(''); }
+                                }}
+                                autoFocus
+                                className="flex-1 bg-transparent border-none text-[10px] text-white focus:outline-none"
+                              />
+                            ) : (
+                              <div
+                                onClick={() => { setEditingImageId(img.id); setEditingTitle(img.title || ''); }}
+                                className="text-[10px] text-white truncate cursor-text hover:text-brand-cyan flex-1"
+                                title="Click to edit title"
+                              >
+                                {img.title || img.variation}
+                              </div>
+                            )}
+                            {/* Model badge */}
+                            {img.model && (
+                              <span className={`text-[8px] px-1 py-0.5 rounded font-medium ${
+                                img.model === 'seedream-4' ? 'bg-green-600/80 text-white' :
+                                img.model === 'ideogram-v3-turbo' ? 'bg-purple-600/80 text-white' :
+                                img.model === 'flux-1.1-pro' ? 'bg-blue-600/80 text-white' :
+                                img.model.startsWith('gpt') ? 'bg-emerald-600/80 text-white' :
+                                'bg-slate-600/80 text-white'
+                              }`}>
+                                {img.model.replace('-1.1-pro', '').replace('-v3-turbo', '').replace('-4', '4').replace('gpt-image-', 'gpt')}
+                              </span>
+                            )}
+                          </div>
+                          {/* Timestamp */}
+                          <div className="text-[8px] text-brand-gold/50">
+                            {new Date(img.createdAt).toLocaleDateString()} {new Date(img.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </div>
+                        </div>
+                        {/* Selection checkbox */}
+                        <div className="absolute top-7 left-1 z-10">
+                          <input
+                            type="checkbox"
+                            checked={selectedForDownload.has(img.id)}
+                            onChange={() => toggleDownloadSelection(img.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded border-2 border-brand-cyan text-brand-cyan focus:ring-brand-cyan bg-slate-900/80"
+                          />
+                        </div>
+                        {/* Category badge */}
+                        {img.category && img.category !== 'Other' && (
+                          <div className="absolute top-7 right-1 z-10">
+                            <select
+                              value={img.category || 'Other'}
+                              onChange={(e) => { e.stopPropagation(); handleUpdateImageCategory(img.id, e.target.value); }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="bg-purple-600/80 text-white text-[9px] px-1 py-0.5 rounded border-none cursor-pointer appearance-none"
+                              style={{ minWidth: 'auto', paddingRight: '0.5rem' }}
+                            >
+                              {settings.image_categories.map(c => (<option key={c} value={c}>{c}</option>))}
+                            </select>
+                          </div>
+                        )}
+                        {/* Image - click to preview */}
+                        <img
+                          src={img.url}
+                          alt={img.title || img.variation}
+                          className="w-full h-24 object-cover rounded-b border border-brand-cyan/30 pt-6"
+                          onClick={() => setPreviewImage(img)}
+                        />
+                        {/* Hover overlay with actions */}
+                        <div className="absolute inset-0 top-6 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded-b flex flex-col items-center justify-center p-1 gap-1">
+                          <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
+                          {img.avatarTag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatarTag}</span>}
+                          <div className="flex gap-1 flex-wrap justify-center">
+                            <button onClick={() => setPreviewImage(img)} className="px-2 py-0.5 bg-blue-600/80 rounded text-white text-[10px]">Expand</button>
+                            <button onClick={() => handleDownloadImage(img)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Download</button>
+                          </div>
+                          <div className="flex gap-1">
+                            <button onClick={() => handleMarkAsUsed(img.id, 'manual')} className="px-2 py-0.5 bg-green-600/80 rounded text-white text-[10px]">Used</button>
+                            <button onClick={() => handleArchiveImage(img.id)} className="px-2 py-0.5 bg-amber-600/80 rounded text-white text-[10px]">Archive</button>
+                            <button onClick={() => handleRemoveFromBank(img.id)} className="px-2 py-0.5 bg-red-600/80 rounded text-white text-[10px]">Delete</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-brand-gold/50 mb-2">No available images.</p>
+                    <button
+                      onClick={() => bankUploadInputRef.current?.click()}
+                      className="px-4 py-2 bg-brand-cyan/20 hover:bg-brand-cyan/30 border border-brand-cyan/50 rounded text-brand-cyan text-sm transition"
+                    >
+                      Upload your first images
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Draft Image Bank (Collapsible) - In-transit images for pages */}
+          <div className="bg-slate-900 rounded-lg border border-amber-500/50 overflow-hidden">
+            <button onClick={() => setIsDraftBankOpen(!isDraftBankOpen)} className="w-full flex items-center justify-between p-3 text-amber-400 hover:bg-slate-800/50 transition">
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                Draft Image Bank ({draftBankStats.draft} in draft)
+                {/* Stats badges */}
+                <span className="ml-2 text-[10px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">
+                  Made: {draftBankStats.totalMade} | Replaced: {draftBankStats.totalReplaced}
+                </span>
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isDraftBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isDraftBankOpen && (
+              <div className="p-4 border-t border-amber-500/30 space-y-3">
+                {/* Stats Overview */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                    <div className="text-2xl font-bold text-white">{draftBankStats.draft}</div>
+                    <div className="text-xs text-amber-400">Draft</div>
+                  </div>
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                    <div className="text-2xl font-bold text-green-400">{draftBankStats.sent}</div>
+                    <div className="text-xs text-green-400/70">Sent</div>
+                  </div>
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                    <div className="text-2xl font-bold text-slate-400">{draftBankStats.totalMade}</div>
+                    <div className="text-xs text-slate-400/70">Total Made</div>
+                  </div>
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                    <div className="text-2xl font-bold text-red-400">{draftBankStats.totalReplaced}</div>
+                    <div className="text-xs text-red-400/70">Replaced</div>
+                  </div>
+                </div>
+
+                {/* Filter Controls */}
+                <div className="flex gap-3 flex-wrap items-center bg-slate-800/50 p-3 rounded-lg border border-amber-500/20">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-amber-400/70">Status:</label>
+                    <select
+                      value={draftBankFilter}
+                      onChange={(e) => setDraftBankFilter(e.target.value as any)}
+                      className="bg-slate-800 border border-amber-500/50 rounded px-2 py-1 text-white text-xs"
+                    >
+                      <option value="all">All Images</option>
+                      <option value="draft">Draft Only</option>
+                      <option value="sent">Sent Only</option>
+                    </select>
+                  </div>
+                  {draftBankItemTypes.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-amber-400/70">Item Type:</label>
+                      <select
+                        value={draftBankItemTypeFilter}
+                        onChange={(e) => setDraftBankItemTypeFilter(e.target.value)}
+                        className="bg-slate-800 border border-amber-500/50 rounded px-2 py-1 text-white text-xs"
+                      >
+                        <option value="all">All Types</option>
+                        {draftBankItemTypes.map(t => (
+                          <option key={t.item_type} value={t.item_type}>{t.item_type} ({t.count})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {draftBankLoading && (
+                    <span className="text-xs text-amber-400 animate-pulse">Loading...</span>
+                  )}
+                </div>
+
+                {/* Image Grid */}
+                {draftBankImages.length > 0 ? (
+                  <div className="grid grid-cols-4 gap-3">
+                    {draftBankImages.map((img) => (
+                      <div key={img.id} className="relative group">
+                        {/* Status badge */}
+                        <div className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded text-[9px] text-white ${
+                          img.status === 'draft' ? 'bg-amber-600/90' :
+                          img.status === 'sent' ? 'bg-green-600/90' :
+                          'bg-red-600/90'
+                        }`}>
+                          {img.status.toUpperCase()}
+                        </div>
+                        {/* Item type tag */}
+                        {img.item_type && (
+                          <div className="absolute top-1 right-1 z-10 px-1.5 py-0.5 bg-slate-900/90 rounded text-[9px] text-amber-300">
+                            {img.item_type}
+                          </div>
+                        )}
+                        <img
+                          src={img.url}
+                          alt={img.item_type || 'Draft image'}
+                          className={`w-full h-24 object-cover rounded border ${
+                            img.status === 'draft' ? 'border-amber-500/30' :
+                            img.status === 'sent' ? 'border-green-500/30 opacity-70' :
+                            'border-red-500/30 opacity-50'
+                          }`}
+                        />
+                        {/* Hover overlay */}
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
+                          <span className="text-xs text-white font-medium">{img.page_keyword || 'No page'}</span>
+                          {img.item_category && <span className="text-[9px] text-amber-300">{img.item_category}</span>}
+                          {img.avatar_tag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatar_tag}</span>}
+                          <div className="text-[8px] text-slate-400 mt-1">
+                            {new Date(img.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-amber-400/50 mb-2">No draft images yet.</p>
+                    <p className="text-xs text-slate-500">Images will appear here when generated for specific pages.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Used/Archive (Collapsible) */}
+          <div className="bg-slate-900 rounded-lg border border-purple-500/50 overflow-hidden">
+            <button onClick={() => setIsUsedOpen(!isUsedOpen)} className="w-full flex items-center justify-between p-3 text-purple-400 hover:bg-slate-800/50 transition">
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                Used/Archive ({usedImages.length})
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isUsedOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isUsedOpen && (
+              <div className="p-4 border-t border-purple-500/30 space-y-3">
+                {usedImages.length > 0 ? (
+                  <div className="grid grid-cols-4 gap-3">
+                    {usedImages.map((img) => (
+                      <div key={img.id} className="relative group">
+                        <img src={img.url} alt={img.variation} className="w-full h-24 object-cover rounded border border-purple-500/30 opacity-70" />
+                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-purple-600/90 rounded text-[9px] text-white">USED</div>
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
+                          <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
+                          {img.avatarTag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatarTag}</span>}
+                          {img.usedOn && (
+                            img.usedOn.startsWith('http')
+                              ? <a href={img.usedOn} target="_blank" rel="noopener noreferrer" className="text-[9px] text-brand-cyan underline">View Page</a>
+                              : <span className="text-[9px] text-purple-300">Used on: {img.usedOn}</span>
+                          )}
+                          <button onClick={() => handleRestoreFromUsed(img.id)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Restore</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-brand-gold/50 py-4">No used images.</p>
+                )}
+              </div>
+            )}
+          </div>
+
 
       {saving && (
         <div className="fixed bottom-4 right-4 bg-brand-cyan text-slate-900 px-4 py-2 rounded-lg shadow-lg text-sm font-medium">
