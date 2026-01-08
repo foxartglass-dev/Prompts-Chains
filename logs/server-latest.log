@@ -1,26 +1,52 @@
 # PromptFlow Server Logs
-# Generated: 2026-01-08T20:30:03.088Z
+# Generated: 2026-01-08T21:52:24.714Z
 # Context: publish-complete
-# Lines: 353
+# Lines: 364
 # ---
-[20:03:07.193] LOG   PromptFlow API server running on http://localhost:8080
-[20:03:07.194] LOG   Mode: PRODUCTION
-[20:03:07.194] LOG   Available providers: anthropic (more coming soon)
-[20:27:24.667] LOG   [Image Creation API] GET settings for workflow: 14
-[20:27:25.072] LOG   [Image Creation API] Found records: 1
-[20:27:25.337] LOG   [Image Creation API] GET settings for workflow: 14
-[20:27:25.583] LOG   [Image Creation API] Found records: 1
-[20:27:57.923] LOG   [Image Creation API] PUT settings for workflow: 14
-[20:27:57.924] LOG   [Image Creation API] Received avatars: 3
-[20:27:57.942] LOG   [Image Creation API] Existing record: 10
-[20:27:57.942] LOG   [Image Creation API] Updating existing record...
-[20:27:58.686] LOG   [Image Creation API] Falling back to UPDATE without live_prompt columns
-[20:27:59.508] LOG   [Image Creation API] Update complete for workflow: 14
-[20:28:08.863] LOG   [anthropic] Model: claude-sonnet-4-5-20250929, Key source: request, Key preview: sk-ant-a...
-[20:28:28.376] LOG   [anthropic] Model: claude-sonnet-4-5-20250929, Key source: request, Key preview: sk-ant-a...
-[20:28:33.375] LOG   [anthropic] Model: claude-sonnet-4-5-20250929, Key source: request, Key preview: sk-ant-a...
-[20:28:40.049] LOG   ZeroGPT raw response: {"success":true,"code":200,"message":"Detection complete","data":{"sentences":[],"isHuman":62.5,"additional_feedback":"","h":["It focuses on visible surfaces, floors, kitchens, and bathrooms without intensive scrubbing or hidden areas..","Sweep, vacuum, and mop all floors.","Dust and wipe reachable surfaces, counters, tables, and sills.","Deep clean bathrooms (toilets, sinks, mirrors, tubs, showers).","Wipe kitchen counters, backsplash, sink, fixtures; clean microwave interior.","## What's Inclu
-[20:28:40.049] LOG   ZeroGPT parsed data: {
+[21:38:17.393] LOG   PromptFlow API server running on http://localhost:8080
+[21:38:17.395] LOG   Mode: PRODUCTION
+[21:38:17.395] LOG   Available providers: anthropic (more coming soon)
+[21:40:00.916] LOG   [Image Creation API] GET settings for workflow: 14
+[21:40:01.281] LOG   [Image Creation API] Found records: 1
+[21:40:01.532] LOG   [Image Creation API] GET settings for workflow: 14
+[21:40:01.778] LOG   [Image Creation API] Found records: 1
+[21:40:04.828] LOG   [Image Creation API] GET settings for workflow: 14
+[21:40:04.834] LOG   [Draft Bank Stats] Getting stats for workflow: 14
+[21:40:04.868] LOG   [Draft Bank Stats] Counts from draft_image_bank table: {
+  "total": "55",
+  "draft": "55",
+  "sent": "0",
+  "replaced": "0"
+}
+[21:40:04.870] LOG   [Draft Bank Stats] Lifetime stats from draft_image_bank_stats: {
+  "total_made": 55,
+  "total_replaced": 0,
+  "total_sent": 0
+}
+[21:40:05.069] LOG   [Image Creation API] Found records: 1
+[21:40:05.280] LOG   [Image Creation API] GET settings for workflow: 14
+[21:40:05.548] LOG   [Image Creation API] Found records: 1
+[21:49:17.586] LOG   [Image Creation API] GET settings for workflow: 14
+[21:49:17.600] LOG   [Draft Bank Stats] Getting stats for workflow: 14
+[21:49:17.650] LOG   [Draft Bank Stats] Counts from draft_image_bank table: {
+  "total": "55",
+  "draft": "55",
+  "sent": "0",
+  "replaced": "0"
+}
+[21:49:17.650] LOG   [Draft Bank Stats] Lifetime stats from draft_image_bank_stats: {
+  "total_made": 55,
+  "total_replaced": 0,
+  "total_sent": 0
+}
+[21:49:17.916] LOG   [Image Creation API] Found records: 1
+[21:49:18.194] LOG   [Image Creation API] GET settings for workflow: 14
+[21:49:18.423] LOG   [Image Creation API] Found records: 1
+[21:50:32.232] LOG   [anthropic] Model: claude-sonnet-4-5-20250929, Key source: request, Key preview: sk-ant-a...
+[21:50:50.533] LOG   [anthropic] Model: claude-sonnet-4-5-20250929, Key source: request, Key preview: sk-ant-a...
+[21:50:55.019] LOG   [anthropic] Model: claude-sonnet-4-5-20250929, Key source: request, Key preview: sk-ant-a...
+[21:51:01.523] LOG   ZeroGPT raw response: {"success":true,"code":200,"message":"Detection complete","data":{"sentences":[],"isHuman":62.5,"additional_feedback":"","h":["It focuses on visible surfaces, floors, kitchens, and bathrooms without intensive scrubbing or hidden areas..","Sweep, vacuum, and mop all floors.","Dust and wipe reachable surfaces, counters, tables, and sills.","Deep clean bathrooms (toilets, sinks, mirrors, tubs, showers).","Wipe kitchen counters, backsplash, sink, fixtures; clean microwave interior.","## What's Inclu
+[21:51:01.523] LOG   ZeroGPT parsed data: {
   "success": true,
   "code": 200,
   "message": "Detection complete",
@@ -34,454 +60,455 @@
       "Dust and wipe reachable surfaces, counters, tables, and sills.",
       "Deep clean bathrooms (toilets, sinks, mirrors, tubs, showers).",
       "Wipe kitchen counte
-[20:28:40.050] LOG   ZeroGPT extracted score: 33.59
-[20:28:40.408] LOG   [SESSION] Started new session: session-1767904120408 {
-  "keyword": "i(H)"
+[21:51:01.523] LOG   ZeroGPT extracted score: 33.99
+[21:51:01.880] LOG   [SESSION] Started new session: session-1767909061880 {
+  "keyword": "2(H)"
 }
-[20:28:40.409] LOG   [PUBLISH] Starting publish for: i(H) {
-  "articleId": 161,
+[21:51:01.882] LOG   [PUBLISH] Starting publish for: 2(H) {
+  "articleId": 163,
   "workflowId": 14,
   "imageDraftMode": true,
   "useImageBank": true,
   "generateImages": true,
   "maxImages": 4
 }
-[20:28:40.660] LOG   [Elementor Publish] Settings found: true
-[20:28:40.660] LOG   [Elementor Publish] integration_mode: live
-[20:28:40.661] LOG   [Elementor Publish] Integration mode: live
-[20:28:40.661] LOG   [Elementor Publish] Image generation model: gpt-image-1.5
-[20:28:40.661] LOG   [Elementor Publish] Image quality: low
-[20:28:40.661] LOG   [Elementor Publish] Live prompt mode: main_prompt
-[20:28:40.661] LOG   [Elementor Publish] Target avatar: House Cleaning
-[20:28:40.661] LOG   [Elementor Publish] Mode: Generate Live - will create new images
-[20:28:40.661] LOG   [IMAGE] Mode: Generate Live - will create new images {
+[21:51:02.200] LOG   [Elementor Publish] Settings found: true
+[21:51:02.200] LOG   [Elementor Publish] integration_mode: live
+[21:51:02.200] LOG   [Elementor Publish] Integration mode: live
+[21:51:02.201] LOG   [Elementor Publish] Image generation model: gpt-image-1.5
+[21:51:02.201] LOG   [Elementor Publish] Image quality: low
+[21:51:02.201] LOG   [Elementor Publish] Live prompt mode: main_prompt
+[21:51:02.201] LOG   [Elementor Publish] Target avatar: House Cleaning
+[21:51:02.201] LOG   [Elementor Publish] Mode: Generate Live - will create new images
+[21:51:02.201] LOG   [IMAGE] Mode: Generate Live - will create new images {
   "model": "gpt-image-1.5",
   "quality": "low"
 }
-[20:28:40.661] LOG   [Image Bank] Checking conditions: effectiveUseBank= false workflowId= 14 dbEnabled= true
-[20:28:40.919] LOG   [Elementor Publish] Generate Live settings:
-[20:28:40.919] LOG     - Prompt mode: main_prompt
-[20:28:40.919] LOG     - Target avatar: House Cleaning
-[20:28:40.919] LOG     - Main prompt: Photorealistic professional cleaning service scene...
-[20:28:40.919] LOG   [Elementor Publish] Generating 5 live images with model: gpt-image-1.5
-[20:28:40.919] LOG   [Elementor Publish] Prompt mode: main_prompt
-[20:28:40.922] LOG   [Main Prompt Mode] Avatar: House Cleaning | Hero side: right
-[20:28:40.923] LOG   
+[21:51:02.201] LOG   [Image Bank] Checking conditions: effectiveUseBank= false workflowId= 14 dbEnabled= true
+[21:51:02.521] LOG   [Elementor Publish] Generate Live settings:
+[21:51:02.521] LOG     - Prompt mode: main_prompt
+[21:51:02.521] LOG     - Target avatar: House Cleaning
+[21:51:02.521] LOG     - Main prompt: Photorealistic professional cleaning service scene...
+[21:51:02.522] LOG   [Elementor Publish] Generating 5 live images with model: gpt-image-1.5
+[21:51:02.522] LOG   [Elementor Publish] Prompt mode: main_prompt
+[21:51:02.525] LOG   [Main Prompt Mode] Avatar: House Cleaning | Hero side: left
+[21:51:02.526] LOG   
 [Hero Image] Position 38 words, local content: Standard Cleaning(H) Standard Cleaning in Hendersonville, TN. Professional Home ...
-[20:28:40.925] LOG   [Smart Match #0] Cleaning Item: Fallback → "cleaning the stove burners                                                                         "
-[20:28:40.925] LOG   [Smart Match #0] Worker Persona: Random → "A female professional cleaner in her late‑30s to mid‑40s with a fuller, realistic body type. She has a mature, confident presence and looks like an experienced cleaner who has worked in homes and businesses for years."
-[20:28:40.925] LOG   [Smart Match #0] Camera Distance: Random → "Camera distance 3–4 feet, 85mm lens look, tight action detail (hands/arms + tool), waist-up crop."
-[20:28:40.925] LOG   [Smart Match #0] Hero Composition: Random → "Balanced editorial composition, subject near center with natural room context; no intentional text space."
-[20:28:40.926] LOG   [Hero] Prompt: Photorealistic professional cleaning service scene.
+[21:51:02.528] LOG   [Smart Match #0] Cleaning Item: Fallback → "cleaning the stove burners                                                                         "
+[21:51:02.528] LOG   [Smart Match #0] Worker Persona: Random → " Late 20s / early 30s, sturdy build"
+[21:51:02.528] LOG   [Smart Match #0] Camera Distance: Random → "Camera distance 8–12 feet, 35mm lens look, wide environmental shot showing most of the room, worker is smaller in frame."
+[21:51:02.528] LOG   [Smart Match #0] Hero Composition: Random → "Balanced editorial composition, subject near center with natural room context; no intentional text space."
+[21:51:02.528] LOG   [Hero] Prompt: Photorealistic professional cleaning service scene.
 
-A female professional cleaner in her late‑30s t...
-[20:28:40.926] LOG   
+ Late 20s / early 30s, sturdy build is actively...
+[21:51:02.529] LOG   
 [Image #1] Section "What does standard cleaning include in Hendersonville, TN?" at word 111
-[20:28:40.926] LOG   [Image #1] Local: what standard cleaning covers, how it differs from deep cleans, and how to book ...
-[20:28:40.927] LOG   [Smart Match #1] Cleaning Item: "cleaning the kitchen countertop" (score: 10, primary: kitchen counter, secondary: )
-[20:28:40.927] LOG   [Smart Match #1] Worker Persona: Random → "A female professional cleaner in her late‑30s to mid‑40s with a fuller, realistic body type. She has a mature, confident presence and looks like an experienced cleaner who has worked in homes and businesses for years."
-[20:28:40.927] LOG   [Smart Match #1] Camera Distance: Random → "Camera distance 8–12 feet, 35mm lens look, wide environmental shot showing most of the room, worker is smaller in frame."
-[20:28:40.927] LOG   [Smart Match #1] Hero Composition: Random → "Leave clean negative space on the LEFT side for website headline text; subject on right third; uncluttered wall/background."
-[20:28:40.927] LOG   [Image #1] Side: left | Prompt: Photorealistic professional cleaning service scene.
+[21:51:02.529] LOG   [Image #1] Local: what standard cleaning covers, how it differs from deep cleans, and how to book ...
+[21:51:02.529] LOG   [Smart Match #1] Cleaning Item: "cleaning the kitchen countertop" (score: 10, primary: kitchen counter, secondary: )
+[21:51:02.529] LOG   [Smart Match #1] Worker Persona: Random → "A female professional cleaner in her late‑30s to mid‑40s with a fuller, realistic body type. She has a mature, confident presence and looks like an experienced cleaner who has worked in homes and businesses for years."
+[21:51:02.529] LOG   [Smart Match #1] Camera Distance: Random → "Camera distance 8–12 feet, 35mm lens look, wide environmental shot showing most of the room, worker is smaller in frame."
+[21:51:02.529] LOG   [Smart Match #1] Hero Composition: Random → "Balanced editorial composition, subject near center with natural room context; no intentional text space."
+[21:51:02.529] LOG   [Image #1] Side: right | Prompt: Photorealistic professional cleaning service scene.
 
 A female professional clean...
-[20:28:40.927] LOG   
+[21:51:02.531] LOG   
 [Image #2] Section "How Standard Cleaning Differs from Deep Cleaning" at word 415
-[20:28:40.927] LOG   [Image #2] Local: in bathrooms. Standard cleaning keeps fixtures and grout lines fresh between dee...
-[20:28:40.928] LOG   [Smart Match #2] Cleaning Item: "cleaning the outside of the Refrigerator" (score: 10, primary: fridge, secondary: )
-[20:28:40.928] LOG   [Smart Match #2] Worker Persona: Random → "A female professional cleaner in her early‑to‑mid 20s with a slim but natural build. She has a casual, work‑focused appearance and looks like a real employee doing her job, not posing or modeling."
-[20:28:40.928] LOG   [Smart Match #2] Camera Distance: Random → "Camera distance 8–12 feet, 35mm lens look, wide environmental shot showing most of the room, worker is smaller in frame."
-[20:28:40.928] LOG   [Smart Match #2] Hero Composition: Random → "Leave clean negative space on the RIGHT side for website headline text; subject on left third; uncluttered wall/background."
-[20:28:40.928] LOG   [Image #2] Side: right | Prompt: Photorealistic professional cleaning service scene.
+[21:51:02.531] LOG   [Image #2] Local: in bathrooms. Standard cleaning keeps fixtures and grout lines fresh between dee...
+[21:51:02.531] LOG   [Smart Match #2] Cleaning Item: "cleaning the outside of the Refrigerator" (score: 10, primary: fridge, secondary: )
+[21:51:02.531] LOG   [Smart Match #2] Worker Persona: Random → "A female professional cleaner in her late‑30s to mid‑40s with a fuller, realistic body type. She has a mature, confident presence and looks like an experienced cleaner who has worked in homes and businesses for years."
+[21:51:02.531] LOG   [Smart Match #2] Camera Distance: Random → "Camera distance 3–4 feet, 85mm lens look, tight action detail (hands/arms + tool), waist-up crop."
+[21:51:02.531] LOG   [Smart Match #2] Hero Composition: Random → "Leave clean negative space on the LEFT side for website headline text; subject on right third; uncluttered wall/background."
+[21:51:02.532] LOG   [Image #2] Side: left | Prompt: Photorealistic professional cleaning service scene.
 
 A female professional clean...
-[20:28:40.928] LOG   
+[21:51:02.532] LOG   
 [Image #3] Section "What Homeowners Should Do Before a Standard Cleaning Visit" at word 761
-[20:28:40.928] LOG   [Image #3] Local: and floors. Bi-weekly standard cleaning during April and May keeps allergens dow...
-[20:28:40.929] LOG   [Smart Match #3] Cleaning Item: Fallback → "cleaning the stove burners                                                                         "
-[20:28:40.929] LOG   [Smart Match #3] Worker Persona: Random → "A female professional cleaner in her late‑30s to mid‑40s with a fuller, realistic body type. She has a mature, confident presence and looks like an experienced cleaner who has worked in homes and businesses for years."
-[20:28:40.929] LOG   [Smart Match #3] Camera Distance: Random → "Camera distance 5–7 feet, 50mm lens look, knees-up, worker and surrounding workspace clearly visible."
-[20:28:40.929] LOG   [Smart Match #3] Hero Composition: Random → "Leave clean negative space on the LEFT side for website headline text; subject on right third; uncluttered wall/background."
-[20:28:40.929] LOG   [Image #3] Side: left | Prompt: Photorealistic professional cleaning service scene.
+[21:51:02.532] LOG   [Image #3] Local: and floors. Bi-weekly standard cleaning during April and May keeps allergens dow...
+[21:51:02.533] LOG   [Smart Match #3] Cleaning Item: Fallback → "cleaning the stove burners                                                                         "
+[21:51:02.533] LOG   [Smart Match #3] Worker Persona: Random → "A female professional cleaner in her mid‑20s to early‑30s with an athletic but natural build. She has a practical hairstyle pulled back for work and a focused, no‑nonsense appearance. She looks like someone who does physical work daily, not a model."
+[21:51:02.533] LOG   [Smart Match #3] Camera Distance: Random → "Camera distance 5–7 feet, 50mm lens look, knees-up, worker and surrounding workspace clearly visible."
+[21:51:02.533] LOG   [Smart Match #3] Hero Composition: Random → "Leave clean negative space on the LEFT side for website headline text; subject on right third; uncluttered wall/background."
+[21:51:02.533] LOG   [Image #3] Side: right | Prompt: Photorealistic professional cleaning service scene.
 
 A female professional clean...
-[20:28:40.929] LOG   
+[21:51:02.533] LOG   
 [Image #4] Section "Why Bed-Making and Light Tidying Are Part of Standard Service" at word 1108
-[20:28:40.929] LOG   [Image #4] Local: and closet interiors. Both services give you the fresh start standard cleaning c...
-[20:28:40.929] LOG   [Smart Match #4] Cleaning Item: Fallback → "cleaning the stove burners                                                                         "
-[20:28:40.929] LOG   [Smart Match #4] Worker Persona: Random → "A female professional cleaner in her late‑30s to mid‑40s with a fuller, realistic body type. She has a mature, confident presence and looks like an experienced cleaner who has worked in homes and businesses for years."
-[20:28:40.929] LOG   [Smart Match #4] Camera Distance: Random → "Camera distance 5–7 feet, 50mm lens look, knees-up, worker and surrounding workspace clearly visible."
-[20:28:40.929] LOG   [Smart Match #4] Hero Composition: Random → "Balanced editorial composition, subject near center with natural room context; no intentional text space."
-[20:28:40.930] LOG   [Image #4] Side: right | Prompt: Photorealistic professional cleaning service scene.
+[21:51:02.533] LOG   [Image #4] Local: and closet interiors. Both services give you the fresh start standard cleaning c...
+[21:51:02.534] LOG   [Smart Match #4] Cleaning Item: Fallback → "cleaning the stove burners                                                                         "
+[21:51:02.534] LOG   [Smart Match #4] Worker Persona: Random → "A female professional cleaner in her mid‑20s to early‑30s with an athletic but natural build. She has a practical hairstyle pulled back for work and a focused, no‑nonsense appearance. She looks like someone who does physical work daily, not a model."
+[21:51:02.534] LOG   [Smart Match #4] Camera Distance: Random → "Camera distance 3–4 feet, 85mm lens look, tight action detail (hands/arms + tool), waist-up crop."
+[21:51:02.534] LOG   [Smart Match #4] Hero Composition: Random → "Balanced editorial composition, subject near center with natural room context; no intentional text space."
+[21:51:02.534] LOG   [Image #4] Side: left | Prompt: Photorealistic professional cleaning service scene.
 
 A female professional clean...
-[20:28:40.930] LOG   [Smart Match] Total: 5 images | Primaries used: kitchen counter, fridge
-[20:28:40.930] LOG   [Image Generator] Starting article image generation
-[20:28:40.930] LOG   [generateArticleImages] Options: {
+[21:51:02.534] LOG   [Smart Match] Total: 5 images | Primaries used: kitchen counter, fridge
+[21:51:02.535] LOG   [Image Generator] Starting article image generation
+[21:51:02.535] LOG   [generateArticleImages] Options: {
   "heroImage": true,
   "maxImages": 5,
   "model": "gpt-image-1.5",
   "quality": "low"
 }
-[20:28:40.930] LOG   [generateArticleImages] Chunks received: {
+[21:51:02.535] LOG   [generateArticleImages] Chunks received: {
   "hasIntro": true,
   "introHasPrompt": true,
   "bodyChunksCount": 8,
   "bodyChunksWithPrompts": 4
 }
-[20:28:40.931] LOG   [Hero Auto-Size] 76 words ≈ 8 lines → SLIGHT LANDSCAPE (1024x1024, 4:3)
-[20:28:40.931] LOG   [Image Generator] Generating 5 images with gpt-image-1.5
-[20:28:40.931] LOG   [36m[GENERATING IMAGE with gpt-image-1.5][0m
-[20:28:40.931] LOG   [Image Generator] 🎨 Prompt: Photorealistic professional cleaning service scene.
+[21:51:02.535] LOG   [Hero Auto-Size] 76 words ≈ 8 lines → SLIGHT LANDSCAPE (1024x1024, 4:3)
+[21:51:02.536] LOG   [Image Generator] Generating 5 images with gpt-image-1.5
+[21:51:02.536] LOG   [36m[GENERATING IMAGE with gpt-image-1.5][0m
+[21:51:02.536] LOG   [Image Generator] 🎨 Prompt: Photorealistic professional cleaning service scene.
+
+ Late 20s / early 30s, sturdy build is actively...
+[21:51:02.536] LOG   [Image Generator] 📐 Size: 1024x1024
+[21:51:02.536] LOG   [Image Generator] 📊 Quality: low
+[21:51:02.539] LOG   [Image Generator] OpenAI gpt-image-1.5, quality: low, size: 1024x1024
+[21:51:16.288] LOG   [Image Generator] Got base64 image, converted to data URL
+[21:51:16.288] LOG   [32m[IMAGE GENERATED [generateImage()]][0m
+[21:51:16.288] LOG   [32m--- Generation Details ---[0m
+[21:51:16.288] LOG   [37m  Source: generateImage()[0m
+[21:51:16.289] LOG   [37m  Timestamp: 2026-01-08T21:51:16.288Z[0m
+[21:51:16.289] LOG   [37m  Prompt: Photorealistic professional cleaning service scene.
+
+ Late 20s / early 30s, stur...[0m
+[21:51:16.289] LOG   [37m  Model: gpt-image-1.5[0m
+[21:51:16.289] LOG   [32m--- Image Data ---[0m
+[21:51:16.291] LOG   [35m│ [Image #0][0m
+[21:51:16.291] LOG   │   ID: NO ID
+[21:51:16.291] LOG   │   Placement: NO PLACEMENT
+[21:51:16.291] LOG   │   URL Type: BASE64
+[21:51:16.291] LOG   │   Has URL: [32m✓ YES[0m
+[21:51:16.291] LOG   │   Has WP URL: [31m✗ NO[0m
+[21:51:16.291] LOG   │   WP Media ID: NONE
+[21:51:16.291] LOG   │   Pushed to WP: [31m✗ NO[0m
+[21:51:16.291] LOG   │   URL Preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAA...
+[21:51:16.291] LOG   [32m[OK] Image generated! URL type: BASE64[0m
+[21:51:16.291] LOG   [Image Generator] ✅ URL preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAE6eGNhQlgAAT...
+[21:51:16.291] LOG   [36m[GENERATING IMAGE with gpt-image-1.5][0m
+[21:51:16.291] LOG   [Image Generator] 🎨 Prompt: Photorealistic professional cleaning service scene.
 
 A female professional cleaner in her late‑30s t...
-[20:28:40.931] LOG   [Image Generator] 📐 Size: 1024x1024
-[20:28:40.931] LOG   [Image Generator] 📊 Quality: low
-[20:28:40.933] LOG   [Image Generator] OpenAI gpt-image-1.5, quality: low, size: 1024x1024
-[20:28:51.153] LOG   [Image Generator] Got base64 image, converted to data URL
-[20:28:51.154] LOG   [32m[IMAGE GENERATED [generateImage()]][0m
-[20:28:51.154] LOG   [32m--- Generation Details ---[0m
-[20:28:51.154] LOG   [37m  Source: generateImage()[0m
-[20:28:51.154] LOG   [37m  Timestamp: 2026-01-08T20:28:51.154Z[0m
-[20:28:51.154] LOG   [37m  Prompt: Photorealistic professional cleaning service scene.
+[21:51:16.291] LOG   [Image Generator] 📐 Size: 1024x1024
+[21:51:16.291] LOG   [Image Generator] 📊 Quality: low
+[21:51:16.291] LOG   [Image Generator] OpenAI gpt-image-1.5, quality: low, size: 1024x1024
+[21:51:29.454] LOG   [Image Generator] Got base64 image, converted to data URL
+[21:51:29.454] LOG   [32m[IMAGE GENERATED [generateImage()]][0m
+[21:51:29.454] LOG   [32m--- Generation Details ---[0m
+[21:51:29.454] LOG   [37m  Source: generateImage()[0m
+[21:51:29.454] LOG   [37m  Timestamp: 2026-01-08T21:51:29.454Z[0m
+[21:51:29.454] LOG   [37m  Prompt: Photorealistic professional cleaning service scene.
 
 A female professional clean...[0m
-[20:28:51.154] LOG   [37m  Model: gpt-image-1.5[0m
-[20:28:51.154] LOG   [32m--- Image Data ---[0m
-[20:28:51.156] LOG   [35m│ [Image #0][0m
-[20:28:51.157] LOG   │   ID: NO ID
-[20:28:51.157] LOG   │   Placement: NO PLACEMENT
-[20:28:51.157] LOG   │   URL Type: BASE64
-[20:28:51.157] LOG   │   Has URL: [32m✓ YES[0m
-[20:28:51.157] LOG   │   Has WP URL: [31m✗ NO[0m
-[20:28:51.157] LOG   │   WP Media ID: NONE
-[20:28:51.157] LOG   │   Pushed to WP: [31m✗ NO[0m
-[20:28:51.157] LOG   │   URL Preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAA...
-[20:28:51.157] LOG   [32m[OK] Image generated! URL type: BASE64[0m
-[20:28:51.157] LOG   [Image Generator] ✅ URL preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAEsMWNhQlgAAS...
-[20:28:51.157] LOG   [36m[GENERATING IMAGE with gpt-image-1.5][0m
-[20:28:51.157] LOG   [Image Generator] 🎨 Prompt: Photorealistic professional cleaning service scene.
+[21:51:29.454] LOG   [37m  Model: gpt-image-1.5[0m
+[21:51:29.454] LOG   [32m--- Image Data ---[0m
+[21:51:29.457] LOG   [35m│ [Image #0][0m
+[21:51:29.457] LOG   │   ID: NO ID
+[21:51:29.457] LOG   │   Placement: NO PLACEMENT
+[21:51:29.457] LOG   │   URL Type: BASE64
+[21:51:29.457] LOG   │   Has URL: [32m✓ YES[0m
+[21:51:29.457] LOG   │   Has WP URL: [31m✗ NO[0m
+[21:51:29.457] LOG   │   WP Media ID: NONE
+[21:51:29.457] LOG   │   Pushed to WP: [31m✗ NO[0m
+[21:51:29.457] LOG   │   URL Preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAA...
+[21:51:29.457] LOG   [32m[OK] Image generated! URL type: BASE64[0m
+[21:51:29.457] LOG   [Image Generator] ✅ URL preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAEcAGNhQlgAAR...
+[21:51:29.457] LOG   [36m[GENERATING IMAGE with gpt-image-1.5][0m
+[21:51:29.457] LOG   [Image Generator] 🎨 Prompt: Photorealistic professional cleaning service scene.
 
 A female professional cleaner in her late‑30s t...
-[20:28:51.157] LOG   [Image Generator] 📐 Size: 1024x1024
-[20:28:51.157] LOG   [Image Generator] 📊 Quality: low
-[20:28:51.157] LOG   [Image Generator] OpenAI gpt-image-1.5, quality: low, size: 1024x1024
-[20:29:04.164] LOG   [Image Generator] Got base64 image, converted to data URL
-[20:29:04.164] LOG   [32m[IMAGE GENERATED [generateImage()]][0m
-[20:29:04.164] LOG   [32m--- Generation Details ---[0m
-[20:29:04.164] LOG   [37m  Source: generateImage()[0m
-[20:29:04.164] LOG   [37m  Timestamp: 2026-01-08T20:29:04.164Z[0m
-[20:29:04.164] LOG   [37m  Prompt: Photorealistic professional cleaning service scene.
+[21:51:29.457] LOG   [Image Generator] 📐 Size: 1024x1024
+[21:51:29.457] LOG   [Image Generator] 📊 Quality: low
+[21:51:29.458] LOG   [Image Generator] OpenAI gpt-image-1.5, quality: low, size: 1024x1024
+[21:51:42.154] LOG   [Image Generator] Got base64 image, converted to data URL
+[21:51:42.155] LOG   [32m[IMAGE GENERATED [generateImage()]][0m
+[21:51:42.155] LOG   [32m--- Generation Details ---[0m
+[21:51:42.155] LOG   [37m  Source: generateImage()[0m
+[21:51:42.155] LOG   [37m  Timestamp: 2026-01-08T21:51:42.155Z[0m
+[21:51:42.155] LOG   [37m  Prompt: Photorealistic professional cleaning service scene.
 
 A female professional clean...[0m
-[20:29:04.164] LOG   [37m  Model: gpt-image-1.5[0m
-[20:29:04.164] LOG   [32m--- Image Data ---[0m
-[20:29:04.167] LOG   [35m│ [Image #0][0m
-[20:29:04.167] LOG   │   ID: NO ID
-[20:29:04.167] LOG   │   Placement: NO PLACEMENT
-[20:29:04.167] LOG   │   URL Type: BASE64
-[20:29:04.167] LOG   │   Has URL: [32m✓ YES[0m
-[20:29:04.167] LOG   │   Has WP URL: [31m✗ NO[0m
-[20:29:04.167] LOG   │   WP Media ID: NONE
-[20:29:04.167] LOG   │   Pushed to WP: [31m✗ NO[0m
-[20:29:04.167] LOG   │   URL Preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAA...
-[20:29:04.167] LOG   [32m[OK] Image generated! URL type: BASE64[0m
-[20:29:04.167] LOG   [Image Generator] ✅ URL preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAEXuGNhQlgAAR...
-[20:29:04.167] LOG   [36m[GENERATING IMAGE with gpt-image-1.5][0m
-[20:29:04.168] LOG   [Image Generator] 🎨 Prompt: Photorealistic professional cleaning service scene.
+[21:51:42.155] LOG   [37m  Model: gpt-image-1.5[0m
+[21:51:42.155] LOG   [32m--- Image Data ---[0m
+[21:51:42.158] LOG   [35m│ [Image #0][0m
+[21:51:42.158] LOG   │   ID: NO ID
+[21:51:42.158] LOG   │   Placement: NO PLACEMENT
+[21:51:42.158] LOG   │   URL Type: BASE64
+[21:51:42.158] LOG   │   Has URL: [32m✓ YES[0m
+[21:51:42.158] LOG   │   Has WP URL: [31m✗ NO[0m
+[21:51:42.158] LOG   │   WP Media ID: NONE
+[21:51:42.158] LOG   │   Pushed to WP: [31m✗ NO[0m
+[21:51:42.158] LOG   │   URL Preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAA...
+[21:51:42.158] LOG   [32m[OK] Image generated! URL type: BASE64[0m
+[21:51:42.158] LOG   [Image Generator] ✅ URL preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAEpn2NhQlgAAS...
+[21:51:42.158] LOG   [36m[GENERATING IMAGE with gpt-image-1.5][0m
+[21:51:42.158] LOG   [Image Generator] 🎨 Prompt: Photorealistic professional cleaning service scene.
 
-A female professional cleaner in her early‑to‑m...
-[20:29:04.168] LOG   [Image Generator] 📐 Size: 1024x1024
-[20:29:04.168] LOG   [Image Generator] 📊 Quality: low
-[20:29:04.168] LOG   [Image Generator] OpenAI gpt-image-1.5, quality: low, size: 1024x1024
-[20:29:17.804] LOG   [Image Generator] Got base64 image, converted to data URL
-[20:29:17.804] LOG   [32m[IMAGE GENERATED [generateImage()]][0m
-[20:29:17.804] LOG   [32m--- Generation Details ---[0m
-[20:29:17.805] LOG   [37m  Source: generateImage()[0m
-[20:29:17.805] LOG   [37m  Timestamp: 2026-01-08T20:29:17.805Z[0m
-[20:29:17.805] LOG   [37m  Prompt: Photorealistic professional cleaning service scene.
-
-A female professional clean...[0m
-[20:29:17.805] LOG   [37m  Model: gpt-image-1.5[0m
-[20:29:17.805] LOG   [32m--- Image Data ---[0m
-[20:29:17.807] LOG   [35m│ [Image #0][0m
-[20:29:17.807] LOG   │   ID: NO ID
-[20:29:17.807] LOG   │   Placement: NO PLACEMENT
-[20:29:17.807] LOG   │   URL Type: BASE64
-[20:29:17.807] LOG   │   Has URL: [32m✓ YES[0m
-[20:29:17.807] LOG   │   Has WP URL: [31m✗ NO[0m
-[20:29:17.808] LOG   │   WP Media ID: NONE
-[20:29:17.808] LOG   │   Pushed to WP: [31m✗ NO[0m
-[20:29:17.808] LOG   │   URL Preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAA...
-[20:29:17.808] LOG   [32m[OK] Image generated! URL type: BASE64[0m
-[20:29:17.808] LOG   [Image Generator] ✅ URL preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAE972NhQlgAAT...
-[20:29:17.808] LOG   [36m[GENERATING IMAGE with gpt-image-1.5][0m
-[20:29:17.808] LOG   [Image Generator] 🎨 Prompt: Photorealistic professional cleaning service scene.
-
-A female professional cleaner in her late‑30s t...
-[20:29:17.808] LOG   [Image Generator] 📐 Size: 1024x1024
-[20:29:17.808] LOG   [Image Generator] 📊 Quality: low
-[20:29:17.808] LOG   [Image Generator] OpenAI gpt-image-1.5, quality: low, size: 1024x1024
-[20:29:31.870] LOG   [Image Generator] Got base64 image, converted to data URL
-[20:29:31.870] LOG   [32m[IMAGE GENERATED [generateImage()]][0m
-[20:29:31.870] LOG   [32m--- Generation Details ---[0m
-[20:29:31.870] LOG   [37m  Source: generateImage()[0m
-[20:29:31.870] LOG   [37m  Timestamp: 2026-01-08T20:29:31.870Z[0m
-[20:29:31.870] LOG   [37m  Prompt: Photorealistic professional cleaning service scene.
+A female professional cleaner in her mid‑20s to...
+[21:51:42.158] LOG   [Image Generator] 📐 Size: 1024x1024
+[21:51:42.158] LOG   [Image Generator] 📊 Quality: low
+[21:51:42.159] LOG   [Image Generator] OpenAI gpt-image-1.5, quality: low, size: 1024x1024
+[21:51:56.853] LOG   [Image Generator] Got base64 image, converted to data URL
+[21:51:56.853] LOG   [32m[IMAGE GENERATED [generateImage()]][0m
+[21:51:56.853] LOG   [32m--- Generation Details ---[0m
+[21:51:56.853] LOG   [37m  Source: generateImage()[0m
+[21:51:56.853] LOG   [37m  Timestamp: 2026-01-08T21:51:56.853Z[0m
+[21:51:56.853] LOG   [37m  Prompt: Photorealistic professional cleaning service scene.
 
 A female professional clean...[0m
-[20:29:31.870] LOG   [37m  Model: gpt-image-1.5[0m
-[20:29:31.870] LOG   [32m--- Image Data ---[0m
-[20:29:31.874] LOG   [35m│ [Image #0][0m
-[20:29:31.874] LOG   │   ID: NO ID
-[20:29:31.874] LOG   │   Placement: NO PLACEMENT
-[20:29:31.874] LOG   │   URL Type: BASE64
-[20:29:31.874] LOG   │   Has URL: [32m✓ YES[0m
-[20:29:31.874] LOG   │   Has WP URL: [31m✗ NO[0m
-[20:29:31.874] LOG   │   WP Media ID: NONE
-[20:29:31.874] LOG   │   Pushed to WP: [31m✗ NO[0m
-[20:29:31.874] LOG   │   URL Preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAA...
-[20:29:31.874] LOG   [32m[OK] Image generated! URL type: BASE64[0m
-[20:29:31.874] LOG   [Image Generator] ✅ URL preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAEkCmNhQlgAAS...
-[20:29:31.874] LOG   [36m[GENERATING IMAGE with gpt-image-1.5][0m
-[20:29:31.874] LOG   [Image Generator] 🎨 Prompt: Photorealistic professional cleaning service scene.
+[21:51:56.853] LOG   [37m  Model: gpt-image-1.5[0m
+[21:51:56.853] LOG   [32m--- Image Data ---[0m
+[21:51:56.857] LOG   [35m│ [Image #0][0m
+[21:51:56.857] LOG   │   ID: NO ID
+[21:51:56.857] LOG   │   Placement: NO PLACEMENT
+[21:51:56.857] LOG   │   URL Type: BASE64
+[21:51:56.857] LOG   │   Has URL: [32m✓ YES[0m
+[21:51:56.857] LOG   │   Has WP URL: [31m✗ NO[0m
+[21:51:56.857] LOG   │   WP Media ID: NONE
+[21:51:56.857] LOG   │   Pushed to WP: [31m✗ NO[0m
+[21:51:56.857] LOG   │   URL Preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAA...
+[21:51:56.857] LOG   [32m[OK] Image generated! URL type: BASE64[0m
+[21:51:56.858] LOG   [Image Generator] ✅ URL preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAErY2NhQlgAAS...
+[21:51:56.858] LOG   [36m[GENERATING IMAGE with gpt-image-1.5][0m
+[21:51:56.858] LOG   [Image Generator] 🎨 Prompt: Photorealistic professional cleaning service scene.
 
-A female professional cleaner in her late‑30s t...
-[20:29:31.874] LOG   [Image Generator] 📐 Size: 1024x1024
-[20:29:31.874] LOG   [Image Generator] 📊 Quality: low
-[20:29:31.874] LOG   [Image Generator] OpenAI gpt-image-1.5, quality: low, size: 1024x1024
-[20:29:45.875] LOG   [Image Generator] Got base64 image, converted to data URL
-[20:29:45.876] LOG   [32m[IMAGE GENERATED [generateImage()]][0m
-[20:29:45.876] LOG   [32m--- Generation Details ---[0m
-[20:29:45.876] LOG   [37m  Source: generateImage()[0m
-[20:29:45.876] LOG   [37m  Timestamp: 2026-01-08T20:29:45.876Z[0m
-[20:29:45.876] LOG   [37m  Prompt: Photorealistic professional cleaning service scene.
+A female professional cleaner in her mid‑20s to...
+[21:51:56.858] LOG   [Image Generator] 📐 Size: 1024x1024
+[21:51:56.858] LOG   [Image Generator] 📊 Quality: low
+[21:51:56.858] LOG   [Image Generator] OpenAI gpt-image-1.5, quality: low, size: 1024x1024
+[21:52:09.834] LOG   [Image Generator] Got base64 image, converted to data URL
+[21:52:09.834] LOG   [32m[IMAGE GENERATED [generateImage()]][0m
+[21:52:09.834] LOG   [32m--- Generation Details ---[0m
+[21:52:09.834] LOG   [37m  Source: generateImage()[0m
+[21:52:09.834] LOG   [37m  Timestamp: 2026-01-08T21:52:09.834Z[0m
+[21:52:09.834] LOG   [37m  Prompt: Photorealistic professional cleaning service scene.
 
 A female professional clean...[0m
-[20:29:45.876] LOG   [37m  Model: gpt-image-1.5[0m
-[20:29:45.876] LOG   [32m--- Image Data ---[0m
-[20:29:45.880] LOG   [35m│ [Image #0][0m
-[20:29:45.880] LOG   │   ID: NO ID
-[20:29:45.880] LOG   │   Placement: NO PLACEMENT
-[20:29:45.880] LOG   │   URL Type: BASE64
-[20:29:45.880] LOG   │   Has URL: [32m✓ YES[0m
-[20:29:45.880] LOG   │   Has WP URL: [31m✗ NO[0m
-[20:29:45.880] LOG   │   WP Media ID: NONE
-[20:29:45.880] LOG   │   Pushed to WP: [31m✗ NO[0m
-[20:29:45.880] LOG   │   URL Preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAA...
-[20:29:45.880] LOG   [32m[OK] Image generated! URL type: BASE64[0m
-[20:29:45.880] LOG   [Image Generator] ✅ URL preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAEZ8mNhQlgAAR...
-[20:29:45.880] LOG   [Image Generator] Complete: 5 images (Hero: YES, Body: 4)
-[20:29:45.881] LOG   [WP Upload] Processing base64 data URL for hero
-[20:29:45.884] LOG   [WP Upload] Uploading hero to WordPress Media Library...
-[20:29:48.907] LOG   [WP Upload] ✓ hero uploaded: https://aichatautomations.com/wp-content/uploads/2026/01/hero-1767904185884.png
-[20:29:48.908] LOG   [WP Upload] Processing base64 data URL for section-1
-[20:29:48.910] LOG   [WP Upload] Uploading section-1 to WordPress Media Library...
-[20:29:52.885] LOG   [WP Upload] ✓ section-1 uploaded: https://aichatautomations.com/wp-content/uploads/2026/01/section-1-1767904188910.png
-[20:29:52.885] LOG   [WP Upload] Processing base64 data URL for section-3
-[20:29:52.888] LOG   [WP Upload] Uploading section-3 to WordPress Media Library...
-[20:29:56.180] LOG   [WP Upload] ✓ section-3 uploaded: https://aichatautomations.com/wp-content/uploads/2026/01/section-3-1767904192888.png
-[20:29:56.180] LOG   [WP Upload] Processing base64 data URL for section-5
-[20:29:56.182] LOG   [WP Upload] Uploading section-5 to WordPress Media Library...
-[20:29:58.918] LOG   [WP Upload] ✓ section-5 uploaded: https://aichatautomations.com/wp-content/uploads/2026/01/section-5-1767904196182.png
-[20:29:58.918] LOG   [WP Upload] Processing base64 data URL for section-7
-[20:29:58.920] LOG   [WP Upload] Uploading section-7 to WordPress Media Library...
-[20:30:02.167] LOG   [WP Upload] ✓ section-7 uploaded: https://aichatautomations.com/wp-content/uploads/2026/01/section-7-1767904198920.png
-[20:30:02.167] LOG   
+[21:52:09.834] LOG   [37m  Model: gpt-image-1.5[0m
+[21:52:09.834] LOG   [32m--- Image Data ---[0m
+[21:52:09.836] LOG   [35m│ [Image #0][0m
+[21:52:09.837] LOG   │   ID: NO ID
+[21:52:09.837] LOG   │   Placement: NO PLACEMENT
+[21:52:09.837] LOG   │   URL Type: BASE64
+[21:52:09.837] LOG   │   Has URL: [32m✓ YES[0m
+[21:52:09.837] LOG   │   Has WP URL: [31m✗ NO[0m
+[21:52:09.837] LOG   │   WP Media ID: NONE
+[21:52:09.837] LOG   │   Pushed to WP: [31m✗ NO[0m
+[21:52:09.837] LOG   │   URL Preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAA...
+[21:52:09.837] LOG   [32m[OK] Image generated! URL type: BASE64[0m
+[21:52:09.837] LOG   [Image Generator] ✅ URL preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAEaN2NhQlgAAR...
+[21:52:09.837] LOG   [Image Generator] Complete: 5 images (Hero: YES, Body: 4)
+[21:52:09.837] LOG   [WP Upload] Processing base64 data URL for hero
+[21:52:09.840] LOG   [WP Upload] Uploading hero to WordPress Media Library...
+[21:52:12.925] LOG   [WP Upload] ✓ hero uploaded: https://aichatautomations.com/wp-content/uploads/2026/01/hero-1767909129840.png
+[21:52:12.926] LOG   [WP Upload] Processing base64 data URL for section-1
+[21:52:12.928] LOG   [WP Upload] Uploading section-1 to WordPress Media Library...
+[21:52:15.973] LOG   [WP Upload] ✓ section-1 uploaded: https://aichatautomations.com/wp-content/uploads/2026/01/section-1-1767909132928.png
+[21:52:15.973] LOG   [WP Upload] Processing base64 data URL for section-3
+[21:52:15.975] LOG   [WP Upload] Uploading section-3 to WordPress Media Library...
+[21:52:18.706] LOG   [WP Upload] ✓ section-3 uploaded: https://aichatautomations.com/wp-content/uploads/2026/01/section-3-1767909135975.png
+[21:52:18.707] LOG   [WP Upload] Processing base64 data URL for section-5
+[21:52:18.709] LOG   [WP Upload] Uploading section-5 to WordPress Media Library...
+[21:52:21.753] LOG   [WP Upload] ✓ section-5 uploaded: https://aichatautomations.com/wp-content/uploads/2026/01/section-5-1767909138709.png
+[21:52:21.753] LOG   [WP Upload] Processing base64 data URL for section-7
+[21:52:21.756] LOG   [WP Upload] Uploading section-7 to WordPress Media Library...
+[21:52:24.569] LOG   [WP Upload] ✓ section-7 uploaded: https://aichatautomations.com/wp-content/uploads/2026/01/section-7-1767909141756.png
+[21:52:24.569] LOG   
 [PIPELINE] ========== RETURNING FROM PIPELINE ==========
-[20:30:02.167] LOG   [PIPELINE] imageCount: 5
-[20:30:02.168] LOG   [PIPELINE] intro.imageData exists: true
-[20:30:02.168] LOG   [PIPELINE] intro.imageData.url: YES
-[20:30:02.168] LOG   [PIPELINE] intro.imageData.wpUrl: YES
-[20:30:02.168] LOG   [PIPELINE] intro.imageData.wpMediaId: 522
-[20:30:02.168] LOG   [PIPELINE] chunk[0].imageData: url=YES, wpUrl=YES
-[20:30:02.168] LOG   [PIPELINE] chunk[2].imageData: url=YES, wpUrl=YES
-[20:30:02.168] LOG   [PIPELINE] chunk[4].imageData: url=YES, wpUrl=YES
-[20:30:02.168] LOG   [PIPELINE] chunk[6].imageData: url=YES, wpUrl=YES
-[20:30:02.168] LOG   [PIPELINE] ===================================================
+[21:52:24.569] LOG   [PIPELINE] imageCount: 5
+[21:52:24.570] LOG   [PIPELINE] intro.imageData exists: true
+[21:52:24.570] LOG   [PIPELINE] intro.imageData.url: YES
+[21:52:24.570] LOG   [PIPELINE] intro.imageData.wpUrl: YES
+[21:52:24.570] LOG   [PIPELINE] intro.imageData.wpMediaId: 538
+[21:52:24.570] LOG   [PIPELINE] chunk[0].imageData: url=YES, wpUrl=YES
+[21:52:24.570] LOG   [PIPELINE] chunk[2].imageData: url=YES, wpUrl=YES
+[21:52:24.570] LOG   [PIPELINE] chunk[4].imageData: url=YES, wpUrl=YES
+[21:52:24.570] LOG   [PIPELINE] chunk[6].imageData: url=YES, wpUrl=YES
+[21:52:24.570] LOG   [PIPELINE] ===================================================
 
-[20:30:02.168] LOG   [Pipeline] Generated: 5 | Hero: YES | Body: 4
-[20:30:02.168] LOG   [Image Draft Mode] NOT embedding live-generated images in page - saving for review
-[20:30:02.168] LOG   [Image Draft Mode] Saved 5 generated images for review
-[20:30:02.168] LOG   
+[21:52:24.570] LOG   [Pipeline] Generated: 5 | Hero: YES | Body: 4
+[21:52:24.570] LOG   [Image Draft Mode] NOT embedding live-generated images in page - saving for review
+[21:52:24.571] LOG   [Image Draft Mode] Saved 5 generated images for review
+[21:52:24.571] LOG   
 [AFTER MERGE] chunked.intro.imageData: false
-[20:30:02.168] LOG   [AFTER MERGE] chunked.chunks[0].imageData: false
-[20:30:02.168] LOG   [AFTER MERGE] chunked.chunks[1].imageData: false
-[20:30:02.168] LOG   [AFTER MERGE] chunked.chunks[2].imageData: false
-[20:30:02.168] LOG   [AFTER MERGE] chunked.chunks[3].imageData: false
-[20:30:02.168] LOG   [AFTER MERGE] chunked.chunks[4].imageData: false
-[20:30:02.168] LOG   [AFTER MERGE] chunked.chunks[5].imageData: false
-[20:30:02.168] LOG   [AFTER MERGE] chunked.chunks[6].imageData: false
-[20:30:02.168] LOG   [AFTER MERGE] chunked.chunks[7].imageData: false
-[20:30:02.168] LOG   [Elementor Publish] Generated 5 images
-[20:30:02.168] LOG   [Generate Live] Article: i | Model: gpt-image-1.5 | Quality: low | Total: 5
-[20:30:02.168] LOG     Hero: 1024x1024 | wpUrl: YES
-[20:30:02.168] LOG     Body images: 4
-[20:30:02.169] LOG   ✓ [PIPELINE] Generated 5 images live {
+[21:52:24.571] LOG   [AFTER MERGE] chunked.chunks[0].imageData: false
+[21:52:24.571] LOG   [AFTER MERGE] chunked.chunks[1].imageData: false
+[21:52:24.571] LOG   [AFTER MERGE] chunked.chunks[2].imageData: false
+[21:52:24.571] LOG   [AFTER MERGE] chunked.chunks[3].imageData: false
+[21:52:24.571] LOG   [AFTER MERGE] chunked.chunks[4].imageData: false
+[21:52:24.571] LOG   [AFTER MERGE] chunked.chunks[5].imageData: false
+[21:52:24.571] LOG   [AFTER MERGE] chunked.chunks[6].imageData: false
+[21:52:24.571] LOG   [AFTER MERGE] chunked.chunks[7].imageData: false
+[21:52:24.571] LOG   [Elementor Publish] Generated 5 images
+[21:52:24.572] LOG   [Generate Live] Article: 2 | Model: gpt-image-1.5 | Quality: low | Total: 5
+[21:52:24.572] LOG     Hero: 1024x1024 | wpUrl: YES
+[21:52:24.572] LOG     Body images: 4
+[21:52:24.572] LOG   ✓ [PIPELINE] Generated 5 images live {
   "model": "gpt-image-1.5",
   "quality": "low",
   "mode": "main_prompt",
   "heroHasWpUrl": true,
   "imagesWithWpUrl": 4
 }
-[20:30:02.873] LOG   
+[21:52:24.578] LOG   [Elementor Publish] Skipping WP page creation (image processing only mode)
+[21:52:24.578] LOG   [WP] Skipping WordPress page creation - image processing only 
+[21:52:24.578] LOG   
 ========== IMAGE SAVE DIAGNOSTIC ==========
-[20:30:02.873] LOG   [SAVE] articleId: 161
-[20:30:02.873] LOG   [SAVE] isDatabaseEnabled(): true
-[20:30:02.873] LOG   [SAVE] chunked.intro exists: true
-[20:30:02.873] LOG   [SAVE] chunked.intro.imageData: null
-[20:30:02.873] LOG   [SAVE] chunked.chunks count: 8
-[20:30:02.873] LOG   ============================================
+[21:52:24.578] LOG   [SAVE] articleId: 163
+[21:52:24.578] LOG   [SAVE] isDatabaseEnabled(): true
+[21:52:24.579] LOG   [SAVE] chunked.intro exists: true
+[21:52:24.579] LOG   [SAVE] chunked.intro.imageData: null
+[21:52:24.579] LOG   [SAVE] chunked.chunks count: 8
+[21:52:24.579] LOG   ============================================
 
-[20:30:02.873] LOG   [Elementor Publish] Using 5 draft mode images for article
-[20:30:02.873] LOG   [36m[SAVING IMAGES TO DATABASE - Article 161][0m
-[20:30:02.874] LOG   [33m[IMAGES ATTACHED TO CHUNKS [BEFORE saving to DB]][0m
-[20:30:02.874] LOG   [33m--- Chunk Analysis ---[0m
-[20:30:02.874] LOG   [37m  INTRO CHUNK:[0m
-[20:30:02.874] LOG   [37m    - Has imageData: [31m✗ NO[0m[0m
-[20:30:02.874] LOG   [37m    - Has imagePrompt: ✗ NO[0m
-[20:30:02.874] LOG   [37m  
+[21:52:24.579] LOG   [Elementor Publish] Using 5 draft mode images for article
+[21:52:24.579] LOG   [36m[SAVING IMAGES TO DATABASE - Article 163][0m
+[21:52:24.579] LOG   [33m[IMAGES ATTACHED TO CHUNKS [BEFORE saving to DB]][0m
+[21:52:24.579] LOG   [33m--- Chunk Analysis ---[0m
+[21:52:24.579] LOG   [37m  INTRO CHUNK:[0m
+[21:52:24.579] LOG   [37m    - Has imageData: [31m✗ NO[0m[0m
+[21:52:24.579] LOG   [37m    - Has imagePrompt: ✗ NO[0m
+[21:52:24.579] LOG   [37m  
 BODY CHUNKS (8 total):[0m
-[20:30:02.874] LOG   [37m    [0] "What does standard cleaning in" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
-[20:30:02.874] LOG   [37m    [1] "What's Included in a Standard " - Image:[31m✗[0m Prompt:[31m✗[0m[0m
-[20:30:02.874] LOG   [37m    [2] "How Standard Cleaning Differs " - Image:[31m✗[0m Prompt:[31m✗[0m[0m
-[20:30:02.874] LOG   [37m    [3] "How Often Hendersonville Homes" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
-[20:30:02.874] LOG   [37m    [4] "What Homeowners Should Do Befo" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
-[20:30:02.874] LOG   [37m    [5] "When Standard Cleaning Is Not " - Image:[31m✗[0m Prompt:[31m✗[0m[0m
-[20:30:02.874] LOG   [37m    [6] "Why Bed-Making and Light Tidyi" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
-[20:30:02.874] LOG   [37m    [7] "FAQ" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
-[20:30:02.874] LOG   [33m--- Summary ---[0m
-[20:30:02.874] LOG   [37m  Total chunks: 8[0m
-[20:30:02.874] LOG   [37m  Chunks with imageData: 0[0m
-[20:30:02.874] LOG   [37m  Chunks with imagePrompt: 0[0m
-[20:30:02.876] LOG   [31m[ERR] NO CHUNKS HAVE IMAGE DATA![0m
-[20:30:02.876] LOG   [31m[ERR] Images were never attached to chunks, or were lost somewhere[0m
-[20:30:02.876] LOG   [34m[IMAGES SAVED TO DB [elementor.js publish endpoint]][0m
-[20:30:02.876] LOG   [34m--- Save Operation ---[0m
-[20:30:02.876] LOG   [37m  Location: elementor.js publish endpoint[0m
-[20:30:02.876] LOG   [37m  Timestamp: 2026-01-08T20:30:02.876Z[0m
-[20:30:02.876] LOG   [37m  Article ID: 161[0m
-[20:30:02.877] LOG   [37m  Number of Images: 5[0m
-[20:30:02.877] LOG   [34m--- All 5 Images Being Saved ---[0m
-[20:30:02.877] LOG   [35m│ [Image #0][0m
-[20:30:02.878] LOG   │   ID: img-1767904202168-hero
-[20:30:02.878] LOG   │   Placement: hero
-[20:30:02.878] LOG   │   URL Type: HTTP
-[20:30:02.878] LOG   │   Has URL: [32m✓ YES[0m
-[20:30:02.878] LOG   │   Has WP URL: [31m✗ NO[0m
-[20:30:02.878] LOG   │   WP Media ID: 522
-[20:30:02.878] LOG   │   Pushed to WP: [31m✗ NO[0m
-[20:30:02.878] LOG   │   URL Preview: https://aichatautomations.com/wp-content/uploads/2...
-[20:30:02.878] LOG   │
-[20:30:02.878] LOG   [35m│ [Image #1][0m
-[20:30:02.878] LOG   │   ID: img-1767904202168-section-1
-[20:30:02.878] LOG   │   Placement: section-1
-[20:30:02.878] LOG   │   URL Type: HTTP
-[20:30:02.878] LOG   │   Has URL: [32m✓ YES[0m
-[20:30:02.878] LOG   │   Has WP URL: [31m✗ NO[0m
-[20:30:02.878] LOG   │   WP Media ID: 523
-[20:30:02.878] LOG   │   Pushed to WP: [31m✗ NO[0m
-[20:30:02.878] LOG   │   URL Preview: https://aichatautomations.com/wp-content/uploads/2...
-[20:30:02.878] LOG   │
-[20:30:02.878] LOG   [35m│ [Image #2][0m
-[20:30:02.878] LOG   │   ID: img-1767904202168-section-3
-[20:30:02.878] LOG   │   Placement: section-3
-[20:30:02.878] LOG   │   URL Type: HTTP
-[20:30:02.878] LOG   │   Has URL: [32m✓ YES[0m
-[20:30:02.878] LOG   │   Has WP URL: [31m✗ NO[0m
-[20:30:02.878] LOG   │   WP Media ID: 524
-[20:30:02.878] LOG   │   Pushed to WP: [31m✗ NO[0m
-[20:30:02.878] LOG   │   URL Preview: https://aichatautomations.com/wp-content/uploads/2...
-[20:30:02.878] LOG   │
-[20:30:02.878] LOG   [35m│ [Image #3][0m
-[20:30:02.878] LOG   │   ID: img-1767904202168-section-5
-[20:30:02.878] LOG   │   Placement: section-5
-[20:30:02.878] LOG   │   URL Type: HTTP
-[20:30:02.878] LOG   │   Has URL: [32m✓ YES[0m
-[20:30:02.878] LOG   │   Has WP URL: [31m✗ NO[0m
-[20:30:02.878] LOG   │   WP Media ID: 525
-[20:30:02.878] LOG   │   Pushed to WP: [31m✗ NO[0m
-[20:30:02.878] LOG   │   URL Preview: https://aichatautomations.com/wp-content/uploads/2...
-[20:30:02.878] LOG   │
-[20:30:02.878] LOG   [35m│ [Image #4][0m
-[20:30:02.878] LOG   │   ID: img-1767904202168-section-7
-[20:30:02.878] LOG   │   Placement: section-7
-[20:30:02.878] LOG   │   URL Type: HTTP
-[20:30:02.878] LOG   │   Has URL: [32m✓ YES[0m
-[20:30:02.878] LOG   │   Has WP URL: [31m✗ NO[0m
-[20:30:02.878] LOG   │   WP Media ID: 526
-[20:30:02.878] LOG   │   Pushed to WP: [31m✗ NO[0m
-[20:30:02.878] LOG   │   URL Preview: https://aichatautomations.com/wp-content/uploads/2...
-[20:30:02.878] LOG   │
-[20:30:02.878] LOG   [32m[OK] 5 images prepared for database save[0m
-[20:30:02.878] LOG   [Elementor Publish] Saving 5 images to article 161
-[20:30:02.878] LOG   [32m[OK] Found 5 images to save![0m
-[20:30:02.879] LOG   [Elementor Publish] Images to save: [
+[21:52:24.579] LOG   [37m    [0] "What does standard cleaning in" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[21:52:24.579] LOG   [37m    [1] "What's Included in a Standard " - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[21:52:24.579] LOG   [37m    [2] "How Standard Cleaning Differs " - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[21:52:24.579] LOG   [37m    [3] "How Often Hendersonville Homes" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[21:52:24.579] LOG   [37m    [4] "What Homeowners Should Do Befo" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[21:52:24.579] LOG   [37m    [5] "When Standard Cleaning Is Not " - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[21:52:24.579] LOG   [37m    [6] "Why Bed-Making and Light Tidyi" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[21:52:24.579] LOG   [37m    [7] "FAQ" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[21:52:24.579] LOG   [33m--- Summary ---[0m
+[21:52:24.579] LOG   [37m  Total chunks: 8[0m
+[21:52:24.579] LOG   [37m  Chunks with imageData: 0[0m
+[21:52:24.579] LOG   [37m  Chunks with imagePrompt: 0[0m
+[21:52:24.579] LOG   [31m[ERR] NO CHUNKS HAVE IMAGE DATA![0m
+[21:52:24.579] LOG   [31m[ERR] Images were never attached to chunks, or were lost somewhere[0m
+[21:52:24.579] LOG   [34m[IMAGES SAVED TO DB [elementor.js publish endpoint]][0m
+[21:52:24.579] LOG   [34m--- Save Operation ---[0m
+[21:52:24.579] LOG   [37m  Location: elementor.js publish endpoint[0m
+[21:52:24.579] LOG   [37m  Timestamp: 2026-01-08T21:52:24.579Z[0m
+[21:52:24.579] LOG   [37m  Article ID: 163[0m
+[21:52:24.579] LOG   [37m  Number of Images: 5[0m
+[21:52:24.579] LOG   [34m--- All 5 Images Being Saved ---[0m
+[21:52:24.580] LOG   [35m│ [Image #0][0m
+[21:52:24.580] LOG   │   ID: img-1767909144571-hero
+[21:52:24.580] LOG   │   Placement: hero
+[21:52:24.580] LOG   │   URL Type: HTTP
+[21:52:24.580] LOG   │   Has URL: [32m✓ YES[0m
+[21:52:24.580] LOG   │   Has WP URL: [31m✗ NO[0m
+[21:52:24.580] LOG   │   WP Media ID: 538
+[21:52:24.580] LOG   │   Pushed to WP: [31m✗ NO[0m
+[21:52:24.580] LOG   │   URL Preview: https://aichatautomations.com/wp-content/uploads/2...
+[21:52:24.580] LOG   │
+[21:52:24.580] LOG   [35m│ [Image #1][0m
+[21:52:24.580] LOG   │   ID: img-1767909144571-section-1
+[21:52:24.580] LOG   │   Placement: section-1
+[21:52:24.580] LOG   │   URL Type: HTTP
+[21:52:24.580] LOG   │   Has URL: [32m✓ YES[0m
+[21:52:24.580] LOG   │   Has WP URL: [31m✗ NO[0m
+[21:52:24.580] LOG   │   WP Media ID: 539
+[21:52:24.580] LOG   │   Pushed to WP: [31m✗ NO[0m
+[21:52:24.580] LOG   │   URL Preview: https://aichatautomations.com/wp-content/uploads/2...
+[21:52:24.580] LOG   │
+[21:52:24.580] LOG   [35m│ [Image #2][0m
+[21:52:24.580] LOG   │   ID: img-1767909144571-section-3
+[21:52:24.580] LOG   │   Placement: section-3
+[21:52:24.580] LOG   │   URL Type: HTTP
+[21:52:24.580] LOG   │   Has URL: [32m✓ YES[0m
+[21:52:24.580] LOG   │   Has WP URL: [31m✗ NO[0m
+[21:52:24.580] LOG   │   WP Media ID: 540
+[21:52:24.580] LOG   │   Pushed to WP: [31m✗ NO[0m
+[21:52:24.580] LOG   │   URL Preview: https://aichatautomations.com/wp-content/uploads/2...
+[21:52:24.580] LOG   │
+[21:52:24.580] LOG   [35m│ [Image #3][0m
+[21:52:24.580] LOG   │   ID: img-1767909144571-section-5
+[21:52:24.580] LOG   │   Placement: section-5
+[21:52:24.580] LOG   │   URL Type: HTTP
+[21:52:24.580] LOG   │   Has URL: [32m✓ YES[0m
+[21:52:24.580] LOG   │   Has WP URL: [31m✗ NO[0m
+[21:52:24.580] LOG   │   WP Media ID: 541
+[21:52:24.580] LOG   │   Pushed to WP: [31m✗ NO[0m
+[21:52:24.580] LOG   │   URL Preview: https://aichatautomations.com/wp-content/uploads/2...
+[21:52:24.580] LOG   │
+[21:52:24.580] LOG   [35m│ [Image #4][0m
+[21:52:24.580] LOG   │   ID: img-1767909144571-section-7
+[21:52:24.580] LOG   │   Placement: section-7
+[21:52:24.580] LOG   │   URL Type: HTTP
+[21:52:24.580] LOG   │   Has URL: [32m✓ YES[0m
+[21:52:24.580] LOG   │   Has WP URL: [31m✗ NO[0m
+[21:52:24.580] LOG   │   WP Media ID: 542
+[21:52:24.580] LOG   │   Pushed to WP: [31m✗ NO[0m
+[21:52:24.580] LOG   │   URL Preview: https://aichatautomations.com/wp-content/uploads/2...
+[21:52:24.580] LOG   │
+[21:52:24.580] LOG   [32m[OK] 5 images prepared for database save[0m
+[21:52:24.580] LOG   [Elementor Publish] Saving 5 images to article 163
+[21:52:24.580] LOG   [32m[OK] Found 5 images to save![0m
+[21:52:24.580] LOG   [Elementor Publish] Images to save: [
   {
-    "id": "img-1767904202168-hero",
+    "id": "img-1767909144571-hero",
     "placement": "hero",
     "hasUrl": true,
     "urlType": "http",
-    "wpMediaId": 522,
+    "wpMediaId": 538,
     "pushedToWp": false
   },
   {
-    "id": "img-1767904202168-section-1",
+    "id": "img-1767909144571-section-1",
     "placement": "section-1",
     "hasUrl": true,
     "urlType": "http",
-    "wpMediaId": 523,
+    "wpMediaId": 539,
     "pushedToWp": false
   },
   {
-    "id": "img-1767904202168-section-3",
+    "id": "img-1767909144571-section-3",
     "placement": "section-3",
     "hasUrl": true,
     "urlType": "http",
-    "wpMediaId": 524,
+    "wpMediaId": 540,
     "pushedToWp": false
   },
   {
-    "id": "img-1767904202168-section-5",
+    "id": "img-1767909144571-section-5",
     "placement": "section-5",
     "hasUrl": true,
     "urlType": "http",
-    "wpMediaId": 525,
+    "wpMediaId": 541,
     "pushedToWp": false
   },
   {
-    "id": "img-1767904202168-section-7",
+    "id": "img-1767909144571-section-7",
     "placement": "section-7",
     "hasUrl": true,
     "urlType": "http",
-    "wpMediaId": 526,
+    "wpMediaId": 542,
     "pushedToWp": false
   }
 ]
-[20:30:02.880] LOG   
+[21:52:24.581] LOG   
 [SAVE] ========== ABOUT TO SAVE ==========
-[20:30:02.880] LOG   [SAVE] generatedImagesData.length: 5
-[20:30:02.880] LOG   [SAVE] isManualPush: false
-[20:30:02.880] LOG   [SAVE] Image 0: id=img-1767904202168-hero, placement=hero, hasUrl=true, urlStart=https://aichatautomations.com/
-[20:30:02.880] LOG   [SAVE] Image 1: id=img-1767904202168-section-1, placement=section-1, hasUrl=true, urlStart=https://aichatautomations.com/
-[20:30:02.880] LOG   [SAVE] Image 2: id=img-1767904202168-section-3, placement=section-3, hasUrl=true, urlStart=https://aichatautomations.com/
-[20:30:02.880] LOG   [SAVE] Image 3: id=img-1767904202168-section-5, placement=section-5, hasUrl=true, urlStart=https://aichatautomations.com/
-[20:30:02.880] LOG   [SAVE] Image 4: id=img-1767904202168-section-7, placement=section-7, hasUrl=true, urlStart=https://aichatautomations.com/
-[20:30:02.880] LOG   [SAVE] ========================================
+[21:52:24.581] LOG   [SAVE] generatedImagesData.length: 5
+[21:52:24.581] LOG   [SAVE] isManualPush: false
+[21:52:24.581] LOG   [SAVE] Image 0: id=img-1767909144571-hero, placement=hero, hasUrl=true, urlStart=https://aichatautomations.com/
+[21:52:24.581] LOG   [SAVE] Image 1: id=img-1767909144571-section-1, placement=section-1, hasUrl=true, urlStart=https://aichatautomations.com/
+[21:52:24.581] LOG   [SAVE] Image 2: id=img-1767909144571-section-3, placement=section-3, hasUrl=true, urlStart=https://aichatautomations.com/
+[21:52:24.581] LOG   [SAVE] Image 3: id=img-1767909144571-section-5, placement=section-5, hasUrl=true, urlStart=https://aichatautomations.com/
+[21:52:24.581] LOG   [SAVE] Image 4: id=img-1767909144571-section-7, placement=section-7, hasUrl=true, urlStart=https://aichatautomations.com/
+[21:52:24.581] LOG   [SAVE] ========================================
 
-[20:30:02.914] LOG   [SAVE] ✅ Auto push DB update completed for article 161
-[20:30:02.915] LOG   [SAVE] Update result: 1 rows affected
-[20:30:02.915] LOG   [SAVE] ✅ Successfully saved 5 images to database
-[20:30:02.939] LOG   [VERIFY] ✅ Database verification: Article 161 has 5 images saved
-[20:30:02.939] LOG   [DRAFT BANK] Saving 5 images to Draft Image Bank
-[20:30:03.086] LOG   [DRAFT BANK] ✅ Saved 5 images to Draft Image Bank
-[20:30:03.086] LOG   ✓ [PUBLISH] Successfully published to WordPress {
-  "pageId": 527,
-  "pageUrl": "https://aichatautomations.com/?page_id=527",
+[21:52:24.581] LOG   [SAVE] Draft mode - saving images without WP page data
+[21:52:24.606] LOG   [SAVE] ✅ Draft mode DB update completed for article 163
+[21:52:24.606] LOG   [SAVE] Update result: 1 rows affected
+[21:52:24.606] LOG   [SAVE] ✅ Successfully saved 5 images to database
+[21:52:24.628] LOG   [VERIFY] ✅ Database verification: Article 163 has 5 images saved
+[21:52:24.628] LOG   [DRAFT BANK] Saving 5 images to Draft Image Bank
+[21:52:24.712] LOG   [DRAFT BANK] ✅ Saved 5 images to Draft Image Bank
+[21:52:24.713] LOG   ✓ [PUBLISH] Successfully published to WordPress {
   "totalImages": 5,
   "imagesSaved": 5
 }
-[20:30:03.087] LOG   [SESSION] Session ended: session-1767904120408 {
+[21:52:24.713] LOG   [SESSION] Session ended: session-1767909061880 {
   "summary": {
     "articlesProcessed": 1,
     "imagesGenerated": 5,
@@ -490,7 +517,7 @@ BODY CHUNKS (8 total):[0m
     "wpUploads": 1
   }
 }
-[20:30:03.087] LOG   [GitHub Logger] Checking if configured...
-[20:30:03.087] LOG   [GitHub Logger] isConfigured: true
-[20:30:03.087] LOG   [GitHub Logger] Status: {"configured":true,"repo":"foxartglass-dev/Prompts-Chains","tokenSet":true,"logFilePath":"logs/server-latest.log","maxLines":500}
-[20:30:03.087] LOG   [GitHub Logger] Attempting push to GitHub...
+[21:52:24.713] LOG   [GitHub Logger] Checking if configured...
+[21:52:24.713] LOG   [GitHub Logger] isConfigured: true
+[21:52:24.713] LOG   [GitHub Logger] Status: {"configured":true,"repo":"foxartglass-dev/Prompts-Chains","tokenSet":true,"logFilePath":"logs/server-latest.log","maxLines":500}
+[21:52:24.713] LOG   [GitHub Logger] Attempting push to GitHub...
