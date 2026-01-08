@@ -4628,9 +4628,9 @@ Start by introducing yourself and asking about their business in a friendly way.
 
   return (
     <div className="space-y-4">
-      {/* Model Selectors + Save */}
-      <div className="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-brand-gold/50 flex-wrap gap-3">
-        <div className="flex items-center gap-4 flex-wrap">
+      {/* Model Selectors + Save - Compact row */}
+      <div className="flex items-center justify-between flex-wrap gap-2 -mt-2 mb-2">
+        <div className="flex items-center gap-3 flex-wrap">
           {/* Image Generation Model - The model that creates images */}
           <div className="flex items-center gap-2">
             <label className="text-sm text-brand-gold/70">Image Model:</label>
@@ -4665,19 +4665,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <option value="high">100% - Max quality</option>
                 </>
               )}
-            </select>
-          </div>
-          {/* Prompt Assistant Model - The chat model that helps craft prompts */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-brand-gold/70">Prompt Assistant:</label>
-            <select
-              value={settings.prompt_assistant_model}
-              onChange={(e) => updateSettings({ prompt_assistant_model: e.target.value })}
-              className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm"
-            >
-              {AVAILABLE_MODELS.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
             </select>
           </div>
           {/* Prompt Guide Button */}
