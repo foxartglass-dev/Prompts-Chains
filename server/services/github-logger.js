@@ -38,13 +38,15 @@ function getGitHubConfig() {
 async function getFileSha(config) {
   try {
     console.log('[GitHub Logger] Getting SHA for existing file...');
-    const url = `${GITHUB_API_BASE}/repos/${config.repo}/contents/${LOG_FILE_PATH}`;
+    // Add ref=main to explicitly specify the branch
+    const url = `${GITHUB_API_BASE}/repos/${config.repo}/contents/${LOG_FILE_PATH}?ref=main`;
     console.log('[GitHub Logger] SHA request URL:', url);
 
     const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${config.token}`,
-        'Accept': 'application/vnd.github.v3+json'
+        'Accept': 'application/vnd.github.v3+json',
+        'X-GitHub-Api-Version': '2022-11-28'
       }
     });
 
@@ -142,6 +144,18 @@ export async function pushLogsToGitHub(context = 'auto') {
     if (!response.ok) {
       const error = await response.json();
       console.error('[GitHub Logger] Push failed:', error.message);
+
+      // Special handling: if SHA wasn't found but file exists, token might lack read permission
+      if (error.message?.includes("sha") && !sha) {
+        console.error('[GitHub Logger] ⚠️ File exists but could not read SHA.');
+        console.error('[GitHub Logger] Check that GITHUB_TOKEN has "Contents: Read and Write" permission.');
+        console.error('[GitHub Logger] For fine-grained tokens: Repository permissions → Contents → Read and write');
+        return {
+          success: false,
+          message: 'Token permission issue: Cannot read file SHA. Check GITHUB_TOKEN has Contents read+write permission.'
+        };
+      }
+
       return { success: false, message: error.message };
     }
 
