@@ -798,3 +798,149 @@ onChange={() => updateSettings({
 ---
 
 *Document last updated: 2026-01-08 (Post-Implementation)*
+
+---
+
+## 10. Backend Investigation Findings (2026-01-08)
+
+### 10.1 Key Discovery: Backend IS Working Correctly
+
+After thorough investigation of `server/routes/elementor.js` and `server/services/image-pipeline.js`, the backend logic is **functioning correctly**. Here's what actually happens:
+
+#### Integration Mode Logic (elementor.js:386-428)
+
+```javascript
+const integrationMode = config.integration_mode || 'bank';
+const fallbackToLive = config.fallback_to_live ?? true;
+
+if (integrationMode === 'live') {
+  // "Generate Live" mode - skip bank, generate fresh images
+  effectiveUseBank = false;
+  effectiveGenerateLive = true;
+  console.log('[Elementor Publish] Mode: Generate Live - will create new images');
+} else {
+  // "Pull from Bank" mode - use bank, optionally fallback to live
+  effectiveUseBank = true;
+  effectiveGenerateLive = fallbackToLive;
+  console.log('[Elementor Publish] Mode: Pull from Bank (fallback:', fallbackToLive, ')');
+}
+```
+
+**Conclusion:** The backend correctly routes to either bank or live generation based on `integration_mode`.
+
+### 10.2 Critical Discovery: Smart Matching ONLY Works for Bank Mode
+
+The Smart Content Matching code is **only executed inside the bank mode block** (lines 553-790):
+
+```javascript
+if (effectiveUseBank && workflowId && isDatabaseEnabled()) {
+  // ... bank image selection ...
+
+  const smartMatchingEnabled = config.smart_matching_enabled || false;
+  const smartMatchingMode = config.smart_matching_mode || 'bank_first';
+
+  if (smartMatchingEnabled && targetAvatar?.placeholderCategories?.length > 0) {
+    // Smart matching logic runs HERE - only in bank mode
+  }
+}
+```
+
+**Key Implication:** When "Generate Live" is selected, the Smart Matching toggle has **NO EFFECT** on the backend. Smart Matching is designed to match bank images to article content, not for live generation.
+
+### 10.3 Generate Live Prompt Modes (image-pipeline.js)
+
+When `integration_mode === 'live'`, the backend uses `image-pipeline.js` with these modes:
+
+| Mode | File Location | What It Does |
+|------|---------------|--------------|
+| **main_prompt** | image-pipeline.js:286-415 | Uses avatar's mainPrompt template with smart-matched placeholders per image position |
+| **guided_gpt** | image-pipeline.js:424-529 | Uses GPT-4o with guardrails to generate contextual prompts |
+| **smart_prompt** | image-pipeline.js:536-556 | Uses GPT-4o-mini to analyze article content (legacy) |
+
+**Important:** The "smart matching" in `main_prompt` mode is **different** from Smart Content Matching toggle. It matches placeholders to local content around each image position, not images from the bank.
+
+### 10.4 Matching Strategy Modes Explained
+
+The `smart_matching_mode` field controls behavior differently based on source:
+
+#### For Bank Mode (`integration_mode === 'bank`):
+
+| Mode | Behavior | Backend Location |
+|------|----------|------------------|
+| **bank_first** | 1. Search bank with smart matching<br>2. If no match found, generate live | elementor.js:1811-1843 |
+| **bank_only** | 1. Search bank with smart matching<br>2. If no match, skip (no generation) | elementor.js:1811-1821 |
+
+#### For Live Mode (`integration_mode === 'live`):
+
+| Mode | Behavior | Backend Location |
+|------|----------|------------------|
+| **generate_first** | 1. Generate fresh image<br>2. Save to bank for future reuse | image-creation.js:1919 |
+| **generate_only** | 1. Generate fresh image<br>2. Do NOT save to bank | image-creation.js:1919 |
+
+### 10.5 Why "Generate First → Save to Bank" Makes Sense
+
+The user was confused about this mode. Here's the use case:
+
+**Scenario:** Running batch processing of 50 articles
+- **Generate Only:** Each article gets unique images (never reused)
+- **Generate First:** Images are generated and saved to bank - if similar content appears later, the same image might be smart-matched (efficiency)
+
+This is useful for workflows where you want to build up a library of reusable images over time.
+
+### 10.6 Smart Matching Toggle State IS Being Saved Correctly
+
+The frontend and backend are correctly wired:
+
+**Frontend (ImageCreationSection.tsx:8347):**
+```javascript
+<input type="checkbox"
+  checked={settings.smart_matching_enabled}
+  onChange={(e) => updateSettings({ smart_matching_enabled: e.target.checked })}
+/>
+```
+
+**Backend GET (image-creation.js:897):**
+```javascript
+smart_matching_enabled: results[0].smart_matching_enabled ?? false,
+```
+
+**Backend PUT (image-creation.js:1176):**
+```javascript
+smart_matching_enabled = COALESCE(${smart_matching_enabled}, smart_matching_enabled),
+```
+
+**Conclusion:** The toggle state IS being saved and loaded correctly. If the notification always shows "ON", that's likely a UI display bug, not a backend issue.
+
+### 10.7 Remaining Issues to Address
+
+Based on the investigation, these issues still need attention:
+
+1. **Smart Matching UI should be hidden for Generate Live mode** - Since it has no effect in live mode, showing it is confusing
+2. **Smart Matching should auto-disable for Guided GPT and Smart Prompt** - These modes use GPT to analyze content, not placeholder matching
+3. **"Generate First" needs clearer explanation** - Users don't understand that "Save to bank" means for future reuse by other articles
+4. **Draft Image Bank concept** - Need separate storage for in-transit images vs. reusable bank images
+
+---
+
+## 11. Smart Matching Scope Clarification
+
+### 11.1 When Smart Matching Toggle Actually Matters
+
+| Mode | Smart Matching Toggle Effect |
+|------|------------------------------|
+| **Pull from Bank** | ✅ **ACTIVE** - Controls whether bank images are matched by keywords |
+| **Generate Live → Main Prompt** | ⚠️ **IRRELEVANT** - Main Prompt has its own per-position placeholder matching |
+| **Generate Live → Guided GPT** | ❌ **IRRELEVANT** - GPT generates prompts based on content analysis |
+| **Generate Live → Smart Prompt** | ❌ **IRRELEVANT** - GPT-4o-mini analyzes content for prompts |
+
+### 11.2 Recommended UI Changes
+
+Based on these findings:
+
+1. **Hide Smart Matching section when Generate Live is selected** (or show disabled with explanation)
+2. **Add tooltip explaining**: "Smart Content Matching only applies when pulling from Image Bank. For Generate Live mode, image prompts are generated based on article content."
+3. **For Main Prompt mode**: Show a different "Placeholder Matching" section that explains the per-position matching
+
+---
+
+*Document updated: 2026-01-08 (Backend Investigation Complete)*
