@@ -997,7 +997,28 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setDraftBankLoading(false);
   };
 
-  // Fetch draft bank when opened or filters change
+  // Fetch draft bank stats on mount (for header count display)
+  const fetchDraftBankStats = async () => {
+    if (!workflowId) return;
+    try {
+      const statsRes = await fetch(`/api/draft-image-bank/${workflowId}/stats`);
+      const statsData = await statsRes.json();
+      if (statsData.success) {
+        setDraftBankStats(statsData.data);
+      }
+    } catch (error) {
+      console.error('[Draft Bank] Failed to fetch stats:', error);
+    }
+  };
+
+  // Fetch stats on mount and when workflowId changes
+  useEffect(() => {
+    if (workflowId) {
+      fetchDraftBankStats();
+    }
+  }, [workflowId]);
+
+  // Fetch full draft bank when opened or filters change
   useEffect(() => {
     if (isDraftBankOpen && workflowId) {
       fetchDraftBank();
