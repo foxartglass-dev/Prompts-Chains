@@ -63,7 +63,12 @@ export async function getDraftImageBank(workflowId, options = {}) {
   params.push(limit);
 
   // Use tagged template for the query
-  return await sql.unsafe(query, params);
+  console.log('[Draft Bank Service] Query:', query);
+  console.log('[Draft Bank Service] Params:', params);
+  const result = await sql.unsafe(query, params);
+  console.log('[Draft Bank Service] Result count:', result?.length || 0);
+  console.log('[Draft Bank Service] First row sample:', result?.[0] ? JSON.stringify(result[0]).substring(0, 200) : 'none');
+  return result;
 }
 
 /**
@@ -286,6 +291,8 @@ export async function deleteDraftImage(workflowId, imageId) {
 export async function getDraftBankStats(workflowId) {
   if (!isDatabaseEnabled()) return { total: 0, draft: 0, sent: 0, replaced: 0, totalMade: 0, totalReplaced: 0 };
 
+  console.log('[Draft Bank Stats] Getting stats for workflow:', workflowId);
+
   // Get current counts
   const counts = await sql`
     SELECT
@@ -305,6 +312,9 @@ export async function getDraftBankStats(workflowId) {
   `;
 
   const lifetimeStats = stats[0] || { total_made: 0, total_replaced: 0, total_sent: 0 };
+
+  console.log('[Draft Bank Stats] Counts from draft_image_bank table:', counts[0]);
+  console.log('[Draft Bank Stats] Lifetime stats from draft_image_bank_stats:', lifetimeStats);
 
   return {
     total: parseInt(counts[0].total),
