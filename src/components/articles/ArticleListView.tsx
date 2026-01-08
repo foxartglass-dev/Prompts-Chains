@@ -87,6 +87,11 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const [selectedDescIndex, setSelectedDescIndex] = useState<number | null>(null);
   const [metaSaved, setMetaSaved] = useState(false);
   const [savingMeta, setSavingMeta] = useState(false);
+  const [customMetaTitle, setCustomMetaTitle] = useState('');
+  const [customMetaDesc, setCustomMetaDesc] = useState('');
+  const [useCustomTitle, setUseCustomTitle] = useState(false);
+  const [useCustomDesc, setUseCustomDesc] = useState(false);
+  const [pushingAll, setPushingAll] = useState(false);
 
   // Image management
   const [showImages, setShowImages] = useState(false);
@@ -169,15 +174,20 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const saveMetaSelections = async () => {
     if (!selectedArticle) return;
 
-    const metaTitle = selectedTitleIndex !== null && selectedArticle.meta_titles
-      ? selectedArticle.meta_titles[selectedTitleIndex]
-      : null;
-    const metaDesc = selectedDescIndex !== null && selectedArticle.meta_descriptions
-      ? selectedArticle.meta_descriptions[selectedDescIndex]
-      : null;
+    // Use custom values if selected, otherwise use the selected option
+    const metaTitle = useCustomTitle && customMetaTitle.trim()
+      ? customMetaTitle.trim()
+      : (selectedTitleIndex !== null && selectedArticle.meta_titles
+        ? selectedArticle.meta_titles[selectedTitleIndex]
+        : null);
+    const metaDesc = useCustomDesc && customMetaDesc.trim()
+      ? customMetaDesc.trim()
+      : (selectedDescIndex !== null && selectedArticle.meta_descriptions
+        ? selectedArticle.meta_descriptions[selectedDescIndex]
+        : null);
 
     if (!metaTitle && !metaDesc) {
-      setError('Please select a meta title and/or description first');
+      setError('Please select or enter a meta title and/or description first');
       return;
     }
 
@@ -194,6 +204,12 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
       if (res.ok) {
         setMetaSaved(true);
+        // Update the selected article with the new meta values
+        setSelectedArticle({
+          ...selectedArticle,
+          selected_meta_title: metaTitle,
+          selected_meta_description: metaDesc
+        });
         fetchArticles(); // Refresh list
       } else {
         setError('Failed to save meta selections');
@@ -288,6 +304,108 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       setError('Failed to publish to WordPress');
     } finally {
       setPublishing(false);
+    }
+  };
+
+  // Push ALL to WordPress (article + meta + images)
+  const pushAllToWordPress = async () => {
+    if (!selectedArticle) return;
+
+    const wpUrl = selectedArticle.wp_url;
+    const wpUser = selectedArticle.wp_user;
+    const wpPassword = selectedArticle.wp_app_password;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      setError('WordPress credentials not configured for this website');
+      return;
+    }
+
+    // Check if meta is saved
+    if (!selectedArticle.selected_meta_title && !selectedArticle.selected_meta_description) {
+      setError('Please save your meta title & description first before pushing all to WordPress');
+      return;
+    }
+
+    setPushingAll(true);
+    setError(null);
+
+    try {
+      // Step 1: Publish article if not already published
+      let wpPostId = selectedArticle.wp_post_id;
+      if (!wpPostId) {
+        const articleRes = await fetch('/api/elementor/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wpUrl,
+            wpUser,
+            wpPassword,
+            title: selectedArticle.keyword,
+            content: editContent || selectedArticle.final_content,
+            status: 'draft',
+            articleId: selectedArticle.id,
+            isManualPush: true
+          })
+        });
+        const articleData = await articleRes.json();
+        if (articleData.success && articleData.page) {
+          wpPostId = articleData.page.id;
+          await fetch(`/api/articles/${selectedArticle.id}/wp-status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              wpPostId: articleData.page.id,
+              wpPostUrl: articleData.page.link,
+              status: 'published'
+            })
+          });
+        } else {
+          throw new Error(articleData.error || 'Failed to publish article');
+        }
+      }
+
+      // Step 2: Push meta to SEO plugin
+      if (wpPostId && (selectedArticle.selected_meta_title || selectedArticle.selected_meta_description)) {
+        const metaRes = await fetch('/api/seo/push-direct', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wpUrl,
+            wpUser,
+            wpPassword,
+            postId: wpPostId,
+            metaTitle: selectedArticle.selected_meta_title,
+            metaDescription: selectedArticle.selected_meta_description,
+            articleId: selectedArticle.id
+          })
+        });
+        const metaData = await metaRes.json();
+        if (!metaData.success) {
+          console.warn('Meta push warning:', metaData.error);
+        }
+      }
+
+      // Step 3: Push images to WordPress
+      if (selectedArticle.images && selectedArticle.images.length > 0) {
+        const imagesRes = await fetch(`/api/articles/${selectedArticle.id}/push-images`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wpUrl, wpUser, wpPassword })
+        });
+        const imagesData = await imagesRes.json();
+        if (!imagesData.success) {
+          console.warn('Images push warning:', imagesData.error);
+        }
+      }
+
+      // Refresh article data
+      fetchArticleDetails(selectedArticle.id);
+      fetchArticles();
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to push all to WordPress');
+    } finally {
+      setPushingAll(false);
     }
   };
 
@@ -819,28 +937,60 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
               </div>
 
               <div className="flex items-center gap-2">
+                {/* Push All to WP Button */}
+                <div className="relative group">
+                  <button
+                    onClick={pushAllToWordPress}
+                    disabled={pushingAll || !selectedArticle.selected_meta_title}
+                    className={`px-4 py-1.5 rounded text-white font-medium text-sm transition flex items-center gap-2 ${
+                      selectedArticle.selected_meta_title
+                        ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500'
+                        : 'bg-gray-600 cursor-not-allowed opacity-60'
+                    }`}
+                  >
+                    {pushingAll ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Pushing All...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        Push All to WP
+                      </>
+                    )}
+                  </button>
+                  {/* Tooltip when disabled */}
+                  {!selectedArticle.selected_meta_title && (
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 border border-amber-500/50 rounded-lg text-xs text-amber-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Save Meta Title & Description first
+                      </div>
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                    </div>
+                  )}
+                </div>
                 {/* WordPress Link */}
                 {selectedArticle.wp_post_url && (
                   <a
                     href={selectedArticle.wp_post_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded text-white text-sm font-medium flex items-center gap-2 transition"
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-sm font-medium flex items-center gap-2 transition"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                     View on WP
                   </a>
-                )}
-                {!selectedArticle.wp_post_id && (
-                  <button
-                    onClick={publishToWordPress}
-                    disabled={publishing}
-                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
-                  >
-                    {publishing ? 'Publishing...' : 'Publish to WP'}
-                  </button>
                 )}
                 <button
                   onClick={closeModal}
@@ -1170,7 +1320,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       <div>
                         <h5 className="text-sm font-medium text-brand-gold mb-3 flex items-center gap-2">
                           Meta Titles
-                          {selectedTitleIndex !== null && selectedArticle.meta_titles && (
+                          {useCustomTitle && customMetaTitle ? (
+                            <span className="text-xs text-gray-500">({customMetaTitle.length} chars)</span>
+                          ) : selectedTitleIndex !== null && selectedArticle.meta_titles && (
                             <span className="text-xs text-gray-500">
                               ({selectedArticle.meta_titles[selectedTitleIndex]?.length || 0} chars)
                             </span>
@@ -1182,17 +1334,17 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                               <label
                                 key={i}
                                 className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition ${
-                                  selectedTitleIndex === i
+                                  selectedTitleIndex === i && !useCustomTitle
                                     ? 'bg-brand-gold/20 border-brand-gold'
                                     : 'bg-slate-800 border-transparent hover:border-brand-gold/50'
                                 }`}
-                                onClick={() => { setSelectedTitleIndex(i); setMetaSaved(false); }}
+                                onClick={() => { setSelectedTitleIndex(i); setUseCustomTitle(false); setMetaSaved(false); }}
                               >
                                 <input
                                   type="radio"
                                   name="metaTitle"
-                                  checked={selectedTitleIndex === i}
-                                  onChange={() => { setSelectedTitleIndex(i); setMetaSaved(false); }}
+                                  checked={selectedTitleIndex === i && !useCustomTitle}
+                                  onChange={() => { setSelectedTitleIndex(i); setUseCustomTitle(false); setMetaSaved(false); }}
                                   className="mt-1 accent-yellow-500"
                                 />
                                 <div className="flex-1">
@@ -1206,6 +1358,41 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                                 </div>
                               </label>
                             ))}
+                            {/* Custom Title Input */}
+                            <label
+                              className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition ${
+                                useCustomTitle
+                                  ? 'bg-brand-gold/20 border-brand-gold'
+                                  : 'bg-slate-800 border-transparent hover:border-brand-gold/50'
+                              }`}
+                              onClick={() => { setUseCustomTitle(true); setMetaSaved(false); }}
+                            >
+                              <input
+                                type="radio"
+                                name="metaTitle"
+                                checked={useCustomTitle}
+                                onChange={() => { setUseCustomTitle(true); setMetaSaved(false); }}
+                                className="mt-1 accent-yellow-500"
+                              />
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  placeholder="Write custom meta title..."
+                                  value={customMetaTitle}
+                                  onChange={(e) => { setCustomMetaTitle(e.target.value); setUseCustomTitle(true); setMetaSaved(false); }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-gold"
+                                />
+                                {useCustomTitle && customMetaTitle && (
+                                  <div className="mt-1 text-xs text-gray-500">
+                                    {customMetaTitle.length} characters
+                                    {customMetaTitle.length < 50 && <span className="text-amber-400 ml-2">Too short</span>}
+                                    {customMetaTitle.length > 60 && <span className="text-red-400 ml-2">Too long</span>}
+                                    {customMetaTitle.length >= 50 && customMetaTitle.length <= 60 && <span className="text-green-400 ml-2">Optimal</span>}
+                                  </div>
+                                )}
+                              </div>
+                            </label>
                           </div>
                         ) : (
                           <p className="text-sm text-gray-500">No meta titles generated</p>
@@ -1216,7 +1403,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       <div>
                         <h5 className="text-sm font-medium text-brand-cyan mb-3 flex items-center gap-2">
                           Meta Descriptions
-                          {selectedDescIndex !== null && selectedArticle.meta_descriptions && (
+                          {useCustomDesc && customMetaDesc ? (
+                            <span className="text-xs text-gray-500">({customMetaDesc.length} chars)</span>
+                          ) : selectedDescIndex !== null && selectedArticle.meta_descriptions && (
                             <span className="text-xs text-gray-500">
                               ({selectedArticle.meta_descriptions[selectedDescIndex]?.length || 0} chars)
                             </span>
@@ -1228,17 +1417,17 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                               <label
                                 key={i}
                                 className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition ${
-                                  selectedDescIndex === i
+                                  selectedDescIndex === i && !useCustomDesc
                                     ? 'bg-brand-cyan/20 border-brand-cyan'
                                     : 'bg-slate-800 border-transparent hover:border-brand-cyan/50'
                                 }`}
-                                onClick={() => { setSelectedDescIndex(i); setMetaSaved(false); }}
+                                onClick={() => { setSelectedDescIndex(i); setUseCustomDesc(false); setMetaSaved(false); }}
                               >
                                 <input
                                   type="radio"
                                   name="metaDesc"
-                                  checked={selectedDescIndex === i}
-                                  onChange={() => { setSelectedDescIndex(i); setMetaSaved(false); }}
+                                  checked={selectedDescIndex === i && !useCustomDesc}
+                                  onChange={() => { setSelectedDescIndex(i); setUseCustomDesc(false); setMetaSaved(false); }}
                                   className="mt-1 accent-cyan-500"
                                 />
                                 <div className="flex-1">
@@ -1252,6 +1441,41 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                                 </div>
                               </label>
                             ))}
+                            {/* Custom Description Input */}
+                            <label
+                              className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition ${
+                                useCustomDesc
+                                  ? 'bg-brand-cyan/20 border-brand-cyan'
+                                  : 'bg-slate-800 border-transparent hover:border-brand-cyan/50'
+                              }`}
+                              onClick={() => { setUseCustomDesc(true); setMetaSaved(false); }}
+                            >
+                              <input
+                                type="radio"
+                                name="metaDesc"
+                                checked={useCustomDesc}
+                                onChange={() => { setUseCustomDesc(true); setMetaSaved(false); }}
+                                className="mt-1 accent-cyan-500"
+                              />
+                              <div className="flex-1">
+                                <textarea
+                                  placeholder="Write custom meta description..."
+                                  value={customMetaDesc}
+                                  onChange={(e) => { setCustomMetaDesc(e.target.value); setUseCustomDesc(true); setMetaSaved(false); }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  rows={3}
+                                  className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-cyan resize-none"
+                                />
+                                {useCustomDesc && customMetaDesc && (
+                                  <div className="mt-1 text-xs text-gray-500">
+                                    {customMetaDesc.length} characters
+                                    {customMetaDesc.length < 150 && <span className="text-amber-400 ml-2">Too short</span>}
+                                    {customMetaDesc.length > 160 && <span className="text-red-400 ml-2">Too long</span>}
+                                    {customMetaDesc.length >= 150 && customMetaDesc.length <= 160 && <span className="text-green-400 ml-2">Optimal</span>}
+                                  </div>
+                                )}
+                              </div>
+                            </label>
                           </div>
                         ) : (
                           <p className="text-sm text-gray-500">No meta descriptions generated</p>
@@ -1264,17 +1488,21 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       <h5 className="text-sm font-medium text-gray-400 mb-3">Google Search Preview</h5>
                       <div className="bg-white rounded-lg p-4 max-w-2xl">
                         <div className="text-blue-800 text-lg font-medium truncate hover:underline cursor-pointer">
-                          {selectedTitleIndex !== null && selectedArticle.meta_titles
-                            ? selectedArticle.meta_titles[selectedTitleIndex]
-                            : selectedArticle.keyword}
+                          {useCustomTitle && customMetaTitle
+                            ? customMetaTitle
+                            : (selectedTitleIndex !== null && selectedArticle.meta_titles
+                              ? selectedArticle.meta_titles[selectedTitleIndex]
+                              : selectedArticle.keyword)}
                         </div>
                         <div className="text-green-700 text-sm truncate mt-1">
                           {selectedArticle.wp_post_url || 'https://example.com/' + selectedArticle.keyword.toLowerCase().replace(/\s+/g, '-')}
                         </div>
                         <div className="text-gray-600 text-sm mt-1 line-clamp-2">
-                          {selectedDescIndex !== null && selectedArticle.meta_descriptions
-                            ? selectedArticle.meta_descriptions[selectedDescIndex]
-                            : 'No description selected...'}
+                          {useCustomDesc && customMetaDesc
+                            ? customMetaDesc
+                            : (selectedDescIndex !== null && selectedArticle.meta_descriptions
+                              ? selectedArticle.meta_descriptions[selectedDescIndex]
+                              : 'No description selected...')}
                         </div>
                       </div>
                     </div>
