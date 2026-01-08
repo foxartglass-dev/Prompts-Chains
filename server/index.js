@@ -31,6 +31,7 @@ import wpHealthRouter from './routes/wp-health.js';
 import localVikingRouter from './routes/local-viking.js';
 import globalSettingsRouter from './routes/global-settings.js';
 import promptAssistantRouter from './routes/prompt-assistant.js';
+import logsRouter from './routes/logs.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
 dotenv.config();
@@ -201,6 +202,7 @@ app.use('/api/wp-health', wpHealthRouter);
 app.use('/api/local-viking', localVikingRouter);
 app.use('/api/global-settings', globalSettingsRouter);
 app.use('/api/prompt-assistant', promptAssistantRouter);
+app.use('/api/logs', logsRouter);
 
 // Database status endpoint
 app.get('/api/db/status', async (req, res) => {

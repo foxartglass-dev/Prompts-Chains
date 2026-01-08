@@ -30,6 +30,7 @@ import {
   error as logError,
   highlight
 } from '../services/image-tracker.js';
+import sessionLogger from '../services/session-logger.js';
 
 const router = express.Router();
 
@@ -331,6 +332,17 @@ router.post('/publish', async (req, res) => {
 
     const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
 
+    // Start session logging for this publish run
+    sessionLogger.startSession(keyword || title);
+    sessionLogger.logInfo('PUBLISH', `Starting publish for: ${keyword || title}`, {
+      articleId,
+      workflowId,
+      imageDraftMode,
+      useImageBank,
+      generateImages,
+      maxImages
+    });
+
     // Step 0: Clean content (remove markdown #, stray dashes, fix H2 titles)
     const cleanedContent = cleanContent(content);
 
@@ -420,11 +432,13 @@ router.post('/publish', async (req, res) => {
             effectiveUseBank = false;
             effectiveGenerateLive = true;
             console.log('[Elementor Publish] Mode: Generate Live - will create new images');
+            sessionLogger.logInfo('IMAGE', 'Mode: Generate Live - will create new images', { model: imageGenModel, quality: imageQuality });
           } else {
             // "Pull from Bank" mode - use bank, optionally fallback to live
             effectiveUseBank = true;
             effectiveGenerateLive = fallbackToLive; // Only generate if bank is empty and fallback enabled
             console.log('[Elementor Publish] Mode: Pull from Bank (fallback:', fallbackToLive, ')');
+            sessionLogger.logInfo('IMAGE', `Mode: Pull from Bank (fallback: ${fallbackToLive})`, { avatar: targetAvatar?.name });
           }
         } else {
           console.log('[Elementor Publish] ⚠️ No Image Creation settings found');
@@ -923,7 +937,8 @@ router.post('/publish', async (req, res) => {
                 variation: img.variation,
                 bankImageId: img.id,
                 createdAt: timestamp,
-                pushedToWp: false // NOT pushed to WP page, just matched for review
+                pushedToWp: false, // NOT pushed to WP page, just matched for review
+                source: 'bank' // Images from Image Bank
               });
             });
           }
@@ -934,6 +949,14 @@ router.post('/publish', async (req, res) => {
           console.log(`║ IMAGES SELECTED FROM BANK: ${String(imagesFromBank).padEnd(3)}                             ║`);
           console.log(`║ (Hero: 1, Body: ${String(imagesFromBank - 1).padEnd(2)})                                       ║`);
           console.log('╚══════════════════════════════════════════════════════════════╝');
+
+          // Session log for bank selection
+          sessionLogger.logSuccess('BANK', `Selected ${imagesFromBank} images from Image Bank`, {
+            hero: imagesFromBank > 0 ? 1 : 0,
+            body: Math.max(0, imagesFromBank - 1),
+            variations: imagesToUse.map(i => i.variation)
+          });
+          sessionLogger.updateSummary({ imagesFromBank });
 
           // Mark images as used
           if (imagesToUse.length > 0) {
@@ -1089,7 +1112,8 @@ router.post('/publish', async (req, res) => {
             side: heroImg.side || 'right',
             prompt: pipelineResult.chunks.intro.imagePrompt || '',
             createdAt: timestamp,
-            pushedToWp: false
+            pushedToWp: false,
+            source: 'generated' // Live generated images
           });
         }
 
@@ -1103,7 +1127,8 @@ router.post('/publish', async (req, res) => {
               side: pChunk.imageData.side || 'left',
               prompt: pChunk.imagePrompt || '',
               createdAt: timestamp,
-              pushedToWp: false
+              pushedToWp: false,
+              source: 'generated' // Live generated images
             });
           }
         });
@@ -1168,6 +1193,18 @@ router.post('/publish', async (req, res) => {
       });
 
       console.log('╚══════════════════════════════════════════════════════════════╝\n');
+
+      // Session logging for live generation
+      const liveGenCount = (pipelineResult.chunks.intro?.imageData ? 1 : 0) +
+        pipelineResult.chunks.chunks.filter(c => c.imageData).length;
+      sessionLogger.logSuccess('PIPELINE', `Generated ${liveGenCount} images live`, {
+        model: imageGenModel,
+        quality: imageQuality,
+        mode: livePromptMode,
+        heroHasWpUrl: !!pipelineResult.chunks.intro?.imageData?.wpUrl,
+        imagesWithWpUrl: pipelineResult.chunks.chunks.filter(c => c.imageData?.wpUrl).length
+      });
+      sessionLogger.updateSummary({ imagesGenerated: liveGenCount });
 
       // Populate image decision report for frontend
       imageDecisionReport.mode = 'live';
@@ -1269,6 +1306,9 @@ router.post('/publish', async (req, res) => {
           generatedImagesData.push(...draftModeImages);
         } else {
           // Normal mode: get images from embedded chunk data
+          // Determine source from imageDecisionReport.mode
+          const imageSource = imageDecisionReport.mode === 'bank' ? 'bank' : 'generated';
+
           // Hero image
           if (chunked.intro?.imageData?.url || chunked.intro?.imageData?.wpUrl) {
             const heroImageData = chunked.intro.imageData;
@@ -1280,7 +1320,8 @@ router.post('/publish', async (req, res) => {
               side: heroImageData.side || 'right',
               prompt: chunked.intro.imagePrompt || imageDecisionReport.images.find(i => i.type === 'hero')?.prompt || '',
               createdAt: timestamp,
-              pushedToWp: !!heroImageData.wpMediaId // True if already has WordPress media ID
+              pushedToWp: !!heroImageData.wpMediaId, // True if already has WordPress media ID
+              source: imageSource // Track where images came from
             });
           }
 
@@ -1297,7 +1338,8 @@ router.post('/publish', async (req, res) => {
                 heading: chunk.heading || `Section ${idx + 1}`,
                 prompt: chunk.imagePrompt || '',
                 createdAt: timestamp,
-                pushedToWp: !!chunkImageData.wpMediaId
+                pushedToWp: !!chunkImageData.wpMediaId,
+                source: imageSource // Track where images came from
               });
             }
           });
@@ -1433,6 +1475,16 @@ router.post('/publish', async (req, res) => {
       imageSaveStatus = { saved: false, count: 0, articleId, error: 'SKIPPED: ' + (!articleId ? 'No articleId' : 'Database disabled') };
     }
 
+    // Session logging for successful publish
+    sessionLogger.logSuccess('PUBLISH', `Successfully published to WordPress`, {
+      pageId: pageResult?.id,
+      pageUrl: pageResult?.link,
+      totalImages: imagesFromBank + imagesGenerated,
+      imagesSaved: imageSaveStatus?.verifiedCount || imageSaveStatus?.count || 0
+    });
+    sessionLogger.updateSummary({ articlesProcessed: 1, wpUploads: 1 });
+    sessionLogger.endSession();
+
     res.json({
       success: true,
       page: pageResult,
@@ -1447,6 +1499,8 @@ router.post('/publish', async (req, res) => {
     });
   } catch (error) {
     console.error('Publish error:', error);
+    sessionLogger.logError('PUBLISH', `Publish failed: ${error.message}`, { stack: error.stack });
+    sessionLogger.endSession();
     res.status(500).json({ error: error.message });
   }
 });

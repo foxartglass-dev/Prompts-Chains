@@ -708,17 +708,30 @@ async function uploadImagesToWordPress(chunks, wpCredentials, onProgress = null)
     if (!chunk.imageData?.url) return;
 
     try {
-      // Download image from OpenAI URL
-      const imageResponse = await fetch(chunk.imageData.url);
-      if (!imageResponse.ok) throw new Error('Failed to download image');
+      let base64;
+      const imageUrl = chunk.imageData.url;
 
-      const imageBuffer = await imageResponse.arrayBuffer();
-      const base64 = Buffer.from(imageBuffer).toString('base64');
+      // Handle base64 data URLs directly (fetch cannot download them)
+      if (imageUrl.startsWith('data:')) {
+        console.log(`[WP Upload] Processing base64 data URL for ${namePrefix}`);
+        // Extract base64 from data URL: data:image/png;base64,<base64data>
+        const base64Match = imageUrl.match(/^data:[^;]+;base64,(.+)$/);
+        if (!base64Match) throw new Error('Invalid base64 data URL format');
+        base64 = base64Match[1];
+      } else {
+        // Download image from HTTP URL
+        console.log(`[WP Upload] Downloading HTTP image for ${namePrefix}: ${imageUrl.substring(0, 60)}...`);
+        const imageResponse = await fetch(imageUrl);
+        if (!imageResponse.ok) throw new Error(`Failed to download image: ${imageResponse.status}`);
+        const imageBuffer = await imageResponse.arrayBuffer();
+        base64 = Buffer.from(imageBuffer).toString('base64');
+      }
 
       // Generate filename
       const filename = `${namePrefix}-${Date.now()}.webp`;
 
       // Upload to WordPress
+      console.log(`[WP Upload] Uploading ${namePrefix} to WordPress Media Library...`);
       const media = await uploadMedia(
         wpCredentials,
         base64,
@@ -729,12 +742,13 @@ async function uploadImagesToWordPress(chunks, wpCredentials, onProgress = null)
       // Update chunk with WordPress URL
       chunk.imageData.wpUrl = media.url;
       chunk.imageData.wpMediaId = media.id;
+      console.log(`[WP Upload] ✓ ${namePrefix} uploaded: ${media.url}`);
 
       current++;
       if (onProgress) onProgress(current, total);
     } catch (error) {
-      console.error(`Failed to upload image for ${namePrefix}:`, error);
-      // Don't fail the whole process, keep OpenAI URL as fallback
+      console.error(`[WP Upload] ✗ Failed to upload ${namePrefix}:`, error.message);
+      // Don't fail the whole process, keep original URL as fallback
     }
   }
 

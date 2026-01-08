@@ -26,6 +26,7 @@ import SitePlanningSection from './src/components/SitePlanningSection';
 import LocalVikingSection from './src/components/LocalVikingSection';
 import { VibeCoderToggle } from './src/components/VibeCoderNotepad';
 import HelpButton from './src/components/HelpButton';
+import LogViewer from './src/components/LogViewer';
 
 // Types for workflow
 interface WorkflowItem {
@@ -219,6 +220,7 @@ const App: React.FC = () => {
     const [globalSettingsLoading, setGlobalSettingsLoading] = useState(false);
     const [isMoreDropdownOpen, setIsMoreDropdownOpen] = useState(false);
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
+    const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
     const [defaultWorkflow, setDefaultWorkflow] = useState<DefaultWorkflowConfig | null>(() => {
       // Load from localStorage on init
       const saved = localStorage.getItem('promptflow_default_workflow');
@@ -3495,6 +3497,20 @@ const App: React.FC = () => {
 
             {/* Help Button - Opens User Manual */}
             <HelpButton position="bottom-left" />
+
+            {/* Logs Button - Opens Session Logs Viewer */}
+            <button
+                onClick={() => setIsLogViewerOpen(true)}
+                className="fixed bottom-4 left-16 z-40 p-2 bg-slate-700 hover:bg-slate-600 rounded-full shadow-lg transition-colors"
+                title="View Session Logs"
+            >
+                <svg className="w-5 h-5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+            </button>
+
+            {/* Log Viewer Modal */}
+            <LogViewer isOpen={isLogViewerOpen} onClose={() => setIsLogViewerOpen(false)} />
         </div>
     );
 };
