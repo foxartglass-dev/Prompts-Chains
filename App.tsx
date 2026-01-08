@@ -196,6 +196,7 @@ const App: React.FC = () => {
     // UI State
     const [isProcessing, setIsProcessing] = useState(false);
     const [logs, setLogs] = useState<LogEntry[]>([]);
+    const [processingLogCollapsed, setProcessingLogCollapsed] = useState(true);
     const [results, setResults] = useState<Result[]>([]);
     const [pendingResults, setPendingResults] = useState<PendingResult[]>([]);
     const [fileName, setFileName] = useState('');
@@ -267,6 +268,8 @@ const App: React.FC = () => {
 
     // useCallback for logging (must be before conditional returns)
     const addLog = useCallback((message: string, status: LogStatus, itemId?: number) => {
+        // Auto-expand the processing log when a new log entry is added
+        setProcessingLogCollapsed(false);
         setLogs(prevLogs => {
             const newLog = { id: prevLogs.length, message, status, itemId, timestamp: new Date().toLocaleTimeString() };
             const updatedLogs = [...prevLogs, newLog];
@@ -3178,6 +3181,63 @@ const App: React.FC = () => {
 
                 {/* Right Column */}
                 <div className="flex flex-col gap-8">
+                    {/* Processing Log - at the very top, collapsible */}
+                    <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan relative z-10">
+                        <button
+                            onClick={() => setProcessingLogCollapsed(!processingLogCollapsed)}
+                            className="w-full text-xl font-bold flex items-center justify-between text-brand-cyan p-5 hover:bg-slate-800/30 transition-colors rounded-t-xl"
+                        >
+                            <div className="flex items-center">
+                                <Icon type="info" className="h-6 w-6"/>
+                                <span className="ml-3">Processing Log</span>
+                                {logs.length > 0 && (
+                                    <span className="ml-2 text-xs bg-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded-full font-normal">
+                                        {logs.length} entries
+                                    </span>
+                                )}
+                            </div>
+                            <svg className={`w-5 h-5 transition-transform ${processingLogCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        {!processingLogCollapsed && (
+                        <div className="p-5 pt-0 border-t border-brand-cyan/30">
+                            {/* Mode Indicators */}
+                            <div className="flex flex-wrap gap-2 mb-3 text-xs font-mono">
+                                <span className={`px-2 py-1 rounded ${currentProject?.state?.articlePublishMode === 'wordpress' ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'}`}>
+                                    Article: {currentProject?.state?.articlePublishMode === 'wordpress' ? 'WP' : 'Draft'}
+                                </span>
+                                <span className={`px-2 py-1 rounded ${currentProject?.state?.metaPublishMode === 'wordpress' ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'}`}>
+                                    Meta: {currentProject?.state?.metaPublishMode === 'wordpress' ? 'WP' : 'Draft'}
+                                </span>
+                                <span className={`px-2 py-1 rounded ${
+                                    currentProject?.state?.wpPublishMode === 'wordpress' ? 'bg-green-600/30 text-green-400' :
+                                    currentProject?.state?.wpPublishMode === 'draft' ? 'bg-amber-600/30 text-amber-400' :
+                                    'bg-slate-600/30 text-slate-400'
+                                }`}>
+                                    Image: {currentProject?.state?.wpPublishMode === 'wordpress' ? 'WP' : currentProject?.state?.wpPublishMode === 'draft' ? 'Draft' : 'Off'}
+                                </span>
+                                {/* Image Source Counts (when images enabled) - shows actual results */}
+                                {currentProject?.state?.wpPublishMode !== 'off' && (
+                                    <>
+                                        <span className={`px-2 py-1 rounded ${batchImageCounts.fromBank > 0 ? 'bg-brand-gold/30 text-brand-gold' : 'bg-slate-600/30 text-slate-400'}`}>
+                                            📦 Bank: {batchImageCounts.fromBank}
+                                        </span>
+                                        <span className={`px-2 py-1 rounded ${batchImageCounts.fromLive > 0 ? 'bg-brand-cyan/30 text-brand-cyan' : 'bg-slate-600/30 text-slate-400'}`}>
+                                            ⚡ Live: {batchImageCounts.fromLive}
+                                        </span>
+                                    </>
+                                )}
+                            </div>
+                            {/* Logs - expanded to show all (max-h with auto, no fixed h-96) */}
+                            <div ref={logContainerRef} className="max-h-[600px] min-h-[200px] bg-slate-900 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">
+                                {logs.map(log => (<div key={log.id} className={`flex items-start ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400 animate-pulse'}[log.status]}`}>{{ [LogStatus.INFO]: <Icon type="info" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-4 w-4 mr-2 flex-shrink-0 animate-spin"/>}[log.status]}<span className="flex-1"><span className="text-gray-500 mr-2">{log.timestamp}</span>{log.message}</span></div>))}
+                                {logs.length === 0 && <div className="text-gray-500">Logs will appear here once processing starts.</div>}
+                            </div>
+                        </div>
+                        )}
+                    </div>
+
                     {renderSection('6. Prompt Workflow', 'prompts', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-4">
                             {currentProject.state.promptTemplates.map((prompt, index) => (
@@ -3289,44 +3349,6 @@ const App: React.FC = () => {
                             showNotification={showNotification}
                         />
                     )}
-
-                    <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan relative z-10">
-                        <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5`}><Icon type="info" className="h-6 w-6"/><span className="ml-3">Processing Log</span></h2>
-                        <div className="p-5 pt-0 border-t border-brand-cyan/30">
-                            {/* Mode Indicators */}
-                            <div className="flex flex-wrap gap-2 mb-3 text-xs font-mono">
-                                <span className={`px-2 py-1 rounded ${currentProject?.state?.articlePublishMode === 'wordpress' ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'}`}>
-                                    Article: {currentProject?.state?.articlePublishMode === 'wordpress' ? 'WP' : 'Draft'}
-                                </span>
-                                <span className={`px-2 py-1 rounded ${currentProject?.state?.metaPublishMode === 'wordpress' ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'}`}>
-                                    Meta: {currentProject?.state?.metaPublishMode === 'wordpress' ? 'WP' : 'Draft'}
-                                </span>
-                                <span className={`px-2 py-1 rounded ${
-                                    currentProject?.state?.wpPublishMode === 'wordpress' ? 'bg-green-600/30 text-green-400' :
-                                    currentProject?.state?.wpPublishMode === 'draft' ? 'bg-amber-600/30 text-amber-400' :
-                                    'bg-slate-600/30 text-slate-400'
-                                }`}>
-                                    Image: {currentProject?.state?.wpPublishMode === 'wordpress' ? 'WP' : currentProject?.state?.wpPublishMode === 'draft' ? 'Draft' : 'Off'}
-                                </span>
-                                {/* Image Source Counts (when images enabled) - shows actual results */}
-                                {currentProject?.state?.wpPublishMode !== 'off' && (
-                                    <>
-                                        <span className={`px-2 py-1 rounded ${batchImageCounts.fromBank > 0 ? 'bg-brand-gold/30 text-brand-gold' : 'bg-slate-600/30 text-slate-400'}`}>
-                                            📦 Bank: {batchImageCounts.fromBank}
-                                        </span>
-                                        <span className={`px-2 py-1 rounded ${batchImageCounts.fromLive > 0 ? 'bg-brand-cyan/30 text-brand-cyan' : 'bg-slate-600/30 text-slate-400'}`}>
-                                            ⚡ Live: {batchImageCounts.fromLive}
-                                        </span>
-                                    </>
-                                )}
-                            </div>
-                            {/* Logs - expanded to show all (max-h with auto, no fixed h-96) */}
-                            <div ref={logContainerRef} className="max-h-[600px] min-h-[200px] bg-slate-900 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">
-                                {logs.map(log => (<div key={log.id} className={`flex items-start ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400 animate-pulse'}[log.status]}`}>{{ [LogStatus.INFO]: <Icon type="info" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-4 w-4 mr-2 flex-shrink-0 animate-spin"/>}[log.status]}<span className="flex-1"><span className="text-gray-500 mr-2">{log.timestamp}</span>{log.message}</span></div>))}
-                                {logs.length === 0 && <div className="text-gray-500">Logs will appear here once processing starts.</div>}
-                            </div>
-                        </div>
-                    </div>
 
                     {/* Pending Selections Section */}
                     {pendingResults.length > 0 && (
