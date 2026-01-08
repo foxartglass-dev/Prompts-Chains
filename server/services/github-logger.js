@@ -37,25 +37,40 @@ function getGitHubConfig() {
  */
 async function getFileSha(config) {
   try {
-    const response = await fetch(
-      `${GITHUB_API_BASE}/repos/${config.repo}/contents/${LOG_FILE_PATH}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${config.token}`,
-          'Accept': 'application/vnd.github.v3+json'
-        }
+    console.log('[GitHub Logger] Getting SHA for existing file...');
+    const url = `${GITHUB_API_BASE}/repos/${config.repo}/contents/${LOG_FILE_PATH}`;
+    console.log('[GitHub Logger] SHA request URL:', url);
+
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${config.token}`,
+        'Accept': 'application/vnd.github.v3+json'
       }
-    );
+    });
+
+    console.log('[GitHub Logger] SHA response status:', response.status);
 
     if (response.ok) {
       const data = await response.json();
+      console.log('[GitHub Logger] Got SHA:', data.sha);
       return data.sha;
     }
 
-    // File doesn't exist yet, that's okay
+    // Log the error response
+    const errorText = await response.text();
+    console.log('[GitHub Logger] SHA request failed:', response.status, errorText);
+
+    // File doesn't exist yet, that's okay for first creation
+    if (response.status === 404) {
+      console.log('[GitHub Logger] File does not exist yet, will create new');
+      return null;
+    }
+
+    // Other error - return null but log it
+    console.error('[GitHub Logger] Unexpected error getting SHA:', response.status);
     return null;
   } catch (error) {
-    console.log('[GitHub Logger] File not found, will create new');
+    console.error('[GitHub Logger] Exception getting SHA:', error.message);
     return null;
   }
 }
