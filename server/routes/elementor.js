@@ -803,7 +803,8 @@ router.post('/publish', async (req, res) => {
               primaryScore: img.primaryScore || 0,
               secondaryScore: img.secondaryScore || 0,
               matchedPrimary: img.matchedPrimary || [],
-              matchedSecondary: img.matchedSecondary || []
+              matchedSecondary: img.matchedSecondary || [],
+              source: 'bank' // Track image source for frontend display
             }));
           }
 
@@ -1176,7 +1177,8 @@ router.post('/publish', async (req, res) => {
           mood: heroAction.mood || 'N/A',
           setting: heroAction.setting || 'N/A',
           prompt: pipelineResult.chunks.intro.imagePrompt || 'N/A', // Full prompt, no truncation
-          matchedKeywords: heroAction.matchedKeywords || []
+          matchedKeywords: heroAction.matchedKeywords || [],
+          source: 'generated' // Track image source for frontend display
         });
       }
 
@@ -1193,7 +1195,8 @@ router.post('/publish', async (req, res) => {
             action: action.action || 'N/A',
             mood: action.mood || 'N/A',
             prompt: chunk.imagePrompt || 'N/A', // Full prompt, no truncation
-            matchedKeywords: action.matchedKeywords || []
+            matchedKeywords: action.matchedKeywords || [],
+            source: 'generated' // Track image source for frontend display
           });
         }
       });
