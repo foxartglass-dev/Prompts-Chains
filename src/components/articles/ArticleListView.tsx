@@ -95,6 +95,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
   // Image management
   const [showImages, setShowImages] = useState(false);
+  const [showImageSettings, setShowImageSettings] = useState(false);
   const [showImageReport, setShowImageReport] = useState(false);
 
   // Tab state for article modal
@@ -1116,6 +1117,140 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     )}
                   </div>
 
+                  {/* Collapsible Image Integration Settings */}
+                  {selectedArticle.image_decision_report && (
+                    <div className="mb-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                      <button
+                        onClick={() => setShowImageSettings(!showImageSettings)}
+                        className="w-full flex items-center justify-between p-3 text-sm font-medium text-gray-300 hover:text-white transition"
+                      >
+                        <span className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          Image Integration Settings
+                        </span>
+                        <svg className={`w-4 h-4 transition-transform ${showImageSettings ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {showImageSettings && (
+                        <div className="px-3 pb-3 flex items-center gap-4 text-sm flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500">Mode:</span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              selectedArticle.image_decision_report.mode === 'bank' ? 'bg-blue-600/30 text-blue-400' :
+                              selectedArticle.image_decision_report.mode === 'live' ? 'bg-green-600/30 text-green-400' :
+                              'bg-gray-600/30 text-gray-400'
+                            }`}>
+                              {selectedArticle.image_decision_report.mode === 'bank' ? 'Pull from Bank' :
+                               selectedArticle.image_decision_report.mode === 'live' ? 'Generate Live' : 'None'}
+                            </span>
+                          </div>
+                          {selectedArticle.image_decision_report.model && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-500">Model:</span>
+                              <span className="text-brand-cyan text-xs">{selectedArticle.image_decision_report.model}</span>
+                            </div>
+                          )}
+                          {selectedArticle.image_decision_report.quality && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-500">Quality:</span>
+                              <span className="text-green-400 text-xs">{selectedArticle.image_decision_report.quality}</span>
+                            </div>
+                          )}
+                          {selectedArticle.image_decision_report.smartMatchingEnabled && (
+                            <span className="px-2 py-0.5 bg-emerald-600/30 text-emerald-400 rounded text-xs">
+                              Smart Matching ON
+                            </span>
+                          )}
+                          {selectedArticle.image_decision_report.avatar && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-500">Avatar:</span>
+                              <span className="text-pink-400 text-xs">{selectedArticle.image_decision_report.avatar}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Collapsible Processing Log */}
+                  {selectedArticle.image_decision_report && selectedArticle.image_decision_report.images?.length > 0 && (
+                    <div className="mb-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                      <button
+                        onClick={() => setShowImageReport(!showImageReport)}
+                        className="w-full flex items-center justify-between p-3 text-sm font-medium text-gray-300 hover:text-white transition"
+                      >
+                        <span className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          Processing Log
+                          <span className="bg-purple-600/30 text-purple-400 px-2 py-0.5 rounded text-xs">
+                            {selectedArticle.image_decision_report.images.length} decisions
+                          </span>
+                        </span>
+                        <svg className={`w-4 h-4 transition-transform ${showImageReport ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {showImageReport && (
+                        <div className="px-3 pb-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {selectedArticle.image_decision_report.images.map((img, idx) => (
+                              <div
+                                key={idx}
+                                className={`p-3 rounded-lg border ${
+                                  img.source === 'bank' ? 'bg-blue-900/20 border-blue-500/30' :
+                                  img.source === 'generated' ? 'bg-green-900/20 border-green-500/30' :
+                                  'bg-gray-900/20 border-gray-500/30'
+                                }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${
+                                    img.type === 'hero' ? 'bg-brand-gold' : 'bg-slate-600'
+                                  }`}>
+                                    {img.position}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                        img.type === 'hero' ? 'bg-brand-gold/20 text-brand-gold' : 'bg-slate-600/50 text-slate-300'
+                                      }`}>
+                                        {img.type === 'hero' ? 'Hero' : 'Inline'} {img.side ? `(${img.side})` : ''}
+                                      </span>
+                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                        img.source === 'bank' ? 'bg-blue-600/30 text-blue-400' :
+                                        img.source === 'generated' ? 'bg-green-600/30 text-green-400' :
+                                        'bg-red-600/30 text-red-400'
+                                      }`}>
+                                        {img.source === 'bank' ? 'From Bank' : img.source === 'generated' ? 'Generated' : 'Not Found'}
+                                      </span>
+                                    </div>
+                                    {img.matchedKeywords && img.matchedKeywords.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-2">
+                                        {img.matchedKeywords.map((kw: string, kwIdx: number) => (
+                                          <span key={kwIdx} className="text-[10px] bg-emerald-900/30 text-emerald-400 px-1.5 py-0.5 rounded">
+                                            {kw}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {img.url && (
+                                    <img src={img.url} alt="" className="w-12 h-12 object-cover rounded shrink-0" />
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {selectedArticle.images && selectedArticle.images.length > 0 ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {selectedArticle.images.map((image, idx) => (
@@ -1183,104 +1318,6 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       </svg>
                       <p className="text-lg">No images generated yet</p>
                       <p className="text-sm mt-1">Generate images from the Image Creation section</p>
-                    </div>
-                  )}
-
-                  {/* Image Decision Report */}
-                  {selectedArticle.image_decision_report && (
-                    <div className="mt-8 border-t border-slate-700 pt-6">
-                      <button
-                        onClick={() => setShowImageReport(!showImageReport)}
-                        className="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white transition mb-4"
-                      >
-                        <svg className={`w-4 h-4 transition-transform ${showImageReport ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                        </svg>
-                        Image Processing Log
-                        <span className="bg-purple-600/30 text-purple-400 px-2 py-0.5 rounded text-xs">
-                          {selectedArticle.image_decision_report.images?.length || 0} decisions
-                        </span>
-                      </button>
-
-                      {showImageReport && (
-                        <div className="bg-slate-800/50 rounded-lg p-4 space-y-4">
-                          {/* Report Header */}
-                          <div className="flex items-center gap-4 text-sm flex-wrap">
-                            <div className="flex items-center gap-2">
-                              <span className="text-gray-500">Mode:</span>
-                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                selectedArticle.image_decision_report.mode === 'bank' ? 'bg-blue-600/30 text-blue-400' :
-                                selectedArticle.image_decision_report.mode === 'live' ? 'bg-green-600/30 text-green-400' :
-                                'bg-gray-600/30 text-gray-400'
-                              }`}>
-                                {selectedArticle.image_decision_report.mode === 'bank' ? 'Pull from Bank' :
-                                 selectedArticle.image_decision_report.mode === 'live' ? 'Generate Live' : 'None'}
-                              </span>
-                            </div>
-                            {selectedArticle.image_decision_report.model && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-gray-500">Model:</span>
-                                <span className="text-brand-cyan text-xs">{selectedArticle.image_decision_report.model}</span>
-                              </div>
-                            )}
-                            {selectedArticle.image_decision_report.smartMatchingEnabled && (
-                              <span className="px-2 py-0.5 bg-emerald-600/30 text-emerald-400 rounded text-xs">
-                                Smart Matching ON
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Image Decisions Grid */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {selectedArticle.image_decision_report.images?.map((img, idx) => (
-                              <div
-                                key={idx}
-                                className={`p-3 rounded-lg border ${
-                                  img.source === 'bank' ? 'bg-blue-900/20 border-blue-500/30' :
-                                  img.source === 'generated' ? 'bg-green-900/20 border-green-500/30' :
-                                  'bg-gray-900/20 border-gray-500/30'
-                                }`}
-                              >
-                                <div className="flex items-start gap-3">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${
-                                    img.type === 'hero' ? 'bg-brand-gold' : 'bg-slate-600'
-                                  }`}>
-                                    {img.position}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                        img.type === 'hero' ? 'bg-brand-gold/20 text-brand-gold' : 'bg-slate-600/50 text-slate-300'
-                                      }`}>
-                                        {img.type === 'hero' ? 'Hero' : 'Inline'} {img.side ? `(${img.side})` : ''}
-                                      </span>
-                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                        img.source === 'bank' ? 'bg-blue-600/30 text-blue-400' :
-                                        img.source === 'generated' ? 'bg-green-600/30 text-green-400' :
-                                        'bg-red-600/30 text-red-400'
-                                      }`}>
-                                        {img.source === 'bank' ? 'From Bank' : img.source === 'generated' ? 'Generated' : 'Not Found'}
-                                      </span>
-                                    </div>
-                                    {img.matchedKeywords && img.matchedKeywords.length > 0 && (
-                                      <div className="flex flex-wrap gap-1 mt-2">
-                                        {img.matchedKeywords.map((kw: string, kwIdx: number) => (
-                                          <span key={kwIdx} className="text-[10px] bg-emerald-900/30 text-emerald-400 px-1.5 py-0.5 rounded">
-                                            {kw}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                  {img.url && (
-                                    <img src={img.url} alt="" className="w-12 h-12 object-cover rounded shrink-0" />
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>

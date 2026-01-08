@@ -283,13 +283,15 @@ router.post('/:id/new-version', requireDb, async (req, res) => {
 router.put('/:id', requireDb, async (req, res) => {
   try {
     const { id } = req.params;
-    const { finalContent, metaTitles, metaDescriptions, status } = req.body;
+    const { finalContent, metaTitles, metaDescriptions, status, selectedMetaTitle, selectedMetaDescription } = req.body;
 
     const result = await sql`
       UPDATE articles
       SET final_content = COALESCE(${finalContent}, final_content),
           meta_titles = COALESCE(${metaTitles ? JSON.stringify(metaTitles) : null}, meta_titles),
           meta_descriptions = COALESCE(${metaDescriptions ? JSON.stringify(metaDescriptions) : null}, meta_descriptions),
+          selected_meta_title = COALESCE(${selectedMetaTitle}, selected_meta_title),
+          selected_meta_description = COALESCE(${selectedMetaDescription}, selected_meta_description),
           status = COALESCE(${status}, status),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
