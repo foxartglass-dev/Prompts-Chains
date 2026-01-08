@@ -491,6 +491,7 @@ router.post('/publish', async (req, res) => {
           // Get available images from bank matching the tag
           // In draft mode: allow images without wpUrl (they won't be embedded in WP page)
           // In live mode: require wpUrl (base64 data URLs won't work in WordPress)
+          console.log(`[Image Bank] Filtering ${imageBank.length} images (imageDraftMode: ${imageDraftMode}, articleTag: ${articleTag})`);
           let availableImages = imageBank.filter(img => {
             if (img.used) {
               console.log('[Image Bank] Skipping used image:', img.id);
@@ -498,13 +499,14 @@ router.post('/publish', async (req, res) => {
             }
             // Skip images without WordPress URL - UNLESS we're in draft mode
             if (!img.wpUrl && !imageDraftMode) {
-              console.log('[Image Bank] ⚠️ Skipping image without wpUrl:', img.id, '- needs WordPress upload');
+              console.log('[Image Bank] ⚠️ Skipping image without wpUrl:', img.id, '- needs WordPress upload (imageDraftMode:', imageDraftMode, ')');
               return false;
             }
             // If article has a tag and image has a tag, they must match
             if (articleTag && img.avatarTag) {
               const matches = img.avatarTag === articleTag;
               if (!matches) console.log('[Image Bank] Tag mismatch:', img.avatarTag, '!=', articleTag);
+              else console.log('[Image Bank] ✅ Tag match:', img.avatarTag, '=', articleTag, 'for image:', img.id);
               return matches;
             }
             // If no tags, check variation match
@@ -514,6 +516,7 @@ router.post('/publish', async (req, res) => {
               return matches;
             }
             // No tag requirements - include all unused images
+            console.log('[Image Bank] Including image (no tag requirements):', img.id);
             return true;
           });
 
