@@ -106,6 +106,18 @@ interface AudienceAvatar {
   referenceImages?: ReferenceImage[];
 }
 
+// ========== PROMPT SETS (Multiple prompt collections) ==========
+// Allows multiple prompt sets: main avatars, universal prompts, neighborhood images, etc.
+
+interface PromptSet {
+  id: number;
+  name: string; // e.g., "Main Prompts", "Neighborhood Landmarks", "Supporting Content"
+  isUniversal: boolean; // If true, uses universalPrompt; if false, uses per-avatar prompts
+  universalPrompt?: string; // Single prompt used for all avatars (when isUniversal=true)
+  avatars: AudienceAvatar[]; // Per-avatar prompts (when isUniversal=false)
+  description?: string; // Optional description of what this prompt set is for
+}
+
 interface BankImage {
   id: string;
   url: string;
@@ -351,6 +363,8 @@ interface ImageCreationSettings {
   reference_images: ReferenceImage[];
   logo_images: LogoImage[];
   audience_avatars: AudienceAvatar[];
+  // Multiple prompt sets (Prompt Set 1, Universal Prompts, etc.)
+  prompt_sets?: PromptSet[];
   image_bank: BankImage[];
   // Custom sorting categories for uploaded images
   image_categories: string[];
@@ -423,6 +437,9 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   reference_images: [],
   logo_images: [],
   audience_avatars: [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }],
+  // Multiple prompt sets - default is empty (use audience_avatars for backwards compatibility)
+  // When prompt_sets is populated, it provides additional prompt options beyond the main avatars
+  prompt_sets: [],
   image_bank: [],
   // Custom categories for sorting uploaded images
   image_categories: ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'],
