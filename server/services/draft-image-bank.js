@@ -62,10 +62,10 @@ export async function getDraftImageBank(workflowId, options = {}) {
   query += ` ORDER BY created_at DESC LIMIT $${paramIndex}`;
   params.push(limit);
 
-  // Use tagged template for the query
+  // Neon serverless uses sql(query, params) for dynamic queries
   console.log('[Draft Bank Service] Query:', query);
   console.log('[Draft Bank Service] Params:', params);
-  const result = await sql.unsafe(query, params);
+  const result = await sql(query, params);
   console.log('[Draft Bank Service] Result count:', result?.length || 0);
   console.log('[Draft Bank Service] First row sample:', result?.[0] ? JSON.stringify(result[0]).substring(0, 200) : 'none');
   return result;
