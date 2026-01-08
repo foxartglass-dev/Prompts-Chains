@@ -958,22 +958,21 @@ router.post('/publish', async (req, res) => {
           });
           sessionLogger.updateSummary({ imagesFromBank });
 
-          // Mark images as used
+          // Mark images as used in the NEW image_bank_items table
           if (imagesToUse.length > 0) {
-            const usedIds = new Set(imagesToUse.map(i => i.id));
-            const updatedBank = imageBank.map(img => {
-              if (usedIds.has(img.id)) {
-                return { ...img, used: true, usedOn: keyword, usedAt: new Date().toISOString() };
-              }
-              return img;
-            });
+            console.log(`[Image Bank] Marking ${imagesToUse.length} images as used...`);
+            const { markImageAsUsed } = await import('../services/image-bank.js');
 
-            await sql`
-              UPDATE image_creation_settings
-              SET image_bank = ${JSON.stringify(updatedBank)}::jsonb,
-                  updated_at = CURRENT_TIMESTAMP
-              WHERE workflow_id = ${workflowId}
-            `;
+            for (const img of imagesToUse) {
+              // Use dbId (database ID) to update the correct record
+              const imageId = img.dbId || img.id;
+              try {
+                await markImageAsUsed(workflowId, imageId, keyword);
+                console.log(`[Image Bank] ✅ Marked image ${imageId} as used on "${keyword}"`);
+              } catch (markError) {
+                console.error(`[Image Bank] Failed to mark image ${imageId} as used:`, markError.message);
+              }
+            }
           }
         }
       } catch (bankError) {
