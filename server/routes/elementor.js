@@ -489,14 +489,15 @@ router.post('/publish', async (req, res) => {
           console.log('[Image Bank] Target avatar:', targetAvatar?.name, targetAvatar?.tag);
 
           // Get available images from bank matching the tag
-          // IMPORTANT: Only use images that have been uploaded to WordPress (have wpUrl)
+          // In draft mode: allow images without wpUrl (they won't be embedded in WP page)
+          // In live mode: require wpUrl (base64 data URLs won't work in WordPress)
           let availableImages = imageBank.filter(img => {
             if (img.used) {
               console.log('[Image Bank] Skipping used image:', img.id);
               return false;
             }
-            // Skip images without WordPress URL - base64 data URLs won't work
-            if (!img.wpUrl) {
+            // Skip images without WordPress URL - UNLESS we're in draft mode
+            if (!img.wpUrl && !imageDraftMode) {
               console.log('[Image Bank] ⚠️ Skipping image without wpUrl:', img.id, '- needs WordPress upload');
               return false;
             }
@@ -516,12 +517,14 @@ router.post('/publish', async (req, res) => {
             return true;
           });
 
-          // Count images missing wpUrl for warning
+          // Count images missing wpUrl for warning (only matters in non-draft mode)
           const missingWpUrl = imageBank.filter(img => !img.used && !img.wpUrl).length;
           console.log('[Image Bank] Available images after filter:', availableImages.length);
-          if (missingWpUrl > 0) {
+          if (missingWpUrl > 0 && !imageDraftMode) {
             console.log(`[Image Bank] ⚠️ WARNING: ${missingWpUrl} images skipped - missing WordPress URL!`);
             console.log('[Image Bank] → These images need to be uploaded to WordPress Media Library first');
+          } else if (missingWpUrl > 0 && imageDraftMode) {
+            console.log(`[Image Bank] Draft mode: ${missingWpUrl} images available (wpUrl not required)`);
           }
 
           // ═══════════════════════════════════════════════════════════════
