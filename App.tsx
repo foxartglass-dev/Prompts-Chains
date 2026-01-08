@@ -1329,8 +1329,12 @@ const App: React.FC = () => {
                                     });
                                     const publishData = await publishResponse.json();
 
-                                    // Success: either WP page created OR images processed (when skipWpPageCreation)
-                                    if (publishResponse.ok && (publishData.page?.id || publishData.imagesProcessed)) {
+                                    // Success conditions:
+                                    // 1. WP page created (publishData.page?.id)
+                                    // 2. Images processed (publishData.imagesProcessed)
+                                    // 3. Draft mode completed (skipWpPageCreation was true, even if no images)
+                                    const isDraftModeSuccess = !shouldPublishToWP && publishResponse.ok;
+                                    if (publishResponse.ok && (publishData.page?.id || publishData.imagesProcessed || isDraftModeSuccess)) {
                                         // Log image results with detailed mode info
                                         const report = publishData.imageDecisionReport;
                                         const modeLabel = report?.mode === 'bank' ? '📦 Bank' : report?.mode === 'live' ? '⚡ Live' : '❌ None';
@@ -1344,7 +1348,16 @@ const App: React.FC = () => {
                                             const liveDetails = promptModeLabel ? ` (${promptModeLabel})` : '';
                                             addLog(`[${itemLabel}] ${modeLabel}${liveDetails}: Generated ${publishData.totalImages} images`, LogStatus.SUCCESS, item.id);
                                         } else if (includeImages) {
-                                            addLog(`[${itemLabel}] ${modeLabel}: No images processed`, LogStatus.INFO, item.id);
+                                            // No images found - provide context on why
+                                            const noImageReason = report?.mode === 'bank'
+                                                ? 'No matching images in Bank'
+                                                : report?.mode === 'live'
+                                                    ? 'Image generation skipped or failed'
+                                                    : 'Images not enabled';
+                                            addLog(`[${itemLabel}] ${modeLabel}: ${noImageReason}`, LogStatus.INFO, item.id);
+                                        } else if (!shouldPublishToWP) {
+                                            // Draft mode with images off
+                                            addLog(`[${itemLabel}] Draft mode: Article processed (no images)`, LogStatus.INFO, item.id);
                                         }
                                         // Log actual image save status from server
                                         if (publishData.imageSaveStatus) {
