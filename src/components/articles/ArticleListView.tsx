@@ -99,6 +99,10 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const [pushingMeta, setPushingMeta] = useState(false);
   const [regeneratingImage, setRegeneratingImage] = useState<string | null>(null);
 
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   useEffect(() => {
     fetchArticles();
   }, [websiteId, statusFilter]);
@@ -303,6 +307,43 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     }
   };
 
+  // Bulk selection handlers
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredArticles.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredArticles.map(a => a.id)));
+    }
+  };
+
+  const toggleSelectArticle = (id: number) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const bulkDeleteArticles = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} article${selectedIds.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
+
+    setBulkDeleting(true);
+    try {
+      for (const id of selectedIds) {
+        await fetch(`/api/articles/${id}`, { method: 'DELETE' });
+      }
+      setSelectedIds(new Set());
+      fetchArticles();
+    } catch (err) {
+      setError('Failed to delete some articles');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'published': return 'bg-green-500 text-white';
@@ -479,6 +520,28 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         </select>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-4 p-3 bg-slate-800 rounded-lg border border-brand-cyan/30 mb-2">
+          <span className="text-sm text-gray-300">
+            {selectedIds.size} article{selectedIds.size !== 1 ? 's' : ''} selected
+          </span>
+          <button
+            onClick={bulkDeleteArticles}
+            disabled={bulkDeleting}
+            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-white text-sm font-medium transition disabled:opacity-50"
+          >
+            {bulkDeleting ? 'Deleting...' : 'Delete Selected'}
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-gray-300 text-sm transition"
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {/* Article List */}
       <div className="flex-1 overflow-auto rounded-lg border border-brand-cyan/20">
         {filteredArticles.length === 0 ? (
@@ -492,60 +555,119 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-slate-800 text-left text-gray-400 border-b border-brand-cyan/20">
               <tr>
-                <th className="p-3">Keyword</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Tag</th>
-                <th className="p-3">AI Score</th>
-                <th className="p-3">Words</th>
-                <th className="p-3">Client</th>
-                <th className="p-3">Website</th>
-                <th className="p-3">Created</th>
-                <th className="p-3">Actions</th>
+                <th className="p-2 w-10">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size === filteredArticles.length && filteredArticles.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-gray-600 bg-slate-700 text-brand-cyan focus:ring-brand-cyan"
+                  />
+                </th>
+                <th className="p-2">Keyword</th>
+                <th className="p-2">Status</th>
+                <th className="p-2">Tag</th>
+                <th className="p-2">Created</th>
+                <th className="p-2">Article</th>
+                <th className="p-2">Meta</th>
+                <th className="p-2">Image</th>
+                <th className="p-2">Bank</th>
+                <th className="p-2">Live</th>
+                <th className="p-2">AI</th>
+                <th className="p-2">Words</th>
+                <th className="p-2">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredArticles.map((article) => (
                 <tr
                   key={article.id}
-                  className="border-b border-brand-cyan/10 hover:bg-slate-800/50 transition"
+                  className={`border-b border-brand-cyan/10 hover:bg-slate-800/50 transition ${selectedIds.has(article.id) ? 'bg-brand-cyan/10' : ''}`}
                 >
-                  <td className="p-3 font-medium text-white">
+                  <td className="p-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(article.id)}
+                      onChange={() => toggleSelectArticle(article.id)}
+                      className="w-4 h-4 rounded border-gray-600 bg-slate-700 text-brand-cyan focus:ring-brand-cyan"
+                    />
+                  </td>
+                  <td className="p-2 font-medium text-white">
                     {article.keyword}
                     {article.version && article.version > 1 && (
                       <span className="ml-2 text-xs text-gray-500">v{article.version}</span>
                     )}
                   </td>
-                  <td className="p-3">
+                  <td className="p-2">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(article.status)}`}>
                       {article.status}
                     </span>
                   </td>
-                  <td className="p-3">
+                  <td className="p-2">
                     {article.tag && (
                       <span className="px-2 py-0.5 bg-brand-gold/20 text-brand-gold rounded text-xs font-medium">
                         {article.tag}
                       </span>
                     )}
                   </td>
-                  <td className="p-3 text-gray-300">
+                  <td className="p-2 text-gray-400 text-xs whitespace-nowrap">
+                    {new Date(article.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{' '}
+                    {new Date(article.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                  </td>
+                  <td className="p-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      article.wp_post_id ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
+                    }`}>
+                      {article.wp_post_id ? 'WP' : 'Draft'}
+                    </span>
+                  </td>
+                  <td className="p-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      article.selected_meta_title ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
+                    }`}>
+                      {article.selected_meta_title ? 'WP' : 'Draft'}
+                    </span>
+                  </td>
+                  <td className="p-2">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      !article.images || (Array.isArray(article.images) ? article.images.length === 0 : true)
+                        ? 'bg-slate-600/30 text-slate-400'
+                        : (Array.isArray(article.images) && article.images.some((img: ArticleImage) => img.pushedToWp))
+                          ? 'bg-green-600/30 text-green-400'
+                          : 'bg-amber-600/30 text-amber-400'
+                    }`}>
+                      {!article.images || (Array.isArray(article.images) ? article.images.length === 0 : true)
+                        ? 'Off'
+                        : (Array.isArray(article.images) && article.images.some((img: ArticleImage) => img.pushedToWp))
+                          ? 'WP'
+                          : 'Draft'}
+                    </span>
+                  </td>
+                  <td className="p-2 text-xs">
+                    <span className={`${
+                      (article.image_decision_report?.images?.filter((img: ImageDecisionReportImage) => img.source === 'bank').length || 0) > 0
+                        ? 'text-brand-gold' : 'text-gray-500'
+                    }`}>
+                      {article.image_decision_report?.images?.filter((img: ImageDecisionReportImage) => img.source === 'bank').length || 0}
+                    </span>
+                  </td>
+                  <td className="p-2 text-xs">
+                    <span className={`${
+                      (article.image_decision_report?.images?.filter((img: ImageDecisionReportImage) => img.source === 'generated').length || 0) > 0
+                        ? 'text-brand-cyan' : 'text-gray-500'
+                    }`}>
+                      {article.image_decision_report?.images?.filter((img: ImageDecisionReportImage) => img.source === 'generated').length || 0}
+                    </span>
+                  </td>
+                  <td className="p-2 text-gray-300 text-xs">
                     {article.ai_score !== null && article.ai_score !== undefined
                       ? `${article.ai_score}%`
                       : '-'}
                   </td>
-                  <td className="p-3 text-gray-300">
+                  <td className="p-2 text-gray-300 text-xs">
                     {article.word_count || '-'}
                   </td>
-                  <td className="p-3 text-gray-400 text-xs">
-                    {article.client_name || '-'}
-                  </td>
-                  <td className="p-3 text-gray-400 text-xs">
-                    {article.website_name || '-'}
-                  </td>
-                  <td className="p-3 text-gray-400 text-xs">
-                    {new Date(article.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="p-3">
-                    <div className="flex items-center gap-2">
+                  <td className="p-2">
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => openArticle(article)}
                         className="px-2 py-1 bg-brand-cyan/20 hover:bg-brand-cyan/30 border border-brand-cyan/50 rounded text-brand-cyan text-xs font-medium transition"
@@ -557,7 +679,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                         <button
                           onClick={() => onEditVisual(article)}
                           className="px-2 py-1 bg-brand-gold/20 hover:bg-brand-gold/30 border border-brand-gold/50 rounded text-brand-gold text-xs font-medium transition"
-                          title="Visual Editor (Draft Preview)"
+                          title="Visual Editor"
                         >
                           Visual
                         </button>
@@ -611,15 +733,25 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                         {selectedArticle.tag}
                       </span>
                     )}
-                  </div>
-                  {/* Stats + Status Badges - All on one line */}
-                  <div className="flex items-center gap-2 mt-1 text-xs font-mono">
-                    <span className="text-gray-400">{selectedArticle.word_count || 0} words</span>
-                    <span className="text-gray-400">AI: {selectedArticle.ai_score ?? '-'}%</span>
+                    <span className="text-gray-400">|</span>
+                    <span className="text-gray-400 text-sm">{selectedArticle.word_count || 0} words</span>
+                    <span className="text-gray-400 text-sm">AI: {selectedArticle.ai_score ?? '-'}%</span>
                     {selectedArticle.images && selectedArticle.images.length > 0 && (
-                      <span className="text-amber-400">{selectedArticle.images.length} images</span>
+                      <span className="text-amber-400 text-sm">{selectedArticle.images.length} images</span>
                     )}
-                    <span className="text-gray-600">|</span>
+                    {/* Created Date/Time */}
+                    {selectedArticle.created_at && (
+                      <span className="text-gray-500 text-sm ml-2">
+                        {new Date(selectedArticle.created_at).toLocaleDateString('en-US', {
+                          month: 'short', day: 'numeric', year: 'numeric'
+                        })} {new Date(selectedArticle.created_at).toLocaleTimeString('en-US', {
+                          hour: 'numeric', minute: '2-digit', hour12: true
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  {/* Status Badges Row */}
+                  <div className="flex items-center gap-2 mt-1 text-xs font-mono">
                     {/* Article: Draft/WP */}
                     <span className={`px-2 py-0.5 rounded font-medium ${
                       selectedArticle.wp_post_id ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
@@ -661,16 +793,6 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       ⚡ Live: {selectedArticle.image_decision_report?.images?.filter(img => img.source === 'generated').length || 0}
                     </span>
                   </div>
-                  {/* Created Date/Time - Second line */}
-                  {selectedArticle.created_at && (
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      {new Date(selectedArticle.created_at).toLocaleDateString('en-US', {
-                        month: 'short', day: 'numeric', year: 'numeric'
-                      })} {new Date(selectedArticle.created_at).toLocaleTimeString('en-US', {
-                        hour: 'numeric', minute: '2-digit', hour12: true
-                      })}
-                    </div>
-                  )}
                 </div>
 
                 {/* Tab Navigation */}
@@ -847,61 +969,59 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                   {selectedArticle.images && selectedArticle.images.length > 0 ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {selectedArticle.images.map((image, idx) => (
-                        <div key={image.id} className="relative group bg-slate-900 rounded-lg overflow-hidden border border-slate-700 hover:border-brand-cyan/50 transition">
-                          <img
-                            src={image.url}
-                            alt={image.placement || 'Article image'}
-                            className="w-full aspect-[3/4] object-contain bg-slate-900"
-                          />
-                          {/* Placement badge */}
-                          <div className="absolute top-2 left-2">
-                            <span className={`px-2 py-1 rounded text-[10px] font-medium ${
-                              image.placement === 'hero' || image.placement?.includes('hero')
-                                ? 'bg-brand-gold text-slate-900'
-                                : 'bg-slate-600 text-white'
-                            }`}>
-                              {image.placement || `Image ${idx + 1}`}
-                            </span>
-                          </div>
-                          {/* WP status badge */}
-                          {image.pushedToWp && (
-                            <div className="absolute top-2 right-2">
-                              <span className="px-1.5 py-0.5 bg-green-600 rounded text-white text-[10px] flex items-center gap-1">
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                                </svg>
-                                WP
+                        <div key={image.id} className="relative bg-slate-900 rounded-lg overflow-hidden border border-slate-700 hover:border-brand-cyan/50 transition flex flex-col">
+                          {/* Image container - shows real aspect ratio */}
+                          <div className="relative">
+                            <img
+                              src={image.url}
+                              alt={image.placement || 'Article image'}
+                              className="w-full h-auto"
+                            />
+                            {/* Placement badge */}
+                            <div className="absolute top-2 left-2">
+                              <span className={`px-2 py-1 rounded text-[10px] font-medium ${
+                                image.placement === 'hero' || image.placement?.includes('hero')
+                                  ? 'bg-brand-gold text-slate-900'
+                                  : 'bg-slate-600 text-white'
+                              }`}>
+                                {image.placement || `Image ${idx + 1}`}
                               </span>
                             </div>
-                          )}
-                          {/* Hover overlay */}
-                          <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3">
-                            {image.keywords && image.keywords.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mb-2">
-                                {image.keywords.slice(0, 3).map((kw, i) => (
-                                  <span key={i} className="text-[9px] bg-emerald-900/50 text-emerald-400 px-1 py-0.5 rounded">
-                                    {kw}
-                                  </span>
-                                ))}
+                            {/* WP status badge */}
+                            {image.pushedToWp && (
+                              <div className="absolute top-2 right-2">
+                                <span className="px-1.5 py-0.5 bg-green-600 rounded text-white text-[10px] flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  WP
+                                </span>
                               </div>
                             )}
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => regenerateImage(image.id)}
-                                disabled={regeneratingImage === image.id}
-                                className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs font-medium disabled:opacity-50"
-                              >
-                                {regeneratingImage === image.id ? 'Regenerating...' : 'Regenerate'}
-                              </button>
-                              <a
-                                href={image.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-white text-xs"
-                              >
-                                View
-                              </a>
-                            </div>
+                          </div>
+                          {/* Buttons - always visible below image */}
+                          <div className="p-2 bg-slate-800 flex gap-1">
+                            <button
+                              onClick={() => regenerateImage(image.id)}
+                              disabled={regeneratingImage === image.id}
+                              className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs font-medium disabled:opacity-50 flex items-center justify-center gap-1"
+                            >
+                              {regeneratingImage === image.id && (
+                                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                              )}
+                              {regeneratingImage === image.id ? 'Regenerating...' : 'Regenerate'}
+                            </button>
+                            <a
+                              href={image.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-white text-xs"
+                            >
+                              View
+                            </a>
                           </div>
                         </div>
                       ))}
