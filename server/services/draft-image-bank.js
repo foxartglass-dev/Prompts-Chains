@@ -164,6 +164,13 @@ export async function getItemCategories(workflowId) {
 export async function addToDraftBank(workflowId, image) {
   if (!isDatabaseEnabled()) return null;
 
+  // Validate URL - must be a real URL, not base64 (which would exceed VARCHAR(1000))
+  const url = image.url || '';
+  if (!url || url.startsWith('data:') || url.length > 1000) {
+    console.warn('[Draft Bank] Skipping image - invalid or too long URL:', url.substring(0, 50) + '...');
+    return null;
+  }
+
   const result = await sql`
     INSERT INTO draft_image_bank (
       workflow_id, article_id, url, wp_media_id,
@@ -173,7 +180,7 @@ export async function addToDraftBank(workflowId, image) {
     ) VALUES (
       ${workflowId},
       ${image.articleId || null},
-      ${image.url},
+      ${url},
       ${image.wpMediaId || null},
       ${image.itemType || null},
       ${image.itemCategory || null},
