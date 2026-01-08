@@ -1,0 +1,169 @@
+# PromptFlow Server Logs
+# Generated: 2026-01-08T10:16:07.788Z
+# Context: publish-complete
+# Lines: 107
+# ---
+[10:14:41.121] LOG   PromptFlow API server running on http://localhost:8080
+[10:14:41.123] LOG   Mode: PRODUCTION
+[10:14:41.123] LOG   Available providers: anthropic (more coming soon)
+[10:15:12.907] LOG   [Image Creation API] GET settings for workflow: 14
+[10:15:13.129] LOG   [Image Creation API] Found records: 1
+[10:15:37.075] LOG   [anthropic] Model: claude-sonnet-4-5-20250929, Key source: request, Key preview: sk-ant-a...
+[10:15:55.533] LOG   [anthropic] Model: claude-sonnet-4-5-20250929, Key source: request, Key preview: sk-ant-a...
+[10:15:59.958] LOG   [anthropic] Model: claude-sonnet-4-5-20250929, Key source: request, Key preview: sk-ant-a...
+[10:16:06.686] LOG   ZeroGPT raw response: {"success":true,"code":200,"message":"Detection complete","data":{"sentences":[],"isHuman":62.5,"additional_feedback":"","h":["It focuses on visible surfaces, floors, kitchens, and bathrooms without intensive scrubbing or hidden areas..","Sweep, vacuum, and mop all floors.","Dust and wipe reachable surfaces, counters, tables, and sills.","Deep clean bathrooms (toilets, sinks, mirrors, tubs, showers).","Wipe kitchen counters, backsplash, sink, fixtures; clean microwave interior.","## What's Inclu
+[10:16:06.686] LOG   ZeroGPT parsed data: {
+  "success": true,
+  "code": 200,
+  "message": "Detection complete",
+  "data": {
+    "sentences": [],
+    "isHuman": 62.5,
+    "additional_feedback": "",
+    "h": [
+      "It focuses on visible surfaces, floors, kitchens, and bathrooms without intensive scrubbing or hidden areas..",
+      "Sweep, vacuum, and mop all floors.",
+      "Dust and wipe reachable surfaces, counters, tables, and sills.",
+      "Deep clean bathrooms (toilets, sinks, mirrors, tubs, showers).",
+      "Wipe kitchen counte
+[10:16:06.686] LOG   ZeroGPT extracted score: 33.59
+[10:16:07.104] LOG   [SESSION] Started new session: session-1767867367104 {
+  "keyword": "tst1(H)"
+}
+[10:16:07.105] LOG   [PUBLISH] Starting publish for: tst1(H) {
+  "articleId": 150,
+  "workflowId": 14,
+  "imageDraftMode": true,
+  "useImageBank": true,
+  "generateImages": true,
+  "maxImages": 4
+}
+[10:16:07.355] LOG   [Elementor Publish] Settings found: true
+[10:16:07.356] LOG   [Elementor Publish] integration_mode: bank
+[10:16:07.356] LOG   [Elementor Publish] Integration mode: bank
+[10:16:07.356] LOG   [Elementor Publish] Image generation model: gpt-image-1.5
+[10:16:07.356] LOG   [Elementor Publish] Image quality: low
+[10:16:07.356] LOG   [Elementor Publish] Live prompt mode: main_prompt
+[10:16:07.356] LOG   [Elementor Publish] Target avatar: House Cleaning
+[10:16:07.356] LOG   [Elementor Publish] Mode: Pull from Bank (fallback: false )
+[10:16:07.356] LOG   [IMAGE] Mode: Pull from Bank (fallback: false) {
+  "avatar": "House Cleaning"
+}
+[10:16:07.356] LOG   [Image Bank] Checking conditions: effectiveUseBank= true workflowId= 14 dbEnabled= true
+[10:16:07.558] LOG   [Image Bank] Starting selection - Bank: 0 images, Avatars: 3
+[10:16:07.558] LOG   [Image Bank] WARNING: Bank is empty!
+[10:16:07.558] LOG   [Image Bank] Keyword: tst1(H)
+[10:16:07.558] LOG   [Image Bank] Article tag: H
+[10:16:07.558] LOG   [Image Bank] Bank size: 0
+[10:16:07.558] LOG   [Image Bank] Avatars: [
+  {
+    "name": "House Cleaning",
+    "tag": "H"
+  },
+  {
+    "name": "J",
+    "tag": "J"
+  },
+  {
+    "name": "C",
+    "tag": "C"
+  }
+]
+[10:16:07.559] LOG   [Image Bank] Target avatar: House Cleaning H
+[10:16:07.559] LOG   [Image Bank] Available images after filter: 0
+[10:16:07.559] LOG   [Smart Matching] Enabled, mode: bank_first , plurals: true
+[10:16:07.560] LOG   [Smart Match] Article: tst1(H) | Avatar: House Cleaning | Plurals: ON
+[10:16:07.560] LOG   [Smart Match] Matched 0 images:
+[10:16:07.560] LOG   [Image Bank] Selected 0 images (Hero: 1, Body: -1)
+[10:16:07.560] LOG   ✓ [BANK] Selected 0 images from Image Bank {
+  "hero": 0,
+  "body": 0,
+  "variations": []
+}
+[10:16:07.762] LOG   [Elementor Publish] Generate Live settings:
+[10:16:07.763] LOG     - Prompt mode: main_prompt
+[10:16:07.763] LOG     - Target avatar: House Cleaning
+[10:16:07.763] LOG     - Main prompt: Photorealistic professional cleaning service scene...
+[10:16:07.766] LOG   [Elementor Publish] Skipping WP page creation (image processing only mode)
+[10:16:07.766] LOG   [WP] Skipping WordPress page creation - image processing only 
+[10:16:07.766] LOG   
+========== IMAGE SAVE DIAGNOSTIC ==========
+[10:16:07.766] LOG   [SAVE] articleId: 150
+[10:16:07.766] LOG   [SAVE] isDatabaseEnabled(): true
+[10:16:07.767] LOG   [SAVE] chunked.intro exists: true
+[10:16:07.767] LOG   [SAVE] chunked.intro.imageData: null
+[10:16:07.767] LOG   [SAVE] chunked.chunks count: 8
+[10:16:07.767] LOG   ============================================
+
+[10:16:07.767] LOG   [36m[SAVING IMAGES TO DATABASE - Article 150][0m
+[10:16:07.767] LOG   [33m[IMAGES ATTACHED TO CHUNKS [BEFORE saving to DB]][0m
+[10:16:07.767] LOG   [33m--- Chunk Analysis ---[0m
+[10:16:07.767] LOG   [37m  INTRO CHUNK:[0m
+[10:16:07.767] LOG   [37m    - Has imageData: [31m✗ NO[0m[0m
+[10:16:07.767] LOG   [37m    - Has imagePrompt: ✗ NO[0m
+[10:16:07.767] LOG   [37m  
+BODY CHUNKS (8 total):[0m
+[10:16:07.768] LOG   [37m    [0] "What does standard cleaning in" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[10:16:07.768] LOG   [37m    [1] "What's Included in a Standard " - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[10:16:07.768] LOG   [37m    [2] "How Standard Cleaning Differs " - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[10:16:07.768] LOG   [37m    [3] "How Often Hendersonville Homes" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[10:16:07.768] LOG   [37m    [4] "What Homeowners Should Do Befo" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[10:16:07.768] LOG   [37m    [5] "When Standard Cleaning Is Not " - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[10:16:07.768] LOG   [37m    [6] "Why Bed-Making and Light Tidyi" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[10:16:07.768] LOG   [37m    [7] "FAQ" - Image:[31m✗[0m Prompt:[31m✗[0m[0m
+[10:16:07.768] LOG   [33m--- Summary ---[0m
+[10:16:07.768] LOG   [37m  Total chunks: 8[0m
+[10:16:07.768] LOG   [37m  Chunks with imageData: 0[0m
+[10:16:07.768] LOG   [37m  Chunks with imagePrompt: 0[0m
+[10:16:07.768] LOG   [31m[ERR] NO CHUNKS HAVE IMAGE DATA![0m
+[10:16:07.768] LOG   [31m[ERR] Images were never attached to chunks, or were lost somewhere[0m
+[10:16:07.768] LOG   [34m[IMAGES SAVED TO DB [elementor.js publish endpoint]][0m
+[10:16:07.768] LOG   [34m--- Save Operation ---[0m
+[10:16:07.768] LOG   [37m  Location: elementor.js publish endpoint[0m
+[10:16:07.768] LOG   [37m  Timestamp: 2026-01-08T10:16:07.768Z[0m
+[10:16:07.768] LOG   [37m  Article ID: 150[0m
+[10:16:07.768] LOG   [37m  Number of Images: 0[0m
+[10:16:07.768] LOG   [31m[ERR] NO IMAGES TO SAVE! Array is empty or null![0m
+[10:16:07.768] LOG   [31m[ERR] This is likely the problem - images never made it to save operation![0m
+[10:16:07.768] LOG   [Elementor Publish] Saving 0 images to article 150
+[10:16:07.768] LOG   [31m[ERR] NO IMAGES TO SAVE! This is the problem![0m
+[10:16:07.768] LOG   [33m[WARN] Checking chunks to find where images got lost...[0m
+[10:16:07.768] LOG   [Elementor Publish] DEBUG - No images to save. Checking chunks:
+[10:16:07.768] LOG     - chunked.intro exists: true
+[10:16:07.768] LOG     - chunked.intro.imageData exists: false
+[10:16:07.768] LOG     - chunked.intro.imageData.url: NONE
+[10:16:07.768] LOG     - chunked.intro.imageData.wpUrl: NONE
+[10:16:07.768] LOG     - chunked.chunks count: 8
+[10:16:07.769] LOG     - chunk[0].imageData exists: false
+[10:16:07.769] LOG     - chunk[1].imageData exists: false
+[10:16:07.769] LOG     - chunk[2].imageData exists: false
+[10:16:07.769] LOG     - chunk[3].imageData exists: false
+[10:16:07.769] LOG     - chunk[4].imageData exists: false
+[10:16:07.769] LOG     - chunk[5].imageData exists: false
+[10:16:07.769] LOG     - chunk[6].imageData exists: false
+[10:16:07.769] LOG     - chunk[7].imageData exists: false
+[10:16:07.769] LOG   
+[SAVE] ========== ABOUT TO SAVE ==========
+[10:16:07.769] LOG   [SAVE] generatedImagesData.length: 0
+[10:16:07.769] LOG   [SAVE] isManualPush: false
+[10:16:07.769] LOG   [SAVE] ⚠️ NO IMAGES IN ARRAY - This is why nothing is saved!
+[10:16:07.769] LOG   [SAVE] ========================================
+
+[10:16:07.769] LOG   [SAVE] Draft mode - saving images without WP page data
+[10:16:07.780] LOG   [SAVE] ✅ Draft mode DB update completed for article 150
+[10:16:07.780] LOG   [SAVE] Update result: 1 rows affected
+[10:16:07.780] LOG   [SAVE] ✅ Successfully saved 0 images to database
+[10:16:07.786] LOG   [VERIFY] ✅ Database verification: Article 150 has 0 images saved
+[10:16:07.786] LOG   ✓ [PUBLISH] Successfully published to WordPress {
+  "totalImages": 0,
+  "imagesSaved": 0
+}
+[10:16:07.787] LOG   [SESSION] Session ended: session-1767867367104 {
+  "summary": {
+    "articlesProcessed": 1,
+    "imagesGenerated": 0,
+    "imagesFromBank": 0,
+    "errors": 0,
+    "wpUploads": 1
+  }
+}
