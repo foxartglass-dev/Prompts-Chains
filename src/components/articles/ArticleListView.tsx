@@ -252,6 +252,14 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     }
   };
 
+  // Check if article content has changed from what's saved
+  const hasArticleChanges = () => {
+    if (!selectedArticle) return false;
+    const currentContent = editContent || '';
+    const savedContent = selectedArticle.final_content || '';
+    return currentContent !== savedContent;
+  };
+
   const publishToWordPress = async () => {
     if (!selectedArticle) return;
 
@@ -264,42 +272,85 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       return;
     }
 
+    const contentToPublish = editContent || selectedArticle.final_content;
+    const wpPostId = selectedArticle.wp_post_id;
+
+    // If already published, check for changes
+    if (wpPostId) {
+      if (!hasArticleChanges()) {
+        setError('No changes to push - article content is unchanged');
+        return;
+      }
+    }
+
     setPublishing(true);
     setError(null);
 
     try {
-      const res = await fetch('/api/elementor/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          wpUrl,
-          wpUser,
-          wpPassword,
-          title: selectedArticle.keyword,
-          content: editContent || selectedArticle.final_content,
-          status: 'draft',
-          articleId: selectedArticle.id,
-          isManualPush: true
-        })
-      });
-
-      const data = await res.json();
-
-      if (data.success && data.page) {
-        await fetch(`/api/articles/${selectedArticle.id}/wp-status`, {
-          method: 'PATCH',
+      if (wpPostId) {
+        // UPDATE existing post
+        const res = await fetch('/api/elementor/update', {
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            wpPostId: data.page.id,
-            wpPostUrl: data.page.link,
-            status: 'published'
+            wpUrl,
+            wpUser,
+            wpPassword,
+            postId: wpPostId,
+            content: contentToPublish,
+            articleId: selectedArticle.id
           })
         });
 
-        fetchArticleDetails(selectedArticle.id);
-        fetchArticles();
+        const data = await res.json();
+
+        if (data.success) {
+          // Save the new content to the article in DB
+          await fetch(`/api/articles/${selectedArticle.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ finalContent: contentToPublish })
+          });
+          fetchArticleDetails(selectedArticle.id);
+          fetchArticles();
+        } else {
+          setError(data.error || 'Failed to update article on WordPress');
+        }
       } else {
-        setError(data.error || 'Failed to publish');
+        // CREATE new post
+        const res = await fetch('/api/elementor/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wpUrl,
+            wpUser,
+            wpPassword,
+            title: selectedArticle.keyword,
+            content: contentToPublish,
+            status: 'draft',
+            articleId: selectedArticle.id,
+            isManualPush: true
+          })
+        });
+
+        const data = await res.json();
+
+        if (data.success && data.page) {
+          await fetch(`/api/articles/${selectedArticle.id}/wp-status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              wpPostId: data.page.id,
+              wpPostUrl: data.page.link,
+              status: 'published'
+            })
+          });
+
+          fetchArticleDetails(selectedArticle.id);
+          fetchArticles();
+        } else {
+          setError(data.error || 'Failed to publish');
+        }
       }
     } catch (err) {
       setError('Failed to publish to WordPress');
@@ -965,58 +1016,77 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Push All to WP Button */}
-                <div className="relative group">
-                  <button
-                    onClick={pushAllToWordPress}
-                    disabled={pushingAll || !selectedArticle.selected_meta_title}
-                    className={`px-4 py-1.5 rounded text-white font-medium text-sm transition flex items-center gap-2 ${
-                      selectedArticle.selected_meta_title
-                        ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500'
-                        : 'bg-gray-600 cursor-not-allowed opacity-60'
-                    }`}
-                  >
-                    {pushingAll ? (
-                      <>
-                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Pushing All...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                        Push All to WP
-                      </>
-                    )}
-                  </button>
-                  {/* Tooltip when disabled */}
-                  {!selectedArticle.selected_meta_title && (
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 border border-amber-500/50 rounded-lg text-xs text-amber-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                      <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        Save Meta Title & Description first
-                      </div>
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
-                    </div>
+                {/* 1. Push Article to WP */}
+                <button
+                  onClick={publishToWordPress}
+                  disabled={publishing}
+                  className={`px-3 py-1.5 rounded text-white font-medium text-xs transition ${
+                    selectedArticle.wp_post_id
+                      ? 'bg-blue-600 hover:bg-blue-500'
+                      : 'bg-green-600 hover:bg-green-500'
+                  } disabled:opacity-50`}
+                  title={selectedArticle.wp_post_id ? 'Update article on WordPress' : 'Publish article to WordPress'}
+                >
+                  {publishing ? 'Pushing...' : (selectedArticle.wp_post_id ? 'Update Article to WP' : 'Push Article to WP')}
+                </button>
+
+                {/* 2. Push Meta to WP */}
+                <button
+                  onClick={pushMetaToWordPress}
+                  disabled={pushingMeta || !selectedArticle.wp_post_id}
+                  className={`px-3 py-1.5 rounded text-white font-medium text-xs transition ${
+                    selectedArticle.wp_post_id
+                      ? 'bg-purple-600 hover:bg-purple-500'
+                      : 'bg-gray-600 cursor-not-allowed opacity-50'
+                  } disabled:opacity-50`}
+                  title={!selectedArticle.wp_post_id ? 'Push article first' : 'Push meta title & description to WordPress'}
+                >
+                  {pushingMeta ? 'Pushing...' : 'Push Meta to WP'}
+                </button>
+
+                {/* 3. Push All Images to WP */}
+                <button
+                  onClick={pushImagesToWordPress}
+                  disabled={pushingImages || !selectedArticle.wp_post_id || !selectedArticle.images?.length}
+                  className={`px-3 py-1.5 rounded text-white font-medium text-xs transition ${
+                    selectedArticle.wp_post_id && selectedArticle.images?.length
+                      ? 'bg-amber-600 hover:bg-amber-500'
+                      : 'bg-gray-600 cursor-not-allowed opacity-50'
+                  } disabled:opacity-50`}
+                  title={!selectedArticle.wp_post_id ? 'Push article first' : !selectedArticle.images?.length ? 'No images to push' : 'Push all images to WordPress'}
+                >
+                  {pushingImages ? 'Pushing...' : 'Push All Images to WP'}
+                </button>
+
+                {/* 4. Push All (Article + Meta + Images) */}
+                <button
+                  onClick={pushAllToWordPress}
+                  disabled={pushingAll || !selectedArticle.selected_meta_title}
+                  className={`px-3 py-1.5 rounded text-white font-medium text-xs transition text-center leading-tight ${
+                    selectedArticle.selected_meta_title
+                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500'
+                      : 'bg-gray-600 cursor-not-allowed opacity-50'
+                  } disabled:opacity-50`}
+                  title={!selectedArticle.selected_meta_title ? 'Select meta title & description first' : 'Push article, meta, and images to WordPress'}
+                >
+                  {pushingAll ? 'Pushing...' : (
+                    <span className="flex flex-col">
+                      <span>Push All</span>
+                      <span className="text-[10px] opacity-80">Article, Meta, Images</span>
+                      <span className="text-[10px] opacity-80">to WP</span>
+                    </span>
                   )}
-                </div>
+                </button>
+
                 {/* WordPress Link */}
                 {selectedArticle.wp_post_url && (
                   <a
                     href={selectedArticle.wp_post_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-sm font-medium flex items-center gap-2 transition"
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs font-medium flex items-center gap-1 transition"
+                    title="View page on WordPress"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
                     View on WP
                   </a>
                 )}
@@ -1133,15 +1203,6 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                         <span className="ml-2 text-sm text-gray-400">({selectedArticle.images.length} images)</span>
                       )}
                     </h4>
-                    {selectedArticle.images && selectedArticle.images.length > 0 && (
-                      <button
-                        onClick={pushImagesToWordPress}
-                        disabled={pushingImages}
-                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
-                      >
-                        {pushingImages ? 'Pushing to WP...' : 'Push All to WordPress'}
-                      </button>
-                    )}
                   </div>
 
                   {/* Collapsible Image Integration Settings */}
@@ -1357,31 +1418,16 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     {/* Action Buttons */}
                     <div className="flex items-center justify-between mb-6">
                       <h4 className="text-lg font-medium text-white">Meta Title & Description</h4>
-                      <div className="flex gap-2">
-                        {!metaSaved ? (
-                          <button
-                            onClick={saveMetaSelections}
-                            disabled={savingMeta}
-                            className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm transition disabled:opacity-50"
-                          >
-                            {savingMeta ? 'Saving...' : 'Save Meta'}
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            {!selectedArticle.wp_post_id && (
-                              <span className="text-xs text-amber-400 bg-amber-500/20 px-2 py-1 rounded">
-                                ⚠️ Publish article first
-                              </span>
-                            )}
-                            <button
-                              onClick={pushMetaToWordPress}
-                              disabled={pushingMeta || !selectedArticle.wp_post_id}
-                              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
-                              title={!selectedArticle.wp_post_id ? 'Article must be published to WordPress before pushing meta' : 'Push meta title & description to WordPress'}
-                            >
-                              {pushingMeta ? 'Pushing...' : 'Push to WordPress'}
-                            </button>
-                          </div>
+                      <div className="flex gap-2 items-center">
+                        <button
+                          onClick={saveMetaSelections}
+                          disabled={savingMeta}
+                          className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm transition disabled:opacity-50"
+                        >
+                          {savingMeta ? 'Saving...' : 'Save Meta'}
+                        </button>
+                        {metaSaved && (
+                          <span className="text-xs text-emerald-400">✓ Saved</span>
                         )}
                       </div>
                     </div>

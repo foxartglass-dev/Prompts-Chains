@@ -1568,6 +1568,70 @@ router.post('/publish', async (req, res) => {
 });
 
 /**
+ * PUT /api/elementor/update
+ * Update an existing WordPress page with new content
+ * Used for re-pushing edited articles
+ */
+router.put('/update', async (req, res) => {
+  try {
+    const {
+      wpUrl,
+      wpUser,
+      wpPassword,
+      postId,
+      content,
+      title,
+      articleId
+    } = req.body;
+
+    if (!postId) {
+      return res.status(400).json({ error: 'Post ID is required for updates' });
+    }
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'WordPress credentials required' });
+    }
+
+    console.log(`[Elementor Update] Updating post ${postId} on ${wpUrl}`);
+
+    // Clean the content before processing
+    const cleanedContent = cleanContent(content);
+
+    // Chunk the content for Elementor
+    const chunked = chunkContent(cleanedContent);
+
+    // Build Elementor page structure
+    const elementorData = buildElementorPage(chunked, {
+      maxWords: 300,
+      ctaText: 'Book Now!',
+      ctaUrl: '#',
+      includeStatsBar: false
+    });
+
+    // Update the page
+    const result = await updatePage(
+      { url: wpUrl, user: wpUser, password: wpPassword },
+      postId,
+      {
+        content: chunked.intro + '\n\n' + chunked.chunks.map(c => c.title + '\n' + c.body).join('\n\n'),
+        meta: getElementorMetaFields(elementorData)
+      }
+    );
+
+    console.log(`[Elementor Update] Successfully updated post ${postId}`);
+
+    res.json({
+      success: true,
+      postId: result.id,
+      link: result.link
+    });
+  } catch (error) {
+    console.error('[Elementor Update] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * POST /api/elementor/publish-article/:id
  * Publish an existing article from the database as an Elementor page
  */

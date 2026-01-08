@@ -4656,89 +4656,60 @@ Start by introducing yourself and asking about their business in a friendly way.
   }
 
   return (
-    <div className="space-y-4">
-      {/* Model Selectors + Save - Compact row */}
-      <div className="flex items-center justify-between flex-wrap gap-2 -mt-2 mb-2">
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Image Generation Model - The model that creates images */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-brand-gold/70">Image Model:</label>
-            <select
-              value={settings.image_generation_model || 'flux-1.1-pro'}
-              onChange={(e) => updateSettings({ image_generation_model: e.target.value })}
-              className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm"
-            >
-              {IMAGE_GENERATION_MODELS.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
-          {/* Image Quality - different options based on model */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-brand-gold/70">Quality:</label>
-            <select
-              value={settings.image_quality || 'low'}
-              onChange={(e) => updateSettings({ image_quality: e.target.value as 'low' | 'medium' | 'high' })}
-              className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-sm"
-            >
-              {(settings.image_generation_model || 'flux-1.1-pro').startsWith('gpt-image') ? (
-                <>
-                  <option value="low">Low ($0.01) - Web</option>
-                  <option value="medium">Medium ($0.04)</option>
-                  <option value="high">High ($0.17) - Print</option>
-                </>
-              ) : (
-                <>
-                  <option value="low">60% - Small files</option>
-                  <option value="medium">80% - Balanced</option>
-                  <option value="high">100% - Max quality</option>
-                </>
-              )}
-            </select>
-          </div>
-          {/* Prompt Guide Button */}
-          <button
-            onClick={() => setShowPromptGuide(true)}
-            className="flex items-center gap-1 px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm font-medium transition"
-            title="View GPT-Image-1.5 Prompting Guide"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-            Prompt Guide
-          </button>
-          {/* Save Button for Image Creation */}
-          <button
-            onClick={forceSave}
-            disabled={saving || !loaded}
-            className={`flex items-center gap-1 px-3 py-1 rounded text-sm font-medium transition ${
-              hasUnsavedChanges
-                ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-            }`}
-            title={loaded ? "Click to save Image Creation settings" : "Loading..."}
-          >
-            {saving ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>Saving...</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
-                </svg>
-                <span>{hasUnsavedChanges ? 'Save' : 'Saved'}</span>
-                {lastSaved && (
-                  <span className="text-[10px] opacity-75">{lastSaved.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                )}
-              </>
-            )}
-          </button>
-        </div>
+    <div className="space-y-4 relative">
+      {/* Model Selectors + Save - Positioned in section header */}
+      <div className="absolute -top-[52px] right-8 flex items-center gap-2 z-10">
+        {/* Image Generation Model */}
+        <select
+          value={settings.image_generation_model || 'flux-1.1-pro'}
+          onChange={(e) => updateSettings({ image_generation_model: e.target.value })}
+          className="bg-slate-900 border border-brand-gold/50 rounded px-1.5 py-0.5 text-white text-xs"
+        >
+          {IMAGE_GENERATION_MODELS.map(m => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ))}
+        </select>
+        {/* Image Quality */}
+        <select
+          value={settings.image_quality || 'low'}
+          onChange={(e) => updateSettings({ image_quality: e.target.value as 'low' | 'medium' | 'high' })}
+          className="bg-slate-900 border border-brand-gold/50 rounded px-1.5 py-0.5 text-white text-xs"
+        >
+          {(settings.image_generation_model || 'flux-1.1-pro').startsWith('gpt-image') ? (
+            <>
+              <option value="low">Low ($0.01)</option>
+              <option value="medium">Med ($0.04)</option>
+              <option value="high">High ($0.17)</option>
+            </>
+          ) : (
+            <>
+              <option value="low">60%</option>
+              <option value="medium">80%</option>
+              <option value="high">100%</option>
+            </>
+          )}
+        </select>
+        {/* Prompt Guide Button */}
+        <button
+          onClick={() => setShowPromptGuide(true)}
+          className="px-2 py-0.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-xs font-medium transition"
+          title="View GPT-Image-1.5 Prompting Guide"
+        >
+          Guide
+        </button>
+        {/* Save Button */}
+        <button
+          onClick={forceSave}
+          disabled={saving || !loaded}
+          className={`px-2 py-0.5 rounded text-xs font-medium transition ${
+            hasUnsavedChanges
+              ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900'
+              : 'bg-emerald-600/80 text-white'
+          }`}
+          title={loaded ? "Save Image Creation settings" : "Loading..."}
+        >
+          {saving ? 'Saving...' : (hasUnsavedChanges ? 'Save' : 'Saved')}
+        </button>
       </div>
 
       {/* Prompt Guide Modal - Shows both GPT-Image and Flux guides */}
