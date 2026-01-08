@@ -31,6 +31,7 @@ import {
   highlight
 } from '../services/image-tracker.js';
 import sessionLogger from '../services/session-logger.js';
+import { addBatchToDraftBank } from '../services/draft-image-bank.js';
 
 const router = express.Router();
 
@@ -1300,12 +1301,14 @@ router.post('/publish', async (req, res) => {
     // Track image save status for response
     let imageSaveStatus = { saved: false, count: 0, articleId: null, error: null };
 
+    // Build array of generated images - declared outside if block so it's accessible for draft bank save
+    let generatedImagesData = [];
+    const timestamp = new Date().toISOString();
+
     if (articleId && isDatabaseEnabled()) {
       try {
         // Build array of generated images to save with article
         // Must include all fields expected by ArticleImage interface: id, url, prompt, placement, wpMediaId, createdAt, pushedToWp
-        const generatedImagesData = [];
-        const timestamp = new Date().toISOString();
 
         // Use draft mode images if available (images matched but not embedded in page)
         if (imageDraftMode && draftModeImages.length > 0) {
@@ -1413,7 +1416,21 @@ router.post('/publish', async (req, res) => {
         }
         console.log('[SAVE] ========================================\n');
 
-        if (isManualPush) {
+        // Check if we're in draft mode (no WP page created)
+        if (skipWpPageCreation) {
+          // DRAFT MODE: Save images to article record WITHOUT WordPress data
+          // pageResult is null here, so we only update generated_images
+          console.log('[SAVE] Draft mode - saving images without WP page data');
+          const updateResult = await sql`
+            UPDATE articles
+            SET generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${articleId}
+            RETURNING id
+          `;
+          console.log('[SAVE] ✅ Draft mode DB update completed for article', articleId);
+          console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
+        } else if (isManualPush) {
           // Manual push: increment count and append date
           const updateResult = await sql`
             UPDATE articles
@@ -1482,6 +1499,63 @@ router.post('/publish', async (req, res) => {
       imageSaveStatus = { saved: false, count: 0, articleId, error: 'SKIPPED: ' + (!articleId ? 'No articleId' : 'Database disabled') };
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // DRAFT IMAGE BANK: Save images to separate draft bank for tracking
+    // This allows viewing all generated images and tracking made/replaced counts
+    // Both Draft mode and WordPress mode images are logged here
+    // ═══════════════════════════════════════════════════════════════
+    let draftBankSaveStatus = { saved: false, count: 0 };
+
+    // Determine which images to save to draft bank
+    // Draft mode: use draftModeImages (images not embedded in WP page)
+    // WordPress mode: use generatedImagesData (images embedded in WP page, logged for tracking)
+    const imagesToSaveToBank = draftModeImages.length > 0 ? draftModeImages : generatedImagesData;
+    const isPassThrough = draftModeImages.length === 0 && generatedImagesData.length > 0; // WordPress mode = pass-through
+
+    if (workflowId && isDatabaseEnabled() && imagesToSaveToBank.length > 0) {
+      try {
+        console.log(`[DRAFT BANK] Saving ${imagesToSaveToBank.length} images to Draft Image Bank${isPassThrough ? ' (pass-through for tracking)' : ''}`);
+
+        // Transform images for draft bank format
+        const draftBankImages = imagesToSaveToBank.map(img => ({
+          articleId: articleId,
+          url: img.url,
+          wpMediaId: img.wpMediaId || null,
+          itemType: img.variation?.split(' · ')[0] || null, // Extract item code from variation like "I3 · (H) · G2"
+          itemCategory: img.placement || null,
+          avatarTag: keyword?.match(/\(([A-Z])\)/i)?.[1] || null,
+          pageKeyword: keyword,
+          pageTitle: title,
+          prompt: img.prompt || '',
+          model: imageGenModel || null,
+          placement: img.placement,
+          metadata: {
+            source: img.source,
+            side: img.side,
+            bankImageId: img.bankImageId,
+            createdAt: img.createdAt,
+            passThrough: isPassThrough // Mark as pass-through if sent directly to WP
+          }
+        }));
+
+        const savedToBank = await addBatchToDraftBank(workflowId, draftBankImages);
+        draftBankSaveStatus = { saved: true, count: savedToBank.length, passThrough: isPassThrough };
+        console.log(`[DRAFT BANK] ✅ Saved ${savedToBank.length} images to Draft Image Bank`);
+
+        // If pass-through (WordPress mode), immediately mark as sent
+        if (isPassThrough && savedToBank.length > 0) {
+          console.log('[DRAFT BANK] WordPress mode - images logged for tracking (status: sent)');
+          // Note: Images in WordPress mode are logged but immediately marked as "sent" conceptually
+          // The actual status update can be done if needed, but the metadata.passThrough flag indicates this
+        }
+      } catch (draftBankError) {
+        console.error('[DRAFT BANK] ❌ Failed to save to Draft Image Bank:', draftBankError.message);
+        draftBankSaveStatus = { saved: false, count: 0, error: draftBankError.message };
+      }
+    } else if (imagesToSaveToBank.length > 0) {
+      console.log('[DRAFT BANK] ⚠️ SKIPPED - workflowId:', workflowId, 'dbEnabled:', isDatabaseEnabled());
+    }
+
     // Session logging for successful publish
     sessionLogger.logSuccess('PUBLISH', `Successfully published to WordPress`, {
       pageId: pageResult?.id,
@@ -1502,7 +1576,8 @@ router.post('/publish', async (req, res) => {
       totalImages: imagesFromBank + imagesGenerated,
       estimatedCost,
       imageDecisionReport, // Include decision report for frontend display
-      imageSaveStatus, // NEW: Detailed status of image save to database
+      imageSaveStatus, // Detailed status of image save to article record
+      draftBankSaveStatus, // Status of save to Draft Image Bank
       imagesProcessed: skipWpPageCreation && (imagesFromBank > 0 || imagesGenerated > 0) // True if images were processed without WP page
     });
   } catch (error) {
