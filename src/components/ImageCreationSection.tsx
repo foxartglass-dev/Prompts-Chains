@@ -493,6 +493,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [isUsedOpen, setIsUsedOpen] = useState(false);
   const [isOrderOpen, setIsOrderOpen] = useState(false);
 
+  // Double opt-in confirmation for "Generate First" (save to bank) option
+  const [showGenerateFirstWarning, setShowGenerateFirstWarning] = useState(false);
+
   // Tab for Reference Assets in Guided GPT section
   const [guidedAssetsTab, setGuidedAssetsTab] = useState<'problems' | 'reference' | 'logo'>('problems');
 
@@ -6679,8 +6682,9 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'live' ? 'bg-brand-cyan/20 border-2 border-brand-cyan' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
                     <input type="radio" name="integration_mode" checked={settings.integration_mode === 'live'} onChange={() => updateSettings({
                       integration_mode: 'live',
-                      // AUTO-SWITCH: When switching to Live mode, ensure matching strategy is a generate option
-                      smart_matching_mode: (settings.smart_matching_mode === 'bank_first' || settings.smart_matching_mode === 'bank_only') ? 'generate_first' : settings.smart_matching_mode
+                      // AUTO-SWITCH: When switching to Live mode, default to generate_only (Page Only)
+                      // generate_first requires double opt-in, so never auto-switch to it
+                      smart_matching_mode: 'generate_only'
                     })} className="hidden" />
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'live' ? 'bg-brand-cyan text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
@@ -8333,61 +8337,251 @@ Start by introducing yourself and asking about their business in a friendly way.
 
               {/* ─────────────────────────────────────────────────────
                   SECTION 2: Smart Content Matching
-                  NOTE: Only applicable when Image Source is "Pull from Bank"
-                  For Generate Live mode, the prompt mode handles image generation
+                  - Bank mode: Toggle on/off
+                  - Live + Main Prompt: Always ON (it's the core mechanism)
+                  - Live + Guided/Smart: OFF (GPT handles prompts)
               ───────────────────────────────────────────────────── */}
+              {(() => {
+                // Determine Smart Matching state based on mode
+                const isLiveMode = settings.integration_mode === 'live';
+                const isMainPromptMode = settings.live_prompt_mode === 'main_prompt';
+                const isGuidedOrSmartMode = settings.live_prompt_mode === 'guided_gpt' || settings.live_prompt_mode === 'smart_prompt';
+
+                // Smart Matching is ALWAYS ON for Main Prompt mode (it's how it works)
+                const isAlwaysOnMode = isLiveMode && isMainPromptMode;
+                // Smart Matching is OFF/disabled for Guided GPT and Smart Prompt
+                const isDisabledMode = isLiveMode && isGuidedOrSmartMode;
+                // Normal toggle mode for Bank
+                const isToggleMode = !isLiveMode;
+
+                // Effective enabled state
+                const effectiveEnabled = isAlwaysOnMode || (isToggleMode && settings.smart_matching_enabled);
+
+                return (
               <div className={`rounded-lg p-4 border transition-all ${
-                settings.integration_mode === 'live'
+                isDisabledMode
                   ? 'bg-slate-800/20 border-slate-600 opacity-60'
-                  : settings.smart_matching_enabled
-                    ? 'bg-purple-900/20 border-purple-500'
-                    : 'bg-slate-800/30 border-slate-700'
+                  : isAlwaysOnMode
+                    ? 'bg-purple-900/30 border-purple-500'
+                    : effectiveEnabled
+                      ? 'bg-purple-900/20 border-purple-500'
+                      : 'bg-slate-800/30 border-slate-700'
               }`}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <svg className={`w-5 h-5 ${settings.integration_mode === 'live' ? 'text-slate-500' : settings.smart_matching_enabled ? 'text-purple-400' : 'text-slate-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className={`w-5 h-5 ${isDisabledMode ? 'text-slate-500' : effectiveEnabled ? 'text-purple-400' : 'text-slate-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
-                    <h3 className={`font-semibold ${settings.integration_mode === 'live' ? 'text-slate-500' : settings.smart_matching_enabled ? 'text-purple-400' : 'text-slate-500'}`}>Smart Content Matching</h3>
+                    <h3 className={`font-semibold ${isDisabledMode ? 'text-slate-500' : effectiveEnabled ? 'text-purple-400' : 'text-slate-500'}`}>Smart Content Matching</h3>
                     <span className="px-2 py-0.5 bg-purple-600/30 text-purple-300 text-[10px] rounded font-medium">BETA</span>
-                    {settings.integration_mode === 'live' && (
-                      <span className="px-2 py-0.5 bg-slate-600/50 text-slate-400 text-[10px] rounded font-medium">BANK MODE ONLY</span>
+                    {isAlwaysOnMode && (
+                      <span className="px-2 py-0.5 bg-purple-600/50 text-purple-200 text-[10px] rounded font-medium">ALWAYS ON</span>
+                    )}
+                    {isDisabledMode && (
+                      <span className="px-2 py-0.5 bg-slate-600/50 text-slate-400 text-[10px] rounded font-medium">GPT HANDLES THIS</span>
                     )}
                   </div>
-                  <label className={`relative inline-flex items-center ${settings.integration_mode === 'live' ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                    title={settings.integration_mode === 'live' ? 'Smart Matching only applies to "Pull from Bank" mode. For Generate Live, images are created based on your selected prompt mode.' : ''}>
-                    <input
-                      type="checkbox"
-                      checked={settings.smart_matching_enabled}
-                      onChange={(e) => updateSettings({ smart_matching_enabled: e.target.checked })}
-                      className="sr-only peer"
-                      disabled={settings.integration_mode === 'live'}
-                    />
-                    <div className={`w-11 h-6 ${settings.integration_mode === 'live' ? 'bg-slate-600 cursor-not-allowed' : 'bg-slate-700'} peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${settings.integration_mode === 'live' ? 'peer-checked:bg-slate-500' : 'peer-checked:bg-purple-600'}`}></div>
-                  </label>
+                  {/* Toggle - only show for Bank mode */}
+                  {isToggleMode ? (
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.smart_matching_enabled}
+                        onChange={(e) => updateSettings({ smart_matching_enabled: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  ) : isAlwaysOnMode ? (
+                    <span className="text-xs text-purple-400 font-medium">Core Feature</span>
+                  ) : (
+                    <span className="text-xs text-slate-500">Not Used</span>
+                  )}
                 </div>
 
-                {/* Show disabled message when in Generate Live mode */}
-                {settings.integration_mode === 'live' ? (
+                {/* DISABLED: Guided GPT or Smart Prompt mode */}
+                {isDisabledMode ? (
                   <div className="space-y-3">
                     <p className="text-xs text-slate-400">
-                      <strong className="text-slate-300">Not applicable for Generate Live mode.</strong> Smart Content Matching is designed to match pre-generated bank images to article content.
+                      <strong className="text-slate-300">Not used for {settings.live_prompt_mode === 'guided_gpt' ? 'Guided GPT' : 'Smart Prompt'} mode.</strong>
                     </p>
                     <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-600">
                       <p className="text-[10px] text-slate-500 leading-relaxed">
-                        <strong className="text-cyan-400">For Generate Live:</strong> Your selected prompt mode ({settings.live_prompt_mode === 'main_prompt' ? 'Main Prompt' : settings.live_prompt_mode === 'guided_gpt' ? 'Guided GPT' : 'Smart Prompt'}) handles how images are generated:
+                        {settings.live_prompt_mode === 'guided_gpt' ? (
+                          <>GPT-4o analyzes your article content and generates contextual image prompts using your guardrails. No placeholder matching needed.</>
+                        ) : (
+                          <>GPT-4o-mini analyzes your article content and automatically generates appropriate image prompts. No placeholder matching needed.</>
+                        )}
                       </p>
-                      <ul className="text-[10px] text-slate-500 mt-2 space-y-1 ml-3">
-                        <li>• <strong className="text-purple-400">Main Prompt:</strong> Uses placeholder matching per image position</li>
-                        <li>• <strong className="text-amber-400">Guided GPT:</strong> GPT analyzes content with guardrails</li>
-                        <li>• <strong className="text-emerald-400">Smart Prompt:</strong> GPT-4o-mini analyzes article content</li>
-                      </ul>
                       <p className="text-[10px] text-slate-500 mt-2">
-                        Switch to <strong className="text-purple-400">"Pull from Bank"</strong> to use Smart Content Matching.
+                        Switch to <strong className="text-purple-400">"Main Prompt"</strong> to use placeholder-based Smart Content Matching.
                       </p>
                     </div>
                   </div>
-                ) : settings.smart_matching_enabled ? (
+                ) : isAlwaysOnMode ? (
+                  /* ALWAYS ON: Main Prompt mode in Generate Live */
+                  <div className="space-y-4">
+                    <p className="text-xs text-purple-300/70">
+                      Main Prompt mode uses Smart Content Matching to fill placeholders based on article content around each image position.
+                    </p>
+                    <div className="bg-purple-900/30 rounded-lg p-3 border border-purple-500/30">
+                      <p className="text-[10px] text-purple-300 leading-relaxed">
+                        <strong>How it works:</strong> For each image position, the system looks at the surrounding ~75 words and matches your placeholder keywords (e.g., {'{Room}'}, {'{Surface}'}) to the article content.
+                      </p>
+                    </div>
+
+                    {/* Category Matching Rules for Main Prompt */}
+                    {activeAvatar?.placeholderCategories && activeAvatar.placeholderCategories.length > 0 && (
+                      <div className="bg-slate-800/50 rounded-lg p-3 border border-purple-500/20">
+                        <label className="text-xs text-purple-400 mb-3 block font-medium flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
+                          Category Matching Rules:
+                        </label>
+                        <div className="space-y-2">
+                          {activeAvatar.placeholderCategories.map(cat => (
+                            <div key={cat.id} className="flex items-center gap-3 text-xs bg-slate-900/50 p-2 rounded">
+                              <span className="text-white font-medium w-32 truncate">{cat.name}</span>
+                              <div className="flex-1 flex items-center gap-4">
+                                <label className={`flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded transition ${!cat.isRandomized ? 'bg-purple-600/30 border border-purple-500' : 'hover:bg-slate-800'}`}>
+                                  <input
+                                    type="radio"
+                                    name={`cat-match-live-${cat.id}`}
+                                    checked={!cat.isRandomized}
+                                    onChange={() => {
+                                      const updatedCats = activeAvatar.placeholderCategories?.map(c =>
+                                        c.id === cat.id ? { ...c, isRandomized: false } : c
+                                      );
+                                      handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCats });
+                                    }}
+                                    className="accent-purple-500"
+                                  />
+                                  <span className="text-purple-300">🎯 Match Keywords</span>
+                                </label>
+                                <label className={`flex items-center gap-1.5 cursor-pointer px-2 py-1 rounded transition ${cat.isRandomized === true ? 'bg-amber-600/30 border border-amber-500' : 'hover:bg-slate-800'}`}>
+                                  <input
+                                    type="radio"
+                                    name={`cat-match-live-${cat.id}`}
+                                    checked={cat.isRandomized === true}
+                                    onChange={() => {
+                                      const updatedCats = activeAvatar.placeholderCategories?.map(c =>
+                                        c.id === cat.id ? { ...c, isRandomized: true } : c
+                                      );
+                                      handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updatedCats });
+                                    }}
+                                    className="accent-amber-500"
+                                  />
+                                  <span className="text-amber-300">🎲 Randomize</span>
+                                </label>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bank Save Option - Default: Generate Only, with double opt-in for Generate First */}
+                    <div className="bg-slate-800/50 rounded-lg p-3 border border-purple-500/20">
+                      <label className="text-xs text-purple-400 mb-3 block font-medium flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+                        Image Destination:
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {/* Generate Only - Default */}
+                        <label className={`flex flex-col p-3 rounded cursor-pointer transition border-2 ${
+                          settings.smart_matching_mode === 'generate_only'
+                            ? 'bg-purple-600 border-purple-400 text-white'
+                            : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700 hover:border-slate-500'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="live_destination"
+                            checked={settings.smart_matching_mode === 'generate_only'}
+                            onChange={() => updateSettings({ smart_matching_mode: 'generate_only' })}
+                            className="hidden"
+                          />
+                          <span className="text-xs font-bold flex items-center gap-1">
+                            <span className="text-lg">📄</span> Page Only
+                          </span>
+                          <span className="text-[10px] opacity-80 mt-1">Generate fresh for this page</span>
+                          <span className="text-[9px] opacity-60 mt-0.5">Recommended</span>
+                        </label>
+
+                        {/* Generate First - Requires double opt-in */}
+                        <label
+                          className={`flex flex-col p-3 rounded cursor-pointer transition border-2 ${
+                            settings.smart_matching_mode === 'generate_first'
+                              ? 'bg-amber-600 border-amber-400 text-white'
+                              : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700 hover:border-slate-500'
+                          }`}
+                          onClick={(e) => {
+                            // If not already selected, show warning first
+                            if (settings.smart_matching_mode !== 'generate_first') {
+                              e.preventDefault();
+                              setShowGenerateFirstWarning(true);
+                            }
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="live_destination"
+                            checked={settings.smart_matching_mode === 'generate_first'}
+                            onChange={() => {}} // Handled by onClick above
+                            className="hidden"
+                          />
+                          <span className="text-xs font-bold flex items-center gap-1">
+                            <span className="text-lg">📄➕📦</span> Page + Bank
+                          </span>
+                          <span className="text-[10px] opacity-80 mt-1">Also save copy to Image Bank</span>
+                          <span className="text-[9px] opacity-60 mt-0.5">For reuse on future pages</span>
+                        </label>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-2">
+                        <strong className="text-purple-400">Page Only:</strong> Each page gets unique generated images.<br/>
+                        <strong className="text-amber-400">Page + Bank:</strong> Images are also saved for potential reuse by other articles.
+                      </p>
+                    </div>
+
+                    {/* Double Opt-In Warning Modal for Generate First */}
+                    {showGenerateFirstWarning && (
+                      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+                        <div className="bg-slate-800 rounded-xl border border-amber-500 p-6 max-w-md mx-4 shadow-2xl">
+                          <div className="flex items-center gap-3 mb-4">
+                            <span className="text-3xl">⚠️</span>
+                            <h3 className="text-lg font-bold text-amber-400">Save to Image Bank?</h3>
+                          </div>
+                          <p className="text-sm text-slate-300 mb-4">
+                            This will generate images for the current page <strong className="text-white">AND</strong> save copies to the Image Bank for potential reuse on future pages.
+                          </p>
+                          <div className="bg-amber-900/30 border border-amber-500/30 rounded-lg p-3 mb-4">
+                            <p className="text-xs text-amber-300">
+                              <strong>Use case:</strong> Building a reusable image library over time. Images generated for one article may be smart-matched to similar content in future articles.
+                            </p>
+                          </div>
+                          <p className="text-xs text-slate-400 mb-4">
+                            If you just want unique images per page without saving to the bank, cancel and use "Page Only" instead.
+                          </p>
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => setShowGenerateFirstWarning(false)}
+                              className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm font-medium transition"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => {
+                                updateSettings({ smart_matching_mode: 'generate_first' });
+                                setShowGenerateFirstWarning(false);
+                              }}
+                              className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-bold transition"
+                            >
+                              Yes, Save to Bank
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : effectiveEnabled ? (
                   <div className="space-y-4">
                     <p className="text-xs text-purple-300/70">
                       AI analyzes article text and matches images based on keywords. Define keywords in each placeholder option above.
@@ -8495,6 +8689,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </p>
                 )}
               </div>
+                );
+              })()}
 
               {/* ─────────────────────────────────────────────────────
                   SECTION 3: Matching Rules - CONDITIONAL based on Smart Matching toggle
