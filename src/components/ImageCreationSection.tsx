@@ -581,6 +581,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [activeProblemAreaId, setActiveProblemAreaId] = useState<string | null>(null);
   const [editingProblemArea, setEditingProblemArea] = useState<PromptProblemArea | null>(null);
 
+  // Guided GPT Assets Tabs - collapsed by default (rarely used)
+  const [guidedAssetsCollapsed, setGuidedAssetsCollapsed] = useState(true);
+
   // Guided GPT Assistant Chat state
   const [guidedAssistantOpen, setGuidedAssistantOpen] = useState(false);
   const [guidedAssistantMessages, setGuidedAssistantMessages] = useState<ChatMessage[]>([]);
@@ -8041,17 +8044,18 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                 {/* ─────────────────────────────────────────────────────
                     Reference Assets Tabs (Problem Areas, Reference Images, Logo/Action)
+                    COLLAPSIBLE - Default collapsed, rarely used
                 ───────────────────────────────────────────────────── */}
                 <div className="mt-4 border-t border-slate-700 pt-4">
-                  {/* Tab Buttons */}
-                  <div className="flex border-b border-slate-700">
+                  {/* Tab Buttons with Collapse Toggle */}
+                  <div className="flex items-center border-b border-slate-700">
                     <button
-                      onClick={() => setGuidedAssetsTab('problems')}
+                      onClick={() => !guidedAssetsCollapsed && setGuidedAssetsTab('problems')}
                       className={`flex-1 px-4 py-2.5 text-sm font-medium transition-all border-b-2 ${
-                        guidedAssetsTab === 'problems'
+                        !guidedAssetsCollapsed && guidedAssetsTab === 'problems'
                           ? 'text-orange-400 border-orange-500 bg-orange-500/10'
                           : 'text-slate-400 border-transparent hover:text-slate-300 hover:bg-slate-800/50'
-                      }`}
+                      } ${guidedAssetsCollapsed ? 'opacity-60' : ''}`}
                     >
                       <span className="flex items-center justify-center gap-2">
                         🎯 Prompt Problem Areas
@@ -8063,12 +8067,12 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </span>
                     </button>
                     <button
-                      onClick={() => setGuidedAssetsTab('logo')}
+                      onClick={() => !guidedAssetsCollapsed && setGuidedAssetsTab('logo')}
                       className={`flex-1 px-4 py-2.5 text-sm font-medium transition-all border-b-2 ${
-                        guidedAssetsTab === 'logo'
+                        !guidedAssetsCollapsed && guidedAssetsTab === 'logo'
                           ? 'text-brand-cyan border-brand-cyan bg-brand-cyan/10'
                           : 'text-slate-400 border-transparent hover:text-slate-300 hover:bg-slate-800/50'
-                      }`}
+                      } ${guidedAssetsCollapsed ? 'opacity-60' : ''}`}
                     >
                       <span className="flex items-center justify-center gap-2">
                         LOGO REFERENCE
@@ -8080,12 +8084,12 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </span>
                     </button>
                     <button
-                      onClick={() => setGuidedAssetsTab('reference')}
+                      onClick={() => !guidedAssetsCollapsed && setGuidedAssetsTab('reference')}
                       className={`flex-1 px-4 py-2.5 text-sm font-medium transition-all border-b-2 ${
-                        guidedAssetsTab === 'reference'
+                        !guidedAssetsCollapsed && guidedAssetsTab === 'reference'
                           ? 'text-purple-400 border-purple-500 bg-purple-500/10'
                           : 'text-slate-400 border-transparent hover:text-slate-300 hover:bg-slate-800/50'
-                      }`}
+                      } ${guidedAssetsCollapsed ? 'opacity-60' : ''}`}
                     >
                       <span className="flex items-center justify-center gap-2">
                         Reference Images
@@ -8096,9 +8100,25 @@ Start by introducing yourself and asking about their business in a friendly way.
                         )}
                       </span>
                     </button>
+                    {/* Collapse/Expand Toggle Arrow */}
+                    <button
+                      onClick={() => setGuidedAssetsCollapsed(!guidedAssetsCollapsed)}
+                      className="px-3 py-2.5 text-slate-400 hover:text-white transition-all hover:bg-slate-800/50"
+                      title={guidedAssetsCollapsed ? 'Expand section' : 'Collapse section'}
+                    >
+                      <svg
+                        className={`w-5 h-5 transition-transform duration-200 ${guidedAssetsCollapsed ? '' : 'rotate-180'}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
                   </div>
 
-                  {/* Tab Content */}
+                  {/* Tab Content - Only show when expanded */}
+                  {!guidedAssetsCollapsed && (
                   <div className="p-4 bg-slate-900/50 rounded-b-lg">
                     {/* Prompt Problem Areas Tab */}
                     {guidedAssetsTab === 'problems' && (
@@ -8330,6 +8350,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     )}
                   </div>
+                  )}
                 </div>
 
                 {/* REMOVED: Redundant fallback checkbox - functionality now handled by "Bank First" matching strategy */}
@@ -8415,6 +8436,42 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </p>
                       <p className="text-[10px] text-slate-500 mt-2">
                         Switch to <strong className="text-purple-400">"Main Prompt"</strong> to use placeholder-based Smart Content Matching.
+                      </p>
+                    </div>
+
+                    {/* Static Placement Rules - Still apply to Guided GPT / Smart Prompt */}
+                    <div className="bg-slate-800/30 rounded-lg p-3 border border-cyan-500/30">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                        </svg>
+                        <h4 className="text-xs text-cyan-400 font-semibold">Placement Rules</h4>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-600/30 text-cyan-300">STILL ACTIVE</span>
+                      </div>
+                      <div className="space-y-2">
+                        <div>
+                          <label className="text-[10px] text-cyan-400 font-medium block mb-1">Image Placement Rule</label>
+                          <textarea
+                            value={settings.placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.'}
+                            onChange={(e) => updateSettings({ placement_rule: e.target.value })}
+                            className="w-full bg-slate-800 border border-cyan-500/30 rounded px-2 py-1.5 text-white text-xs resize-none focus:outline-none focus:border-cyan-500"
+                            rows={2}
+                            placeholder="Place image at last paragraph break under {300} words since previous image..."
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-cyan-400 font-medium block mb-1">Content Analysis Rule</label>
+                          <textarea
+                            value={settings.smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.'}
+                            onChange={(e) => updateSettings({ smart_matching_rule: e.target.value })}
+                            className="w-full bg-slate-800 border border-cyan-500/30 rounded px-2 py-1.5 text-white text-xs resize-none focus:outline-none focus:border-cyan-500"
+                            rows={2}
+                            placeholder="Look {50-75} words around image placement for keyword matches..."
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[9px] text-slate-500 mt-2">
+                        These rules guide GPT on where to place images and what content to analyze.
                       </p>
                     </div>
                   </div>
