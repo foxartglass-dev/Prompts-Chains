@@ -974,8 +974,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         typesRes.json()
       ]);
 
+      // DEBUG: Log all API responses
+      console.log('[Draft Bank] Images API response:', imagesData);
+      console.log('[Draft Bank] Stats API response:', statsData);
+      console.log('[Draft Bank] workflowId used:', workflowId);
+
       if (imagesData.success) {
+        console.log('[Draft Bank] Setting images, count:', imagesData.data?.length || 0);
         setDraftBankImages(imagesData.data || []);
+      } else {
+        console.error('[Draft Bank] Images API failed:', imagesData.error || 'Unknown error');
       }
       if (statsData.success) {
         setDraftBankStats(statsData.data);
