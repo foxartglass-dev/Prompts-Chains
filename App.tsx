@@ -252,6 +252,12 @@ const App: React.FC = () => {
         livePromptMode: 'main_prompt'
     });
 
+    // Batch image counts (for Processing Log tabs - shows results)
+    const [batchImageCounts, setBatchImageCounts] = useState<{
+        fromBank: number;
+        fromLive: number;
+    }>({ fromBank: 0, fromLive: 0 });
+
     // Refs
     const prevProjectIdRef = useRef<string | null>(null);
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1079,6 +1085,7 @@ const App: React.FC = () => {
         setIsProcessing(true);
         setResults([]);
         setLogs([]);
+        setBatchImageCounts({ fromBank: 0, fromLive: 0 }); // Reset image counts for new batch
 
         const modelNames = activeModels.map(m => m.model.split('-').slice(0, 2).join('-')).join(', ');
         addLog(`Starting batch processing for ${items.length} items using ${activeModels.length} model(s): ${modelNames}...`, LogStatus.INFO);
@@ -1344,9 +1351,11 @@ const App: React.FC = () => {
 
                                         if (publishData.imagesFromBank > 0) {
                                             addLog(`[${itemLabel}] ${modeLabel}: ${publishData.imagesFromBank} images pulled from Image Bank`, LogStatus.SUCCESS, item.id);
+                                            setBatchImageCounts(prev => ({ ...prev, fromBank: prev.fromBank + publishData.imagesFromBank }));
                                         } else if (publishData.totalImages > 0) {
                                             const liveDetails = promptModeLabel ? ` (${promptModeLabel})` : '';
                                             addLog(`[${itemLabel}] ${modeLabel}${liveDetails}: Generated ${publishData.totalImages} images`, LogStatus.SUCCESS, item.id);
+                                            setBatchImageCounts(prev => ({ ...prev, fromLive: prev.fromLive + publishData.totalImages }));
                                         } else if (includeImages) {
                                             // No images found - provide context on why
                                             const noImageReason = report?.mode === 'bank'
@@ -3299,23 +3308,16 @@ const App: React.FC = () => {
                                 }`}>
                                     Image: {currentProject?.state?.wpPublishMode === 'wordpress' ? 'WP' : currentProject?.state?.wpPublishMode === 'draft' ? 'Draft' : 'Off'}
                                 </span>
-                                {/* Image Source Indicator (when images enabled) */}
+                                {/* Image Source Counts (when images enabled) - shows actual results */}
                                 {currentProject?.state?.wpPublishMode !== 'off' && (
-                                    <span className={`px-2 py-1 rounded ${
-                                        imageSettings.integrationMode === 'bank' ? 'bg-brand-gold/30 text-brand-gold' : 'bg-brand-cyan/30 text-brand-cyan'
-                                    }`}>
-                                        Source: {imageSettings.integrationMode === 'bank' ? '📦 Bank' : '⚡ Live'}
-                                    </span>
-                                )}
-                                {/* Live Prompt Mode Indicator (only when Source is Live) */}
-                                {currentProject?.state?.wpPublishMode !== 'off' && imageSettings.integrationMode === 'live' && (
-                                    <span className="px-2 py-1 rounded bg-purple-600/30 text-purple-400">
-                                        Mode: {
-                                            imageSettings.livePromptMode === 'main_prompt' ? 'Main Prompt' :
-                                            imageSettings.livePromptMode === 'guided_gpt' ? 'Guided GPT' :
-                                            imageSettings.livePromptMode === 'smart_prompt' ? 'Smart Prompt' : 'Main Prompt'
-                                        }
-                                    </span>
+                                    <>
+                                        <span className={`px-2 py-1 rounded ${batchImageCounts.fromBank > 0 ? 'bg-brand-gold/30 text-brand-gold' : 'bg-slate-600/30 text-slate-400'}`}>
+                                            📦 Bank: {batchImageCounts.fromBank}
+                                        </span>
+                                        <span className={`px-2 py-1 rounded ${batchImageCounts.fromLive > 0 ? 'bg-brand-cyan/30 text-brand-cyan' : 'bg-slate-600/30 text-slate-400'}`}>
+                                            ⚡ Live: {batchImageCounts.fromLive}
+                                        </span>
+                                    </>
                                 )}
                             </div>
                             {/* Logs - expanded to show all (max-h with auto, no fixed h-96) */}
