@@ -243,6 +243,21 @@ const App: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
 
+    // Image settings state (for Processing Log tabs)
+    const [imageSettings, setImageSettings] = useState<{
+        integrationMode: 'bank' | 'live';
+        livePromptMode: 'main_prompt' | 'guided_gpt' | 'smart_prompt';
+    }>({
+        integrationMode: 'bank',
+        livePromptMode: 'main_prompt'
+    });
+
+    // Batch image counts (for Processing Log tabs - shows results)
+    const [batchImageCounts, setBatchImageCounts] = useState<{
+        fromBank: number;
+        fromLive: number;
+    }>({ fromBank: 0, fromLive: 0 });
+
     // Refs
     const prevProjectIdRef = useRef<string | null>(null);
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -372,6 +387,28 @@ const App: React.FC = () => {
         localStorage.removeItem('promptflow_default_workflow');
       }
     }, [defaultWorkflow]);
+
+    // Fetch image settings when workflow changes (for Processing Log tabs)
+    useEffect(() => {
+      if (!currentWorkflowId) return;
+
+      const fetchImageSettings = async () => {
+        try {
+          const res = await fetch(`/api/image-creation/settings/${currentWorkflowId}`);
+          const data = await res.json();
+          if (data.success && data.settings) {
+            setImageSettings({
+              integrationMode: data.settings.integration_mode || 'bank',
+              livePromptMode: data.settings.live_prompt_mode || 'main_prompt'
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching image settings:', error);
+        }
+      };
+
+      fetchImageSettings();
+    }, [currentWorkflowId]);
 
     // Auto-load default workflow on startup
     const hasAutoLoadedRef = useRef(false);
@@ -1048,6 +1085,7 @@ const App: React.FC = () => {
         setIsProcessing(true);
         setResults([]);
         setLogs([]);
+        setBatchImageCounts({ fromBank: 0, fromLive: 0 }); // Reset image counts for new batch
 
         const modelNames = activeModels.map(m => m.model.split('-').slice(0, 2).join('-')).join(', ');
         addLog(`Starting batch processing for ${items.length} items using ${activeModels.length} model(s): ${modelNames}...`, LogStatus.INFO);
@@ -1269,7 +1307,7 @@ const App: React.FC = () => {
                                     // Image toggle (wpPublishMode): 'off' = no images, 'draft'/'wordpress' = include images
                                     const includeImages = currentProject.state.wpPublishMode !== 'off';
                                     if (includeImages) {
-                                        addLog(`[${itemLabel}] Preparing images from Image Bank...`, LogStatus.WORKING, item.id);
+                                        addLog(`[${itemLabel}] Processing images...`, LogStatus.WORKING, item.id);
                                     }
                                     const publishResponse = await fetch('/api/elementor/publish', {
                                         method: 'POST',
@@ -1298,15 +1336,37 @@ const App: React.FC = () => {
                                     });
                                     const publishData = await publishResponse.json();
 
-                                    // Success: either WP page created OR images processed (when skipWpPageCreation)
-                                    if (publishResponse.ok && (publishData.page?.id || publishData.imagesProcessed)) {
-                                        // Log image results
+                                    // Success conditions:
+                                    // 1. WP page created (publishData.page?.id)
+                                    // 2. Images processed (publishData.imagesProcessed)
+                                    // 3. Draft mode completed (skipWpPageCreation was true, even if no images)
+                                    const isDraftModeSuccess = !shouldPublishToWP && publishResponse.ok;
+                                    if (publishResponse.ok && (publishData.page?.id || publishData.imagesProcessed || isDraftModeSuccess)) {
+                                        // Log image results with detailed mode info
+                                        const report = publishData.imageDecisionReport;
+                                        const modeLabel = report?.mode === 'bank' ? '📦 Bank' : report?.mode === 'live' ? '⚡ Live' : '❌ None';
+                                        const promptModeLabel = report?.livePromptMode === 'main_prompt' ? 'Main Prompt' :
+                                                               report?.livePromptMode === 'guided_gpt' ? 'Guided GPT' :
+                                                               report?.livePromptMode === 'smart_prompt' ? 'Smart Prompt' : '';
+
                                         if (publishData.imagesFromBank > 0) {
-                                            addLog(`[${itemLabel}] Added ${publishData.imagesFromBank} images from Image Bank`, LogStatus.SUCCESS, item.id);
+                                            addLog(`[${itemLabel}] ${modeLabel}: ${publishData.imagesFromBank} images pulled from Image Bank`, LogStatus.SUCCESS, item.id);
+                                            setBatchImageCounts(prev => ({ ...prev, fromBank: prev.fromBank + publishData.imagesFromBank }));
                                         } else if (publishData.totalImages > 0) {
-                                            addLog(`[${itemLabel}] Generated ${publishData.totalImages} images`, LogStatus.SUCCESS, item.id);
+                                            const liveDetails = promptModeLabel ? ` (${promptModeLabel})` : '';
+                                            addLog(`[${itemLabel}] ${modeLabel}${liveDetails}: Generated ${publishData.totalImages} images`, LogStatus.SUCCESS, item.id);
+                                            setBatchImageCounts(prev => ({ ...prev, fromLive: prev.fromLive + publishData.totalImages }));
                                         } else if (includeImages) {
-                                            addLog(`[${itemLabel}] No images added (Image Bank empty or disabled)`, LogStatus.INFO, item.id);
+                                            // No images found - provide context on why
+                                            const noImageReason = report?.mode === 'bank'
+                                                ? 'No matching images in Bank'
+                                                : report?.mode === 'live'
+                                                    ? 'Image generation skipped or failed'
+                                                    : 'Images not enabled';
+                                            addLog(`[${itemLabel}] ${modeLabel}: ${noImageReason}`, LogStatus.INFO, item.id);
+                                        } else if (!shouldPublishToWP) {
+                                            // Draft mode with images off
+                                            addLog(`[${itemLabel}] Draft mode: Article processed (no images)`, LogStatus.INFO, item.id);
                                         }
                                         // Log actual image save status from server
                                         if (publishData.imageSaveStatus) {
@@ -1324,12 +1384,27 @@ const App: React.FC = () => {
                                             // Fallback for older API response format
                                             addLog(`[${itemLabel}] Images saved to article record for viewing in Articles page`, LogStatus.INFO, item.id);
                                         }
-                                        // Log based on what was done
-                                        if (publishData.page?.id) {
-                                            addLog(`[${itemLabel}] Published to WordPress!`, LogStatus.SUCCESS, item.id);
-                                        } else {
-                                            addLog(`[${itemLabel}] Images processed and saved to article.`, LogStatus.SUCCESS, item.id);
+                                        // Log Draft Bank status (new feature)
+                                        if (publishData.draftBankSaveStatus) {
+                                            const draftBank = publishData.draftBankSaveStatus;
+                                            if (draftBank.saved && draftBank.count > 0) {
+                                                addLog(`[${itemLabel}] ✅ Draft Bank: ${draftBank.count} images saved${draftBank.passThrough ? ' (pass-through)' : ''}`, LogStatus.SUCCESS, item.id);
+                                            } else if (draftBank.error) {
+                                                addLog(`[${itemLabel}] ❌ Draft Bank: ${draftBank.error}`, LogStatus.ERROR, item.id);
+                                            }
                                         }
+
+                                        // Summary status row
+                                        const articleOk = publishData.imageSaveStatus?.saved && publishData.imageSaveStatus?.verifiedCount > 0;
+                                        const draftBankOk = publishData.draftBankSaveStatus?.saved && publishData.draftBankSaveStatus?.count > 0;
+                                        const websiteOk = !!publishData.page?.id;
+                                        const statusLine = [
+                                            `Article ${articleOk ? '✅' : '❌'}`,
+                                            `Draft Bank ${draftBankOk ? '✅' : '❌'}`,
+                                            `Website ${websiteOk ? '✅' : '⏸️'}`
+                                        ].join(' | ');
+                                        addLog(`[${itemLabel}] STATUS: ${statusLine}`, websiteOk || articleOk ? LogStatus.SUCCESS : LogStatus.INFO, item.id);
+
                                         // Update result with WP link and image decision report
                                         setResults(prev => prev.map(r =>
                                             r.item.id === resultItem.id
@@ -1451,7 +1526,7 @@ const App: React.FC = () => {
 
             if (useElementor) {
                 // Use Elementor publishing endpoint (with Image Bank integration)
-                addLog(`[${result.item.name}] Preparing images from Image Bank...`, LogStatus.WORKING, result.item.id);
+                addLog(`[${result.item.name}] Processing images...`, LogStatus.WORKING, result.item.id);
                 response = await fetch('/api/elementor/publish', {
                     method: 'POST',
                     headers: {
@@ -1480,11 +1555,18 @@ const App: React.FC = () => {
                     throw new Error(data.error || `Elementor API Error: ${response.statusText}`);
                 }
 
-                // Log image results
+                // Log image results with detailed mode info
+                const report = data.imageDecisionReport;
+                const modeLabel = report?.mode === 'bank' ? '📦 Bank' : report?.mode === 'live' ? '⚡ Live' : '❌ None';
+                const promptModeLabel = report?.livePromptMode === 'main_prompt' ? 'Main Prompt' :
+                                       report?.livePromptMode === 'guided_gpt' ? 'Guided GPT' :
+                                       report?.livePromptMode === 'smart_prompt' ? 'Smart Prompt' : '';
+
                 if (data.imagesFromBank > 0) {
-                    addLog(`[${result.item.name}] Added ${data.imagesFromBank} images from Image Bank`, LogStatus.SUCCESS, result.item.id);
+                    addLog(`[${result.item.name}] ${modeLabel}: ${data.imagesFromBank} images pulled from Image Bank`, LogStatus.SUCCESS, result.item.id);
                 } else if (data.totalImages > 0) {
-                    addLog(`[${result.item.name}] Generated ${data.totalImages} images`, LogStatus.SUCCESS, result.item.id);
+                    const liveDetails = promptModeLabel ? ` (${promptModeLabel})` : '';
+                    addLog(`[${result.item.name}] ${modeLabel}${liveDetails}: Generated ${data.totalImages} images`, LogStatus.SUCCESS, result.item.id);
                 }
 
                 updateResultStatus(result.item.id, 'published', data.page?.link, undefined, data.imageDecisionReport);
@@ -3226,6 +3308,17 @@ const App: React.FC = () => {
                                 }`}>
                                     Image: {currentProject?.state?.wpPublishMode === 'wordpress' ? 'WP' : currentProject?.state?.wpPublishMode === 'draft' ? 'Draft' : 'Off'}
                                 </span>
+                                {/* Image Source Counts (when images enabled) - shows actual results */}
+                                {currentProject?.state?.wpPublishMode !== 'off' && (
+                                    <>
+                                        <span className={`px-2 py-1 rounded ${batchImageCounts.fromBank > 0 ? 'bg-brand-gold/30 text-brand-gold' : 'bg-slate-600/30 text-slate-400'}`}>
+                                            📦 Bank: {batchImageCounts.fromBank}
+                                        </span>
+                                        <span className={`px-2 py-1 rounded ${batchImageCounts.fromLive > 0 ? 'bg-brand-cyan/30 text-brand-cyan' : 'bg-slate-600/30 text-slate-400'}`}>
+                                            ⚡ Live: {batchImageCounts.fromLive}
+                                        </span>
+                                    </>
+                                )}
                             </div>
                             {/* Logs - expanded to show all (max-h with auto, no fixed h-96) */}
                             <div ref={logContainerRef} className="max-h-[600px] min-h-[200px] bg-slate-900 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">

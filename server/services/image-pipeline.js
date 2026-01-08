@@ -290,13 +290,7 @@ export async function processArticleWithImages(content, options = {}) {
       // KEY FIX: Match EACH image position to LOCAL content (75 words around it)
       progress('smart_matching', { message: 'Smart matching content to placeholders per image position...' });
 
-      console.log('\n╔══════════════════════════════════════════════════════════════╗');
-      console.log('║     GENERATE LIVE: MAIN PROMPT MODE (Per-Position Matching)  ║');
-      console.log('╠══════════════════════════════════════════════════════════════╣');
-      console.log(`║ Avatar: ${(targetAvatar.name || 'Unknown').padEnd(52)} ║`);
-      console.log(`║ Main Prompt: ${targetAvatar.mainPrompt?.substring(0, 47).padEnd(47)}... ║`);
-      console.log(`║ Hero Side: ${heroImageSide.padEnd(10)} | Inline starts: ${(heroImageSide === 'right' ? 'left' : 'right').padEnd(25)} ║`);
-      console.log('╚══════════════════════════════════════════════════════════════╝');
+      console.log(`[Main Prompt Mode] Avatar: ${targetAvatar.name} | Hero side: ${heroImageSide}`);
 
       // Shared state across all image positions
       const usedPrimaries = new Set(); // Rule 3: No duplicate primaries across page
@@ -403,15 +397,7 @@ export async function processArticleWithImages(content, options = {}) {
       }
 
       // Summary log
-      console.log('\n╔══════════════════════════════════════════════════════════════╗');
-      console.log('║                   SMART MATCHING SUMMARY                     ║');
-      console.log('╠══════════════════════════════════════════════════════════════╣');
-      console.log(`║ Total Images: ${String(imageCount).padEnd(3)} | Used Primaries: ${Array.from(usedPrimaries).slice(0, 3).join(', ').padEnd(30)} ║`);
-      allReplacements.forEach((r, idx) => {
-        const values = Object.values(r.replacements).join(', ').substring(0, 50);
-        console.log(`║ #${idx}: ${values.padEnd(56)} ║`);
-      });
-      console.log('╚══════════════════════════════════════════════════════════════╝\n');
+      console.log(`[Smart Match] Total: ${imageCount} images | Primaries used: ${Array.from(usedPrimaries).slice(0, 5).join(', ')}`);
 
       const promptCount = countPromptsInChunks(chunks);
       progress('prompts_generated', {
@@ -425,15 +411,7 @@ export async function processArticleWithImages(content, options = {}) {
       // GUIDED GPT MODE: Use GPT-4o with guardrails to generate contextual prompts
       progress('guided_prompts', { message: `Generating prompts with ${guidedModel} + guardrails...` });
 
-      console.log('\n╔══════════════════════════════════════════════════════════════╗');
-      console.log('║        GENERATE LIVE: GUIDED GPT MODE                        ║');
-      console.log('╠══════════════════════════════════════════════════════════════╣');
-      console.log(`║ Model: ${guidedModel.padEnd(53)} ║`);
-      console.log(`║ Avatar: ${(targetAvatar?.name || 'Default').padEnd(52)} ║`);
-      if (guidedGuardrails?.instructions) {
-        console.log(`║ Instructions: ${guidedGuardrails.instructions.substring(0, 45).padEnd(45)}... ║`);
-      }
-      console.log('╚══════════════════════════════════════════════════════════════╝');
+      console.log(`[Guided GPT Mode] Model: ${guidedModel} | Avatar: ${targetAvatar?.name || 'Default'}`);
 
       const guardrails = guidedGuardrails || targetAvatar?.guardrails || {};
       let imageCount = 0;

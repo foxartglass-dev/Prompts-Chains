@@ -31,6 +31,9 @@ import {
   highlight
 } from '../services/image-tracker.js';
 import sessionLogger from '../services/session-logger.js';
+import { addBatchToDraftBank } from '../services/draft-image-bank.js';
+import githubLogger from '../services/github-logger.js';
+import { getImageBank } from '../services/image-bank.js';
 
 const router = express.Router();
 
@@ -462,18 +465,36 @@ router.post('/publish', async (req, res) => {
         // Note: We don't check 'enabled' here - if integration_mode is 'bank', user wants bank
         if (bankImages.length > 0) {
           const config = bankImages[0];
-          const imageBank = config.image_bank || [];
+
+          // Fetch images from the NEW image_bank_items table (not the old JSONB column)
+          const imageBankRows = await getImageBank(workflowId, { archived: false });
+          // Transform from snake_case DB columns to camelCase for consistency
+          const imageBank = imageBankRows.map(row => ({
+            id: row.external_id || String(row.id),
+            url: row.url,
+            title: row.title,
+            category: row.category,
+            variation: row.variation_name,
+            variationId: row.variation_id,
+            avatarTag: row.avatar_tag,
+            orientation: row.orientation,
+            prompt: row.prompt,
+            model: row.model,
+            used: row.used,
+            usedOn: row.used_on,
+            usedAt: row.used_at,
+            archived: row.archived,
+            tags: row.tags || [],
+            wpUrl: row.wp_url,
+            wpMediaId: row.wp_media_id,
+            dbId: row.id
+          }));
+
           const avatars = config.audience_avatars || [];
 
-          console.log('╔══════════════════════════════════════════════════════════════╗');
-          console.log('║              IMAGE BANK SELECTION STARTING                    ║');
-          console.log('╠══════════════════════════════════════════════════════════════╣');
-          console.log(`║ Bank size: ${String(imageBank.length).padEnd(5)} images                                  ║`);
-          console.log(`║ Avatars configured: ${String(avatars.length).padEnd(3)}                                   ║`);
-
+          console.log(`[Image Bank] Starting selection - Bank: ${imageBank.length} images (from image_bank_items table), Avatars: ${avatars.length}`);
           if (imageBank.length === 0) {
-            console.log('║ ⚠️  WARNING: Image Bank is EMPTY - no images to select!       ║');
-            console.log('╚══════════════════════════════════════════════════════════════╝');
+            console.log('[Image Bank] WARNING: Bank is empty!');
           }
           const variationOrderMode = config.variation_order_mode || 'sequential';
           const manualOrder = config.manual_variation_order || [];
@@ -493,21 +514,24 @@ router.post('/publish', async (req, res) => {
           console.log('[Image Bank] Target avatar:', targetAvatar?.name, targetAvatar?.tag);
 
           // Get available images from bank matching the tag
-          // IMPORTANT: Only use images that have been uploaded to WordPress (have wpUrl)
+          // In draft mode: allow images without wpUrl (they won't be embedded in WP page)
+          // In live mode: require wpUrl (base64 data URLs won't work in WordPress)
+          console.log(`[Image Bank] Filtering ${imageBank.length} images (imageDraftMode: ${imageDraftMode}, articleTag: ${articleTag})`);
           let availableImages = imageBank.filter(img => {
             if (img.used) {
               console.log('[Image Bank] Skipping used image:', img.id);
               return false;
             }
-            // Skip images without WordPress URL - base64 data URLs won't work
-            if (!img.wpUrl) {
-              console.log('[Image Bank] ⚠️ Skipping image without wpUrl:', img.id, '- needs WordPress upload');
+            // Skip images without WordPress URL - UNLESS we're in draft mode
+            if (!img.wpUrl && !imageDraftMode) {
+              console.log('[Image Bank] ⚠️ Skipping image without wpUrl:', img.id, '- needs WordPress upload (imageDraftMode:', imageDraftMode, ')');
               return false;
             }
             // If article has a tag and image has a tag, they must match
             if (articleTag && img.avatarTag) {
               const matches = img.avatarTag === articleTag;
               if (!matches) console.log('[Image Bank] Tag mismatch:', img.avatarTag, '!=', articleTag);
+              else console.log('[Image Bank] ✅ Tag match:', img.avatarTag, '=', articleTag, 'for image:', img.id);
               return matches;
             }
             // If no tags, check variation match
@@ -517,15 +541,18 @@ router.post('/publish', async (req, res) => {
               return matches;
             }
             // No tag requirements - include all unused images
+            console.log('[Image Bank] Including image (no tag requirements):', img.id);
             return true;
           });
 
-          // Count images missing wpUrl for warning
+          // Count images missing wpUrl for warning (only matters in non-draft mode)
           const missingWpUrl = imageBank.filter(img => !img.used && !img.wpUrl).length;
           console.log('[Image Bank] Available images after filter:', availableImages.length);
-          if (missingWpUrl > 0) {
+          if (missingWpUrl > 0 && !imageDraftMode) {
             console.log(`[Image Bank] ⚠️ WARNING: ${missingWpUrl} images skipped - missing WordPress URL!`);
             console.log('[Image Bank] → These images need to be uploaded to WordPress Media Library first');
+          } else if (missingWpUrl > 0 && imageDraftMode) {
+            console.log(`[Image Bank] Draft mode: ${missingWpUrl} images available (wpUrl not required)`);
           }
 
           // ═══════════════════════════════════════════════════════════════
@@ -750,37 +777,13 @@ router.post('/publish', async (req, res) => {
 
             availableImages = selectedImages;
 
-            // ═══════════════════════════════════════════════════════════════
-            // SMART MATCHING DECISION REPORT - Show why each image was chosen
-            // ═══════════════════════════════════════════════════════════════
-            console.log('\n╔══════════════════════════════════════════════════════════════╗');
-            console.log('║         SMART CONTENT MATCHING DECISION REPORT               ║');
-            console.log('╠══════════════════════════════════════════════════════════════╣');
-            console.log(`║ Article: ${(keyword || title || 'Untitled').substring(0, 50).padEnd(50)} ║`);
-            console.log(`║ Avatar: ${(targetAvatar?.name || 'None').padEnd(52)} ║`);
-            console.log(`║ Mode: Pull from Bank | Plurals: ${matchPlurals ? 'ON' : 'OFF'}                       ║`);
-            console.log('╠══════════════════════════════════════════════════════════════╣');
-            console.log('║ MATCHING RULES APPLIED:                                      ║');
-            console.log('║  1. Always try primary keywords first                        ║');
-            console.log('║  2. Fall back to secondary keywords if enabled               ║');
-            console.log('║  3. Never duplicate primary keywords on a page               ║');
-            console.log('║  4. Secondary matches must have different primaries          ║');
-            console.log('╠══════════════════════════════════════════════════════════════╣');
-
+            // Smart matching decision report
+            console.log(`[Smart Match] Article: ${keyword || title} | Avatar: ${targetAvatar?.name || 'None'} | Plurals: ${matchPlurals ? 'ON' : 'OFF'}`);
+            console.log(`[Smart Match] Matched ${availableImages.length} images:`);
             availableImages.slice(0, 5).forEach((img, idx) => {
-              console.log(`║ IMAGE #${idx + 1}: ${(img.variation || img.id).substring(0, 50).padEnd(50)} ║`);
-              console.log(`║   Primary Score: ${String(img.primaryScore || 0).padEnd(5)} | Secondary Score: ${String(img.secondaryScore || 0).padEnd(12)} ║`);
-              if (img.matchedPrimary?.length > 0) {
-                console.log(`║   Primary Keywords: ${img.matchedPrimary.slice(0, 3).join(', ').substring(0, 40).padEnd(40)} ║`);
-              }
-              if (img.matchedSecondary?.length > 0) {
-                console.log(`║   Secondary Keywords: ${img.matchedSecondary.slice(0, 3).join(', ').substring(0, 38).padEnd(38)} ║`);
-              }
-              console.log('╠──────────────────────────────────────────────────────────────╣');
+              const primaryKw = img.matchedPrimary?.slice(0, 2).join(', ') || 'none';
+              console.log(`  #${idx + 1}: ${(img.variation || img.id).substring(0, 40)} (primary: ${primaryKw})`);
             });
-
-            console.log(`║ Total Matched: ${String(availableImages.length).padEnd(3)} images                                  ║`);
-            console.log('╚══════════════════════════════════════════════════════════════╝\n');
 
             // Populate image decision report for frontend
             imageDecisionReport.mode = 'bank';
@@ -945,11 +948,7 @@ router.post('/publish', async (req, res) => {
           }
 
           imagesFromBank = imagesToUse.length;
-
-          console.log('╠══════════════════════════════════════════════════════════════╣');
-          console.log(`║ IMAGES SELECTED FROM BANK: ${String(imagesFromBank).padEnd(3)}                             ║`);
-          console.log(`║ (Hero: 1, Body: ${String(imagesFromBank - 1).padEnd(2)})                                       ║`);
-          console.log('╚══════════════════════════════════════════════════════════════╝');
+          console.log(`[Image Bank] Selected ${imagesFromBank} images (Hero: 1, Body: ${imagesFromBank - 1})`);
 
           // Session log for bank selection
           sessionLogger.logSuccess('BANK', `Selected ${imagesFromBank} images from Image Bank`, {
@@ -959,22 +958,21 @@ router.post('/publish', async (req, res) => {
           });
           sessionLogger.updateSummary({ imagesFromBank });
 
-          // Mark images as used
+          // Mark images as used in the NEW image_bank_items table
           if (imagesToUse.length > 0) {
-            const usedIds = new Set(imagesToUse.map(i => i.id));
-            const updatedBank = imageBank.map(img => {
-              if (usedIds.has(img.id)) {
-                return { ...img, used: true, usedOn: keyword, usedAt: new Date().toISOString() };
-              }
-              return img;
-            });
+            console.log(`[Image Bank] Marking ${imagesToUse.length} images as used...`);
+            const { markImageAsUsed } = await import('../services/image-bank.js');
 
-            await sql`
-              UPDATE image_creation_settings
-              SET image_bank = ${JSON.stringify(updatedBank)}::jsonb,
-                  updated_at = CURRENT_TIMESTAMP
-              WHERE workflow_id = ${workflowId}
-            `;
+            for (const img of imagesToUse) {
+              // Use dbId (database ID) to update the correct record
+              const imageId = img.dbId || img.id;
+              try {
+                await markImageAsUsed(workflowId, imageId, keyword);
+                console.log(`[Image Bank] ✅ Marked image ${imageId} as used on "${keyword}"`);
+              } catch (markError) {
+                console.error(`[Image Bank] Failed to mark image ${imageId} as used:`, markError.message);
+              }
+            }
           }
         }
       } catch (bankError) {
@@ -1061,30 +1059,11 @@ router.post('/publish', async (req, res) => {
         guidedModel
       });
 
-      // 🔍🔍🔍 CRITICAL TRACKING: What came back from pipeline?
-      banner('PIPELINE RESULT - What images came back?');
-      console.log('╔══════════════════════════════════════════════════════════════════════╗');
-      console.log('║  🔬 EXAMINING PIPELINE RESULT FOR IMAGES                            ║');
-      console.log('╠══════════════════════════════════════════════════════════════════════╣');
-      console.log(`║ pipelineResult.imagesGenerated: ${pipelineResult.imagesGenerated || 0}`.padEnd(71) + '║');
-      console.log(`║ pipelineResult.chunks.intro exists: ${!!pipelineResult.chunks.intro}`.padEnd(71) + '║');
-      console.log(`║ pipelineResult.chunks.intro.imageData exists: ${!!pipelineResult.chunks.intro?.imageData}`.padEnd(71) + '║');
-      if (pipelineResult.chunks.intro?.imageData) {
-        const id = pipelineResult.chunks.intro.imageData;
-        console.log(`║   - url: ${id.url ? 'YES (' + (id.url.startsWith('data:') ? 'BASE64' : 'HTTP') + ')' : 'NO'}`.padEnd(71) + '║');
-        console.log(`║   - wpUrl: ${id.wpUrl ? 'YES' : 'NO'}`.padEnd(71) + '║');
-        console.log(`║   - wpMediaId: ${id.wpMediaId || 'NONE'}`.padEnd(71) + '║');
-      }
-      console.log(`║ pipelineResult.chunks.chunks count: ${pipelineResult.chunks.chunks?.length || 0}`.padEnd(71) + '║');
+      // Pipeline result summary
       let pipelineChunksWithImages = 0;
-      pipelineResult.chunks.chunks?.forEach((c, i) => {
-        if (c.imageData) {
-          pipelineChunksWithImages++;
-          console.log(`║   chunk[${i}] imageData: url=${c.imageData.url ? 'YES' : 'NO'}, wpUrl=${c.imageData.wpUrl ? 'YES' : 'NO'}`.padEnd(71) + '║');
-        }
-      });
-      console.log(`║ Pipeline chunks with imageData: ${pipelineChunksWithImages}`.padEnd(71) + '║');
-      console.log('╚══════════════════════════════════════════════════════════════════════╝');
+      pipelineResult.chunks.chunks?.forEach((c) => { if (c.imageData) pipelineChunksWithImages++; });
+      const heroHasImage = !!pipelineResult.chunks.intro?.imageData;
+      console.log(`[Pipeline] Generated: ${pipelineResult.imagesGenerated || 0} | Hero: ${heroHasImage ? 'YES' : 'NO'} | Body: ${pipelineChunksWithImages}`);
 
       // Merge pipeline images with bank images (only if NOT in draft mode)
       if (!imageDraftMode) {
@@ -1147,53 +1126,21 @@ router.post('/publish', async (req, res) => {
       estimatedCost = pipelineResult.estimatedCost;
       console.log(`[Elementor Publish] Generated ${imagesGenerated} images`);
 
-      // ═══════════════════════════════════════════════════════════════
-      // IMAGE DECISION REPORT - Log what was generated and why
-      // ═══════════════════════════════════════════════════════════════
-      console.log('\n╔══════════════════════════════════════════════════════════════╗');
-      console.log('║          IMAGE GENERATION DECISION REPORT                    ║');
-      console.log('╠══════════════════════════════════════════════════════════════╣');
-      console.log(`║ Article: ${(title || keyword || 'Untitled').substring(0, 50).padEnd(50)} ║`);
-      console.log(`║ Mode: Generate Live | Model: ${imageGenModel.padEnd(28)} ║`);
-      console.log(`║ Quality: ${imageQuality.padEnd(10)} | Images Generated: ${String(imagesGenerated).padEnd(14)} ║`);
-      console.log('╠══════════════════════════════════════════════════════════════╣');
-
-      // Log hero image if present
+      // Image generation summary
+      console.log(`[Generate Live] Article: ${title || keyword} | Model: ${imageGenModel} | Quality: ${imageQuality} | Total: ${imagesGenerated}`);
       if (pipelineResult.chunks.intro?.imageData) {
-        const heroAction = pipelineResult.chunks.intro.extractedAction || {};
         const heroData = pipelineResult.chunks.intro.imageData;
-        const introWords = pipelineResult.chunks.intro.wordCount || 0;
-        const estimatedLines = Math.ceil(introWords / 10); // ~10 words per line in hero layout
-        const sizeLabel = heroData.requestedSize === '1536x1024' ? 'LANDSCAPE' :
-                          heroData.requestedSize === '1024x1024' ? 'SQUARE' : 'PORTRAIT';
-        console.log('║ HERO IMAGE:                                                  ║');
-        console.log(`║   Auto-Size: ${introWords} words ≈ ${estimatedLines} lines → ${sizeLabel} (${heroData.requestedSize || 'N/A'})`.padEnd(62) + '║');
-        console.log(`║   Action: ${(heroAction.action || 'N/A').substring(0, 50).padEnd(50)} ║`);
-        console.log(`║   Mood: ${(heroAction.mood || 'N/A').padEnd(52)} ║`);
-        console.log(`║   Setting: ${(heroAction.setting || 'N/A').substring(0, 48).padEnd(48)} ║`);
-        if (pipelineResult.chunks.intro.imagePrompt) {
-          console.log(`║   Prompt: ${pipelineResult.chunks.intro.imagePrompt.substring(0, 50).padEnd(50)} ║`);
-        }
+        console.log(`  Hero: ${heroData.requestedSize || 'default'} | wpUrl: ${heroData.wpUrl ? 'YES' : 'NO'}`);
       }
-
-      // Log inline images
       let inlineCount = 0;
       pipelineResult.chunks.chunks.forEach((chunk, idx) => {
         if (chunk.imageData) {
           inlineCount++;
-          const action = chunk.extractedAction || {};
-          console.log('╠──────────────────────────────────────────────────────────────╣');
-          console.log(`║ IMAGE #${inlineCount} (Section ${idx + 1}):                                       ║`);
-          console.log(`║   Heading: ${(chunk.heading || 'No heading').substring(0, 48).padEnd(48)} ║`);
-          console.log(`║   Word Count: ${String(chunk.wordCount || 0).padEnd(5)} | Side: ${(chunk.imageData.side || 'N/A').padEnd(25)} ║`);
-          console.log(`║   Action: ${(action.action || 'N/A').substring(0, 50).padEnd(50)} ║`);
-          if (chunk.imagePrompt) {
-            console.log(`║   Prompt: ${chunk.imagePrompt.substring(0, 50).padEnd(50)} ║`);
-          }
         }
       });
-
-      console.log('╚══════════════════════════════════════════════════════════════╝\n');
+      if (inlineCount > 0) {
+        console.log(`  Body images: ${inlineCount}`);
+      }
 
       // Session logging for live generation
       const liveGenCount = (pipelineResult.chunks.intro?.imageData ? 1 : 0) +
@@ -1300,12 +1247,14 @@ router.post('/publish', async (req, res) => {
     // Track image save status for response
     let imageSaveStatus = { saved: false, count: 0, articleId: null, error: null };
 
+    // Build array of generated images - declared outside if block so it's accessible for draft bank save
+    let generatedImagesData = [];
+    const timestamp = new Date().toISOString();
+
     if (articleId && isDatabaseEnabled()) {
       try {
         // Build array of generated images to save with article
         // Must include all fields expected by ArticleImage interface: id, url, prompt, placement, wpMediaId, createdAt, pushedToWp
-        const generatedImagesData = [];
-        const timestamp = new Date().toISOString();
 
         // Use draft mode images if available (images matched but not embedded in page)
         if (imageDraftMode && draftModeImages.length > 0) {
@@ -1413,7 +1362,21 @@ router.post('/publish', async (req, res) => {
         }
         console.log('[SAVE] ========================================\n');
 
-        if (isManualPush) {
+        // Check if we're in draft mode (no WP page created)
+        if (skipWpPageCreation) {
+          // DRAFT MODE: Save images to article record WITHOUT WordPress data
+          // pageResult is null here, so we only update generated_images
+          console.log('[SAVE] Draft mode - saving images without WP page data');
+          const updateResult = await sql`
+            UPDATE articles
+            SET generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${articleId}
+            RETURNING id
+          `;
+          console.log('[SAVE] ✅ Draft mode DB update completed for article', articleId);
+          console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
+        } else if (isManualPush) {
           // Manual push: increment count and append date
           const updateResult = await sql`
             UPDATE articles
@@ -1482,6 +1445,63 @@ router.post('/publish', async (req, res) => {
       imageSaveStatus = { saved: false, count: 0, articleId, error: 'SKIPPED: ' + (!articleId ? 'No articleId' : 'Database disabled') };
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // DRAFT IMAGE BANK: Save images to separate draft bank for tracking
+    // This allows viewing all generated images and tracking made/replaced counts
+    // Both Draft mode and WordPress mode images are logged here
+    // ═══════════════════════════════════════════════════════════════
+    let draftBankSaveStatus = { saved: false, count: 0 };
+
+    // Determine which images to save to draft bank
+    // Draft mode: use draftModeImages (images not embedded in WP page)
+    // WordPress mode: use generatedImagesData (images embedded in WP page, logged for tracking)
+    const imagesToSaveToBank = draftModeImages.length > 0 ? draftModeImages : generatedImagesData;
+    const isPassThrough = draftModeImages.length === 0 && generatedImagesData.length > 0; // WordPress mode = pass-through
+
+    if (workflowId && isDatabaseEnabled() && imagesToSaveToBank.length > 0) {
+      try {
+        console.log(`[DRAFT BANK] Saving ${imagesToSaveToBank.length} images to Draft Image Bank${isPassThrough ? ' (pass-through for tracking)' : ''}`);
+
+        // Transform images for draft bank format
+        const draftBankImages = imagesToSaveToBank.map(img => ({
+          articleId: articleId,
+          url: img.url,
+          wpMediaId: img.wpMediaId || null,
+          itemType: img.variation?.split(' · ')[0] || null, // Extract item code from variation like "I3 · (H) · G2"
+          itemCategory: img.placement || null,
+          avatarTag: keyword?.match(/\(([A-Z])\)/i)?.[1] || null,
+          pageKeyword: keyword,
+          pageTitle: title,
+          prompt: img.prompt || '',
+          model: imageGenModel || null,
+          placement: img.placement,
+          metadata: {
+            source: img.source,
+            side: img.side,
+            bankImageId: img.bankImageId,
+            createdAt: img.createdAt,
+            passThrough: isPassThrough // Mark as pass-through if sent directly to WP
+          }
+        }));
+
+        const savedToBank = await addBatchToDraftBank(workflowId, draftBankImages);
+        draftBankSaveStatus = { saved: true, count: savedToBank.length, passThrough: isPassThrough };
+        console.log(`[DRAFT BANK] ✅ Saved ${savedToBank.length} images to Draft Image Bank`);
+
+        // If pass-through (WordPress mode), immediately mark as sent
+        if (isPassThrough && savedToBank.length > 0) {
+          console.log('[DRAFT BANK] WordPress mode - images logged for tracking (status: sent)');
+          // Note: Images in WordPress mode are logged but immediately marked as "sent" conceptually
+          // The actual status update can be done if needed, but the metadata.passThrough flag indicates this
+        }
+      } catch (draftBankError) {
+        console.error('[DRAFT BANK] ❌ Failed to save to Draft Image Bank:', draftBankError.message);
+        draftBankSaveStatus = { saved: false, count: 0, error: draftBankError.message };
+      }
+    } else if (imagesToSaveToBank.length > 0) {
+      console.log('[DRAFT BANK] ⚠️ SKIPPED - workflowId:', workflowId, 'dbEnabled:', isDatabaseEnabled());
+    }
+
     // Session logging for successful publish
     sessionLogger.logSuccess('PUBLISH', `Successfully published to WordPress`, {
       pageId: pageResult?.id,
@@ -1491,6 +1511,13 @@ router.post('/publish', async (req, res) => {
     });
     sessionLogger.updateSummary({ articlesProcessed: 1, wpUploads: 1 });
     sessionLogger.endSession();
+
+    // Push logs to GitHub (non-blocking, fire and forget)
+    if (githubLogger.isConfigured()) {
+      githubLogger.pushLogsToGitHub('publish-complete').catch(err => {
+        console.error('[GitHub Logger] Background push failed:', err.message);
+      });
+    }
 
     res.json({
       success: true,
@@ -1502,13 +1529,22 @@ router.post('/publish', async (req, res) => {
       totalImages: imagesFromBank + imagesGenerated,
       estimatedCost,
       imageDecisionReport, // Include decision report for frontend display
-      imageSaveStatus, // NEW: Detailed status of image save to database
+      imageSaveStatus, // Detailed status of image save to article record
+      draftBankSaveStatus, // Status of save to Draft Image Bank
       imagesProcessed: skipWpPageCreation && (imagesFromBank > 0 || imagesGenerated > 0) // True if images were processed without WP page
     });
   } catch (error) {
     console.error('Publish error:', error);
     sessionLogger.logError('PUBLISH', `Publish failed: ${error.message}`, { stack: error.stack });
     sessionLogger.endSession();
+
+    // Push logs to GitHub on error too (helps debugging)
+    if (githubLogger.isConfigured()) {
+      githubLogger.pushLogsToGitHub('publish-error').catch(err => {
+        console.error('[GitHub Logger] Background push failed:', err.message);
+      });
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
