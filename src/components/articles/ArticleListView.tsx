@@ -612,15 +612,14 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mt-1 text-sm text-gray-400">
-                    <span>{selectedArticle.word_count || 0} words</span>
-                    <span>AI: {selectedArticle.ai_score ?? '-'}%</span>
+                  {/* Stats + Status Badges - All on one line */}
+                  <div className="flex items-center gap-2 mt-1 text-xs font-mono">
+                    <span className="text-gray-400">{selectedArticle.word_count || 0} words</span>
+                    <span className="text-gray-400">AI: {selectedArticle.ai_score ?? '-'}%</span>
                     {selectedArticle.images && selectedArticle.images.length > 0 && (
                       <span className="text-amber-400">{selectedArticle.images.length} images</span>
                     )}
-                  </div>
-                  {/* Status Badges Row - Always show all 5 */}
-                  <div className="flex items-center gap-2 mt-1.5 text-xs font-mono">
+                    <span className="text-gray-600">|</span>
                     {/* Article: Draft/WP */}
                     <span className={`px-2 py-0.5 rounded font-medium ${
                       selectedArticle.wp_post_id ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
@@ -661,17 +660,17 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     }`}>
                       ⚡ Live: {selectedArticle.image_decision_report?.images?.filter(img => img.source === 'generated').length || 0}
                     </span>
-                    {/* Created Date/Time */}
-                    {selectedArticle.created_at && (
-                      <span className="text-gray-500 ml-2">
-                        {new Date(selectedArticle.created_at).toLocaleDateString('en-US', {
-                          month: 'short', day: 'numeric', year: 'numeric'
-                        })} {new Date(selectedArticle.created_at).toLocaleTimeString('en-US', {
-                          hour: 'numeric', minute: '2-digit', hour12: true
-                        })}
-                      </span>
-                    )}
                   </div>
+                  {/* Created Date/Time - Second line */}
+                  {selectedArticle.created_at && (
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {new Date(selectedArticle.created_at).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric'
+                      })} {new Date(selectedArticle.created_at).toLocaleTimeString('en-US', {
+                        hour: 'numeric', minute: '2-digit', hour12: true
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Tab Navigation */}
@@ -848,11 +847,11 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                   {selectedArticle.images && selectedArticle.images.length > 0 ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {selectedArticle.images.map((image, idx) => (
-                        <div key={image.id} className="relative group bg-slate-800 rounded-lg overflow-hidden border border-slate-700 hover:border-brand-cyan/50 transition">
+                        <div key={image.id} className="relative group bg-slate-900 rounded-lg overflow-hidden border border-slate-700 hover:border-brand-cyan/50 transition">
                           <img
                             src={image.url}
                             alt={image.placement || 'Article image'}
-                            className="w-full aspect-square object-cover"
+                            className="w-full aspect-[3/4] object-contain bg-slate-900"
                           />
                           {/* Placement badge */}
                           <div className="absolute top-2 left-2">
