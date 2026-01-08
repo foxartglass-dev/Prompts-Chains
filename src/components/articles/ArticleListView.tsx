@@ -369,30 +369,56 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const pushAllToWordPress = async () => {
     if (!selectedArticle) return;
 
-    const wpUrl = selectedArticle.wp_url;
-    const wpUser = selectedArticle.wp_user;
-    const wpPassword = selectedArticle.wp_app_password;
-
-    if (!wpUrl || !wpUser || !wpPassword) {
-      setError('WordPress credentials not configured for this website');
-      return;
-    }
-
-    // Check if meta is saved
-    if (!selectedArticle.selected_meta_title && !selectedArticle.selected_meta_description) {
-      setError('Please save your meta title & description first before pushing all to WordPress');
-      return;
-    }
-
     setPushingAll(true);
     setError(null);
 
     const errors: string[] = [];
 
     try {
+      // IMPORTANT: First, refresh article data from database to ensure we have the latest state
+      // This prevents issues where frontend state is stale (e.g., images or meta showing incorrectly)
+      console.log('[Push All] Refreshing article data from database before push...');
+      const refreshRes = await fetch(`/api/articles/${selectedArticle.id}`);
+      if (!refreshRes.ok) {
+        throw new Error('Failed to refresh article data');
+      }
+      const refreshData = await refreshRes.json();
+      const freshArticle = refreshData.article;
+
+      // Map generated_images to images for consistency
+      if (freshArticle.generated_images) {
+        freshArticle.images = freshArticle.generated_images;
+      }
+
+      console.log('[Push All] Fresh data loaded:', {
+        id: freshArticle.id,
+        wpPostId: freshArticle.wp_post_id,
+        hasMetaTitle: !!freshArticle.selected_meta_title,
+        hasMetaDesc: !!freshArticle.selected_meta_description,
+        imageCount: freshArticle.images?.length || 0
+      });
+
+      // Use fresh data for credentials and checks
+      const wpUrl = freshArticle.wp_url || selectedArticle.wp_url;
+      const wpUser = freshArticle.wp_user || selectedArticle.wp_user;
+      const wpPassword = freshArticle.wp_app_password || selectedArticle.wp_app_password;
+
+      if (!wpUrl || !wpUser || !wpPassword) {
+        setError('WordPress credentials not configured for this website');
+        setPushingAll(false);
+        return;
+      }
+
+      // Check if meta is saved using FRESH data
+      if (!freshArticle.selected_meta_title && !freshArticle.selected_meta_description) {
+        setError('Please save your meta title & description first before pushing all to WordPress');
+        setPushingAll(false);
+        return;
+      }
+
       // Step 1: Publish article if not already published
-      let wpPostId = selectedArticle.wp_post_id;
-      console.log('[Push All] Starting - Article ID:', selectedArticle.id, 'WP Post ID:', wpPostId);
+      let wpPostId = freshArticle.wp_post_id;
+      console.log('[Push All] Starting - Article ID:', freshArticle.id, 'WP Post ID:', wpPostId);
 
       if (!wpPostId) {
         console.log('[Push All] Publishing article...');
@@ -403,10 +429,10 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             wpUrl,
             wpUser,
             wpPassword,
-            title: selectedArticle.keyword,
-            content: editContent || selectedArticle.final_content,
+            title: freshArticle.keyword,
+            content: editContent || freshArticle.final_content,
             status: 'draft',
-            articleId: selectedArticle.id,
+            articleId: freshArticle.id,
             isManualPush: true
           })
         });
@@ -414,7 +440,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         if (articleData.success && articleData.page) {
           wpPostId = articleData.page.id;
           console.log('[Push All] Article published, WP Post ID:', wpPostId);
-          await fetch(`/api/articles/${selectedArticle.id}/wp-status`, {
+          await fetch(`/api/articles/${freshArticle.id}/wp-status`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -428,9 +454,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         }
       }
 
-      // Step 2: Push meta to SEO plugin
-      console.log('[Push All] Pushing meta - Title:', selectedArticle.selected_meta_title?.substring(0, 30));
-      if (wpPostId && (selectedArticle.selected_meta_title || selectedArticle.selected_meta_description)) {
+      // Step 2: Push meta to SEO plugin using FRESH data
+      console.log('[Push All] Pushing meta - Title:', freshArticle.selected_meta_title?.substring(0, 30));
+      if (wpPostId && (freshArticle.selected_meta_title || freshArticle.selected_meta_description)) {
         const metaRes = await fetch('/api/seo/push-direct', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -439,9 +465,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             wpUser,
             wpPassword,
             postId: wpPostId,
-            metaTitle: selectedArticle.selected_meta_title,
-            metaDescription: selectedArticle.selected_meta_description,
-            articleId: selectedArticle.id
+            metaTitle: freshArticle.selected_meta_title,
+            metaDescription: freshArticle.selected_meta_description,
+            articleId: freshArticle.id
           })
         });
         const metaData = await metaRes.json();
@@ -455,8 +481,8 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
       // Step 3: Push images to WordPress
       // Always call the endpoint - let the backend check if there are images
-      console.log('[Push All] Pushing images - Count from state:', selectedArticle.images?.length || 0);
-      const imagesRes = await fetch(`/api/articles/${selectedArticle.id}/push-images`, {
+      console.log('[Push All] Pushing images - Count from fresh DB:', freshArticle.images?.length || 0);
+      const imagesRes = await fetch(`/api/articles/${freshArticle.id}/push-images`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wpUrl, wpUser, wpPassword })
@@ -468,14 +494,14 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           console.error('[Push All] Images push failed:', imagesData.error);
           errors.push(`Images: ${imagesData.error}`);
         } else {
-          console.log('[Push All] No images to push (article has no images)');
+          console.log('[Push All] No images to push (article has no images in database)');
         }
       } else {
         console.log('[Push All] Images pushed:', imagesData.pushed, 'skipped:', imagesData.skipped);
       }
 
-      // Refresh article data
-      await fetchArticleDetails(selectedArticle.id);
+      // Refresh article data to update UI with latest state
+      await fetchArticleDetails(freshArticle.id);
       fetchArticles();
 
       if (errors.length > 0) {
