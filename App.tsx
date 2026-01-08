@@ -1230,12 +1230,17 @@ const App: React.FC = () => {
                             console.error('Failed to save article:', saveError);
                         }
 
-                        // Auto-publish to WordPress if articlePublishMode is 'wordpress'
-                        // (Image toggle is independent - only controls images, not article publishing)
-                        if (currentProject.state.articlePublishMode === 'wordpress') {
+                        // Process images and/or publish to WordPress based on modes:
+                        // - Article: wordpress → Create WP page
+                        // - Article: draft + Image: draft/wordpress → Process images, save to article, don't create WP page
+                        // - Article: draft + Image: off → Skip entirely
+                        const shouldProcessImages = currentProject.state.wpPublishMode !== 'off';
+                        const shouldPublishToWP = currentProject.state.articlePublishMode === 'wordpress';
+
+                        if (shouldPublishToWP || shouldProcessImages) {
                             const { url, user, password } = currentProject.state.wpCredentials;
                             if (url && user && password) {
-                                addLog(`[${itemLabel}] Auto-publishing to WordPress...`, LogStatus.WORKING, item.id);
+                                addLog(`[${itemLabel}] ${shouldPublishToWP ? 'Publishing to WordPress' : 'Processing images'}...`, LogStatus.WORKING, item.id);
                                 try {
                                     // Build title from template
                                     const placeholderData = currentProject.state.placeholders.reduce((acc, p) => {
@@ -1281,23 +1286,26 @@ const App: React.FC = () => {
                                             workflowId: currentWorkflowId,
                                             keyword: item.name, // Contains tag like "Standard Cleaning(H)"
                                             useImageBank: includeImages,
-                                            generateImages: includeImages && currentProject.state.wpPublishMode === 'wordpress', // Only generate live if WordPress mode
+                                            generateImages: includeImages, // Generate images if enabled (draft mode saves but doesn't embed)
                                             maxImages: includeImages ? 4 : 0,
                                             // Pass article ID so generated images are saved to the article record
                                             articleId: savedArticleId,
                                             // Image Draft Mode: match images and save to article, but DON'T embed in WP page
                                             imageDraftMode: currentProject.state.wpPublishMode === 'draft',
+                                            // Skip WP page creation when Article is on draft (just process images)
+                                            skipWpPageCreation: !shouldPublishToWP,
                                         }),
                                     });
                                     const publishData = await publishResponse.json();
 
-                                    if (publishResponse.ok && publishData.page?.id) {
+                                    // Success: either WP page created OR images processed (when skipWpPageCreation)
+                                    if (publishResponse.ok && (publishData.page?.id || publishData.imagesProcessed)) {
                                         // Log image results
                                         if (publishData.imagesFromBank > 0) {
                                             addLog(`[${itemLabel}] Added ${publishData.imagesFromBank} images from Image Bank`, LogStatus.SUCCESS, item.id);
                                         } else if (publishData.totalImages > 0) {
                                             addLog(`[${itemLabel}] Generated ${publishData.totalImages} images`, LogStatus.SUCCESS, item.id);
-                                        } else {
+                                        } else if (includeImages) {
                                             addLog(`[${itemLabel}] No images added (Image Bank empty or disabled)`, LogStatus.INFO, item.id);
                                         }
                                         // Log actual image save status from server
@@ -1316,7 +1324,12 @@ const App: React.FC = () => {
                                             // Fallback for older API response format
                                             addLog(`[${itemLabel}] Images saved to article record for viewing in Articles page`, LogStatus.INFO, item.id);
                                         }
-                                        addLog(`[${itemLabel}] Published to WordPress!`, LogStatus.SUCCESS, item.id);
+                                        // Log based on what was done
+                                        if (publishData.page?.id) {
+                                            addLog(`[${itemLabel}] Published to WordPress!`, LogStatus.SUCCESS, item.id);
+                                        } else {
+                                            addLog(`[${itemLabel}] Images processed and saved to article.`, LogStatus.SUCCESS, item.id);
+                                        }
                                         // Update result with WP link and image decision report
                                         setResults(prev => prev.map(r =>
                                             r.item.id === resultItem.id
@@ -3198,7 +3211,24 @@ const App: React.FC = () => {
                     <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-cyan relative z-10">
                         <h2 className={`text-xl font-bold flex items-center text-brand-cyan p-5`}><Icon type="info" className="h-6 w-6"/><span className="ml-3">Processing Log</span></h2>
                         <div className="p-5 pt-0 border-t border-brand-cyan/30">
-                            <div ref={logContainerRef} className="h-96 bg-slate-900 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">
+                            {/* Mode Indicators */}
+                            <div className="flex flex-wrap gap-2 mb-3 text-xs font-mono">
+                                <span className={`px-2 py-1 rounded ${currentProject?.state?.articlePublishMode === 'wordpress' ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'}`}>
+                                    Article: {currentProject?.state?.articlePublishMode === 'wordpress' ? 'WP' : 'Draft'}
+                                </span>
+                                <span className={`px-2 py-1 rounded ${currentProject?.state?.metaPublishMode === 'wordpress' ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'}`}>
+                                    Meta: {currentProject?.state?.metaPublishMode === 'wordpress' ? 'WP' : 'Draft'}
+                                </span>
+                                <span className={`px-2 py-1 rounded ${
+                                    currentProject?.state?.wpPublishMode === 'wordpress' ? 'bg-green-600/30 text-green-400' :
+                                    currentProject?.state?.wpPublishMode === 'draft' ? 'bg-amber-600/30 text-amber-400' :
+                                    'bg-slate-600/30 text-slate-400'
+                                }`}>
+                                    Image: {currentProject?.state?.wpPublishMode === 'wordpress' ? 'WP' : currentProject?.state?.wpPublishMode === 'draft' ? 'Draft' : 'Off'}
+                                </span>
+                            </div>
+                            {/* Logs - expanded to show all (max-h with auto, no fixed h-96) */}
+                            <div ref={logContainerRef} className="max-h-[600px] min-h-[200px] bg-slate-900 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">
                                 {logs.map(log => (<div key={log.id} className={`flex items-start ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400 animate-pulse'}[log.status]}`}>{{ [LogStatus.INFO]: <Icon type="info" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-4 w-4 mr-2 flex-shrink-0 animate-spin"/>}[log.status]}<span className="flex-1"><span className="text-gray-500 mr-2">{log.timestamp}</span>{log.message}</span></div>))}
                                 {logs.length === 0 && <div className="text-gray-500">Logs will appear here once processing starts.</div>}
                             </div>

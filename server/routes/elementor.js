@@ -312,6 +312,7 @@ router.post('/publish', async (req, res) => {
       useImageBank = true, // NEW: Pull from Image Bank by tag
       generateImages = false, // Fallback to live generation
       imageDraftMode = false, // If true: match images, save to article DB, but DON'T embed in WP page
+      skipWpPageCreation = false, // If true: process images but don't create WordPress page
       styleDNA = null,
       referenceImages = null,
       openaiApiKey = null,
@@ -1265,16 +1266,22 @@ router.post('/publish', async (req, res) => {
     // Step 6: Get Elementor meta fields
     const elementorMeta = getElementorMetaFields(elementorData);
 
-    // Step 7: Create WordPress page (with optional hierarchy)
-    const pageResult = await createElementorPage(wpCredentials, {
-      title: pageTitle,
-      slug,
-      elementorMeta,
-      status,
-      publishDate,
-      parent: parentPageId,    // Optional: WordPress ID of parent page
-      menuOrder: menuOrder     // Optional: sort order within parent
-    });
+    // Step 7: Create WordPress page (with optional hierarchy) - SKIP if just processing images
+    let pageResult = null;
+    if (skipWpPageCreation) {
+      console.log('[Elementor Publish] Skipping WP page creation (image processing only mode)');
+      sessionLogger.logInfo('WP', 'Skipping WordPress page creation - image processing only');
+    } else {
+      pageResult = await createElementorPage(wpCredentials, {
+        title: pageTitle,
+        slug,
+        elementorMeta,
+        status,
+        publishDate,
+        parent: parentPageId,    // Optional: WordPress ID of parent page
+        menuOrder: menuOrder     // Optional: sort order within parent
+      });
+    }
 
     // Step 8: Update article in database if articleId provided
     console.log('\n========== IMAGE SAVE DIAGNOSTIC ==========');
@@ -1495,7 +1502,8 @@ router.post('/publish', async (req, res) => {
       totalImages: imagesFromBank + imagesGenerated,
       estimatedCost,
       imageDecisionReport, // Include decision report for frontend display
-      imageSaveStatus // NEW: Detailed status of image save to database
+      imageSaveStatus, // NEW: Detailed status of image save to database
+      imagesProcessed: skipWpPageCreation && (imagesFromBank > 0 || imagesGenerated > 0) // True if images were processed without WP page
     });
   } catch (error) {
     console.error('Publish error:', error);

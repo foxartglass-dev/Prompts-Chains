@@ -158,8 +158,8 @@ export default function LogViewer({ isOpen, onClose }: LogViewerProps) {
   const selectedSessionData = sessions.find(s => s.id === selectedSession);
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-800 rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-start p-4">
+      <div className="bg-slate-800 rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col ml-4 mt-16">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <div className="flex items-center gap-3">
