@@ -1,124 +1,62 @@
 /**
  * Logs API Routes
  *
- * Provides endpoints for retrieving session logs for in-app debugging.
+ * Provides endpoints for retrieving ALL console output - same as Railway logs.
  */
 
 import express from 'express';
-import logger from '../services/session-logger.js';
+import consoleCapture from '../services/console-capture.js';
 
 const router = express.Router();
 
 /**
- * GET /api/logs/sessions
- * Get list of recent sessions
+ * GET /api/logs/console
+ * Get captured console logs (same as Railway)
  */
-router.get('/sessions', (req, res) => {
-  const { count = 5 } = req.query;
-  const sessions = logger.getRecentSessions(parseInt(count));
+router.get('/console', (req, res) => {
+  const { count = 500, since } = req.query;
 
-  // Return session metadata without full logs
-  const sessionList = sessions.map(s => ({
-    id: s.id,
-    startTime: s.startTime,
-    endTime: s.endTime,
-    keyword: s.keyword,
-    logCount: s.logs.length,
-    summary: s.summary
-  }));
-
-  res.json({ success: true, sessions: sessionList });
-});
-
-/**
- * GET /api/logs/session/:sessionId
- * Get full logs for a specific session
- */
-router.get('/session/:sessionId', (req, res) => {
-  const { sessionId } = req.params;
-  const { filterLevel, filterCategory } = req.query;
-
-  const session = logger.getSessionLogs(sessionId);
-
-  if (!session) {
-    return res.status(404).json({ error: 'Session not found' });
-  }
-
-  let logs = session.logs;
-
-  // Apply filters
-  if (filterLevel) {
-    logs = logs.filter(l => l.level === filterLevel);
-  }
-  if (filterCategory) {
-    logs = logs.filter(l => l.category === filterCategory);
+  let logs;
+  if (since) {
+    logs = consoleCapture.getLogsSince(since);
+  } else {
+    logs = consoleCapture.getLastLogs(parseInt(count));
   }
 
   res.json({
     success: true,
-    session: {
-      id: session.id,
-      startTime: session.startTime,
-      endTime: session.endTime,
-      keyword: session.keyword,
-      summary: session.summary,
-      logs
-    }
+    count: logs.length,
+    total: consoleCapture.getLogCount(),
+    logs
   });
 });
 
 /**
- * GET /api/logs/session/:sessionId/copy
- * Get formatted logs for copying to clipboard
+ * GET /api/logs/console/copy
+ * Get formatted logs for copying (plain text - same as Railway)
  */
-router.get('/session/:sessionId/copy', (req, res) => {
-  const { sessionId } = req.params;
-  const { includeTimestamp = 'true', includeData = 'false', filterLevel, filterCategory } = req.query;
-
-  const formatted = logger.formatLogsForCopy(sessionId, {
-    includeTimestamp: includeTimestamp === 'true',
-    includeData: includeData === 'true',
-    filterLevel,
-    filterCategory
-  });
-
+router.get('/console/copy', (req, res) => {
+  const { count = 500 } = req.query;
+  const logs = consoleCapture.getLastLogs(parseInt(count));
+  const formatted = consoleCapture.formatLogsForCopy(logs);
   res.type('text/plain').send(formatted);
 });
 
 /**
- * GET /api/logs/current
- * Get current active session (if any)
+ * DELETE /api/logs/console
+ * Clear all captured logs
  */
-router.get('/current', (req, res) => {
-  const sessionId = logger.getCurrentSessionId();
-
-  if (!sessionId) {
-    return res.json({ success: true, active: false, session: null });
-  }
-
-  const session = logger.getSessionLogs(sessionId);
-  res.json({
-    success: true,
-    active: true,
-    session: {
-      id: session.id,
-      startTime: session.startTime,
-      keyword: session.keyword,
-      logCount: session.logs.length,
-      summary: session.summary,
-      // Return last 50 logs for real-time view
-      recentLogs: session.logs.slice(-50)
-    }
-  });
+router.delete('/console', (req, res) => {
+  consoleCapture.clearLogs();
+  res.json({ success: true, message: 'Logs cleared' });
 });
 
 /**
- * DELETE /api/logs/sessions
- * Clear all session logs
+ * GET /api/logs/console/count
+ * Get total log count
  */
-router.delete('/sessions', (req, res) => {
-  logger.clearAllSessions();
-  res.json({ success: true, message: 'All sessions cleared' });
+router.get('/console/count', (req, res) => {
+  res.json({ count: consoleCapture.getLogCount() });
 });
 
 export default router;

@@ -1,3 +1,6 @@
+// MUST be first import - captures all console output for in-app logs
+import './services/console-capture.js';
+
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
