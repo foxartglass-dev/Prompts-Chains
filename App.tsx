@@ -243,6 +243,15 @@ const App: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
 
+    // Image settings state (for Processing Log tabs)
+    const [imageSettings, setImageSettings] = useState<{
+        integrationMode: 'bank' | 'live';
+        livePromptMode: 'main_prompt' | 'guided_gpt' | 'smart_prompt';
+    }>({
+        integrationMode: 'bank',
+        livePromptMode: 'main_prompt'
+    });
+
     // Refs
     const prevProjectIdRef = useRef<string | null>(null);
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -372,6 +381,28 @@ const App: React.FC = () => {
         localStorage.removeItem('promptflow_default_workflow');
       }
     }, [defaultWorkflow]);
+
+    // Fetch image settings when workflow changes (for Processing Log tabs)
+    useEffect(() => {
+      if (!currentWorkflowId) return;
+
+      const fetchImageSettings = async () => {
+        try {
+          const res = await fetch(`/api/image-creation/settings/${currentWorkflowId}`);
+          const data = await res.json();
+          if (data.success && data.settings) {
+            setImageSettings({
+              integrationMode: data.settings.integration_mode || 'bank',
+              livePromptMode: data.settings.live_prompt_mode || 'main_prompt'
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching image settings:', error);
+        }
+      };
+
+      fetchImageSettings();
+    }, [currentWorkflowId]);
 
     // Auto-load default workflow on startup
     const hasAutoLoadedRef = useRef(false);
@@ -3255,6 +3286,24 @@ const App: React.FC = () => {
                                 }`}>
                                     Image: {currentProject?.state?.wpPublishMode === 'wordpress' ? 'WP' : currentProject?.state?.wpPublishMode === 'draft' ? 'Draft' : 'Off'}
                                 </span>
+                                {/* Image Source Indicator (when images enabled) */}
+                                {currentProject?.state?.wpPublishMode !== 'off' && (
+                                    <span className={`px-2 py-1 rounded ${
+                                        imageSettings.integrationMode === 'bank' ? 'bg-brand-gold/30 text-brand-gold' : 'bg-brand-cyan/30 text-brand-cyan'
+                                    }`}>
+                                        Source: {imageSettings.integrationMode === 'bank' ? '📦 Bank' : '⚡ Live'}
+                                    </span>
+                                )}
+                                {/* Live Prompt Mode Indicator (only when Source is Live) */}
+                                {currentProject?.state?.wpPublishMode !== 'off' && imageSettings.integrationMode === 'live' && (
+                                    <span className="px-2 py-1 rounded bg-purple-600/30 text-purple-400">
+                                        Mode: {
+                                            imageSettings.livePromptMode === 'main_prompt' ? 'Main Prompt' :
+                                            imageSettings.livePromptMode === 'guided_gpt' ? 'Guided GPT' :
+                                            imageSettings.livePromptMode === 'smart_prompt' ? 'Smart Prompt' : 'Main Prompt'
+                                        }
+                                    </span>
+                                )}
                             </div>
                             {/* Logs - expanded to show all (max-h with auto, no fixed h-96) */}
                             <div ref={logContainerRef} className="max-h-[600px] min-h-[200px] bg-slate-900 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">
