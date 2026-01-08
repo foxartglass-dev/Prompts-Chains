@@ -776,6 +776,223 @@ Respond in JSON format only:
 // ========================================
 
 /**
+ * GET /api/image-creation/settings/website/:websiteId
+ * Get image creation settings for a website (shared across all workflows)
+ */
+router.get('/settings/website/:websiteId', requireDb, async (req, res) => {
+  try {
+    const { websiteId } = req.params;
+    console.log('[Image Creation API] GET settings for website:', websiteId);
+
+    const results = await sql`
+      SELECT * FROM image_creation_settings
+      WHERE website_id = ${websiteId}
+    `;
+
+    console.log('[Image Creation API] Found website records:', results.length);
+
+    if (results.length === 0) {
+      console.log('[Image Creation API] No website settings found, returning defaults');
+      return res.json({
+        success: true,
+        settings: null, // No website-level settings yet
+        isWebsiteLevel: true
+      });
+    }
+
+    res.json({
+      success: true,
+      settings: results[0],
+      isWebsiteLevel: true
+    });
+
+  } catch (error) {
+    console.error('[Image Creation API] Get website settings error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/image-creation/settings/website/:websiteId
+ * Save/update image creation settings for a website (shared across all workflows)
+ */
+router.put('/settings/website/:websiteId', requireDb, async (req, res) => {
+  try {
+    const { websiteId } = req.params;
+    console.log('[Image Creation API] PUT settings for website:', websiteId);
+
+    const settingsData = req.body;
+
+    // Check if website settings exist
+    const existing = await sql`
+      SELECT id FROM image_creation_settings WHERE website_id = ${websiteId}
+    `;
+
+    if (existing.length === 0) {
+      // Create new website-level settings
+      await sql`
+        INSERT INTO image_creation_settings (
+          website_id,
+          enabled,
+          prompt_assistant_model,
+          image_generation_model,
+          image_quality,
+          reference_images,
+          logo_images,
+          audience_avatars,
+          image_bank,
+          image_categories,
+          auto_tag_enabled,
+          chat_history,
+          consultant_chat_history,
+          consultant_model,
+          worker_chat_history,
+          worker_model,
+          integration_mode,
+          fallback_to_live,
+          image_order,
+          variation_order_mode,
+          manual_variation_order,
+          live_prompt_mode,
+          smart_prompt_guidance,
+          guided_guardrails,
+          prompt_problem_areas
+        ) VALUES (
+          ${websiteId},
+          ${settingsData.enabled ?? false},
+          ${settingsData.prompt_assistant_model ?? 'gpt-4o'},
+          ${settingsData.image_generation_model ?? 'flux-1.1-pro'},
+          ${settingsData.image_quality ?? 'low'},
+          ${JSON.stringify(settingsData.reference_images ?? [])},
+          ${JSON.stringify(settingsData.logo_images ?? [])},
+          ${JSON.stringify(settingsData.audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
+          ${JSON.stringify(settingsData.image_bank ?? [])},
+          ${JSON.stringify(settingsData.image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
+          ${settingsData.auto_tag_enabled ?? true},
+          ${JSON.stringify(settingsData.chat_history ?? [])},
+          ${JSON.stringify(settingsData.consultant_chat_history ?? [])},
+          ${settingsData.consultant_model ?? 'gpt-4o'},
+          ${JSON.stringify(settingsData.worker_chat_history ?? [])},
+          ${settingsData.worker_model ?? 'gpt-4o-mini'},
+          ${settingsData.integration_mode ?? 'bank'},
+          ${settingsData.fallback_to_live ?? true},
+          ${JSON.stringify(settingsData.image_order ?? [])},
+          ${settingsData.variation_order_mode ?? 'sequential'},
+          ${JSON.stringify(settingsData.manual_variation_order ?? [])},
+          ${settingsData.live_prompt_mode ?? 'smart_prompt'},
+          ${settingsData.smart_prompt_guidance ?? ''},
+          ${JSON.stringify(settingsData.guided_guardrails ?? {})},
+          ${JSON.stringify(settingsData.prompt_problem_areas ?? [])}
+        )
+      `;
+      console.log('[Image Creation API] Created new website settings record');
+    } else {
+      // Update existing website-level settings
+      await sql`
+        UPDATE image_creation_settings
+        SET
+          enabled = COALESCE(${settingsData.enabled}, enabled),
+          prompt_assistant_model = COALESCE(${settingsData.prompt_assistant_model}, prompt_assistant_model),
+          image_generation_model = COALESCE(${settingsData.image_generation_model}, image_generation_model),
+          image_quality = COALESCE(${settingsData.image_quality}, image_quality),
+          reference_images = COALESCE(${settingsData.reference_images ? JSON.stringify(settingsData.reference_images) : null}::jsonb, reference_images),
+          logo_images = COALESCE(${settingsData.logo_images ? JSON.stringify(settingsData.logo_images) : null}::jsonb, logo_images),
+          audience_avatars = COALESCE(${settingsData.audience_avatars ? JSON.stringify(settingsData.audience_avatars) : null}::jsonb, audience_avatars),
+          image_bank = ${settingsData.image_bank ? JSON.stringify(settingsData.image_bank) : '[]'}::jsonb,
+          image_categories = COALESCE(${settingsData.image_categories ? JSON.stringify(settingsData.image_categories) : null}::jsonb, image_categories),
+          auto_tag_enabled = COALESCE(${settingsData.auto_tag_enabled}, auto_tag_enabled),
+          chat_history = COALESCE(${settingsData.chat_history ? JSON.stringify(settingsData.chat_history) : null}::jsonb, chat_history),
+          consultant_chat_history = COALESCE(${settingsData.consultant_chat_history ? JSON.stringify(settingsData.consultant_chat_history) : null}::jsonb, consultant_chat_history),
+          consultant_model = COALESCE(${settingsData.consultant_model}, consultant_model),
+          worker_chat_history = COALESCE(${settingsData.worker_chat_history ? JSON.stringify(settingsData.worker_chat_history) : null}::jsonb, worker_chat_history),
+          worker_model = COALESCE(${settingsData.worker_model}, worker_model),
+          integration_mode = COALESCE(${settingsData.integration_mode}, integration_mode),
+          fallback_to_live = COALESCE(${settingsData.fallback_to_live}, fallback_to_live),
+          image_order = COALESCE(${settingsData.image_order ? JSON.stringify(settingsData.image_order) : null}::jsonb, image_order),
+          variation_order_mode = COALESCE(${settingsData.variation_order_mode}, variation_order_mode),
+          manual_variation_order = COALESCE(${settingsData.manual_variation_order ? JSON.stringify(settingsData.manual_variation_order) : null}::jsonb, manual_variation_order),
+          live_prompt_mode = COALESCE(${settingsData.live_prompt_mode}, live_prompt_mode),
+          smart_prompt_guidance = COALESCE(${settingsData.smart_prompt_guidance}, smart_prompt_guidance),
+          guided_guardrails = COALESCE(${settingsData.guided_guardrails ? JSON.stringify(settingsData.guided_guardrails) : null}::jsonb, guided_guardrails),
+          prompt_problem_areas = COALESCE(${settingsData.prompt_problem_areas ? JSON.stringify(settingsData.prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE website_id = ${websiteId}
+      `;
+      console.log('[Image Creation API] Updated website settings record');
+    }
+
+    res.json({ success: true, isWebsiteLevel: true });
+
+  } catch (error) {
+    console.error('[Image Creation API] Save website settings error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/image-creation/settings/migrate-to-website/:workflowId
+ * Migrate existing workflow-level settings to website-level
+ */
+router.post('/settings/migrate-to-website/:workflowId', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+    const { websiteId } = req.body;
+
+    if (!websiteId) {
+      return res.status(400).json({ error: 'websiteId required' });
+    }
+
+    console.log(`[Image Creation API] Migrating workflow ${workflowId} settings to website ${websiteId}`);
+
+    // Get existing workflow settings
+    const workflowSettings = await sql`
+      SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+    `;
+
+    if (workflowSettings.length === 0) {
+      return res.status(404).json({ error: 'No workflow settings to migrate' });
+    }
+
+    // Check if website already has settings
+    const existingWebsite = await sql`
+      SELECT id FROM image_creation_settings WHERE website_id = ${websiteId}
+    `;
+
+    if (existingWebsite.length > 0) {
+      return res.json({ success: true, message: 'Website already has settings, skipping migration' });
+    }
+
+    // Copy to website level
+    const settings = workflowSettings[0];
+    await sql`
+      INSERT INTO image_creation_settings (
+        website_id, enabled, prompt_assistant_model, image_generation_model, image_quality,
+        reference_images, logo_images, audience_avatars, image_bank, image_categories,
+        auto_tag_enabled, chat_history, consultant_chat_history, consultant_model,
+        worker_chat_history, worker_model, integration_mode, fallback_to_live,
+        image_order, variation_order_mode, manual_variation_order, live_prompt_mode,
+        smart_prompt_guidance, guided_guardrails, prompt_problem_areas
+      )
+      SELECT
+        ${websiteId}, enabled, prompt_assistant_model, image_generation_model, image_quality,
+        reference_images, logo_images, audience_avatars, image_bank, image_categories,
+        auto_tag_enabled, chat_history, consultant_chat_history, consultant_model,
+        worker_chat_history, worker_model, integration_mode, fallback_to_live,
+        image_order, variation_order_mode, manual_variation_order, live_prompt_mode,
+        smart_prompt_guidance, guided_guardrails, prompt_problem_areas
+      FROM image_creation_settings WHERE workflow_id = ${workflowId}
+    `;
+
+    console.log('[Image Creation API] Migration complete');
+    res.json({ success: true, message: 'Settings migrated to website level' });
+
+  } catch (error) {
+    console.error('[Image Creation API] Migration error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/image-creation/settings/:workflowId
  * Get image creation settings for a workflow
  */

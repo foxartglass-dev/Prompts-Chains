@@ -238,9 +238,11 @@ CREATE TABLE IF NOT EXISTS gbp_oauth_tokens (
 -- ============================================
 
 -- Image Creation settings for the "7. Image Creation" section
+-- Can be linked to either workflow_id (legacy) or website_id (preferred - shared across workflows)
 CREATE TABLE IF NOT EXISTS image_creation_settings (
   id SERIAL PRIMARY KEY,
-  workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE UNIQUE,
+  workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE,
+  website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE, -- When set, shared across all workflows in website
   -- Enable/disable image creation for this workflow
   enabled BOOLEAN DEFAULT false,
   -- LLM Models
