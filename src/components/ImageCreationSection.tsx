@@ -546,6 +546,19 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [bankFullscreen, setBankFullscreen] = useState<boolean>(false);
   const [bankViewMode, setBankViewMode] = useState<'compact' | 'gallery'>('compact'); // compact = grid, gallery = large cards
 
+  // Draft Image Bank (in-transit images for pages)
+  const [isDraftBankOpen, setIsDraftBankOpen] = useState(false);
+  const [draftBankImages, setDraftBankImages] = useState<any[]>([]);
+  const [draftBankStats, setDraftBankStats] = useState<{
+    total: number; draft: number; sent: number; replaced: number;
+    totalMade: number; totalReplaced: number; totalSent: number;
+  }>({ total: 0, draft: 0, sent: 0, replaced: 0, totalMade: 0, totalReplaced: 0, totalSent: 0 });
+  const [draftBankFilter, setDraftBankFilter] = useState<'all' | 'draft' | 'sent'>('all');
+  const [draftBankItemTypeFilter, setDraftBankItemTypeFilter] = useState<string>('all');
+  const [draftBankPageFilter, setDraftBankPageFilter] = useState<string>('all');
+  const [draftBankItemTypes, setDraftBankItemTypes] = useState<{item_type: string; count: number}[]>([]);
+  const [draftBankLoading, setDraftBankLoading] = useState(false);
+
   // Image title editing
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState<string>('');
@@ -918,6 +931,53 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setLoading(false);
     setLoaded(true);
   };
+
+  /**
+   * Fetch draft image bank data and stats
+   */
+  const fetchDraftBank = async () => {
+    if (!workflowId) return;
+    setDraftBankLoading(true);
+    try {
+      // Build query string based on filters
+      const params = new URLSearchParams();
+      if (draftBankFilter !== 'all') params.append('status', draftBankFilter);
+      if (draftBankItemTypeFilter !== 'all') params.append('itemType', draftBankItemTypeFilter);
+      if (draftBankPageFilter !== 'all') params.append('pageKeyword', draftBankPageFilter);
+
+      const [imagesRes, statsRes, typesRes] = await Promise.all([
+        fetch(`/api/draft-image-bank/${workflowId}?${params.toString()}`),
+        fetch(`/api/draft-image-bank/${workflowId}/stats`),
+        fetch(`/api/draft-image-bank/${workflowId}/item-types`)
+      ]);
+
+      const [imagesData, statsData, typesData] = await Promise.all([
+        imagesRes.json(),
+        statsRes.json(),
+        typesRes.json()
+      ]);
+
+      if (imagesData.success) {
+        setDraftBankImages(imagesData.data || []);
+      }
+      if (statsData.success) {
+        setDraftBankStats(statsData.data);
+      }
+      if (typesData.success) {
+        setDraftBankItemTypes(typesData.data || []);
+      }
+    } catch (error) {
+      console.error('[Draft Bank] Failed to fetch:', error);
+    }
+    setDraftBankLoading(false);
+  };
+
+  // Fetch draft bank when opened or filters change
+  useEffect(() => {
+    if (isDraftBankOpen && workflowId) {
+      fetchDraftBank();
+    }
+  }, [isDraftBankOpen, draftBankFilter, draftBankItemTypeFilter, draftBankPageFilter, workflowId]);
 
   /**
    * Fetch extended context for Consultant Chat (articles, workflow, websites)
@@ -6582,6 +6642,125 @@ Start by introducing yourself and asking about their business in a friendly way.
                     >
                       Upload your first images
                     </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Draft Image Bank (Collapsible) - In-transit images for pages */}
+          <div className="bg-slate-900 rounded-lg border border-amber-500/50 overflow-hidden">
+            <button onClick={() => setIsDraftBankOpen(!isDraftBankOpen)} className="w-full flex items-center justify-between p-3 text-amber-400 hover:bg-slate-800/50 transition">
+              <span className="flex items-center gap-2 font-semibold">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                Draft Image Bank ({draftBankStats.draft} in draft)
+                {/* Stats badges */}
+                <span className="ml-2 text-[10px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">
+                  Made: {draftBankStats.totalMade} | Replaced: {draftBankStats.totalReplaced}
+                </span>
+              </span>
+              <svg className={`w-5 h-5 transition-transform ${isDraftBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isDraftBankOpen && (
+              <div className="p-4 border-t border-amber-500/30 space-y-3">
+                {/* Stats Overview */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                    <div className="text-2xl font-bold text-white">{draftBankStats.draft}</div>
+                    <div className="text-xs text-amber-400">Draft</div>
+                  </div>
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                    <div className="text-2xl font-bold text-green-400">{draftBankStats.sent}</div>
+                    <div className="text-xs text-green-400/70">Sent</div>
+                  </div>
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                    <div className="text-2xl font-bold text-slate-400">{draftBankStats.totalMade}</div>
+                    <div className="text-xs text-slate-400/70">Total Made</div>
+                  </div>
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
+                    <div className="text-2xl font-bold text-red-400">{draftBankStats.totalReplaced}</div>
+                    <div className="text-xs text-red-400/70">Replaced</div>
+                  </div>
+                </div>
+
+                {/* Filter Controls */}
+                <div className="flex gap-3 flex-wrap items-center bg-slate-800/50 p-3 rounded-lg border border-amber-500/20">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-amber-400/70">Status:</label>
+                    <select
+                      value={draftBankFilter}
+                      onChange={(e) => setDraftBankFilter(e.target.value as any)}
+                      className="bg-slate-800 border border-amber-500/50 rounded px-2 py-1 text-white text-xs"
+                    >
+                      <option value="all">All Images</option>
+                      <option value="draft">Draft Only</option>
+                      <option value="sent">Sent Only</option>
+                    </select>
+                  </div>
+                  {draftBankItemTypes.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-amber-400/70">Item Type:</label>
+                      <select
+                        value={draftBankItemTypeFilter}
+                        onChange={(e) => setDraftBankItemTypeFilter(e.target.value)}
+                        className="bg-slate-800 border border-amber-500/50 rounded px-2 py-1 text-white text-xs"
+                      >
+                        <option value="all">All Types</option>
+                        {draftBankItemTypes.map(t => (
+                          <option key={t.item_type} value={t.item_type}>{t.item_type} ({t.count})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {draftBankLoading && (
+                    <span className="text-xs text-amber-400 animate-pulse">Loading...</span>
+                  )}
+                </div>
+
+                {/* Image Grid */}
+                {draftBankImages.length > 0 ? (
+                  <div className="grid grid-cols-4 gap-3">
+                    {draftBankImages.map((img) => (
+                      <div key={img.id} className="relative group">
+                        {/* Status badge */}
+                        <div className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded text-[9px] text-white ${
+                          img.status === 'draft' ? 'bg-amber-600/90' :
+                          img.status === 'sent' ? 'bg-green-600/90' :
+                          'bg-red-600/90'
+                        }`}>
+                          {img.status.toUpperCase()}
+                        </div>
+                        {/* Item type tag */}
+                        {img.item_type && (
+                          <div className="absolute top-1 right-1 z-10 px-1.5 py-0.5 bg-slate-900/90 rounded text-[9px] text-amber-300">
+                            {img.item_type}
+                          </div>
+                        )}
+                        <img
+                          src={img.url}
+                          alt={img.item_type || 'Draft image'}
+                          className={`w-full h-24 object-cover rounded border ${
+                            img.status === 'draft' ? 'border-amber-500/30' :
+                            img.status === 'sent' ? 'border-green-500/30 opacity-70' :
+                            'border-red-500/30 opacity-50'
+                          }`}
+                        />
+                        {/* Hover overlay */}
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
+                          <span className="text-xs text-white font-medium">{img.page_keyword || 'No page'}</span>
+                          {img.item_category && <span className="text-[9px] text-amber-300">{img.item_category}</span>}
+                          {img.avatar_tag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatar_tag}</span>}
+                          <div className="text-[8px] text-slate-400 mt-1">
+                            {new Date(img.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-amber-400/50 mb-2">No draft images yet.</p>
+                    <p className="text-xs text-slate-500">Images will appear here when generated for specific pages.</p>
                   </div>
                 )}
               </div>
