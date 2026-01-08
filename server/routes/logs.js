@@ -2,10 +2,12 @@
  * Logs API Routes
  *
  * Provides endpoints for retrieving ALL console output - same as Railway logs.
+ * Also supports pushing logs to GitHub for Claude to access directly.
  */
 
 import express from 'express';
 import consoleCapture from '../services/console-capture.js';
+import githubLogger from '../services/github-logger.js';
 
 const router = express.Router();
 
@@ -57,6 +59,36 @@ router.delete('/console', (req, res) => {
  */
 router.get('/console/count', (req, res) => {
   res.json({ count: consoleCapture.getLogCount() });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GitHub Logging Endpoints
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/logs/github/push
+ * Push current logs to GitHub repository
+ */
+router.post('/github/push', async (req, res) => {
+  const { context = 'manual' } = req.body;
+
+  if (!githubLogger.isConfigured()) {
+    return res.status(400).json({
+      success: false,
+      error: 'GitHub logging not configured. Set GITHUB_TOKEN environment variable.'
+    });
+  }
+
+  const result = await githubLogger.pushLogsToGitHub(context);
+  res.json(result);
+});
+
+/**
+ * GET /api/logs/github/status
+ * Check GitHub logging configuration status
+ */
+router.get('/github/status', (req, res) => {
+  res.json(githubLogger.getStatus());
 });
 
 export default router;

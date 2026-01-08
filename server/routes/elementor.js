@@ -32,6 +32,7 @@ import {
 } from '../services/image-tracker.js';
 import sessionLogger from '../services/session-logger.js';
 import { addBatchToDraftBank } from '../services/draft-image-bank.js';
+import githubLogger from '../services/github-logger.js';
 
 const router = express.Router();
 
@@ -1481,6 +1482,13 @@ router.post('/publish', async (req, res) => {
     sessionLogger.updateSummary({ articlesProcessed: 1, wpUploads: 1 });
     sessionLogger.endSession();
 
+    // Push logs to GitHub (non-blocking, fire and forget)
+    if (githubLogger.isConfigured()) {
+      githubLogger.pushLogsToGitHub('publish-complete').catch(err => {
+        console.error('[GitHub Logger] Background push failed:', err.message);
+      });
+    }
+
     res.json({
       success: true,
       page: pageResult,
@@ -1499,6 +1507,14 @@ router.post('/publish', async (req, res) => {
     console.error('Publish error:', error);
     sessionLogger.logError('PUBLISH', `Publish failed: ${error.message}`, { stack: error.stack });
     sessionLogger.endSession();
+
+    // Push logs to GitHub on error too (helps debugging)
+    if (githubLogger.isConfigured()) {
+      githubLogger.pushLogsToGitHub('publish-error').catch(err => {
+        console.error('[GitHub Logger] Background push failed:', err.message);
+      });
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
