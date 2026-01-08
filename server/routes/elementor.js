@@ -33,6 +33,7 @@ import {
 import sessionLogger from '../services/session-logger.js';
 import { addBatchToDraftBank } from '../services/draft-image-bank.js';
 import githubLogger from '../services/github-logger.js';
+import { getImageBank } from '../services/image-bank.js';
 
 const router = express.Router();
 
@@ -464,10 +465,34 @@ router.post('/publish', async (req, res) => {
         // Note: We don't check 'enabled' here - if integration_mode is 'bank', user wants bank
         if (bankImages.length > 0) {
           const config = bankImages[0];
-          const imageBank = config.image_bank || [];
+
+          // Fetch images from the NEW image_bank_items table (not the old JSONB column)
+          const imageBankRows = await getImageBank(workflowId, { archived: false });
+          // Transform from snake_case DB columns to camelCase for consistency
+          const imageBank = imageBankRows.map(row => ({
+            id: row.external_id || String(row.id),
+            url: row.url,
+            title: row.title,
+            category: row.category,
+            variation: row.variation_name,
+            variationId: row.variation_id,
+            avatarTag: row.avatar_tag,
+            orientation: row.orientation,
+            prompt: row.prompt,
+            model: row.model,
+            used: row.used,
+            usedOn: row.used_on,
+            usedAt: row.used_at,
+            archived: row.archived,
+            tags: row.tags || [],
+            wpUrl: row.wp_url,
+            wpMediaId: row.wp_media_id,
+            dbId: row.id
+          }));
+
           const avatars = config.audience_avatars || [];
 
-          console.log(`[Image Bank] Starting selection - Bank: ${imageBank.length} images, Avatars: ${avatars.length}`);
+          console.log(`[Image Bank] Starting selection - Bank: ${imageBank.length} images (from image_bank_items table), Avatars: ${avatars.length}`);
           if (imageBank.length === 0) {
             console.log('[Image Bank] WARNING: Bank is empty!');
           }
