@@ -614,6 +614,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Guided GPT Assets Tabs - collapsed by default (rarely used)
   const [guidedAssetsCollapsed, setGuidedAssetsCollapsed] = useState(true);
 
+  // Image Integration Settings - default OPEN
+  const [imageIntegrationCollapsed, setImageIntegrationCollapsed] = useState(false);
+
   // Guided GPT Assistant Chat state
   const [guidedAssistantOpen, setGuidedAssistantOpen] = useState(false);
   const [guidedAssistantMessages, setGuidedAssistantMessages] = useState<ChatMessage[]>([]);
@@ -6826,8 +6829,11 @@ Start by introducing yourself and asking about their business in a friendly way.
               All page integration, smart matching, and ordering in ONE place
           ═══════════════════════════════════════════════════════════════════ */}
           <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/30 rounded-xl border-2 border-purple-500/50 overflow-hidden shadow-lg shadow-purple-500/10">
-            {/* Dashboard Header */}
-            <div className="bg-gradient-to-r from-purple-900/50 to-indigo-900/50 px-5 py-4 border-b border-purple-500/30">
+            {/* Dashboard Header - Clickable to collapse/expand */}
+            <button
+              onClick={() => setImageIntegrationCollapsed(!imageIntegrationCollapsed)}
+              className="w-full bg-gradient-to-r from-purple-900/50 to-indigo-900/50 px-5 py-4 border-b border-purple-500/30 hover:from-purple-900/70 hover:to-indigo-900/70 transition-all"
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-purple-600/30 rounded-lg">
@@ -6836,7 +6842,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </div>
-                  <div>
+                  <div className="text-left">
                     <h2 className="text-xl font-bold text-white">Image Integration Settings</h2>
                     <p className="text-xs text-purple-300/70">Configure how images are selected and published to pages</p>
                   </div>
@@ -6850,10 +6856,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                       🎯 Smart Match ON
                     </span>
                   )}
+                  <svg className={`w-5 h-5 text-purple-400 transition-transform ${imageIntegrationCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
                 </div>
               </div>
-            </div>
+            </button>
 
+            {!imageIntegrationCollapsed && (
             <div className="p-5 space-y-5">
               {/* ─────────────────────────────────────────────────────
                   SECTION 1: Image Source Mode
@@ -9148,6 +9158,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                 )}
               </div>
             </div>
+            )}
           </div>
 
       {saving && (
