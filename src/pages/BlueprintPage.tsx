@@ -5,7 +5,7 @@ interface BlueprintPageProps {
   onClose: () => void;
 }
 
-type BlueprintTab = 'image-flow' | 'push-all' | 'data-sources' | 'golden-rules';
+type BlueprintTab = 'image-flow' | 'push-all' | 'data-sources' | 'golden-rules' | 'agent-template';
 
 const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<BlueprintTab>('image-flow');
@@ -17,6 +17,7 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
     { id: 'push-all', label: 'Push All to WP' },
     { id: 'data-sources', label: 'Data Sources' },
     { id: 'golden-rules', label: 'Golden Rules' },
+    { id: 'agent-template', label: 'Agent Template' },
   ];
 
   return (
@@ -70,6 +71,7 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
           {activeTab === 'push-all' && <PushAllDiagram />}
           {activeTab === 'data-sources' && <DataSourcesDiagram />}
           {activeTab === 'golden-rules' && <GoldenRules />}
+          {activeTab === 'agent-template' && <AgentTemplate />}
         </main>
       </div>
     </div>
@@ -548,6 +550,185 @@ const GoldenRules: React.FC = () => (
           </ul>
         </div>
       </div>
+    </div>
+  </div>
+);
+
+// Agent Template - Instructions for documenting work
+const AgentTemplate: React.FC = () => (
+  <div className="space-y-6">
+    <div className="text-center mb-8">
+      <h2 className="text-2xl font-bold text-brand-cyan mb-2">Agent Session Template</h2>
+      <p className="text-gray-400">Before ending your session, document your work using this template</p>
+    </div>
+
+    {/* Big instruction box */}
+    <div className="bg-red-900/30 rounded-xl p-6 border border-red-500 max-w-4xl mx-auto">
+      <h3 className="text-lg font-bold text-red-400 mb-3 flex items-center gap-2">
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        ATTENTION AI AGENT
+      </h3>
+      <p className="text-gray-300">
+        You are about to end your session. Before you do, please add your changes to this Blueprint.
+        The next agent will not have your context. Document everything important.
+      </p>
+    </div>
+
+    {/* Template sections */}
+    <div className="max-w-4xl mx-auto space-y-6">
+
+      {/* Section 1 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+        <h3 className="text-lg font-bold text-brand-cyan mb-4">1. What Did You Change?</h3>
+        <div className="space-y-3 text-sm text-gray-300">
+          <div className="bg-slate-900 rounded-lg p-4">
+            <div className="text-brand-gold font-semibold mb-2">Files Modified:</div>
+            <code className="text-gray-400">- path/to/file.tsx (brief description)</code>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-4">
+            <div className="text-brand-gold font-semibold mb-2">Files Created:</div>
+            <code className="text-gray-400">- path/to/new/file.tsx (what it does)</code>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-4">
+            <div className="text-brand-gold font-semibold mb-2">Files Deleted:</div>
+            <code className="text-gray-400">- path/to/removed/file.tsx (why removed)</code>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 2 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-gold/30">
+        <h3 className="text-lg font-bold text-brand-gold mb-4">2. What Was The Bug/Feature?</h3>
+        <div className="space-y-3 text-sm">
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="bg-slate-900 rounded-lg p-4">
+              <div className="text-red-400 font-semibold mb-2">Problem:</div>
+              <div className="text-gray-400">What was broken or missing? (1-2 sentences)</div>
+            </div>
+            <div className="bg-slate-900 rounded-lg p-4">
+              <div className="text-yellow-400 font-semibold mb-2">Root Cause:</div>
+              <div className="text-gray-400">Why was it happening? What was the actual issue?</div>
+            </div>
+            <div className="bg-slate-900 rounded-lg p-4">
+              <div className="text-green-400 font-semibold mb-2">Solution:</div>
+              <div className="text-gray-400">How did you fix it? Be specific.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 3 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border border-purple-500/30">
+        <h3 className="text-lg font-bold text-purple-400 mb-4">3. Data Flow Changes</h3>
+        <p className="text-sm text-gray-400 mb-4">If you changed how data moves through the system:</p>
+        <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm">
+          <div className="text-red-400 mb-2">BEFORE:</div>
+          <div className="text-gray-400 mb-4">[Component] → [API] → [Database]</div>
+          <div className="text-green-400 mb-2">AFTER:</div>
+          <div className="text-gray-400">[Component] → [New Step] → [API] → [Database]</div>
+        </div>
+      </div>
+
+      {/* Section 4 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+        <h3 className="text-lg font-bold text-brand-cyan mb-4">4. Critical Relationships Discovered</h3>
+        <div className="grid md:grid-cols-3 gap-4 text-sm">
+          <div className="bg-slate-900 rounded-lg p-4">
+            <div className="text-brand-gold font-semibold mb-2">Source of Truth:</div>
+            <code className="text-gray-400 text-xs">field_name comes from table_name</code>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-4">
+            <div className="text-brand-gold font-semibold mb-2">Order Dependencies:</div>
+            <code className="text-gray-400 text-xs">Step A must happen before Step B</code>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-4">
+            <div className="text-brand-gold font-semibold mb-2">Conditional Logic:</div>
+            <code className="text-gray-400 text-xs">When X, then Y happens</code>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 5 - Critical */}
+      <div className="bg-red-900/20 rounded-xl p-6 border-2 border-red-500">
+        <h3 className="text-lg font-bold text-red-400 mb-4">5. What Could Break This? (CRITICAL)</h3>
+        <p className="text-sm text-gray-400 mb-4">Future agents NEED to know what NOT to do:</p>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="bg-slate-900 rounded-lg p-4">
+            <div className="text-red-400 font-semibold mb-2">DO NOT:</div>
+            <ul className="text-gray-400 text-sm space-y-1">
+              <li>- Don't do X because it causes Y</li>
+              <li>- Don't change Z without updating W</li>
+              <li>- Don't assume A about B</li>
+            </ul>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-4">
+            <div className="text-green-400 font-semibold mb-2">MUST ALWAYS:</div>
+            <ul className="text-gray-400 text-sm space-y-1">
+              <li>- Always do A before B</li>
+              <li>- Always check C when doing D</li>
+              <li>- Always preserve E when updating F</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 6 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border border-green-500/30">
+        <h3 className="text-lg font-bold text-green-400 mb-4">6. How To Test This</h3>
+        <div className="bg-slate-900 rounded-lg p-4 text-sm">
+          <ol className="text-gray-300 space-y-2">
+            <li><span className="text-brand-cyan">1.</span> Do X in the UI</li>
+            <li><span className="text-brand-cyan">2.</span> Check Y in the database/response</li>
+            <li><span className="text-brand-cyan">3.</span> Expected result: Z should happen</li>
+            <li><span className="text-brand-cyan">4.</span> Verify on WordPress: W should appear</li>
+          </ol>
+        </div>
+      </div>
+
+      {/* Section 7 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border border-yellow-500/30">
+        <h3 className="text-lg font-bold text-yellow-400 mb-4">7. Unfinished Business</h3>
+        <p className="text-sm text-gray-400 mb-4">Anything you noticed but didn't fix?</p>
+        <div className="bg-slate-900 rounded-lg p-4 text-sm text-gray-300 space-y-2">
+          <div><span className="text-yellow-400">TODO:</span> Description of what still needs work</div>
+          <div><span className="text-red-400">WARNING:</span> Potential issue in related area</div>
+          <div><span className="text-blue-400">IDEA:</span> Improvement that could be made later</div>
+        </div>
+      </div>
+
+      {/* Where to add */}
+      <div className="bg-brand-cyan/10 rounded-xl p-6 border border-brand-cyan">
+        <h3 className="text-lg font-bold text-brand-cyan mb-4">Where To Add Your Documentation</h3>
+        <div className="text-sm text-gray-300 space-y-3">
+          <div className="flex items-start gap-3">
+            <span className="text-brand-cyan font-bold">1.</span>
+            <div>
+              <strong className="text-white">If it's a data flow change:</strong> Add to the "Image Flow" or "Push All to WP" tabs
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-brand-cyan font-bold">2.</span>
+            <div>
+              <strong className="text-white">If you discovered a source of truth:</strong> Add to "Data Sources" tab
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-brand-cyan font-bold">3.</span>
+            <div>
+              <strong className="text-white">If something can easily break:</strong> Add to "Golden Rules" tab
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-brand-cyan font-bold">4.</span>
+            <div>
+              <strong className="text-white">Edit this file:</strong> <code className="bg-slate-900 px-2 py-1 rounded">src/pages/BlueprintPage.tsx</code>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 );
