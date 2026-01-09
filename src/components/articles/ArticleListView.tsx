@@ -126,7 +126,17 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        setArticles(Array.isArray(data) ? data : (data.articles || []));
+        const articlesData = Array.isArray(data) ? data : (data.articles || []);
+
+        // Map database field names to our interface for all articles
+        // DB uses 'generated_images', interface uses 'images'
+        articlesData.forEach((article: Article & { generated_images?: ArticleImage[] }) => {
+          if (article.generated_images && !article.images) {
+            article.images = article.generated_images;
+          }
+        });
+
+        setArticles(articlesData);
       }
     } catch (err) {
       console.error('Failed to fetch articles:', err);
@@ -765,9 +775,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                   </td>
                   <td className="p-2">
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                      article.selected_meta_title ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
+                      article.meta_wp_pushed_at ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
                     }`}>
-                      {article.selected_meta_title ? 'WP' : 'Draft'}
+                      {article.meta_wp_pushed_at ? 'WP' : 'Draft'}
                     </span>
                   </td>
                   <td className="p-2">

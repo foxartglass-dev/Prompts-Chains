@@ -808,6 +808,7 @@ router.post('/publish', async (req, res) => {
             imageDecisionReport.images = availableImages.slice(0, 5).map((img, idx) => ({
               position: idx + 1,
               type: idx === 0 ? 'hero' : 'inline',
+              source: 'bank', // Mark as from image bank
               variation: img.variation || img.id,
               primaryScore: img.primaryScore || 0,
               secondaryScore: img.secondaryScore || 0,
@@ -1255,6 +1256,7 @@ router.post('/publish', async (req, res) => {
         imageDecisionReport.images.push({
           position: 0,
           type: 'hero',
+          source: 'generated', // Mark as live-generated
           heading: 'Hero / Intro',
           action: heroAction.action || 'N/A',
           mood: heroAction.mood || 'N/A',
@@ -1271,6 +1273,7 @@ router.post('/publish', async (req, res) => {
           imageDecisionReport.images.push({
             position: idx + 1,
             type: 'inline',
+            source: 'generated', // Mark as live-generated
             heading: chunk.heading || `Section ${idx + 1}`,
             wordCount: chunk.wordCount || 0,
             side: chunk.imageSide || chunk.imageData.side || 'N/A',
