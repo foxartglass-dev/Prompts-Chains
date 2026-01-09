@@ -16,7 +16,6 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import FeedbackPopup from './FeedbackPopup';
 
 // Types for Feedback System
@@ -428,7 +427,7 @@ interface Props {
   onSettingsChange?: (settings: ImageCreationSettings) => void;
   showNotification: (message: string, type: 'success' | 'info' | 'error') => void;
   addLog?: (message: string, status: LogStatus) => void;
-  headerPortalId?: string; // ID of element to render header controls into (for title bar)
+  onHeaderControlsReady?: (controls: React.ReactNode) => void; // Callback to provide header controls to parent
 }
 
 const DEFAULT_SETTINGS: ImageCreationSettings = {
@@ -492,7 +491,7 @@ const AVAILABLE_MODELS = [
 // Variation placeholder tag
 const VARIATION_PLACEHOLDER = '{variation}';
 
-const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettingsChange, showNotification, addLog, headerPortalId }) => {
+const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettingsChange, showNotification, addLog, onHeaderControlsReady }) => {
   // State
   const [settings, setSettings] = useState<ImageCreationSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -1165,6 +1164,96 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       return newSettings;
     });
   }, [loaded, saveSettings]);
+
+  // Provide header controls to parent component (for rendering in section header)
+  useEffect(() => {
+    if (!onHeaderControlsReady || loading) return;
+
+    const headerControls = (
+      <div className="flex items-center gap-2 text-xs">
+        {/* Image Model */}
+        <select
+          value={settings.image_generation_model || 'flux-1.1-pro'}
+          onChange={(e) => {
+            setSettings(current => {
+              const newSettings = { ...current, image_generation_model: e.target.value };
+              saveSettings(newSettings);
+              return newSettings;
+            });
+          }}
+          className="bg-slate-800 border border-brand-gold/50 rounded px-1.5 py-0.5 text-white text-xs"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {IMAGE_GENERATION_MODELS.map(m => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ))}
+        </select>
+        {/* Quality */}
+        <select
+          value={settings.image_quality || 'low'}
+          onChange={(e) => {
+            setSettings(current => {
+              const newSettings = { ...current, image_quality: e.target.value as 'low' | 'medium' | 'high' };
+              saveSettings(newSettings);
+              return newSettings;
+            });
+          }}
+          className="bg-slate-800 border border-brand-gold/50 rounded px-1.5 py-0.5 text-white text-xs"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {(settings.image_generation_model || 'flux-1.1-pro').startsWith('gpt-image') ? (
+            <>
+              <option value="low">Low ($0.01)</option>
+              <option value="medium">Med ($0.04)</option>
+              <option value="high">High ($0.17)</option>
+            </>
+          ) : (
+            <>
+              <option value="low">60%</option>
+              <option value="medium">80%</option>
+              <option value="high">100%</option>
+            </>
+          )}
+        </select>
+        {/* Prompt Guide */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowPromptGuide(true); }}
+          className="flex items-center gap-1 px-2 py-0.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-xs font-medium transition"
+          title="View Prompting Guide"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+          Guide
+        </button>
+        {/* Save */}
+        <button
+          onClick={(e) => { e.stopPropagation(); forceSave(); }}
+          disabled={saving || !loaded}
+          className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition ${
+            hasUnsavedChanges
+              ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900'
+              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+          }`}
+          title="Save settings"
+        >
+          {saving ? (
+            <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          ) : (
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+            </svg>
+          )}
+          {hasUnsavedChanges ? 'Save' : 'Saved'}
+        </button>
+      </div>
+    );
+
+    onHeaderControlsReady(headerControls);
+  }, [onHeaderControlsReady, loading, settings.image_generation_model, settings.image_quality, saving, loaded, hasUnsavedChanges, forceSave, saveSettings]);
 
   // Get active avatar
   const activeAvatar = settings.audience_avatars.find(a => a.id === activeAvatarId) || settings.audience_avatars[0];
@@ -4628,89 +4717,8 @@ Start by introducing yourself and asking about their business in a friendly way.
     );
   }
 
-  // Header controls to be rendered in portal or inline
-  const headerControls = (
-    <div className="flex items-center gap-2 flex-wrap">
-      {/* Image Model */}
-      <div className="flex items-center gap-1">
-        <label className="text-xs text-brand-gold/70">Image Model:</label>
-        <select
-          value={settings.image_generation_model || 'flux-1.1-pro'}
-          onChange={(e) => updateSettings({ image_generation_model: e.target.value })}
-          className="bg-slate-800 border border-brand-gold/50 rounded px-1.5 py-0.5 text-white text-xs"
-        >
-          {IMAGE_GENERATION_MODELS.map(m => (
-            <option key={m.id} value={m.id}>{m.name}</option>
-          ))}
-        </select>
-      </div>
-      {/* Quality */}
-      <div className="flex items-center gap-1">
-        <label className="text-xs text-brand-gold/70">Quality:</label>
-        <select
-          value={settings.image_quality || 'low'}
-          onChange={(e) => updateSettings({ image_quality: e.target.value as 'low' | 'medium' | 'high' })}
-          className="bg-slate-800 border border-brand-gold/50 rounded px-1.5 py-0.5 text-white text-xs"
-        >
-          {(settings.image_generation_model || 'flux-1.1-pro').startsWith('gpt-image') ? (
-            <>
-              <option value="low">Low ($0.01) - Web</option>
-              <option value="medium">Medium ($0.04)</option>
-              <option value="high">High ($0.17) - Print</option>
-            </>
-          ) : (
-            <>
-              <option value="low">60% - Small</option>
-              <option value="medium">80% - Balanced</option>
-              <option value="high">100% - Max</option>
-            </>
-          )}
-        </select>
-      </div>
-      {/* Prompt Guide */}
-      <button
-        onClick={() => setShowPromptGuide(true)}
-        className="flex items-center gap-1 px-2 py-0.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-xs font-medium transition"
-        title="View Prompting Guide"
-      >
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-        </svg>
-        Prompt Guide
-      </button>
-      {/* Save */}
-      <button
-        onClick={forceSave}
-        disabled={saving || !loaded}
-        className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition ${
-          hasUnsavedChanges
-            ? 'bg-yellow-500 hover:bg-yellow-600 text-slate-900'
-            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-        }`}
-        title={loaded ? "Save settings" : "Loading..."}
-      >
-        {saving ? (
-          <span>Saving...</span>
-        ) : (
-          <>
-            <span>{hasUnsavedChanges ? 'Save' : 'Saved'}</span>
-            {lastSaved && (
-              <span className="text-[10px] opacity-75">{lastSaved.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-            )}
-          </>
-        )}
-      </button>
-    </div>
-  );
-
-  // Get portal target element
-  const portalTarget = headerPortalId ? document.getElementById(headerPortalId) : null;
-
   return (
     <div className="space-y-4">
-      {/* Render header controls via portal if target exists, otherwise render inline */}
-      {portalTarget && createPortal(headerControls, portalTarget)}
-
       {/* Prompt Guide Modal - Shows both GPT-Image and Flux guides */}
       {showPromptGuide && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">

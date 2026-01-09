@@ -402,7 +402,15 @@ router.post('/publish', async (req, res) => {
 
           // Check integration_mode to determine behavior
           const integrationMode = config.integration_mode || 'bank';
-          const fallbackToLive = config.fallback_to_live ?? true;
+          const smartMatchingMode = config.smart_matching_mode || 'bank_first';
+
+          // Determine fallback behavior from smart_matching_mode (overrides fallback_to_live)
+          // bank_first = try bank, generate if empty/no match
+          // bank_only = only use bank, never generate
+          const fallbackToLive = smartMatchingMode === 'bank_first' ? true :
+                                 smartMatchingMode === 'bank_only' ? false :
+                                 (config.fallback_to_live ?? true);
+
           imageGenModel = config.image_generation_model || 'flux-1.1-pro';
           imageQuality = config.image_quality || 'low';
 
@@ -424,6 +432,7 @@ router.post('/publish', async (req, res) => {
           config._targetAvatar = targetAvatar;
 
           console.log('[Elementor Publish] Integration mode:', integrationMode);
+          console.log('[Elementor Publish] Smart matching mode:', smartMatchingMode);
           console.log('[Elementor Publish] Image generation model:', imageGenModel);
           console.log('[Elementor Publish] Image quality:', imageQuality);
           console.log('[Elementor Publish] Live prompt mode:', livePromptMode);
@@ -438,11 +447,11 @@ router.post('/publish', async (req, res) => {
             console.log('[Elementor Publish] Mode: Generate Live - will create new images');
             sessionLogger.logInfo('IMAGE', 'Mode: Generate Live - will create new images', { model: imageGenModel, quality: imageQuality });
           } else {
-            // "Pull from Bank" mode - use bank, optionally fallback to live
+            // "Pull from Bank" mode - use bank, optionally fallback to live based on smart_matching_mode
             effectiveUseBank = true;
-            effectiveGenerateLive = fallbackToLive; // Only generate if bank is empty and fallback enabled
-            console.log('[Elementor Publish] Mode: Pull from Bank (fallback:', fallbackToLive, ')');
-            sessionLogger.logInfo('IMAGE', `Mode: Pull from Bank (fallback: ${fallbackToLive})`, { avatar: targetAvatar?.name });
+            effectiveGenerateLive = fallbackToLive;
+            console.log('[Elementor Publish] Mode: Pull from Bank (smart_matching_mode:', smartMatchingMode, ', fallback:', fallbackToLive, ')');
+            sessionLogger.logInfo('IMAGE', `Mode: Pull from Bank (${smartMatchingMode}, fallback: ${fallbackToLive})`, { avatar: targetAvatar?.name });
           }
         } else {
           console.log('[Elementor Publish] ⚠️ No Image Creation settings found');
@@ -980,6 +989,81 @@ router.post('/publish', async (req, res) => {
       }
     }
 
+    // Step 2c: If no images from bank and articleId exists, try to use existing images from article record
+    // This handles the "Push All to WP" case where images are already stored on the article
+    if (imagesFromBank === 0 && articleId && isDatabaseEnabled() && !imageDraftMode) {
+      try {
+        console.log('[Elementor Publish] No images from bank, checking article for existing images...');
+        const articleResult = await sql`SELECT generated_images FROM articles WHERE id = ${articleId}`;
+
+        if (articleResult.length > 0) {
+          const existingImages = articleResult[0].generated_images || [];
+          console.log(`[Elementor Publish] Found ${existingImages.length} existing images on article`);
+
+          if (existingImages.length > 0) {
+            // Sort images by placement (hero first, then sections in order)
+            const sortedImages = existingImages.sort((a, b) => {
+              if (a.placement === 'hero') return -1;
+              if (b.placement === 'hero') return 1;
+              // Extract section numbers for sorting
+              const aNum = parseInt(a.placement?.replace('section-', '') || '99');
+              const bNum = parseInt(b.placement?.replace('section-', '') || '99');
+              return aNum - bNum;
+            });
+
+            // Embed images into chunks based on their placement
+            sortedImages.forEach((img, imgIdx) => {
+              const isHero = img.placement === 'hero';
+
+              // Use wpMediaUrl if available (from push-images), otherwise use url
+              const imageUrl = img.wpMediaUrl || img.url;
+
+              // Skip base64 images that haven't been uploaded to WP yet
+              if (imageUrl?.startsWith('data:')) {
+                console.log(`[Elementor Publish] Skipping base64 image ${img.id} - needs WP upload first`);
+                return;
+              }
+
+              const imageData = {
+                url: imageUrl,
+                wpUrl: img.wpMediaUrl || img.url,
+                wpMediaId: img.wpMediaId || null,
+                alt: img.prompt?.substring(0, 50) || 'Article image',
+                width: isHero ? 400 : 380,
+                height: isHero ? 500 : 475,
+                side: img.side || (isHero ? 'right' : 'left'),
+                orientation: 'vertical' // Default assumption
+              };
+
+              console.log(`[Elementor Publish] Embedding ${img.placement} image:`, {
+                hasUrl: !!imageUrl,
+                wpMediaId: img.wpMediaId,
+                side: imageData.side
+              });
+
+              if (isHero && chunked.intro) {
+                chunked.intro.imageData = imageData;
+              } else {
+                // Parse section number from placement like "section-1"
+                const sectionMatch = img.placement?.match(/section-(\d+)/);
+                if (sectionMatch) {
+                  const sectionIdx = parseInt(sectionMatch[1]) - 1;
+                  if (chunked.chunks[sectionIdx]) {
+                    chunked.chunks[sectionIdx].imageData = imageData;
+                  }
+                }
+              }
+            });
+
+            imagesFromBank = sortedImages.filter(img => !img.url?.startsWith('data:')).length;
+            console.log(`[Elementor Publish] Embedded ${imagesFromBank} existing images from article`);
+          }
+        }
+      } catch (existingImgError) {
+        console.error('[Elementor Publish] Error fetching existing images:', existingImgError.message);
+      }
+    }
+
     // Step 3: Generate live images if needed (either "Generate Live" mode or fallback)
     const needsLiveGeneration = effectiveGenerateLive && imagesFromBank < dynamicMaxImages;
 
@@ -1362,56 +1446,114 @@ router.post('/publish', async (req, res) => {
         }
         console.log('[SAVE] ========================================\n');
 
+        // FIX: Check if article already has images - DON'T overwrite them with empty array!
+        let shouldUpdateImages = generatedImagesData.length > 0;
+        if (!shouldUpdateImages) {
+          const existingArticle = await sql`SELECT generated_images FROM articles WHERE id = ${articleId}`;
+          const existingImages = existingArticle[0]?.generated_images;
+          const hasExistingImages = Array.isArray(existingImages) && existingImages.length > 0;
+          if (hasExistingImages) {
+            console.log('[SAVE] ⚠️ PRESERVING existing', existingImages.length, 'images (not overwriting with empty array)');
+            shouldUpdateImages = false; // Don't touch images
+          } else {
+            console.log('[SAVE] No existing images to preserve, will save empty array');
+            shouldUpdateImages = true; // OK to save empty
+          }
+        }
+
         // Check if we're in draft mode (no WP page created)
         if (skipWpPageCreation) {
           // DRAFT MODE: Save images to article record WITHOUT WordPress data
           // pageResult is null here, so we only update generated_images
           console.log('[SAVE] Draft mode - saving images without WP page data');
-          const updateResult = await sql`
-            UPDATE articles
-            SET generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${articleId}
-            RETURNING id
-          `;
-          console.log('[SAVE] ✅ Draft mode DB update completed for article', articleId);
-          console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
+          if (shouldUpdateImages) {
+            const updateResult = await sql`
+              UPDATE articles
+              SET generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${articleId}
+              RETURNING id
+            `;
+            console.log('[SAVE] ✅ Draft mode DB update completed for article', articleId);
+            console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
+          } else {
+            console.log('[SAVE] ✅ Draft mode - skipping image update (preserving existing)');
+          }
         } else if (isManualPush) {
           // Manual push: increment count and append date
-          const updateResult = await sql`
-            UPDATE articles
-            SET wp_post_id = ${pageResult.id},
-                wp_post_url = ${pageResult.link},
-                wp_published_at = CURRENT_TIMESTAMP,
-                status = ${status === 'publish' ? 'published' : 'draft'},
-                article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
-                article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-                generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${articleId}
-            RETURNING id
-          `;
+          let updateResult;
+          if (shouldUpdateImages) {
+            updateResult = await sql`
+              UPDATE articles
+              SET wp_post_id = ${pageResult.id},
+                  wp_post_url = ${pageResult.link},
+                  wp_published_at = CURRENT_TIMESTAMP,
+                  status = ${status === 'publish' ? 'published' : 'draft'},
+                  article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
+                  article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+                  generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${articleId}
+              RETURNING id
+            `;
+          } else {
+            // Preserve existing images - don't update generated_images field
+            updateResult = await sql`
+              UPDATE articles
+              SET wp_post_id = ${pageResult.id},
+                  wp_post_url = ${pageResult.link},
+                  wp_published_at = CURRENT_TIMESTAMP,
+                  status = ${status === 'publish' ? 'published' : 'draft'},
+                  article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
+                  article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${articleId}
+              RETURNING id
+            `;
+            console.log('[SAVE] ✅ Manual push - preserved existing images (not overwritten)');
+          }
           console.log('[SAVE] ✅ Manual push DB update completed for article', articleId);
           console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
         } else {
           // Auto push: set auto_at timestamp (only if not already set)
-          const updateResult = await sql`
-            UPDATE articles
-            SET wp_post_id = ${pageResult.id},
-                wp_post_url = ${pageResult.link},
-                wp_published_at = CURRENT_TIMESTAMP,
-                status = ${status === 'publish' ? 'published' : 'draft'},
-                article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
-                generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${articleId}
-            RETURNING id
-          `;
+          let updateResult;
+          if (shouldUpdateImages) {
+            updateResult = await sql`
+              UPDATE articles
+              SET wp_post_id = ${pageResult.id},
+                  wp_post_url = ${pageResult.link},
+                  wp_published_at = CURRENT_TIMESTAMP,
+                  status = ${status === 'publish' ? 'published' : 'draft'},
+                  article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
+                  generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${articleId}
+              RETURNING id
+            `;
+          } else {
+            // Preserve existing images - don't update generated_images field
+            updateResult = await sql`
+              UPDATE articles
+              SET wp_post_id = ${pageResult.id},
+                  wp_post_url = ${pageResult.link},
+                  wp_published_at = CURRENT_TIMESTAMP,
+                  status = ${status === 'publish' ? 'published' : 'draft'},
+                  article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${articleId}
+              RETURNING id
+            `;
+            console.log('[SAVE] ✅ Auto push - preserved existing images (not overwritten)');
+          }
           console.log('[SAVE] ✅ Auto push DB update completed for article', articleId);
           console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
         }
-        console.log('[SAVE] ✅ Successfully saved', generatedImagesData.length, 'images to database');
-        imageSaveStatus = { saved: true, count: generatedImagesData.length, articleId, error: null };
+        if (shouldUpdateImages) {
+          console.log('[SAVE] ✅ Successfully saved', generatedImagesData.length, 'images to database');
+        } else {
+          console.log('[SAVE] ✅ Preserved existing images (no new images to save)');
+        }
+        imageSaveStatus = { saved: true, count: generatedImagesData.length, articleId, error: null, preserved: !shouldUpdateImages };
 
         // VERIFICATION: Query the database to confirm images were saved
         try {
