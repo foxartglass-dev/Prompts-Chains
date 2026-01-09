@@ -60,6 +60,8 @@ interface Article {
   seo_plugin?: string;
   selected_meta_title?: string | null;
   selected_meta_description?: string | null;
+  meta_wp_pushed_at?: string | null;
+  images_wp_pushed_at?: string | null;
   images?: ArticleImage[];
   image_decision_report?: ImageDecisionReport | null;
 }
