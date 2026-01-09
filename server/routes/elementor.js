@@ -1473,7 +1473,7 @@ router.post('/publish', async (req, res) => {
             const updateResult = await sql`
               UPDATE articles
               SET generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
-                  image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
+                  image_decision_report = COALESCE(${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb, image_decision_report),
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${articleId}
               RETURNING id
@@ -1504,7 +1504,7 @@ router.post('/publish', async (req, res) => {
                   article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
                   article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
                   generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
-                  image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
+                  image_decision_report = COALESCE(${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb, image_decision_report),
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${articleId}
               RETURNING id
@@ -1540,7 +1540,7 @@ router.post('/publish', async (req, res) => {
                   status = ${status === 'publish' ? 'published' : 'draft'},
                   article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
                   generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
-                  image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
+                  image_decision_report = COALESCE(${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb, image_decision_report),
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${articleId}
               RETURNING id
