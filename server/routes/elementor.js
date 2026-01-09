@@ -1362,56 +1362,114 @@ router.post('/publish', async (req, res) => {
         }
         console.log('[SAVE] ========================================\n');
 
+        // FIX: Check if article already has images - DON'T overwrite them with empty array!
+        let shouldUpdateImages = generatedImagesData.length > 0;
+        if (!shouldUpdateImages) {
+          const existingArticle = await sql`SELECT generated_images FROM articles WHERE id = ${articleId}`;
+          const existingImages = existingArticle[0]?.generated_images;
+          const hasExistingImages = Array.isArray(existingImages) && existingImages.length > 0;
+          if (hasExistingImages) {
+            console.log('[SAVE] ⚠️ PRESERVING existing', existingImages.length, 'images (not overwriting with empty array)');
+            shouldUpdateImages = false; // Don't touch images
+          } else {
+            console.log('[SAVE] No existing images to preserve, will save empty array');
+            shouldUpdateImages = true; // OK to save empty
+          }
+        }
+
         // Check if we're in draft mode (no WP page created)
         if (skipWpPageCreation) {
           // DRAFT MODE: Save images to article record WITHOUT WordPress data
           // pageResult is null here, so we only update generated_images
           console.log('[SAVE] Draft mode - saving images without WP page data');
-          const updateResult = await sql`
-            UPDATE articles
-            SET generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${articleId}
-            RETURNING id
-          `;
-          console.log('[SAVE] ✅ Draft mode DB update completed for article', articleId);
-          console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
+          if (shouldUpdateImages) {
+            const updateResult = await sql`
+              UPDATE articles
+              SET generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${articleId}
+              RETURNING id
+            `;
+            console.log('[SAVE] ✅ Draft mode DB update completed for article', articleId);
+            console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
+          } else {
+            console.log('[SAVE] ✅ Draft mode - skipping image update (preserving existing)');
+          }
         } else if (isManualPush) {
           // Manual push: increment count and append date
-          const updateResult = await sql`
-            UPDATE articles
-            SET wp_post_id = ${pageResult.id},
-                wp_post_url = ${pageResult.link},
-                wp_published_at = CURRENT_TIMESTAMP,
-                status = ${status === 'publish' ? 'published' : 'draft'},
-                article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
-                article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
-                generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${articleId}
-            RETURNING id
-          `;
+          let updateResult;
+          if (shouldUpdateImages) {
+            updateResult = await sql`
+              UPDATE articles
+              SET wp_post_id = ${pageResult.id},
+                  wp_post_url = ${pageResult.link},
+                  wp_published_at = CURRENT_TIMESTAMP,
+                  status = ${status === 'publish' ? 'published' : 'draft'},
+                  article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
+                  article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+                  generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${articleId}
+              RETURNING id
+            `;
+          } else {
+            // Preserve existing images - don't update generated_images field
+            updateResult = await sql`
+              UPDATE articles
+              SET wp_post_id = ${pageResult.id},
+                  wp_post_url = ${pageResult.link},
+                  wp_published_at = CURRENT_TIMESTAMP,
+                  status = ${status === 'publish' ? 'published' : 'draft'},
+                  article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
+                  article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${articleId}
+              RETURNING id
+            `;
+            console.log('[SAVE] ✅ Manual push - preserved existing images (not overwritten)');
+          }
           console.log('[SAVE] ✅ Manual push DB update completed for article', articleId);
           console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
         } else {
           // Auto push: set auto_at timestamp (only if not already set)
-          const updateResult = await sql`
-            UPDATE articles
-            SET wp_post_id = ${pageResult.id},
-                wp_post_url = ${pageResult.link},
-                wp_published_at = CURRENT_TIMESTAMP,
-                status = ${status === 'publish' ? 'published' : 'draft'},
-                article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
-                generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${articleId}
-            RETURNING id
-          `;
+          let updateResult;
+          if (shouldUpdateImages) {
+            updateResult = await sql`
+              UPDATE articles
+              SET wp_post_id = ${pageResult.id},
+                  wp_post_url = ${pageResult.link},
+                  wp_published_at = CURRENT_TIMESTAMP,
+                  status = ${status === 'publish' ? 'published' : 'draft'},
+                  article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
+                  generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${articleId}
+              RETURNING id
+            `;
+          } else {
+            // Preserve existing images - don't update generated_images field
+            updateResult = await sql`
+              UPDATE articles
+              SET wp_post_id = ${pageResult.id},
+                  wp_post_url = ${pageResult.link},
+                  wp_published_at = CURRENT_TIMESTAMP,
+                  status = ${status === 'publish' ? 'published' : 'draft'},
+                  article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${articleId}
+              RETURNING id
+            `;
+            console.log('[SAVE] ✅ Auto push - preserved existing images (not overwritten)');
+          }
           console.log('[SAVE] ✅ Auto push DB update completed for article', articleId);
           console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
         }
-        console.log('[SAVE] ✅ Successfully saved', generatedImagesData.length, 'images to database');
-        imageSaveStatus = { saved: true, count: generatedImagesData.length, articleId, error: null };
+        if (shouldUpdateImages) {
+          console.log('[SAVE] ✅ Successfully saved', generatedImagesData.length, 'images to database');
+        } else {
+          console.log('[SAVE] ✅ Preserved existing images (no new images to save)');
+        }
+        imageSaveStatus = { saved: true, count: generatedImagesData.length, articleId, error: null, preserved: !shouldUpdateImages };
 
         // VERIFICATION: Query the database to confirm images were saved
         try {
