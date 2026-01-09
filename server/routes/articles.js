@@ -407,20 +407,29 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
     const { articleId } = req.params;
     const { wpUrl, wpUser, wpPassword } = req.body;
 
+    console.log('[Push Images] ========== STARTING ==========');
+    console.log('[Push Images] Article ID:', articleId);
+    console.log('[Push Images] Target WP:', wpUrl);
+
     if (!wpUrl || !wpUser || !wpPassword) {
+      console.log('[Push Images] ❌ Missing credentials - aborting');
       return res.status(400).json({ error: 'Missing WordPress credentials' });
     }
 
     // Get article with images from database
     const articles = await sql`SELECT * FROM articles WHERE id = ${articleId}`;
     if (articles.length === 0) {
+      console.log('[Push Images] ❌ Article not found');
       return res.status(404).json({ error: 'Article not found' });
     }
 
     const article = articles[0];
     const images = article.generated_images || [];
 
+    console.log('[Push Images] Found', images.length, 'images in article');
+
     if (images.length === 0) {
+      console.log('[Push Images] ❌ No images to push - aborting');
       return res.status(400).json({ error: 'No images to push' });
     }
 
@@ -500,6 +509,12 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
 
     const successCount = results.filter(r => r.status === 'success').length;
     const skippedCount = results.filter(r => r.status === 'skipped').length;
+    const failedCount = results.filter(r => r.status === 'failed').length;
+
+    console.log('[Push Images] ========== COMPLETE ==========');
+    console.log('[Push Images] ✅ Success:', successCount);
+    console.log('[Push Images] ⏭️ Skipped:', skippedCount);
+    console.log('[Push Images] ❌ Failed:', failedCount);
 
     res.json({
       success: true,
@@ -510,7 +525,7 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Push Images] Error:', error);
+    console.error('[Push Images] ❌ ERROR:', error);
     res.status(500).json({ error: error.message });
   }
 });
