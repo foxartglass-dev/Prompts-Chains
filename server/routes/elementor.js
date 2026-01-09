@@ -980,6 +980,81 @@ router.post('/publish', async (req, res) => {
       }
     }
 
+    // Step 2c: If no images from bank and articleId exists, try to use existing images from article record
+    // This handles the "Push All to WP" case where images are already stored on the article
+    if (imagesFromBank === 0 && articleId && isDatabaseEnabled() && !imageDraftMode) {
+      try {
+        console.log('[Elementor Publish] No images from bank, checking article for existing images...');
+        const articleResult = await sql`SELECT generated_images FROM articles WHERE id = ${articleId}`;
+
+        if (articleResult.length > 0) {
+          const existingImages = articleResult[0].generated_images || [];
+          console.log(`[Elementor Publish] Found ${existingImages.length} existing images on article`);
+
+          if (existingImages.length > 0) {
+            // Sort images by placement (hero first, then sections in order)
+            const sortedImages = existingImages.sort((a, b) => {
+              if (a.placement === 'hero') return -1;
+              if (b.placement === 'hero') return 1;
+              // Extract section numbers for sorting
+              const aNum = parseInt(a.placement?.replace('section-', '') || '99');
+              const bNum = parseInt(b.placement?.replace('section-', '') || '99');
+              return aNum - bNum;
+            });
+
+            // Embed images into chunks based on their placement
+            sortedImages.forEach((img, imgIdx) => {
+              const isHero = img.placement === 'hero';
+
+              // Use wpMediaUrl if available (from push-images), otherwise use url
+              const imageUrl = img.wpMediaUrl || img.url;
+
+              // Skip base64 images that haven't been uploaded to WP yet
+              if (imageUrl?.startsWith('data:')) {
+                console.log(`[Elementor Publish] Skipping base64 image ${img.id} - needs WP upload first`);
+                return;
+              }
+
+              const imageData = {
+                url: imageUrl,
+                wpUrl: img.wpMediaUrl || img.url,
+                wpMediaId: img.wpMediaId || null,
+                alt: img.prompt?.substring(0, 50) || 'Article image',
+                width: isHero ? 400 : 380,
+                height: isHero ? 500 : 475,
+                side: img.side || (isHero ? 'right' : 'left'),
+                orientation: 'vertical' // Default assumption
+              };
+
+              console.log(`[Elementor Publish] Embedding ${img.placement} image:`, {
+                hasUrl: !!imageUrl,
+                wpMediaId: img.wpMediaId,
+                side: imageData.side
+              });
+
+              if (isHero && chunked.intro) {
+                chunked.intro.imageData = imageData;
+              } else {
+                // Parse section number from placement like "section-1"
+                const sectionMatch = img.placement?.match(/section-(\d+)/);
+                if (sectionMatch) {
+                  const sectionIdx = parseInt(sectionMatch[1]) - 1;
+                  if (chunked.chunks[sectionIdx]) {
+                    chunked.chunks[sectionIdx].imageData = imageData;
+                  }
+                }
+              }
+            });
+
+            imagesFromBank = sortedImages.filter(img => !img.url?.startsWith('data:')).length;
+            console.log(`[Elementor Publish] Embedded ${imagesFromBank} existing images from article`);
+          }
+        }
+      } catch (existingImgError) {
+        console.error('[Elementor Publish] Error fetching existing images:', existingImgError.message);
+      }
+    }
+
     // Step 3: Generate live images if needed (either "Generate Live" mode or fallback)
     const needsLiveGeneration = effectiveGenerateLive && imagesFromBank < dynamicMaxImages;
 

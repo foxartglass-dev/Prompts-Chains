@@ -315,16 +315,31 @@ router.patch('/:id/wp-status', requireDb, async (req, res) => {
     const { id } = req.params;
     const { wpPostId, wpPostUrl, status } = req.body;
 
-    const result = await sql`
-      UPDATE articles
-      SET wp_post_id = ${wpPostId || null},
-          wp_post_url = ${wpPostUrl || null},
-          wp_published_at = ${wpPostId ? 'CURRENT_TIMESTAMP' : null},
-          status = ${status || 'published'},
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${id}
-      RETURNING *
-    `;
+    // Use conditional SQL to set wp_published_at only when wpPostId is provided
+    let result;
+    if (wpPostId) {
+      result = await sql`
+        UPDATE articles
+        SET wp_post_id = ${wpPostId},
+            wp_post_url = ${wpPostUrl || null},
+            wp_published_at = CURRENT_TIMESTAMP,
+            status = ${status || 'published'},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${id}
+        RETURNING *
+      `;
+    } else {
+      result = await sql`
+        UPDATE articles
+        SET wp_post_id = NULL,
+            wp_post_url = ${wpPostUrl || null},
+            wp_published_at = NULL,
+            status = ${status || 'published'},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${id}
+        RETURNING *
+      `;
+    }
 
     if (result.length === 0) {
       return res.status(404).json({ error: 'Article not found' });

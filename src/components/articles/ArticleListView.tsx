@@ -331,9 +331,28 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     setError(null);
 
     try {
-      // Step 1: Publish article if not already published
+      // Step 1: Upload images to WordPress Media Library FIRST
+      // This ensures images have WordPress URLs before page creation
+      const hasImages = selectedArticle.generated_images && selectedArticle.generated_images.length > 0;
+      if (hasImages) {
+        console.log('[Push All] Step 1: Uploading images to Media Library...');
+        const imagesRes = await fetch(`/api/articles/${selectedArticle.id}/push-images`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wpUrl, wpUser, wpPassword })
+        });
+        const imagesData = await imagesRes.json();
+        if (!imagesData.success) {
+          console.warn('Images upload warning:', imagesData.error);
+        } else {
+          console.log(`[Push All] Uploaded ${imagesData.pushed} images to Media Library`);
+        }
+      }
+
+      // Step 2: Publish article (now with uploaded image URLs)
       let wpPostId = selectedArticle.wp_post_id;
       if (!wpPostId) {
+        console.log('[Push All] Step 2: Creating WordPress page...');
         const articleRes = await fetch('/api/elementor/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -360,13 +379,15 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
               status: 'published'
             })
           });
+          console.log(`[Push All] Created page with ID: ${wpPostId}`);
         } else {
           throw new Error(articleData.error || 'Failed to publish article');
         }
       }
 
-      // Step 2: Push meta to SEO plugin
+      // Step 3: Push meta to SEO plugin
       if (wpPostId && (selectedArticle.selected_meta_title || selectedArticle.selected_meta_description)) {
+        console.log('[Push All] Step 3: Pushing meta to SEO plugin...');
         const metaRes = await fetch('/api/seo/push-direct', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -383,19 +404,6 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         const metaData = await metaRes.json();
         if (!metaData.success) {
           console.warn('Meta push warning:', metaData.error);
-        }
-      }
-
-      // Step 3: Push images to WordPress
-      if (selectedArticle.images && selectedArticle.images.length > 0) {
-        const imagesRes = await fetch(`/api/articles/${selectedArticle.id}/push-images`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wpUrl, wpUser, wpPassword })
-        });
-        const imagesData = await imagesRes.json();
-        if (!imagesData.success) {
-          console.warn('Images push warning:', imagesData.error);
         }
       }
 
