@@ -402,7 +402,15 @@ router.post('/publish', async (req, res) => {
 
           // Check integration_mode to determine behavior
           const integrationMode = config.integration_mode || 'bank';
-          const fallbackToLive = config.fallback_to_live ?? true;
+          const smartMatchingMode = config.smart_matching_mode || 'bank_first';
+
+          // Determine fallback behavior from smart_matching_mode (overrides fallback_to_live)
+          // bank_first = try bank, generate if empty/no match
+          // bank_only = only use bank, never generate
+          const fallbackToLive = smartMatchingMode === 'bank_first' ? true :
+                                 smartMatchingMode === 'bank_only' ? false :
+                                 (config.fallback_to_live ?? true);
+
           imageGenModel = config.image_generation_model || 'flux-1.1-pro';
           imageQuality = config.image_quality || 'low';
 
@@ -424,6 +432,7 @@ router.post('/publish', async (req, res) => {
           config._targetAvatar = targetAvatar;
 
           console.log('[Elementor Publish] Integration mode:', integrationMode);
+          console.log('[Elementor Publish] Smart matching mode:', smartMatchingMode);
           console.log('[Elementor Publish] Image generation model:', imageGenModel);
           console.log('[Elementor Publish] Image quality:', imageQuality);
           console.log('[Elementor Publish] Live prompt mode:', livePromptMode);
@@ -438,11 +447,11 @@ router.post('/publish', async (req, res) => {
             console.log('[Elementor Publish] Mode: Generate Live - will create new images');
             sessionLogger.logInfo('IMAGE', 'Mode: Generate Live - will create new images', { model: imageGenModel, quality: imageQuality });
           } else {
-            // "Pull from Bank" mode - use bank, optionally fallback to live
+            // "Pull from Bank" mode - use bank, optionally fallback to live based on smart_matching_mode
             effectiveUseBank = true;
-            effectiveGenerateLive = fallbackToLive; // Only generate if bank is empty and fallback enabled
-            console.log('[Elementor Publish] Mode: Pull from Bank (fallback:', fallbackToLive, ')');
-            sessionLogger.logInfo('IMAGE', `Mode: Pull from Bank (fallback: ${fallbackToLive})`, { avatar: targetAvatar?.name });
+            effectiveGenerateLive = fallbackToLive;
+            console.log('[Elementor Publish] Mode: Pull from Bank (smart_matching_mode:', smartMatchingMode, ', fallback:', fallbackToLive, ')');
+            sessionLogger.logInfo('IMAGE', `Mode: Pull from Bank (${smartMatchingMode}, fallback: ${fallbackToLive})`, { avatar: targetAvatar?.name });
           }
         } else {
           console.log('[Elementor Publish] ⚠️ No Image Creation settings found');
