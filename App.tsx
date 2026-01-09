@@ -3317,7 +3317,10 @@ const App: React.FC = () => {
                             tags={currentProject?.state.tags || []}
                             showNotification={showNotification}
                             addLog={addLog}
-                        />
+                            headerPortalId="image-creation-header-controls"
+                        />,
+                        false,
+                        <div id="image-creation-header-controls" className="flex items-center gap-2" />
                     )}
 
                     {/* 8. Site Planning Section */}
