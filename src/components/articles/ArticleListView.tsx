@@ -163,8 +163,10 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           setSelectedDescIndex(0);
         }
 
-        // Reset meta saved state
-        setMetaSaved(false);
+        // Set meta saved state based on whether meta is already saved in database
+        // If article has selected_meta_title or selected_meta_description, it's saved
+        const hasMetaSaved = !!(article.selected_meta_title || article.selected_meta_description);
+        setMetaSaved(hasMetaSaved);
       }
     } catch (err) {
       setError('Failed to load article details');
