@@ -57,6 +57,7 @@ interface Article {
   wp_url?: string;
   wp_user?: string;
   wp_app_password?: string;
+  seo_plugin?: string;
   selected_meta_title?: string | null;
   selected_meta_description?: string | null;
   images?: ArticleImage[];
@@ -390,6 +391,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       // Step 3: Push meta to SEO plugin
       if (wpPostId && (selectedArticle.selected_meta_title || selectedArticle.selected_meta_description)) {
         console.log('[Push All] Step 3: Pushing meta to SEO plugin...');
+        console.log('[Push All] SEO Plugin:', selectedArticle.seo_plugin || 'rankmath');
         const metaRes = await fetch('/api/seo/push-direct', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -400,12 +402,15 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             postId: wpPostId,
             metaTitle: selectedArticle.selected_meta_title,
             metaDescription: selectedArticle.selected_meta_description,
+            seoPlugin: selectedArticle.seo_plugin || 'rankmath',
             articleId: selectedArticle.id
           })
         });
         const metaData = await metaRes.json();
         if (!metaData.success) {
           console.warn('Meta push warning:', metaData.error);
+        } else {
+          console.log('[Push All] ✅ Meta pushed successfully');
         }
       }
 
