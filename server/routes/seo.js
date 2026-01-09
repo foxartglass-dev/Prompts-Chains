@@ -119,10 +119,20 @@ router.post('/push-direct', async (req, res) => {
   try {
     const { wpUrl, wpUser, wpPassword, postId, metaTitle, metaDescription, seoPlugin, postType, articleId, isManualPush = true } = req.body;
 
+    console.log('[META PUSH] ========== PUSH-DIRECT CALLED ==========');
+    console.log('[META PUSH] postId:', postId);
+    console.log('[META PUSH] seoPlugin:', seoPlugin);
+    console.log('[META PUSH] metaTitle:', metaTitle?.substring(0, 50) + '...');
+    console.log('[META PUSH] metaDescription:', metaDescription?.substring(0, 50) + '...');
+    console.log('[META PUSH] articleId:', articleId);
+    console.log('[META PUSH] wpUrl:', wpUrl);
+
     if (!wpUrl || !wpUser || !wpPassword || !postId) {
+      console.log('[META PUSH] ❌ Missing credentials or postId');
       return res.status(400).json({ error: 'WordPress credentials and post ID are required' });
     }
 
+    console.log('[META PUSH] Calling pushMetaToSeoPlugin...');
     const pushResult = await pushMetaToSeoPlugin({
       wpUrl,
       wpUser,
@@ -134,9 +144,14 @@ router.post('/push-direct', async (req, res) => {
       postType: postType || 'pages'
     });
 
+    console.log('[META PUSH] pushResult:', JSON.stringify(pushResult, null, 2));
+
     if (!pushResult.success) {
+      console.log('[META PUSH] ❌ Push failed:', pushResult.error);
       return res.status(500).json({ error: pushResult.error });
     }
+
+    console.log('[META PUSH] ✅ Push succeeded!');
 
     // Track meta push if articleId provided and database enabled
     if (articleId && isDatabaseEnabled()) {
