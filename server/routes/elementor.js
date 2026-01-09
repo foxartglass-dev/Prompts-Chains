@@ -1473,6 +1473,7 @@ router.post('/publish', async (req, res) => {
             const updateResult = await sql`
               UPDATE articles
               SET generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${articleId}
               RETURNING id
@@ -1480,7 +1481,15 @@ router.post('/publish', async (req, res) => {
             console.log('[SAVE] ✅ Draft mode DB update completed for article', articleId);
             console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
           } else {
-            console.log('[SAVE] ✅ Draft mode - skipping image update (preserving existing)');
+            // Still save the decision report even if not updating images
+            const updateResult = await sql`
+              UPDATE articles
+              SET image_decision_report = COALESCE(${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb, image_decision_report),
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${articleId}
+              RETURNING id
+            `;
+            console.log('[SAVE] ✅ Draft mode - skipping image update but saved decision report');
           }
         } else if (isManualPush) {
           // Manual push: increment count and append date
@@ -1495,6 +1504,7 @@ router.post('/publish', async (req, res) => {
                   article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
                   article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
                   generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${articleId}
               RETURNING id
@@ -1509,6 +1519,7 @@ router.post('/publish', async (req, res) => {
                   status = ${status === 'publish' ? 'published' : 'draft'},
                   article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
                   article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+                  image_decision_report = COALESCE(${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb, image_decision_report),
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${articleId}
               RETURNING id
@@ -1529,6 +1540,7 @@ router.post('/publish', async (req, res) => {
                   status = ${status === 'publish' ? 'published' : 'draft'},
                   article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
                   generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  image_decision_report = ${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb,
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${articleId}
               RETURNING id
@@ -1542,6 +1554,7 @@ router.post('/publish', async (req, res) => {
                   wp_published_at = CURRENT_TIMESTAMP,
                   status = ${status === 'publish' ? 'published' : 'draft'},
                   article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
+                  image_decision_report = COALESCE(${reportToSave ? JSON.stringify(reportToSave) : null}::jsonb, image_decision_report),
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${articleId}
               RETURNING id
