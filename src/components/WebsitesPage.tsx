@@ -39,9 +39,10 @@ interface WebsitesPageProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectWebsite?: (websiteId: number) => void;
+  onSeoPluginChange?: (websiteId: number, seoPlugin: string) => void;
 }
 
-const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWebsite }) => {
+const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWebsite, onSeoPluginChange }) => {
   const [websites, setWebsites] = useState<Website[]>([]);
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
   const [loading, setLoading] = useState(true);
@@ -541,6 +542,8 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                               const data = await res.json();
                               setSelectedWebsite(data.website);
                               fetchWebsites();
+                              // Notify parent to sync SEO plugin dropdown
+                              onSeoPluginChange?.(selectedWebsite.id, newPlugin);
                             }
                           } catch (error) {
                             console.error('Failed to update SEO plugin:', error);

@@ -232,6 +232,7 @@ const App: React.FC = () => {
     });
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
+    const [currentWebsiteSeoPlugin, setCurrentWebsiteSeoPlugin] = useState<string>('rankmath');
     const [filterByClientId, setFilterByClientId] = useState<number | undefined>(undefined);
     const [currentWorkflowContext, setCurrentWorkflowContext] = useState<{
       workflowName?: string;
@@ -415,6 +416,28 @@ const App: React.FC = () => {
 
       fetchImageSettings();
     }, [currentWorkflowId]);
+
+    // Sync SEO plugin with website data - single source of truth
+    useEffect(() => {
+      if (!currentWebsiteId) {
+        setCurrentWebsiteSeoPlugin('rankmath');
+        return;
+      }
+
+      const fetchWebsiteSeoPlugin = async () => {
+        try {
+          const res = await fetch(`/api/websites/${currentWebsiteId}`);
+          const data = await res.json();
+          if (data.website?.seo_plugin) {
+            setCurrentWebsiteSeoPlugin(data.website.seo_plugin);
+          }
+        } catch (error) {
+          console.error('Error fetching website SEO plugin:', error);
+        }
+      };
+
+      fetchWebsiteSeoPlugin();
+    }, [currentWebsiteId]);
 
     // Auto-load default workflow on startup
     const hasAutoLoadedRef = useRef(false);
@@ -1861,6 +1884,12 @@ const App: React.FC = () => {
                     setIsWebsitesOpen(false);
                     showNotification('Website selected', 'info');
                 }}
+                onSeoPluginChange={(websiteId, seoPlugin) => {
+                    // Sync SEO plugin when changed in WebsitesPage
+                    if (websiteId === currentWebsiteId) {
+                        setCurrentWebsiteSeoPlugin(seoPlugin);
+                    }
+                }}
             />
             <Analytics isOpen={isAnalyticsOpen} onClose={() => setIsAnalyticsOpen(false)} />
 
@@ -2796,9 +2825,26 @@ const App: React.FC = () => {
                                 <div className="w-24">
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center text-xs">SEO Plugin</label>
                                     <select
-                                        value={currentProject.state.seoPlugin || 'rankmath'}
-                                        onChange={e => setCurrentProjectState(p => ({...p, seoPlugin: e.target.value}))}
+                                        value={currentWebsiteSeoPlugin}
+                                        onChange={async e => {
+                                            const newPlugin = e.target.value;
+                                            setCurrentWebsiteSeoPlugin(newPlugin);
+                                            // Update the website in the database (single source of truth)
+                                            if (currentWebsiteId) {
+                                                try {
+                                                    await fetch(`/api/websites/${currentWebsiteId}`, {
+                                                        method: 'PUT',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ seoPlugin: newPlugin })
+                                                    });
+                                                } catch (error) {
+                                                    console.error('Error updating website SEO plugin:', error);
+                                                }
+                                            }
+                                        }}
                                         className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                        disabled={!currentWebsiteId}
+                                        title={!currentWebsiteId ? 'Select a website first' : ''}
                                     >
                                         <option value="rankmath">Rank Math</option>
                                         <option value="yoast">Yoast</option>
