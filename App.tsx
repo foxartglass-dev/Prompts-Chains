@@ -201,6 +201,7 @@ const App: React.FC = () => {
     const [pendingResults, setPendingResults] = useState<PendingResult[]>([]);
     const [fileName, setFileName] = useState('');
     const [openSections, setOpenSections] = useState<Set<string>>(new Set(['setup']));
+    const [imageCreationHeaderControls, setImageCreationHeaderControls] = useState<React.ReactNode>(null);
     const [newTagName, setNewTagName] = useState('');
     const [selectedPlaceholders, setSelectedPlaceholders] = useState<Set<number>>(new Set());
     const [bulkActionTag, setBulkActionTag] = useState('');
@@ -3317,7 +3318,10 @@ const App: React.FC = () => {
                             tags={currentProject?.state.tags || []}
                             showNotification={showNotification}
                             addLog={addLog}
-                        />
+                            onHeaderControlsReady={setImageCreationHeaderControls}
+                        />,
+                        false,
+                        imageCreationHeaderControls
                     )}
 
                     {/* 8. Site Planning Section */}
