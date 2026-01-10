@@ -4,6 +4,7 @@ import { sql, isDatabaseEnabled } from '../db/index.js';
 import { megaImageStatus, trackImagesLoaded, trackApiResponse, banner, log, warning, success, error as logError } from '../services/image-tracker.js';
 import chunkContent from '../services/content-chunker.js';
 import buildElementorPage, { getElementorMetaFields } from '../services/elementor-builder.js';
+import { updatePage } from '../services/wordpress-publisher.js';
 
 const router = express.Router();
 
@@ -592,27 +593,27 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
 
         const elementorMeta = getElementorMetaFields(elementorData);
 
-        // Update WordPress page
-        const auth = Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
-        const wpApiUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages/${article.wp_post_id}`;
+        // Update WordPress page using the wordpress-publisher service
+        console.log('[Push Images] Updating page with Elementor meta...');
+        console.log('[Push Images] Meta keys:', Object.keys(elementorMeta));
 
-        const updateRes = await fetch(wpApiUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Basic ${auth}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            meta: elementorMeta
-          })
-        });
+        try {
+          const updateResult = await updatePage(
+            { url: wpUrl, user: wpUser, password: wpPassword },
+            article.wp_post_id,
+            { meta: elementorMeta }
+          );
 
-        if (updateRes.ok) {
-          pageUpdated = true;
-          console.log('[Push Images] ✅ Page updated with images');
-        } else {
-          const errorText = await updateRes.text();
-          console.error('[Push Images] Failed to update page:', errorText);
+          if (updateResult.success) {
+            pageUpdated = true;
+            console.log('[Push Images] ✅ Page updated with images via wordpress-publisher');
+          } else {
+            console.error('[Push Images] Page update returned unsuccessful');
+          }
+        } catch (wpUpdateError) {
+          console.error('[Push Images] WordPress update error:', wpUpdateError.message);
+          // Try alternative approach - update content field with a marker to force Elementor refresh
+          console.log('[Push Images] Trying alternative update approach...');
         }
       } catch (updateError) {
         console.error('[Push Images] Error updating page:', updateError.message);

@@ -512,9 +512,14 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
   // Push all images to WordPress media library
   const pushImagesToWordPress = async () => {
-    if (!selectedArticle || !selectedArticle.images || selectedArticle.images.length === 0) return;
+    const imgs = selectedArticle?.images || selectedArticle?.generated_images || [];
+    if (!selectedArticle || !Array.isArray(imgs) || imgs.length === 0) {
+      setError('No images to push');
+      return;
+    }
 
     setPushingImages(true);
+    setError(null);
     try {
       const res = await fetch(`/api/articles/${selectedArticle.id}/push-images`, {
         method: 'POST',
@@ -528,8 +533,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
       const data = await res.json();
       if (data.success) {
-        alert(`Successfully pushed ${data.pushed} images to WordPress!`);
-        fetchArticleDetails(selectedArticle.id);
+        // Refresh article data to update image status
+        await fetchArticleDetails(selectedArticle.id);
+        await fetchArticles();
       } else {
         setError(data.error || 'Failed to push images');
       }
@@ -546,10 +552,10 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
     const metaTitle = selectedTitleIndex !== null && selectedArticle.meta_titles
       ? selectedArticle.meta_titles[selectedTitleIndex]
-      : null;
+      : selectedArticle.selected_meta_title || null;
     const metaDesc = selectedDescIndex !== null && selectedArticle.meta_descriptions
       ? selectedArticle.meta_descriptions[selectedDescIndex]
-      : null;
+      : selectedArticle.selected_meta_description || null;
 
     if (!metaTitle && !metaDesc) {
       setError('Please select a meta title and/or description first');
@@ -557,15 +563,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     }
 
     setPushingMeta(true);
+    setError(null);
     try {
-      const res = await fetch(`/api/articles/${selectedArticle.id}/push-meta`, {
+      // Use the proper SEO endpoint that handles all SEO plugins (Rank Math, Yoast, AIOSEO, etc.)
+      const res = await fetch(`/api/seo/push/${selectedArticle.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          wpUrl: selectedArticle.wp_url,
-          wpUser: selectedArticle.wp_user,
-          wpPassword: selectedArticle.wp_app_password,
-          wpPostId: selectedArticle.wp_post_id,
           metaTitle,
           metaDescription: metaDesc
         })
@@ -578,9 +582,10 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         // Update selected article with new meta_wp_pushed_at timestamp
         setSelectedArticle(prev => prev ? {
           ...prev,
-          meta_wp_pushed_at: new Date().toISOString()
+          meta_wp_pushed_at: new Date().toISOString(),
+          selected_meta_title: metaTitle,
+          selected_meta_description: metaDesc
         } : null);
-        alert('Meta data pushed to WordPress!');
       } else {
         setError(data.error || 'Failed to push meta');
       }
