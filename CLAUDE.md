@@ -24,9 +24,9 @@ Before any UPDATE on articles table, check if images exist. Look for `shouldUpda
 - Don't clear arrays when you mean to leave them unchanged
 
 ## Current State
-- **Last Updated:** 2025-01-09
-- **What's Working:** Image pipeline, Push All to WP, Blueprint page
-- **Known Issues:** SEO plugin dropdown sync between two places
+- **Last Updated:** 2025-01-10
+- **What's Working:** Image pipeline, Push All to WP, Blueprint page, Individual push buttons
+- **Known Issues:** SEO plugin dropdown sync, intermittent workflowId race condition (see Blueprint > Known Issues)
 - **Next Priority:** User will specify
 
 ## Key Commands
@@ -49,6 +49,7 @@ npm test           # Run tests
 - Most of the workflow/prompt chain logic
 
 ## See Also
+- **Agent Onboarding:** Read `AGENT_ONBOARDING.md` for warm-up sequence
 - **In-app Blueprint:** More > Blueprint (visual diagrams)
 - **Agent Template:** More > Blueprint > Agent Template tab
 - **Debrief Command:** `/debrief` at end of session

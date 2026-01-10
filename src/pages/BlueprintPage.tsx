@@ -925,10 +925,17 @@ const KnownIssuesDiagram: React.FC = () => (
 
       <div className="space-y-4 text-sm">
         <div>
-          <div className="font-semibold text-brand-gold mb-2">1. Check Server Logs</div>
+          <div className="font-semibold text-brand-gold mb-2">1. Check Server Logs (GitHub)</div>
+          <p className="text-gray-400 mb-2">
+            Logs are pushed to the <code className="bg-slate-900 px-1 rounded">main</code> branch automatically.
+            You can access them from ANY branch by fetching from main:
+          </p>
           <code className="text-xs bg-slate-900 px-2 py-1 rounded block text-gray-300">
             git fetch origin main && git show origin/main:logs/server-latest.log | tail -200
           </code>
+          <p className="text-xs text-yellow-400 mt-2">
+            Note: Your working branch doesn't matter - always fetch from origin/main to get logs.
+          </p>
         </div>
 
         <div>
@@ -944,6 +951,14 @@ const KnownIssuesDiagram: React.FC = () => (
         <div>
           <div className="font-semibold text-brand-gold mb-2">3. Check Frontend Console</div>
           <div className="text-gray-400">Browser DevTools → Console → Look for fetch errors or state issues</div>
+        </div>
+
+        <div>
+          <div className="font-semibold text-brand-gold mb-2">4. Log File Location</div>
+          <div className="text-gray-400">
+            Server pushes to: <code className="bg-slate-900 px-1 rounded">logs/server-latest.log</code> on main branch.
+            Max 500 lines, auto-rotated on each publish.
+          </div>
         </div>
       </div>
     </div>
