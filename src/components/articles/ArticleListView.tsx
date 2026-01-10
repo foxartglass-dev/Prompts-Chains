@@ -770,19 +770,23 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     </span>
                   </td>
                   <td className="p-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                      !article.images || (Array.isArray(article.images) ? article.images.length === 0 : true)
-                        ? 'bg-slate-600/30 text-slate-400'
-                        : (Array.isArray(article.images) && article.images.some((img: ArticleImage) => img.pushedToWp))
-                          ? 'bg-green-600/30 text-green-400'
-                          : 'bg-amber-600/30 text-amber-400'
-                    }`}>
-                      {!article.images || (Array.isArray(article.images) ? article.images.length === 0 : true)
-                        ? 'Off'
-                        : (Array.isArray(article.images) && article.images.some((img: ArticleImage) => img.pushedToWp))
-                          ? 'WP'
-                          : 'Draft'}
-                    </span>
+                    {(() => {
+                      // Check both images and generated_images
+                      const imgs = article.images || article.generated_images || [];
+                      const hasImages = Array.isArray(imgs) && imgs.length > 0;
+                      const hasPushedImages = hasImages && imgs.some((img: ArticleImage) => img.pushedToWp);
+                      return (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          !hasImages
+                            ? 'bg-slate-600/30 text-slate-400'
+                            : hasPushedImages
+                              ? 'bg-green-600/30 text-green-400'
+                              : 'bg-amber-600/30 text-amber-400'
+                        }`}>
+                          {!hasImages ? 'Off' : hasPushedImages ? 'WP' : 'Draft'}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="p-2 text-xs">
                     {(() => {
