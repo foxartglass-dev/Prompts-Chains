@@ -155,11 +155,11 @@ router.put('/:id', requireDb, async (req, res) => {
 
     const result = await sql`
       UPDATE websites
-      SET name = ${name},
-          url = ${url || ''},
-          wp_url = ${wpUrl || ''},
-          wp_user = ${wpUser || ''},
-          wp_app_password = ${wpAppPassword || ''},
+      SET name = COALESCE(${name}, name),
+          url = COALESCE(${url}, url),
+          wp_url = COALESCE(${wpUrl}, wp_url),
+          wp_user = COALESCE(${wpUser}, wp_user),
+          wp_app_password = COALESCE(${wpAppPassword}, wp_app_password),
           drip_feed_pages_per_day = COALESCE(${dripFeedPagesPerDay}, drip_feed_pages_per_day),
           drip_feed_randomize = COALESCE(${dripFeedRandomize}, drip_feed_randomize),
           drip_feed_publish_time = COALESCE(${dripFeedPublishTime}, drip_feed_publish_time),

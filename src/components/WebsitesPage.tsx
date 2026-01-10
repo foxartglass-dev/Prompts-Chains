@@ -524,7 +524,7 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                     <h4 className="text-sm text-gray-400 mb-1">SEO Plugin</h4>
                     <div className="flex items-center gap-2">
                       <select
-                        value={selectedWebsite.seo_plugin || 'aioseo'}
+                        value={selectedWebsite.seo_plugin || 'yoast'}
                         onChange={async (e) => {
                           const newPlugin = e.target.value;
                           try {
@@ -836,7 +836,7 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
       <SEOSetupGuide
         isOpen={showSEOGuide}
         onClose={() => setShowSEOGuide(false)}
-        initialPlugin={selectedWebsite?.seo_plugin || 'aioseo'}
+        initialPlugin={selectedWebsite?.seo_plugin || 'yoast'}
       />
     </div>
   );

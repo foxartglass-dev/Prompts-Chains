@@ -445,8 +445,25 @@ const App: React.FC = () => {
                 projectName: data.workflow.project_name
               });
 
-              if (data.workflow.state && Object.keys(data.workflow.state).length > 0) {
-                setCurrentProjectState(() => data.workflow.state);
+              let workflowState = data.workflow.state || {};
+
+              // Sync SEO plugin from website if workflow has a website_id
+              if (data.workflow.website_id) {
+                try {
+                  const wsRes = await fetch(`/api/websites/${data.workflow.website_id}`);
+                  if (wsRes.ok) {
+                    const wsData = await wsRes.json();
+                    if (wsData.website?.seo_plugin) {
+                      workflowState = { ...workflowState, seoPlugin: wsData.website.seo_plugin };
+                    }
+                  }
+                } catch (wsErr) {
+                  console.error('Failed to fetch website SEO plugin:', wsErr);
+                }
+              }
+
+              if (Object.keys(workflowState).length > 0) {
+                setCurrentProjectState(() => workflowState);
                 setHasUnsavedChanges(false);
               }
 
@@ -2104,9 +2121,27 @@ const App: React.FC = () => {
                         const response = await fetch(`/api/workflows/${workflow.id}`);
                         if (response.ok) {
                             const data = await response.json();
-                            if (data.workflow && data.workflow.state && Object.keys(data.workflow.state).length > 0) {
-                                // Load the saved state
-                                setCurrentProjectState(() => data.workflow.state);
+                            let workflowState = data.workflow?.state || {};
+
+                            // Sync SEO plugin from website if workflow has a website_id
+                            if (workflow.website_id) {
+                                try {
+                                    const wsRes = await fetch(`/api/websites/${workflow.website_id}`);
+                                    if (wsRes.ok) {
+                                        const wsData = await wsRes.json();
+                                        if (wsData.website?.seo_plugin) {
+                                            // Sync website's seo_plugin to workflow state
+                                            workflowState = { ...workflowState, seoPlugin: wsData.website.seo_plugin };
+                                        }
+                                    }
+                                } catch (wsErr) {
+                                    console.error('Failed to fetch website SEO plugin:', wsErr);
+                                }
+                            }
+
+                            if (Object.keys(workflowState).length > 0) {
+                                // Load the saved state (with synced seoPlugin)
+                                setCurrentProjectState(() => workflowState);
                                 setHasUnsavedChanges(false);
                                 showNotification(`Loaded workflow: ${workflow.name}`, 'success');
                             } else {
@@ -2797,7 +2832,23 @@ const App: React.FC = () => {
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center text-xs">SEO Plugin</label>
                                     <select
                                         value={currentProject.state.seoPlugin || 'rankmath'}
-                                        onChange={e => setCurrentProjectState(p => ({...p, seoPlugin: e.target.value}))}
+                                        onChange={async (e) => {
+                                            const newPlugin = e.target.value;
+                                            // Update workflow state
+                                            setCurrentProjectState(p => ({...p, seoPlugin: newPlugin}));
+                                            // Also sync to website if we have a website_id
+                                            if (currentWebsiteId) {
+                                                try {
+                                                    await fetch(`/api/websites/${currentWebsiteId}`, {
+                                                        method: 'PUT',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ seoPlugin: newPlugin })
+                                                    });
+                                                } catch (err) {
+                                                    console.error('Failed to sync SEO plugin to website:', err);
+                                                }
+                                            }
+                                        }}
                                         className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                     >
                                         <option value="rankmath">Rank Math</option>
