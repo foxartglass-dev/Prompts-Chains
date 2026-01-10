@@ -1450,7 +1450,7 @@ const App: React.FC = () => {
                                                         postId: publishData.page.id,
                                                         metaTitle: metaTitles[0],
                                                         metaDescription: metaDescriptions[0],
-                                                        seoPlugin: 'rankmath',
+                                                        seoPlugin: currentProject.state.seoPlugin || 'rankmath',
                                                         postType: 'pages'
                                                     })
                                                 });
@@ -1611,7 +1611,7 @@ const App: React.FC = () => {
                                 postId: data.page.id,
                                 metaTitle: result.metaTitles[0],
                                 metaDescription: result.metaDescriptions[0],
-                                seoPlugin: 'aioseo',
+                                seoPlugin: currentProject.state.seoPlugin || 'rankmath',
                                 postType: 'pages'
                             })
                         });
@@ -1668,7 +1668,7 @@ const App: React.FC = () => {
                                 postId: data.id,
                                 metaTitle: result.metaTitles[0],
                                 metaDescription: result.metaDescriptions[0],
-                                seoPlugin: 'aioseo',
+                                seoPlugin: currentProject.state.seoPlugin || 'rankmath',
                                 postType: currentProject.state.wpContentType
                             })
                         });
@@ -2851,10 +2851,11 @@ const App: React.FC = () => {
                                         }}
                                         className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
                                     >
+                                        <option value="aioseo">All in One SEO</option>
+                                        <option value="yoast">Yoast SEO</option>
                                         <option value="rankmath">Rank Math</option>
-                                        <option value="yoast">Yoast</option>
-                                        <option value="aioseo">AIOSEO</option>
                                         <option value="seopress">SEOPress</option>
+                                        <option value="none">Direct to WP</option>
                                     </select>
                                 </div>
                             </div>
