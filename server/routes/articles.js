@@ -2,6 +2,8 @@
 import express from 'express';
 import { sql, isDatabaseEnabled } from '../db/index.js';
 import { megaImageStatus, trackImagesLoaded, trackApiResponse, banner, log, warning, success, error as logError } from '../services/image-tracker.js';
+import chunkContent from '../services/content-chunker.js';
+import buildElementorPage, { getElementorMetaFields } from '../services/elementor-builder.js';
 
 const router = express.Router();
 
@@ -518,6 +520,7 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
     await sql`
       UPDATE articles
       SET generated_images = ${JSON.stringify(updatedImages)},
+          images_wp_pushed_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ${articleId}
     `;
@@ -531,11 +534,97 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
     console.log('[Push Images] ⏭️ Skipped:', skippedCount);
     console.log('[Push Images] ❌ Failed:', failedCount);
 
+    // If article has a WP page, update it with the images
+    let pageUpdated = false;
+    if (article.wp_post_id && article.final_content && updatedImages.length > 0) {
+      try {
+        console.log('[Push Images] Updating page content with images...');
+
+        // Chunk the content
+        const chunked = chunkContent(article.final_content, { maxWords: 300 });
+
+        // Sort images by placement (hero first, then sections)
+        const sortedImages = [...updatedImages].sort((a, b) => {
+          if (a.placement === 'hero') return -1;
+          if (b.placement === 'hero') return 1;
+          const aNum = parseInt(a.placement?.replace('section-', '') || '99');
+          const bNum = parseInt(b.placement?.replace('section-', '') || '99');
+          return aNum - bNum;
+        });
+
+        // Embed images into chunks
+        sortedImages.forEach((img, imgIdx) => {
+          const isHero = img.placement === 'hero';
+          const imageUrl = img.wpMediaUrl || img.url;
+
+          // Skip base64 images
+          if (imageUrl?.startsWith('data:')) return;
+
+          const imageData = {
+            url: imageUrl,
+            wpUrl: img.wpMediaUrl || img.url,
+            wpMediaId: img.wpMediaId || null,
+            alt: img.prompt?.substring(0, 50) || 'Article image',
+            width: isHero ? 400 : 380,
+            height: isHero ? 500 : 475,
+            side: img.side || (isHero ? 'right' : 'left'),
+            orientation: 'vertical'
+          };
+
+          if (isHero && chunked.intro) {
+            chunked.intro.imageData = imageData;
+          } else {
+            const sectionMatch = img.placement?.match(/section-(\d+)/);
+            if (sectionMatch) {
+              const sectionIdx = parseInt(sectionMatch[1]) - 1;
+              if (chunked.chunks[sectionIdx]) {
+                chunked.chunks[sectionIdx].imageData = imageData;
+              }
+            }
+          }
+        });
+
+        // Build new Elementor structure
+        const elementorData = buildElementorPage(chunked, {
+          title: article.keyword || 'Article',
+          heroImageSide: sortedImages.find(i => i.placement === 'hero')?.side || 'right'
+        });
+
+        const elementorMeta = getElementorMetaFields(elementorData);
+
+        // Update WordPress page
+        const auth = Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
+        const wpApiUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages/${article.wp_post_id}`;
+
+        const updateRes = await fetch(wpApiUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Basic ${auth}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            meta: elementorMeta
+          })
+        });
+
+        if (updateRes.ok) {
+          pageUpdated = true;
+          console.log('[Push Images] ✅ Page updated with images');
+        } else {
+          const errorText = await updateRes.text();
+          console.error('[Push Images] Failed to update page:', errorText);
+        }
+      } catch (updateError) {
+        console.error('[Push Images] Error updating page:', updateError.message);
+      }
+    }
+
     res.json({
       success: true,
       pushed: successCount,
       skipped: skippedCount,
-      message: `${successCount} images uploaded, ${skippedCount} skipped`,
+      pageUpdated,
+      message: `${successCount} images uploaded, ${skippedCount} skipped${pageUpdated ? ', page updated' : ''}`,
       results
     });
 
@@ -669,9 +758,13 @@ router.post('/:articleId/push-meta', requireDb, async (req, res) => {
     }
 
     const auth = Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
-    const wpApiUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/posts/${wpPostId}`;
 
-    const updateRes = await fetch(wpApiUrl, {
+    // Try pages first (Elementor creates pages), then fall back to posts
+    let wpApiUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages/${wpPostId}`;
+
+    console.log('[Push Meta] Trying pages endpoint:', wpApiUrl);
+
+    let updateRes = await fetch(wpApiUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${auth}`,
@@ -679,6 +772,21 @@ router.post('/:articleId/push-meta', requireDb, async (req, res) => {
       },
       body: JSON.stringify(updatePayload)
     });
+
+    // If pages fails with 404, try posts
+    if (!updateRes.ok && updateRes.status === 404) {
+      console.log('[Push Meta] Pages failed, trying posts endpoint...');
+      wpApiUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/posts/${wpPostId}`;
+
+      updateRes = await fetch(wpApiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updatePayload)
+      });
+    }
 
     if (!updateRes.ok) {
       const errorText = await updateRes.text();
