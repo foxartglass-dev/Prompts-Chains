@@ -105,6 +105,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const [expandedPrompts, setExpandedPrompts] = useState<Set<number>>(new Set());
   const [pushingImages, setPushingImages] = useState(false);
   const [pushingMeta, setPushingMeta] = useState(false);
+  const [pushingArticle, setPushingArticle] = useState(false);
   const [regeneratingImage, setRegeneratingImage] = useState<string | null>(null);
 
   // Bulk selection state
@@ -590,6 +591,68 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     }
   };
 
+  // Push article only to WordPress (creates page/post)
+  const pushArticleToWP = async () => {
+    if (!selectedArticle) return;
+
+    const wpUrl = selectedArticle.wp_url;
+    const wpUser = selectedArticle.wp_user;
+    const wpPassword = selectedArticle.wp_app_password;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      setError('WordPress credentials not configured for this website');
+      return;
+    }
+
+    // If article is already on WP, don't push again
+    if (selectedArticle.wp_post_id) {
+      setError('Article is already published to WordPress');
+      return;
+    }
+
+    setPushingArticle(true);
+    setError(null);
+
+    try {
+      const articleRes = await fetch('/api/elementor/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wpUrl,
+          wpUser,
+          wpPassword,
+          title: selectedArticle.keyword,
+          content: editContent || selectedArticle.final_content,
+          status: 'draft',
+          articleId: selectedArticle.id,
+          isManualPush: true
+        })
+      });
+      const articleData = await articleRes.json();
+      if (articleData.success && articleData.page) {
+        // Update article with WP post ID
+        await fetch(`/api/articles/${selectedArticle.id}/wp-status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wpPostId: articleData.page.id,
+            wpPostUrl: articleData.page.link,
+            status: 'published'
+          })
+        });
+        // Refresh article data
+        fetchArticleDetails(selectedArticle.id);
+        fetchArticles();
+      } else {
+        throw new Error(articleData.error || 'Failed to publish article');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to push article to WordPress');
+    } finally {
+      setPushingArticle(false);
+    }
+  };
+
   // Regenerate a single image
   const regenerateImage = async (imageId: string) => {
     if (!selectedArticle) return;
@@ -998,6 +1061,103 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                 </div>
               </div>
 
+              {/* Individual Push Buttons */}
+              <div className="flex items-center gap-1 ml-4">
+                {/* Article to WP */}
+                <div className="relative group">
+                  <button
+                    onClick={pushArticleToWP}
+                    disabled={pushingArticle || !!selectedArticle.wp_post_id}
+                    className={`px-3 py-1.5 rounded text-xs font-medium transition flex items-center gap-1.5 ${
+                      selectedArticle.wp_post_id
+                        ? 'bg-green-600/30 text-green-400 cursor-default'
+                        : 'bg-blue-600 hover:bg-blue-500 text-white'
+                    }`}
+                    title={selectedArticle.wp_post_id ? 'Article already on WP' : 'Push article to WordPress'}
+                  >
+                    {pushingArticle ? (
+                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                      </svg>
+                    ) : selectedArticle.wp_post_id ? '✓' : '↑'}
+                    Article
+                  </button>
+                </div>
+
+                {/* Meta to WP */}
+                <div className="relative group">
+                  <button
+                    onClick={pushMetaToWordPress}
+                    disabled={pushingMeta || !selectedArticle.selected_meta_title || !selectedArticle.wp_post_id}
+                    className={`px-3 py-1.5 rounded text-xs font-medium transition flex items-center gap-1.5 ${
+                      !selectedArticle.selected_meta_title || !selectedArticle.wp_post_id
+                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-60'
+                        : selectedArticle.meta_wp_pushed_at
+                          ? 'bg-green-600/30 text-green-400'
+                          : 'bg-amber-600 hover:bg-amber-500 text-white'
+                    }`}
+                    title={
+                      !selectedArticle.selected_meta_title
+                        ? 'Save meta selection first'
+                        : !selectedArticle.wp_post_id
+                          ? 'Push article to WP first'
+                          : selectedArticle.meta_wp_pushed_at
+                            ? 'Meta already pushed'
+                            : 'Push meta to WordPress'
+                    }
+                  >
+                    {pushingMeta ? (
+                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                      </svg>
+                    ) : selectedArticle.meta_wp_pushed_at ? '✓' : '↑'}
+                    Meta
+                  </button>
+                </div>
+
+                {/* Images to WP */}
+                <div className="relative group">
+                  {(() => {
+                    const imgs = selectedArticle.images || selectedArticle.generated_images || [];
+                    const hasImages = Array.isArray(imgs) && imgs.length > 0;
+                    const allPushed = hasImages && imgs.every((img: ArticleImage) => img.pushedToWp);
+                    const canPush = hasImages && selectedArticle.wp_post_id;
+                    return (
+                      <button
+                        onClick={pushImagesToWordPress}
+                        disabled={pushingImages || !canPush}
+                        className={`px-3 py-1.5 rounded text-xs font-medium transition flex items-center gap-1.5 ${
+                          !canPush
+                            ? 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-60'
+                            : allPushed
+                              ? 'bg-green-600/30 text-green-400'
+                              : 'bg-purple-600 hover:bg-purple-500 text-white'
+                        }`}
+                        title={
+                          !hasImages
+                            ? 'No images to push'
+                            : !selectedArticle.wp_post_id
+                              ? 'Push article to WP first'
+                              : allPushed
+                                ? 'Images already pushed'
+                                : 'Push images to WordPress'
+                        }
+                      >
+                        {pushingImages ? (
+                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                          </svg>
+                        ) : allPushed ? '✓' : '↑'}
+                        Images
+                      </button>
+                    );
+                  })()}
+                </div>
+              </div>
+
               <div className="flex items-center gap-2">
                 {/* Push All to WP Button */}
                 <div className="relative group">
@@ -1167,15 +1327,6 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                         <span className="ml-2 text-sm text-gray-400">({selectedArticle.images.length} images)</span>
                       )}
                     </h4>
-                    {selectedArticle.images && selectedArticle.images.length > 0 && (
-                      <button
-                        onClick={pushImagesToWordPress}
-                        disabled={pushingImages}
-                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded text-white font-medium text-sm transition disabled:opacity-50"
-                      >
-                        {pushingImages ? 'Pushing to WP...' : 'Push All to WordPress'}
-                      </button>
-                    )}
                   </div>
 
                   {/* Collapsible Image Integration Settings */}
@@ -1402,19 +1553,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                           </button>
                         ) : (
                           <div className="flex items-center gap-2">
-                            {!selectedArticle.wp_post_id && (
-                              <span className="text-xs text-amber-400 bg-amber-500/20 px-2 py-1 rounded">
-                                ⚠️ Publish article first
-                              </span>
-                            )}
-                            <button
-                              onClick={pushMetaToWordPress}
-                              disabled={pushingMeta || !selectedArticle.wp_post_id}
-                              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-medium text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
-                              title={!selectedArticle.wp_post_id ? 'Article must be published to WordPress before pushing meta' : 'Push meta title & description to WordPress'}
-                            >
-                              {pushingMeta ? 'Pushing...' : 'Push to WordPress'}
-                            </button>
+                            <span className="text-xs text-green-400 bg-green-500/20 px-2 py-1 rounded">
+                              ✓ Meta saved - use header buttons to push
+                            </span>
                           </div>
                         )}
                       </div>
