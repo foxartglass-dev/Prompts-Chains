@@ -5,14 +5,15 @@ interface BlueprintPageProps {
   onClose: () => void;
 }
 
-type BlueprintTab = 'image-flow' | 'push-all' | 'individual-buttons' | 'data-sources' | 'golden-rules' | 'known-issues' | 'drip-feed' | 'notes' | 'agent-template';
+type BlueprintTab = 'start-here' | 'image-flow' | 'push-all' | 'individual-buttons' | 'data-sources' | 'golden-rules' | 'known-issues' | 'drip-feed' | 'notes' | 'agent-template';
 
 const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
-  const [activeTab, setActiveTab] = useState<BlueprintTab>('image-flow');
+  const [activeTab, setActiveTab] = useState<BlueprintTab>('start-here');
 
   if (!isOpen) return null;
 
   const tabs: { id: BlueprintTab; label: string }[] = [
+    { id: 'start-here', label: 'Start Here' },
     { id: 'image-flow', label: 'Image Flow' },
     { id: 'push-all', label: 'Push All to WP' },
     { id: 'individual-buttons', label: 'Individual Buttons' },
@@ -71,6 +72,7 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
 
         {/* Content */}
         <main className="flex-1 overflow-auto p-6">
+          {activeTab === 'start-here' && <NewAgentStartHere />}
           {activeTab === 'image-flow' && <ImageFlowDiagram />}
           {activeTab === 'push-all' && <PushAllDiagram />}
           {activeTab === 'individual-buttons' && <IndividualButtonsDiagram />}
@@ -85,6 +87,202 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
     </div>
   );
 };
+
+// New Agent Start Here - First tab, onboarding for AI agents
+const NewAgentStartHere: React.FC = () => (
+  <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="text-center mb-8">
+      <h2 className="text-3xl font-bold text-brand-gold mb-2">New Agent? Start Here!</h2>
+      <p className="text-gray-400 text-lg">Welcome to PromptFlow - SEO Page Factory. Follow this warm-up sequence before doing any work.</p>
+    </div>
+
+    {/* Step 1 */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-brand-cyan">
+      <div className="flex items-center gap-4 mb-4">
+        <div className="bg-brand-cyan text-slate-900 w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl">1</div>
+        <h3 className="text-xl font-bold text-brand-cyan">Read CLAUDE.md</h3>
+      </div>
+      <div className="ml-16 space-y-3">
+        <p className="text-gray-300">This gives you critical rules and current state of the project.</p>
+        <code className="block bg-slate-900 rounded-lg p-3 text-sm text-gray-300">
+          Read /home/user/Prompts-Chains/CLAUDE.md
+        </code>
+        <div className="text-sm text-gray-400">
+          Pay attention to: Critical Rules, Current State, Key Files
+        </div>
+      </div>
+    </div>
+
+    {/* Step 2 */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-brand-gold">
+      <div className="flex items-center gap-4 mb-4">
+        <div className="bg-brand-gold text-slate-900 w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl">2</div>
+        <h3 className="text-xl font-bold text-brand-gold">Explore Blueprint Tabs</h3>
+      </div>
+      <div className="ml-16 space-y-4">
+        <p className="text-gray-300">Go through each of these tabs in order to understand the system:</p>
+        <div className="grid md:grid-cols-2 gap-3">
+          <div className="bg-slate-900 rounded-lg p-3 border border-brand-cyan/30">
+            <span className="text-brand-cyan font-semibold">Image Flow</span>
+            <p className="text-xs text-gray-400 mt-1">How images move: Replicate → WordPress Media → Elementor</p>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3 border border-brand-cyan/30">
+            <span className="text-brand-cyan font-semibold">Push All to WP</span>
+            <p className="text-xs text-gray-400 mt-1">The complete WordPress publishing mechanism</p>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3 border border-brand-cyan/30">
+            <span className="text-brand-cyan font-semibold">Individual Buttons</span>
+            <p className="text-xs text-gray-400 mt-1">How !Article, !Meta, !Images buttons work differently</p>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3 border border-red-500/30">
+            <span className="text-red-400 font-semibold">Known Issues</span>
+            <p className="text-xs text-gray-400 mt-1">Check this BEFORE investigating "weird" behavior</p>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3 border border-brand-cyan/30">
+            <span className="text-brand-cyan font-semibold">Golden Rules</span>
+            <p className="text-xs text-gray-400 mt-1">Rules that exist because things broke before</p>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3 border border-yellow-500/30">
+            <span className="text-yellow-400 font-semibold">Drip Feed</span>
+            <p className="text-xs text-gray-400 mt-1">Partial implementation - know what's missing</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Step 3 */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-purple-500">
+      <div className="flex items-center gap-4 mb-4">
+        <div className="bg-purple-500 text-white w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl">3</div>
+        <h3 className="text-xl font-bold text-purple-400">Check Context (If Resuming Work)</h3>
+      </div>
+      <div className="ml-16 space-y-3">
+        <p className="text-gray-300">If the user mentions previous work or you're continuing a session:</p>
+        <div className="bg-slate-900 rounded-lg p-4 space-y-2">
+          <code className="block text-sm text-gray-300">git log --oneline -10  <span className="text-gray-500"># See recent commits</span></code>
+          <code className="block text-sm text-gray-300">git fetch origin main && git show origin/main:logs/server-latest.log | tail -100</code>
+        </div>
+        <div className="text-sm text-gray-400">
+          Server logs are pushed to main branch - you can access them from any branch.
+        </div>
+      </div>
+    </div>
+
+    {/* Step 4 */}
+    <div className="bg-green-900/30 rounded-xl p-6 border-l-4 border-green-500">
+      <div className="flex items-center gap-4 mb-4">
+        <div className="bg-green-500 text-slate-900 w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl">4</div>
+        <h3 className="text-xl font-bold text-green-400">Report Back</h3>
+      </div>
+      <div className="ml-16 space-y-3">
+        <p className="text-gray-300">After completing Steps 1-3, tell the user:</p>
+        <div className="bg-slate-900 rounded-lg p-4 text-sm text-gray-300 space-y-2">
+          <p>"I've completed the warm-up and reviewed the Blueprint documentation."</p>
+          <p>• Mention which tabs you read (Image Flow, Known Issues, etc.)</p>
+          <p>• Ask what task they'd like you to work on</p>
+        </div>
+      </div>
+    </div>
+
+    {/* Key Mechanisms Quick Reference */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30 mt-8">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Key Mechanisms Quick Reference</h3>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <h4 className="font-semibold text-brand-gold mb-2">WordPress Publishing</h4>
+          <ul className="text-sm text-gray-300 space-y-1">
+            <li>• <strong>Order matters:</strong> Images → Page → Meta</li>
+            <li>• <strong>Elementor quirk:</strong> Can't update _elementor_data via REST</li>
+            <li>• <strong>Images button:</strong> Deletes page → Recreates with same slug</li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="font-semibold text-brand-gold mb-2">State Management</h4>
+          <ul className="text-sm text-gray-300 space-y-1">
+            <li>• <code className="bg-slate-900 px-1 rounded text-xs">articles.generated_images</code> → source of truth</li>
+            <li>• <code className="bg-slate-900 px-1 rounded text-xs">website.seo_plugin</code> → which SEO plugin</li>
+            <li>• Never overwrite images on UPDATE</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    {/* Key Files */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Key Files Reference</h3>
+      <div className="grid md:grid-cols-2 gap-2 text-sm">
+        <div className="flex justify-between py-1 border-b border-slate-700">
+          <span className="text-gray-400">Publishing logic</span>
+          <code className="text-brand-gold">server/routes/elementor.js</code>
+        </div>
+        <div className="flex justify-between py-1 border-b border-slate-700">
+          <span className="text-gray-400">Individual buttons</span>
+          <code className="text-brand-gold">server/routes/articles.js</code>
+        </div>
+        <div className="flex justify-between py-1 border-b border-slate-700">
+          <span className="text-gray-400">Article UI</span>
+          <code className="text-brand-gold">src/components/articles/ArticleListView.tsx</code>
+        </div>
+        <div className="flex justify-between py-1 border-b border-slate-700">
+          <span className="text-gray-400">SEO meta push</span>
+          <code className="text-brand-gold">server/routes/seo.js</code>
+        </div>
+        <div className="flex justify-between py-1 border-b border-slate-700">
+          <span className="text-gray-400">Elementor builder</span>
+          <code className="text-brand-gold">server/services/elementor-builder.js</code>
+        </div>
+        <div className="flex justify-between py-1 border-b border-slate-700">
+          <span className="text-gray-400">This Blueprint</span>
+          <code className="text-brand-gold">src/pages/BlueprintPage.tsx</code>
+        </div>
+      </div>
+    </div>
+
+    {/* Before Making Changes */}
+    <div className="bg-red-900/20 rounded-xl p-6 border border-red-500">
+      <h3 className="text-lg font-bold text-red-400 mb-4">Before Making Changes</h3>
+      <div className="grid md:grid-cols-2 gap-4 text-sm">
+        <div className="space-y-2">
+          <div className="flex items-start gap-2">
+            <span className="text-green-400">✓</span>
+            <span className="text-gray-300">Read the relevant Blueprint tab first</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-green-400">✓</span>
+            <span className="text-gray-300">Check Known Issues tab</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-green-400">✓</span>
+            <span className="text-gray-300">Explain your approach BEFORE implementing</span>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-start gap-2">
+            <span className="text-red-400">✗</span>
+            <span className="text-gray-300">Don't over-engineer or refactor surrounding code</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-red-400">✗</span>
+            <span className="text-gray-300">Don't assume - check the code first</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-red-400">✗</span>
+            <span className="text-gray-300">Don't skip reading Blueprint tabs</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* End of Session */}
+    <div className="bg-brand-cyan/10 rounded-xl p-6 border border-brand-cyan">
+      <h3 className="text-lg font-bold text-brand-cyan mb-3">End of Session</h3>
+      <p className="text-gray-300">
+        Run <code className="bg-slate-900 px-2 py-1 rounded">/debrief</code> command to document what you worked on for the next agent.
+        Also check the <strong>Agent Template</strong> tab for what to document.
+      </p>
+    </div>
+  </div>
+);
 
 // Image Flow Diagram - The most critical diagram
 const ImageFlowDiagram: React.FC = () => (
