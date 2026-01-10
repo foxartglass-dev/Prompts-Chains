@@ -316,6 +316,7 @@ router.post('/publish', async (req, res) => {
       generateImages = false, // Fallback to live generation
       imageDraftMode = false, // If true: match images, save to article DB, but DON'T embed in WP page
       skipWpPageCreation = false, // If true: process images but don't create WordPress page
+      articleOnly = false, // NEW: If true, skip ALL image processing - just push article content
       styleDNA = null,
       referenceImages = null,
       openaiApiKey = null,
@@ -356,6 +357,12 @@ router.post('/publish', async (req, res) => {
     let imagesFromBank = 0;
     let estimatedCost = null;
 
+    // ARTICLE ONLY MODE: Skip ALL image processing
+    if (articleOnly) {
+      console.log('[Elementor Publish] ARTICLE ONLY MODE - skipping all image processing');
+      sessionLogger.logInfo('PUBLISH', 'Article Only mode - no image processing');
+    }
+
     // Track images for draft mode (when images are matched but not embedded in page)
     let draftModeImages = [];
 
@@ -385,7 +392,8 @@ router.post('/publish', async (req, res) => {
     let imageGenModel = 'flux-1.1-pro';  // Default to Flux (gpt-image-1.5 requires org verification)
     let imageQuality = 'low'; // Default to low for websites (cheapest)
 
-    if (workflowId && isDatabaseEnabled()) {
+    // Skip ALL image-related steps if articleOnly mode
+    if (!articleOnly && workflowId && isDatabaseEnabled()) {
       try {
         const settingsResult = await sql`
           SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
@@ -464,8 +472,9 @@ router.post('/publish', async (req, res) => {
     }
 
     // Step 2b: Try to get images from Image Bank if in bank mode
-    console.log('[Image Bank] Checking conditions: effectiveUseBank=', effectiveUseBank, 'workflowId=', workflowId, 'dbEnabled=', isDatabaseEnabled());
-    if (effectiveUseBank && workflowId && isDatabaseEnabled()) {
+    // Skip if articleOnly mode
+    console.log('[Image Bank] Checking conditions: effectiveUseBank=', effectiveUseBank, 'workflowId=', workflowId, 'dbEnabled=', isDatabaseEnabled(), 'articleOnly=', articleOnly);
+    if (!articleOnly && effectiveUseBank && workflowId && isDatabaseEnabled()) {
       try {
         const bankImages = await sql`
           SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
@@ -991,7 +1000,8 @@ router.post('/publish', async (req, res) => {
 
     // Step 2c: If no images from bank and articleId exists, try to use existing images from article record
     // This handles the "Push All to WP" case where images are already stored on the article
-    if (imagesFromBank === 0 && articleId && isDatabaseEnabled() && !imageDraftMode) {
+    // Skip if articleOnly mode - we don't want to embed any images
+    if (!articleOnly && imagesFromBank === 0 && articleId && isDatabaseEnabled() && !imageDraftMode) {
       try {
         console.log('[Elementor Publish] No images from bank, checking article for existing images...');
         const articleResult = await sql`SELECT generated_images FROM articles WHERE id = ${articleId}`;
@@ -1065,7 +1075,8 @@ router.post('/publish', async (req, res) => {
     }
 
     // Step 3: Generate live images if needed (either "Generate Live" mode or fallback)
-    const needsLiveGeneration = effectiveGenerateLive && imagesFromBank < dynamicMaxImages;
+    // Skip if articleOnly mode
+    const needsLiveGeneration = !articleOnly && effectiveGenerateLive && imagesFromBank < dynamicMaxImages;
 
     // Get Generate Live settings from config if available
     let livePromptMode = 'smart_prompt';

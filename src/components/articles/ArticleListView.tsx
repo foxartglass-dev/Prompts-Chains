@@ -626,9 +626,8 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           status: 'draft',
           articleId: selectedArticle.id,
           isManualPush: true,
-          // Disable image processing - article only
-          useImageBank: false,
-          generateImages: false
+          // ARTICLE ONLY MODE - skip ALL image processing
+          articleOnly: true
         })
       });
       const articleData = await articleRes.json();
