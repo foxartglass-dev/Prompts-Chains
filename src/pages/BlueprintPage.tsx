@@ -5,7 +5,7 @@ interface BlueprintPageProps {
   onClose: () => void;
 }
 
-type BlueprintTab = 'image-flow' | 'push-all' | 'data-sources' | 'golden-rules' | 'agent-template';
+type BlueprintTab = 'image-flow' | 'push-all' | 'individual-buttons' | 'data-sources' | 'golden-rules' | 'known-issues' | 'drip-feed' | 'agent-template';
 
 const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<BlueprintTab>('image-flow');
@@ -15,8 +15,11 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
   const tabs: { id: BlueprintTab; label: string }[] = [
     { id: 'image-flow', label: 'Image Flow' },
     { id: 'push-all', label: 'Push All to WP' },
+    { id: 'individual-buttons', label: 'Individual Buttons' },
     { id: 'data-sources', label: 'Data Sources' },
     { id: 'golden-rules', label: 'Golden Rules' },
+    { id: 'known-issues', label: 'Known Issues' },
+    { id: 'drip-feed', label: 'Drip Feed' },
     { id: 'agent-template', label: 'Agent Template' },
   ];
 
@@ -69,8 +72,11 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
         <main className="flex-1 overflow-auto p-6">
           {activeTab === 'image-flow' && <ImageFlowDiagram />}
           {activeTab === 'push-all' && <PushAllDiagram />}
+          {activeTab === 'individual-buttons' && <IndividualButtonsDiagram />}
           {activeTab === 'data-sources' && <DataSourcesDiagram />}
           {activeTab === 'golden-rules' && <GoldenRules />}
+          {activeTab === 'known-issues' && <KnownIssuesDiagram />}
+          {activeTab === 'drip-feed' && <DripFeedDiagram />}
           {activeTab === 'agent-template' && <AgentTemplate />}
         </main>
       </div>
@@ -303,6 +309,216 @@ const PushAllDiagram: React.FC = () => (
           Resetting <code className="bg-slate-800 px-1 rounded">metaSaved</code> state on refresh = UI shows unsaved
         </li>
       </ul>
+    </div>
+  </div>
+);
+
+// Individual Buttons Diagram - Article, Meta, Images buttons
+const IndividualButtonsDiagram: React.FC = () => (
+  <div className="space-y-6">
+    <div className="text-center mb-8">
+      <h2 className="text-2xl font-bold text-brand-cyan mb-2">Individual Push Buttons</h2>
+      <p className="text-gray-400">These buttons allow pushing Article, Meta, and Images independently in ANY order.</p>
+    </div>
+
+    {/* Button Overview */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">Article Header Buttons (ArticleListView.tsx)</h3>
+      <div className="grid md:grid-cols-3 gap-4">
+        {/* Article Button */}
+        <div className="bg-slate-700 rounded-lg p-4 border-2 border-blue-500">
+          <div className="text-blue-500 font-bold mb-2 flex items-center gap-2">
+            <span className="bg-blue-500 text-white px-2 py-1 rounded text-xs">!Article</span>
+            Article Only
+          </div>
+          <div className="text-sm text-gray-300 space-y-2">
+            <div className="text-xs text-gray-400">Endpoint:</div>
+            <code className="text-xs bg-slate-800 px-1 rounded block">POST /api/elementor/publish</code>
+            <div className="text-xs text-gray-400 mt-2">Special param:</div>
+            <code className="text-xs bg-slate-800 px-1 rounded block">articleOnly: true</code>
+            <div className="text-xs text-green-400 mt-2">Result: Creates WP page with text only, NO images</div>
+          </div>
+        </div>
+
+        {/* Meta Button */}
+        <div className="bg-slate-700 rounded-lg p-4 border-2 border-purple-500">
+          <div className="text-purple-500 font-bold mb-2 flex items-center gap-2">
+            <span className="bg-purple-500 text-white px-2 py-1 rounded text-xs">!Meta</span>
+            Meta Only
+          </div>
+          <div className="text-sm text-gray-300 space-y-2">
+            <div className="text-xs text-gray-400">Endpoint:</div>
+            <code className="text-xs bg-slate-800 px-1 rounded block">POST /api/seo/push/:articleId</code>
+            <div className="text-xs text-gray-400 mt-2">Reads from:</div>
+            <code className="text-xs bg-slate-800 px-1 rounded block">websites.seo_plugin</code>
+            <div className="text-xs text-green-400 mt-2">Result: Pushes meta to Rank Math/Yoast/etc.</div>
+          </div>
+        </div>
+
+        {/* Images Button */}
+        <div className="bg-slate-700 rounded-lg p-4 border-2 border-orange-500">
+          <div className="text-orange-500 font-bold mb-2 flex items-center gap-2">
+            <span className="bg-orange-500 text-white px-2 py-1 rounded text-xs">!Images</span>
+            Images Only
+          </div>
+          <div className="text-sm text-gray-300 space-y-2">
+            <div className="text-xs text-gray-400">Endpoint:</div>
+            <code className="text-xs bg-slate-800 px-1 rounded block">POST /api/articles/:id/push-images</code>
+            <div className="text-xs text-gray-400 mt-2">Key behavior:</div>
+            <div className="text-xs text-yellow-400">RE-CREATES the WP page with images!</div>
+            <div className="text-xs text-green-400 mt-2">Result: Uploads to Media Library + embeds in page</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Images Button Deep Dive - This is the complex one */}
+    <div className="bg-orange-900/20 rounded-xl p-6 border border-orange-500">
+      <h3 className="text-lg font-bold text-orange-400 mb-4">Images Button - How It Actually Works</h3>
+      <p className="text-sm text-gray-400 mb-4">
+        This was tricky to implement. WordPress/Elementor doesn't allow updating _elementor_data via REST API,
+        so we can't just "add images" to an existing page. Instead, the button RE-CREATES the page.
+      </p>
+
+      <div className="space-y-3">
+        <div className="flex items-start gap-3">
+          <span className="bg-orange-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+          <div className="text-sm text-gray-300">
+            <strong>Upload images</strong> to WordPress Media Library (gets wpMediaUrl + wpMediaId)
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <span className="bg-orange-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+          <div className="text-sm text-gray-300">
+            <strong>Get existing page slug</strong> from WordPress (to preserve the URL)
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <span className="bg-orange-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+          <div className="text-sm text-gray-300">
+            <strong>DELETE the old page</strong> (frees up the slug)
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <span className="bg-orange-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">4</span>
+          <div className="text-sm text-gray-300">
+            <strong>CREATE new page</strong> with same slug + images embedded via Elementor structure
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <span className="bg-orange-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">5</span>
+          <div className="text-sm text-gray-300">
+            <strong>Update article record</strong> with new wp_post_id and wp_post_url
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 p-3 bg-slate-800 rounded-lg text-xs">
+        <strong className="text-orange-400">Key File:</strong>{' '}
+        <code className="text-gray-300">server/routes/articles.js</code> - push-images endpoint (lines 423-687)
+      </div>
+    </div>
+
+    {/* Article Only Mode */}
+    <div className="bg-blue-900/20 rounded-xl p-6 border border-blue-500">
+      <h3 className="text-lg font-bold text-blue-400 mb-4">Article Only Mode - articleOnly Parameter</h3>
+      <p className="text-sm text-gray-400 mb-4">
+        When you click the Article button, it needs to skip ALL image processing. This is controlled by a special flag.
+      </p>
+
+      <div className="bg-slate-800 rounded-lg p-4 font-mono text-sm">
+        <div className="text-gray-400 mb-2">// In frontend (ArticleListView.tsx):</div>
+        <pre className="text-brand-cyan">{`fetch('/api/elementor/publish', {
+  body: JSON.stringify({
+    articleOnly: true,  // <-- This skips ALL image processing
+    // ... other params
+  })
+})`}</pre>
+      </div>
+
+      <div className="mt-4 text-sm text-gray-300">
+        <strong className="text-blue-400">In elementor.js:</strong> When <code className="bg-slate-800 px-1 rounded">articleOnly: true</code>,
+        these steps are skipped:
+        <ul className="mt-2 ml-4 space-y-1 text-xs text-gray-400">
+          <li>- Image bank selection</li>
+          <li>- Live image generation</li>
+          <li>- Image upload to WordPress</li>
+          <li>- Image embedding in Elementor structure</li>
+        </ul>
+      </div>
+    </div>
+
+    {/* Status Indicators */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Status Indicators in UI</h3>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <h4 className="font-semibold text-brand-gold mb-2">Article Header Status Tags</h4>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="bg-slate-700 text-gray-400 px-2 py-1 rounded text-xs">Article: Draft</span>
+              <span className="text-gray-400">→ Not pushed to WP yet</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="bg-green-700 text-white px-2 py-1 rounded text-xs">Article: WP</span>
+              <span className="text-gray-400">→ Page exists on WordPress</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="bg-slate-700 text-gray-400 px-2 py-1 rounded text-xs">Meta: Draft</span>
+              <span className="text-gray-400">→ Meta not pushed yet</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="bg-green-700 text-white px-2 py-1 rounded text-xs">Meta: WP</span>
+              <span className="text-gray-400">→ Meta pushed to SEO plugin</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="bg-slate-700 text-gray-400 px-2 py-1 rounded text-xs">Image: Draft</span>
+              <span className="text-gray-400">→ Images exist but not on page</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="bg-green-700 text-white px-2 py-1 rounded text-xs">Image: WP</span>
+              <span className="text-gray-400">→ Images embedded in WP page</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h4 className="font-semibold text-brand-gold mb-2">Button State Changes</h4>
+          <div className="text-sm text-gray-300 space-y-2">
+            <div>After clicking <span className="text-blue-400">!Article</span>:</div>
+            <div className="text-xs text-gray-400 ml-4">→ Article: Draft becomes Article: WP</div>
+            <div>After clicking <span className="text-purple-400">!Meta</span>:</div>
+            <div className="text-xs text-gray-400 ml-4">→ Meta: Draft becomes Meta: WP</div>
+            <div>After clicking <span className="text-orange-400">!Images</span>:</div>
+            <div className="text-xs text-gray-400 ml-4">→ Image: Draft becomes Image: WP</div>
+            <div className="text-xs text-yellow-400 ml-4">→ Also re-creates page (new wp_post_id)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Flexibility Box */}
+    <div className="bg-green-900/20 rounded-xl p-6 border border-green-500">
+      <h3 className="text-lg font-bold text-green-400 mb-3">Key Insight: Order Flexibility</h3>
+      <p className="text-sm text-gray-300 mb-3">
+        Unlike "Push All to WP" which requires Images → Page → Meta order, the individual buttons can be used in ANY order:
+      </p>
+      <div className="grid md:grid-cols-3 gap-4 text-sm">
+        <div className="bg-slate-800 rounded-lg p-3">
+          <div className="text-green-400 font-semibold mb-1">Option 1:</div>
+          <div className="text-gray-400">Article → Images → Meta</div>
+        </div>
+        <div className="bg-slate-800 rounded-lg p-3">
+          <div className="text-green-400 font-semibold mb-1">Option 2:</div>
+          <div className="text-gray-400">Article → Meta → Images</div>
+        </div>
+        <div className="bg-slate-800 rounded-lg p-3">
+          <div className="text-green-400 font-semibold mb-1">Option 3:</div>
+          <div className="text-gray-400">Meta first (after Push All)</div>
+        </div>
+      </div>
+      <p className="text-xs text-gray-400 mt-3">
+        The Images button handles the complexity by re-creating the page with images, so order doesn't matter.
+      </p>
     </div>
   </div>
 );
@@ -548,6 +764,374 @@ const GoldenRules: React.FC = () => (
             <li><code className="text-xs">server/routes/articles.js</code></li>
             <li><code className="text-xs">server/routes/seo.js</code></li>
           </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// Known Issues Diagram - Bugs and potential problems
+const KnownIssuesDiagram: React.FC = () => (
+  <div className="space-y-6">
+    <div className="text-center mb-8">
+      <h2 className="text-2xl font-bold text-brand-cyan mb-2">Known Issues & Potential Bugs</h2>
+      <p className="text-gray-400">Document issues here so future agents can reference and fix them</p>
+    </div>
+
+    {/* Active Issues */}
+    <div className="bg-red-900/20 rounded-xl p-6 border border-red-500">
+      <h3 className="text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        Intermittent Issue: Missing workflowId
+      </h3>
+
+      <div className="space-y-4">
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-red-400 font-semibold mb-2">Symptom:</div>
+          <div className="text-sm text-gray-300">
+            "WordPress publish failed: Unknown error" - happens randomly, worked on retry without code changes
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-yellow-400 font-semibold mb-2">Root Cause:</div>
+          <div className="text-sm text-gray-300">
+            The <code className="bg-slate-900 px-1 rounded">workflowId</code> is not being passed to the
+            <code className="bg-slate-900 px-1 rounded">/api/elementor/publish</code> endpoint.
+            This prevents the image bank lookup from working.
+          </div>
+          <div className="mt-2 text-xs text-gray-400">
+            Log shows: <code className="bg-slate-900 px-1 rounded">[Elementor Publish] No workflowId or database not enabled</code>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-blue-400 font-semibold mb-2">Likely Cause:</div>
+          <div className="text-sm text-gray-300">
+            Frontend state synchronization / race condition - the workflow state might not be fully loaded
+            when the user clicks "Start Workflow" or "Push All".
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-green-400 font-semibold mb-2">Potential Fix (NOT IMPLEMENTED):</div>
+          <div className="text-sm text-gray-300">
+            Add validation in <code className="bg-slate-900 px-1 rounded">App.tsx</code> before calling publish endpoint:
+          </div>
+          <pre className="mt-2 text-xs bg-slate-900 p-2 rounded text-brand-cyan">{`if (!workflowId) {
+  addLog('Error: Workflow not loaded. Please try again.', LogStatus.ERROR);
+  return;
+}`}</pre>
+          <div className="mt-2 text-xs text-yellow-400">
+            Note: This fix was NOT implemented because the system is currently working and we didn't want to risk breaking it.
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-purple-400 font-semibold mb-2">Frequency:</div>
+          <div className="text-sm text-gray-300">
+            Rare - observed once, did not reproduce on second attempt. May be related to:
+            <ul className="mt-2 ml-4 text-xs text-gray-400 space-y-1">
+              <li>- Browser caching</li>
+              <li>- Page not fully loaded when clicking Run</li>
+              <li>- Network timing issues</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Resolved Issues */}
+    <div className="bg-green-900/20 rounded-xl p-6 border border-green-500">
+      <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues (Jan 2026)</h3>
+
+      <div className="space-y-4">
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Article button was pushing images too</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            Fix: Added <code className="bg-slate-900 px-1 rounded">articleOnly: true</code> parameter to skip all image processing
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Meta push showing "Invalid post ID"</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            Fix: Changed endpoint to try <code className="bg-slate-900 px-1 rounded">/pages/</code> first, then fallback to <code className="bg-slate-900 px-1 rounded">/posts/</code> (Elementor creates pages, not posts)
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Meta not appearing in Rank Math</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            Fix: Changed frontend to call <code className="bg-slate-900 px-1 rounded">/api/seo/push/:articleId</code> which reads <code className="bg-slate-900 px-1 rounded">seo_plugin</code> from website settings (was hardcoding Yoast fields)
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Images button not embedding images in page</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            Fix: Changed approach to RE-CREATE the page (delete old → create new with same slug) because Elementor doesn't support updating _elementor_data via REST API
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Things to Watch */}
+    <div className="bg-yellow-900/20 rounded-xl p-6 border border-yellow-500">
+      <h3 className="text-lg font-bold text-yellow-400 mb-4">Things to Watch</h3>
+
+      <div className="space-y-3 text-sm">
+        <div className="flex items-start gap-2">
+          <span className="text-yellow-400">⚠</span>
+          <div className="text-gray-300">
+            <strong>Images button creates new page IDs:</strong> Each time you click !Images, the wp_post_id changes.
+            Old page is deleted. URL slug is preserved but internal linking by ID would break.
+          </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-yellow-400">⚠</span>
+          <div className="text-gray-300">
+            <strong>Base64 images in articles.generated_images:</strong> These are temporary and large.
+            After push-images, they get wpMediaUrl. But if push-images fails, base64 data remains.
+          </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-yellow-400">⚠</span>
+          <div className="text-gray-300">
+            <strong>Image: Off status showing unexpectedly:</strong> If workflow image settings aren't loaded,
+            the UI might show "Image: Off" even when images are enabled. Usually resolves on page refresh.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* How to Debug */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">How to Debug Issues</h3>
+
+      <div className="space-y-4 text-sm">
+        <div>
+          <div className="font-semibold text-brand-gold mb-2">1. Check Server Logs</div>
+          <code className="text-xs bg-slate-900 px-2 py-1 rounded block text-gray-300">
+            git fetch origin main && git show origin/main:logs/server-latest.log | tail -200
+          </code>
+        </div>
+
+        <div>
+          <div className="font-semibold text-brand-gold mb-2">2. Key Log Patterns to Search</div>
+          <div className="space-y-1">
+            <code className="text-xs bg-slate-900 px-2 py-1 rounded block text-gray-300">[PUBLISH] Starting publish for:</code>
+            <code className="text-xs bg-slate-900 px-2 py-1 rounded block text-gray-300">[ERR] NO IMAGES</code>
+            <code className="text-xs bg-slate-900 px-2 py-1 rounded block text-gray-300">No workflowId</code>
+            <code className="text-xs bg-slate-900 px-2 py-1 rounded block text-gray-300">[Push Images]</code>
+          </div>
+        </div>
+
+        <div>
+          <div className="font-semibold text-brand-gold mb-2">3. Check Frontend Console</div>
+          <div className="text-gray-400">Browser DevTools → Console → Look for fetch errors or state issues</div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// Drip Feed Diagram - Scheduled publishing feature
+const DripFeedDiagram: React.FC = () => (
+  <div className="space-y-6">
+    <div className="text-center mb-8">
+      <h2 className="text-2xl font-bold text-brand-cyan mb-2">Drip Feed System</h2>
+      <p className="text-gray-400">Scheduled publishing of articles over time</p>
+    </div>
+
+    {/* Current Status */}
+    <div className="bg-yellow-900/20 rounded-xl p-6 border border-yellow-500">
+      <h3 className="text-lg font-bold text-yellow-400 mb-4 flex items-center gap-2">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Current Status: Partially Implemented
+      </h3>
+      <p className="text-sm text-gray-300 mb-4">
+        Database tables exist, but the full UI and automation are not yet complete.
+      </p>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-green-400 font-semibold mb-2">What Exists:</div>
+          <ul className="text-sm text-gray-300 space-y-1">
+            <li>✓ Database table: <code className="bg-slate-900 px-1 rounded text-xs">drip_feed_schedules</code></li>
+            <li>✓ Backend endpoint: <code className="bg-slate-900 px-1 rounded text-xs">/api/elementor/schedule-drip-feed</code></li>
+            <li>✓ WordPress scheduled posts support</li>
+          </ul>
+        </div>
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-red-400 font-semibold mb-2">What's Missing:</div>
+          <ul className="text-sm text-gray-300 space-y-1">
+            <li>✗ UI to configure drip feed schedule</li>
+            <li>✗ Batch scheduling from article list</li>
+            <li>✗ Schedule status dashboard</li>
+            <li>✗ Automatic processing of scheduled items</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    {/* Database Schema */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Database Table: drip_feed_schedules</h3>
+
+      <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-x-auto">
+        <pre className="text-gray-300">{`CREATE TABLE drip_feed_schedules (
+  id SERIAL PRIMARY KEY,
+  workflow_id INTEGER REFERENCES workflows(id),
+  website_id INTEGER REFERENCES websites(id),
+  article_id INTEGER REFERENCES articles(id),
+  scheduled_date TIMESTAMP NOT NULL,
+  status VARCHAR(50) DEFAULT 'pending',  -- pending, published, failed
+  wp_post_id INTEGER,                     -- After publish
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);`}</pre>
+      </div>
+    </div>
+
+    {/* How It Should Work */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-gold/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">Intended Flow (To Be Implemented)</h3>
+
+      <div className="space-y-4">
+        <div className="flex items-start gap-3">
+          <span className="bg-brand-gold text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+          <div className="text-sm text-gray-300">
+            <strong>User selects articles</strong> from the Articles page (checkbox selection)
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <span className="bg-brand-gold text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+          <div className="text-sm text-gray-300">
+            <strong>User clicks "Schedule Drip Feed"</strong> and sets parameters:
+            <ul className="mt-1 ml-4 text-xs text-gray-400">
+              <li>- Start date</li>
+              <li>- Interval (e.g., every 2 days)</li>
+              <li>- Time of day to publish</li>
+            </ul>
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <span className="bg-brand-gold text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+          <div className="text-sm text-gray-300">
+            <strong>System creates schedule entries</strong> in drip_feed_schedules table
+          </div>
+        </div>
+        <div className="flex items-start gap-3">
+          <span className="bg-brand-gold text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">4</span>
+          <div className="text-sm text-gray-300">
+            <strong>Cron job or manual trigger</strong> processes pending schedules:
+            <ul className="mt-1 ml-4 text-xs text-gray-400">
+              <li>- Checks for schedules where scheduled_date {"<="} now AND status = 'pending'</li>
+              <li>- Calls /api/elementor/publish with status: 'publish' (not draft)</li>
+              <li>- Updates schedule status to 'published' or 'failed'</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Backend Endpoint */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Existing Backend Endpoint</h3>
+
+      <div className="bg-slate-900 rounded-lg p-4">
+        <code className="text-brand-cyan">POST /api/elementor/schedule-drip-feed</code>
+        <div className="mt-3 text-sm text-gray-300">
+          <div className="font-semibold text-brand-gold mb-2">Request Body:</div>
+          <pre className="text-xs bg-slate-800 p-2 rounded">{`{
+  "articleIds": [1, 2, 3],
+  "startDate": "2026-01-15",
+  "intervalDays": 2,
+  "publishTime": "09:00",
+  "wpUrl": "https://site.com",
+  "wpUser": "admin",
+  "wpPassword": "app-password"
+}`}</pre>
+        </div>
+      </div>
+
+      <div className="mt-4 text-sm text-gray-400">
+        <strong className="text-brand-cyan">Key File:</strong>{' '}
+        <code className="text-gray-300">server/routes/elementor.js</code> - schedule-drip-feed endpoint
+      </div>
+    </div>
+
+    {/* WordPress Scheduled Posts */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-purple-500/30">
+      <h3 className="text-lg font-bold text-purple-400 mb-4">WordPress Scheduled Posts</h3>
+
+      <p className="text-sm text-gray-300 mb-4">
+        WordPress natively supports scheduled posts. When creating a page/post via REST API,
+        you can set a future date and status 'future':
+      </p>
+
+      <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs">
+        <pre className="text-gray-300">{`// In createElementorPage():
+const body = {
+  title: title,
+  status: 'future',           // Will be published at date_gmt
+  date_gmt: '2026-01-15T09:00:00',
+  content: '',
+  meta: elementorMeta
+};`}</pre>
+      </div>
+
+      <div className="mt-4 text-xs text-gray-400">
+        WordPress wp-cron will automatically publish the post at the scheduled time.
+        No server-side cron needed for the actual publishing.
+      </div>
+    </div>
+
+    {/* Next Steps */}
+    <div className="bg-brand-cyan/10 rounded-xl p-6 border border-brand-cyan">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">To Complete Drip Feed Feature</h3>
+
+      <div className="space-y-3 text-sm">
+        <div className="flex items-start gap-2">
+          <span className="text-brand-cyan font-bold">1.</span>
+          <div className="text-gray-300">
+            <strong>Add UI in ArticleListView.tsx:</strong> Multi-select articles + "Schedule Drip Feed" button
+          </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-brand-cyan font-bold">2.</span>
+          <div className="text-gray-300">
+            <strong>Create DripFeedModal component:</strong> Date picker, interval selector, preview of schedule
+          </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-brand-cyan font-bold">3.</span>
+          <div className="text-gray-300">
+            <strong>Add schedule status view:</strong> Show pending/published/failed schedules
+          </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-brand-cyan font-bold">4.</span>
+          <div className="text-gray-300">
+            <strong>Test with WordPress:</strong> Verify scheduled posts appear correctly
+          </div>
         </div>
       </div>
     </div>
