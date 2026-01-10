@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 interface BlueprintPageProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type BlueprintTab = 'image-flow' | 'push-all' | 'individual-buttons' | 'data-sources' | 'golden-rules' | 'known-issues' | 'drip-feed' | 'agent-template';
+type BlueprintTab = 'image-flow' | 'push-all' | 'individual-buttons' | 'data-sources' | 'golden-rules' | 'known-issues' | 'drip-feed' | 'notes' | 'agent-template';
 
 const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<BlueprintTab>('image-flow');
@@ -20,6 +20,7 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
     { id: 'golden-rules', label: 'Golden Rules' },
     { id: 'known-issues', label: 'Known Issues' },
     { id: 'drip-feed', label: 'Drip Feed' },
+    { id: 'notes', label: 'Notes' },
     { id: 'agent-template', label: 'Agent Template' },
   ];
 
@@ -77,6 +78,7 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
           {activeTab === 'golden-rules' && <GoldenRules />}
           {activeTab === 'known-issues' && <KnownIssuesDiagram />}
           {activeTab === 'drip-feed' && <DripFeedDiagram />}
+          {activeTab === 'notes' && <NotesEditor />}
           {activeTab === 'agent-template' && <AgentTemplate />}
         </main>
       </div>
@@ -1152,6 +1154,268 @@ const body = {
     </div>
   </div>
 );
+
+// Notes Editor - User-editable notes with image support
+const NotesEditor: React.FC = () => {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSaved, setIsSaved] = useState(true);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+
+  // Load notes from localStorage on mount
+  useEffect(() => {
+    const savedNotes = localStorage.getItem('blueprint-notes');
+    const savedTime = localStorage.getItem('blueprint-notes-time');
+    if (savedNotes && editorRef.current) {
+      editorRef.current.innerHTML = savedNotes;
+    }
+    if (savedTime) {
+      setLastSaved(savedTime);
+    }
+  }, []);
+
+  // Save notes to localStorage
+  const saveNotes = useCallback(() => {
+    if (editorRef.current) {
+      const content = editorRef.current.innerHTML;
+      localStorage.setItem('blueprint-notes', content);
+      const now = new Date().toLocaleString();
+      localStorage.setItem('blueprint-notes-time', now);
+      setLastSaved(now);
+      setIsSaved(true);
+    }
+  }, []);
+
+  // Handle content changes
+  const handleInput = useCallback(() => {
+    setIsSaved(false);
+  }, []);
+
+  // Handle paste (including images)
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        e.preventDefault();
+        const blob = items[i].getAsFile();
+        if (blob) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const img = document.createElement('img');
+            img.src = event.target?.result as string;
+            img.style.maxWidth = '100%';
+            img.style.height = 'auto';
+            img.style.margin = '10px 0';
+            img.style.borderRadius = '8px';
+            img.style.border = '1px solid #334155';
+
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+              const range = selection.getRangeAt(0);
+              range.insertNode(img);
+              range.collapse(false);
+            } else if (editorRef.current) {
+              editorRef.current.appendChild(img);
+            }
+            setIsSaved(false);
+          };
+          reader.readAsDataURL(blob);
+        }
+        return;
+      }
+    }
+  }, []);
+
+  // Handle file upload
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = document.createElement('img');
+        img.src = event.target?.result as string;
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        img.style.margin = '10px 0';
+        img.style.borderRadius = '8px';
+        img.style.border = '1px solid #334155';
+
+        if (editorRef.current) {
+          editorRef.current.appendChild(img);
+          editorRef.current.appendChild(document.createElement('br'));
+        }
+        setIsSaved(false);
+      };
+      reader.readAsDataURL(file);
+    }
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  // Formatting commands
+  const formatText = useCallback((command: string, value?: string) => {
+    document.execCommand(command, false, value);
+    editorRef.current?.focus();
+    setIsSaved(false);
+  }, []);
+
+  // Insert bullet list
+  const insertBulletList = useCallback(() => {
+    formatText('insertUnorderedList');
+  }, [formatText]);
+
+  // Insert numbered list
+  const insertNumberedList = useCallback(() => {
+    formatText('insertOrderedList');
+  }, [formatText]);
+
+  // Clear all notes
+  const clearNotes = useCallback(() => {
+    if (window.confirm('Are you sure you want to clear all notes? This cannot be undone.')) {
+      if (editorRef.current) {
+        editorRef.current.innerHTML = '';
+      }
+      localStorage.removeItem('blueprint-notes');
+      localStorage.removeItem('blueprint-notes-time');
+      setLastSaved(null);
+      setIsSaved(true);
+    }
+  }, []);
+
+  return (
+    <div className="space-y-4 h-full flex flex-col">
+      <div className="text-center mb-4">
+        <h2 className="text-2xl font-bold text-brand-cyan mb-2">Notes</h2>
+        <p className="text-gray-400">Add your own notes, diagrams, and images. Paste images directly or upload them.</p>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 flex-wrap bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+        <button
+          onClick={() => formatText('bold')}
+          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm font-bold text-white"
+          title="Bold"
+        >
+          B
+        </button>
+        <button
+          onClick={() => formatText('italic')}
+          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm italic text-white"
+          title="Italic"
+        >
+          I
+        </button>
+        <button
+          onClick={() => formatText('underline')}
+          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm underline text-white"
+          title="Underline"
+        >
+          U
+        </button>
+        <div className="w-px h-6 bg-slate-600 mx-1" />
+        <button
+          onClick={insertBulletList}
+          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm text-white"
+          title="Bullet List"
+        >
+          • List
+        </button>
+        <button
+          onClick={insertNumberedList}
+          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm text-white"
+          title="Numbered List"
+        >
+          1. List
+        </button>
+        <div className="w-px h-6 bg-slate-600 mx-1" />
+        <button
+          onClick={() => formatText('formatBlock', 'h2')}
+          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm text-white font-semibold"
+          title="Heading"
+        >
+          H2
+        </button>
+        <button
+          onClick={() => formatText('formatBlock', 'h3')}
+          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm text-white"
+          title="Subheading"
+        >
+          H3
+        </button>
+        <div className="w-px h-6 bg-slate-600 mx-1" />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="px-3 py-1.5 bg-brand-cyan/20 hover:bg-brand-cyan/30 border border-brand-cyan/50 rounded text-sm text-brand-cyan"
+          title="Upload Image"
+        >
+          + Image
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileUpload}
+          className="hidden"
+        />
+        <div className="flex-1" />
+        <button
+          onClick={clearNotes}
+          className="px-3 py-1.5 bg-red-900/30 hover:bg-red-900/50 border border-red-500/50 rounded text-sm text-red-400"
+          title="Clear All Notes"
+        >
+          Clear All
+        </button>
+        <button
+          onClick={saveNotes}
+          className={`px-4 py-1.5 rounded text-sm font-semibold ${
+            isSaved
+              ? 'bg-green-700 text-white'
+              : 'bg-brand-gold text-slate-900 hover:bg-brand-gold/80'
+          }`}
+        >
+          {isSaved ? 'Saved' : 'Save'}
+        </button>
+      </div>
+
+      {/* Last saved indicator */}
+      {lastSaved && (
+        <div className="text-xs text-gray-500 text-right">
+          Last saved: {lastSaved}
+        </div>
+      )}
+
+      {/* Editor Area */}
+      <div
+        ref={editorRef}
+        contentEditable
+        onInput={handleInput}
+        onPaste={handlePaste}
+        className="flex-1 bg-slate-800/30 rounded-xl p-6 border border-slate-700 overflow-auto min-h-[400px] text-gray-200 focus:outline-none focus:border-brand-cyan/50 prose prose-invert max-w-none"
+        style={{
+          lineHeight: '1.6',
+        }}
+        suppressContentEditableWarning
+      >
+        <p className="text-gray-500 italic">Start typing your notes here... You can paste images directly (Ctrl+V) or use the + Image button.</p>
+      </div>
+
+      {/* Tips */}
+      <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700 text-sm text-gray-400">
+        <strong className="text-brand-cyan">Tips:</strong>
+        <ul className="mt-2 space-y-1 ml-4">
+          <li>• Paste images directly from clipboard (screenshots, diagrams)</li>
+          <li>• Use the toolbar for formatting (bold, lists, headings)</li>
+          <li>• Click Save to persist your notes (stored in browser localStorage)</li>
+          <li>• Notes are stored locally in your browser - they won't sync across devices</li>
+        </ul>
+      </div>
+    </div>
+  );
+};
 
 // Agent Template - Instructions for documenting work
 const AgentTemplate: React.FC = () => (

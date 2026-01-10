@@ -1,16 +1,14 @@
-# Agent Onboarding - PromptFlow
+# New Agent? Start Here!
 
-## Quick Start (New Agent Warm-Up)
+Welcome to PromptFlow - SEO Page Factory. Follow this warm-up sequence to get oriented efficiently before doing any work:
 
-When starting a new session, follow this sequence to get oriented efficiently:
-
-### Step 1: Read CLAUDE.md (2 min)
+## Step 1: Read CLAUDE.md (2 min)
 ```
 Read /home/user/Prompts-Chains/CLAUDE.md
 ```
 This gives you critical rules and current state.
 
-### Step 2: Open Blueprint Page (Primary Resource)
+## Step 2: Explore Blueprint Page (Primary Resource)
 ```
 Read /home/user/Prompts-Chains/src/pages/BlueprintPage.tsx
 ```
@@ -23,12 +21,20 @@ The Blueprint page contains comprehensive visual documentation. Focus on these t
 4. **Known Issues Tab** - Current bugs and debugging info (check this before investigating "weird" behavior)
 5. **Drip Feed Tab** - Partial implementation status
 
-### Step 3: Check for Context (If Resuming Work)
+## Step 3: Check for Context (If Resuming Work)
 If the user mentions previous work or you're continuing a session:
 ```bash
 git log --oneline -10  # See recent commits
 git fetch origin main && git show origin/main:logs/server-latest.log  # Check server logs
 ```
+
+## Step 4: Report Back
+After completing Steps 1-3, tell the user:
+- "I've completed the warm-up and reviewed the Blueprint documentation."
+- Mention any relevant tabs you read (Image Flow, Known Issues, etc.)
+- Ask what task they'd like you to work on
+
+---
 
 ## Key Mechanisms to Understand
 

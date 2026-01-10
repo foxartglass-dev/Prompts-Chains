@@ -49,7 +49,7 @@ npm test           # Run tests
 - Most of the workflow/prompt chain logic
 
 ## See Also
-- **Agent Onboarding:** Read `AGENT_ONBOARDING.md` for warm-up sequence
+- **New Agents Start Here:** Read `NEW_AGENT_START_HERE.md` for warm-up sequence
 - **In-app Blueprint:** More > Blueprint (visual diagrams)
 - **Agent Template:** More > Blueprint > Agent Template tab
 - **Debrief Command:** `/debrief` at end of session
