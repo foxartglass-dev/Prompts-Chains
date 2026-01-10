@@ -527,29 +527,19 @@ const WebsitesPage: React.FC<WebsitesPageProps> = ({ isOpen, onClose, onSelectWe
                         value={selectedWebsite.seo_plugin || 'yoast'}
                         onChange={async (e) => {
                           const newPlugin = e.target.value;
-                          console.log('[SEO Plugin] Changing to:', newPlugin);
-                          console.log('[SEO Plugin] Current value:', selectedWebsite.seo_plugin);
                           try {
                             const res = await fetch(`/api/websites/${selectedWebsite.id}`, {
                               method: 'PUT',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                seoPlugin: newPlugin
-                              })
+                              body: JSON.stringify({ seoPlugin: newPlugin })
                             });
-                            console.log('[SEO Plugin] Response status:', res.status);
                             if (res.ok) {
                               const data = await res.json();
-                              console.log('[SEO Plugin] Response data:', data);
-                              console.log('[SEO Plugin] New seo_plugin value:', data.website?.seo_plugin);
                               setSelectedWebsite(data.website);
                               fetchWebsites();
-                            } else {
-                              const errorData = await res.json();
-                              console.error('[SEO Plugin] API error:', errorData);
                             }
                           } catch (error) {
-                            console.error('[SEO Plugin] Failed to update:', error);
+                            console.error('Failed to update SEO plugin:', error);
                           }
                         }}
                         className="bg-slate-900 border border-brand-cyan/50 rounded px-2 py-1 text-white text-sm flex-1"

@@ -2828,35 +2828,24 @@ const App: React.FC = () => {
                                         )}
                                     </select>
                                 </div>
-                                <div className="w-24">
+                                <div className="w-28">
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5 text-center text-xs">SEO Plugin</label>
-                                    <select
-                                        value={currentProject.state.seoPlugin || 'rankmath'}
-                                        onChange={async (e) => {
-                                            const newPlugin = e.target.value;
-                                            // Update workflow state
-                                            setCurrentProjectState(p => ({...p, seoPlugin: newPlugin}));
-                                            // Also sync to website if we have a website_id
-                                            if (currentWebsiteId) {
-                                                try {
-                                                    await fetch(`/api/websites/${currentWebsiteId}`, {
-                                                        method: 'PUT',
-                                                        headers: { 'Content-Type': 'application/json' },
-                                                        body: JSON.stringify({ seoPlugin: newPlugin })
-                                                    });
-                                                } catch (err) {
-                                                    console.error('Failed to sync SEO plugin to website:', err);
-                                                }
-                                            }
-                                        }}
-                                        className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-1 py-2 text-white text-xs focus:ring-2 focus:ring-brand-gold transition-all"
+                                    <div
+                                        className="w-full bg-slate-800 border-2 border-slate-600 rounded-lg px-2 py-2 text-white text-xs text-center cursor-default"
+                                        title="Change in Websites settings"
                                     >
-                                        <option value="aioseo">All in One SEO</option>
-                                        <option value="yoast">Yoast SEO</option>
-                                        <option value="rankmath">Rank Math</option>
-                                        <option value="seopress">SEOPress</option>
-                                        <option value="none">Direct to WP</option>
-                                    </select>
+                                        {(() => {
+                                            const plugin = currentProject.state.seoPlugin || 'rankmath';
+                                            const names: Record<string, string> = {
+                                                'aioseo': 'All in One SEO',
+                                                'yoast': 'Yoast SEO',
+                                                'rankmath': 'Rank Math',
+                                                'seopress': 'SEOPress',
+                                                'none': 'Direct to WP'
+                                            };
+                                            return names[plugin] || plugin;
+                                        })()}
+                                    </div>
                                 </div>
                             </div>
 
