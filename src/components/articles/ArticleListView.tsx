@@ -61,6 +61,7 @@ interface Article {
   selected_meta_title?: string | null;
   selected_meta_description?: string | null;
   images?: ArticleImage[];
+  generated_images?: ArticleImage[];
   image_decision_report?: ImageDecisionReport | null;
 }
 
@@ -784,20 +785,25 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     </span>
                   </td>
                   <td className="p-2 text-xs">
-                    <span className={`${
-                      (article.image_decision_report?.images?.filter((img: ImageDecisionReportImage) => img.source === 'bank').length || 0) > 0
-                        ? 'text-brand-gold' : 'text-gray-500'
-                    }`}>
-                      {article.image_decision_report?.images?.filter((img: ImageDecisionReportImage) => img.source === 'bank').length || 0}
-                    </span>
+                    {(() => {
+                      const bankCount = article.image_decision_report?.images?.filter((img: ImageDecisionReportImage) => img.source === 'bank').length || 0;
+                      return (
+                        <span className={bankCount > 0 ? 'text-brand-gold' : 'text-gray-500'}>
+                          {bankCount}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="p-2 text-xs">
-                    <span className={`${
-                      (article.image_decision_report?.images?.filter((img: ImageDecisionReportImage) => img.source === 'generated').length || 0) > 0
-                        ? 'text-brand-cyan' : 'text-gray-500'
-                    }`}>
-                      {article.image_decision_report?.images?.filter((img: ImageDecisionReportImage) => img.source === 'generated').length || 0}
-                    </span>
+                    {(() => {
+                      const liveFromReport = article.image_decision_report?.images?.filter((img: ImageDecisionReportImage) => img.source === 'generated').length || 0;
+                      const liveCount = liveFromReport || (article.generated_images?.length || 0);
+                      return (
+                        <span className={liveCount > 0 ? 'text-brand-cyan' : 'text-gray-500'}>
+                          {liveCount}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="p-2 text-gray-300 text-xs">
                     {article.ai_score !== null && article.ai_score !== undefined
@@ -940,18 +946,27 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
                     {/* Bank/Live Counts */}
                     <div className="flex items-center gap-1">
-                      <span className={`px-2 py-0.5 rounded font-medium ${
-                        (selectedArticle.image_decision_report?.images?.filter(img => img.source === 'bank').length || 0) > 0
-                          ? 'bg-brand-gold/30 text-brand-gold' : 'bg-slate-600/30 text-slate-400'
-                      }`}>
-                        📦 Bank: {selectedArticle.image_decision_report?.images?.filter(img => img.source === 'bank').length || 0}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded font-medium ${
-                        (selectedArticle.image_decision_report?.images?.filter(img => img.source === 'generated').length || 0) > 0
-                          ? 'bg-brand-cyan/30 text-brand-cyan' : 'bg-slate-600/30 text-slate-400'
-                      }`}>
-                        ⚡ Live: {selectedArticle.image_decision_report?.images?.filter(img => img.source === 'generated').length || 0}
-                      </span>
+                      {(() => {
+                        // Count from image_decision_report if available, otherwise fall back to generated_images
+                        const bankCount = selectedArticle.image_decision_report?.images?.filter(img => img.source === 'bank').length || 0;
+                        const liveFromReport = selectedArticle.image_decision_report?.images?.filter(img => img.source === 'generated').length || 0;
+                        // If no decision report but has generated_images, count those as live
+                        const liveCount = liveFromReport || (selectedArticle.generated_images?.length || 0);
+                        return (
+                          <>
+                            <span className={`px-2 py-0.5 rounded font-medium ${
+                              bankCount > 0 ? 'bg-brand-gold/30 text-brand-gold' : 'bg-slate-600/30 text-slate-400'
+                            }`}>
+                              📦 Bank: {bankCount}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded font-medium ${
+                              liveCount > 0 ? 'bg-brand-cyan/30 text-brand-cyan' : 'bg-slate-600/30 text-slate-400'
+                            }`}>
+                              ⚡ Live: {liveCount}
+                            </span>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

@@ -142,19 +142,21 @@ router.post('/push-direct', async (req, res) => {
     if (articleId && isDatabaseEnabled()) {
       try {
         if (isManualPush) {
-          // Manual push: increment count and append date
+          // Manual push: increment count, append date, and set meta_wp_pushed_at
           await sql`
             UPDATE articles
             SET meta_push_manual_count = COALESCE(meta_push_manual_count, 0) + 1,
                 meta_push_manual_dates = COALESCE(meta_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+                meta_wp_pushed_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
           `;
         } else {
-          // Auto push: set auto_at timestamp (only if not already set)
+          // Auto push: set auto_at timestamp and meta_wp_pushed_at
           await sql`
             UPDATE articles
             SET meta_push_auto_at = COALESCE(meta_push_auto_at, CURRENT_TIMESTAMP),
+                meta_wp_pushed_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ${articleId}
           `;
