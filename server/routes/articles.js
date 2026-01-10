@@ -4,7 +4,7 @@ import { sql, isDatabaseEnabled } from '../db/index.js';
 import { megaImageStatus, trackImagesLoaded, trackApiResponse, banner, log, warning, success, error as logError } from '../services/image-tracker.js';
 import chunkContent from '../services/content-chunker.js';
 import buildElementorPage, { getElementorMetaFields } from '../services/elementor-builder.js';
-import { updatePage } from '../services/wordpress-publisher.js';
+import { updatePage, getPage, createElementorPage } from '../services/wordpress-publisher.js';
 
 const router = express.Router();
 
@@ -535,16 +535,30 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
     console.log('[Push Images] ⏭️ Skipped:', skippedCount);
     console.log('[Push Images] ❌ Failed:', failedCount);
 
-    // If article has a WP page, update it with the images
+    // If article has a WP page, RE-CREATE it with images (same approach as Push All)
+    // WordPress/Elementor doesn't properly update _elementor_data via REST API,
+    // so we need to create a new page with the same slug
     let pageUpdated = false;
+    let newPageResult = null;
     if (article.wp_post_id && article.final_content && updatedImages.length > 0) {
       try {
-        console.log('[Push Images] Updating page content with images...');
+        console.log('[Push Images] Re-creating page with images (same approach as Push All)...');
+        const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
 
-        // Chunk the content
+        // Step 1: Get the existing page's slug to preserve the URL
+        let existingSlug = null;
+        try {
+          const existingPage = await getPage(wpCredentials, article.wp_post_id);
+          existingSlug = existingPage.slug;
+          console.log('[Push Images] Existing page slug:', existingSlug);
+        } catch (getPageError) {
+          console.log('[Push Images] Could not get existing page, will generate new slug');
+        }
+
+        // Step 2: Chunk the content
         const chunked = chunkContent(article.final_content, { maxWords: 300 });
 
-        // Sort images by placement (hero first, then sections)
+        // Step 3: Sort images by placement (hero first, then sections)
         const sortedImages = [...updatedImages].sort((a, b) => {
           if (a.placement === 'hero') return -1;
           if (b.placement === 'hero') return 1;
@@ -553,13 +567,16 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
           return aNum - bNum;
         });
 
-        // Embed images into chunks
+        // Step 4: Embed images into chunks (same as Push All does)
         sortedImages.forEach((img, imgIdx) => {
           const isHero = img.placement === 'hero';
           const imageUrl = img.wpMediaUrl || img.url;
 
-          // Skip base64 images
-          if (imageUrl?.startsWith('data:')) return;
+          // Skip base64 images - they need to be uploaded first
+          if (imageUrl?.startsWith('data:')) {
+            console.log('[Push Images] Skipping base64 image:', img.id);
+            return;
+          }
 
           const imageData = {
             url: imageUrl,
@@ -571,6 +588,12 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
             side: img.side || (isHero ? 'right' : 'left'),
             orientation: 'vertical'
           };
+
+          console.log('[Push Images] Embedding image:', {
+            placement: img.placement,
+            hasWpUrl: !!img.wpMediaUrl,
+            wpMediaId: img.wpMediaId
+          });
 
           if (isHero && chunked.intro) {
             chunked.intro.imageData = imageData;
@@ -585,7 +608,7 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
           }
         });
 
-        // Build new Elementor structure
+        // Step 5: Build new Elementor structure (same as Push All)
         const elementorData = buildElementorPage(chunked, {
           title: article.keyword || 'Article',
           heroImageSide: sortedImages.find(i => i.placement === 'hero')?.side || 'right'
@@ -593,30 +616,57 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
 
         const elementorMeta = getElementorMetaFields(elementorData);
 
-        // Update WordPress page using the wordpress-publisher service
-        console.log('[Push Images] Updating page with Elementor meta...');
-        console.log('[Push Images] Meta keys:', Object.keys(elementorMeta));
-
-        try {
-          const updateResult = await updatePage(
-            { url: wpUrl, user: wpUser, password: wpPassword },
-            article.wp_post_id,
-            { meta: elementorMeta }
-          );
-
-          if (updateResult.success) {
-            pageUpdated = true;
-            console.log('[Push Images] ✅ Page updated with images via wordpress-publisher');
-          } else {
-            console.error('[Push Images] Page update returned unsuccessful');
+        // Step 6: Delete the old page first (to free up the slug)
+        if (existingSlug) {
+          try {
+            const deleteUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages/${article.wp_post_id}?force=true`;
+            const auth = Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
+            const deleteRes = await fetch(deleteUrl, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Basic ${auth}` }
+            });
+            if (deleteRes.ok) {
+              console.log('[Push Images] ✅ Deleted old page to free up slug');
+            } else {
+              console.log('[Push Images] Could not delete old page, will use different slug');
+              existingSlug = existingSlug + '-updated'; // Use modified slug
+            }
+          } catch (deleteError) {
+            console.log('[Push Images] Delete failed, continuing with modified slug');
+            existingSlug = existingSlug + '-updated';
           }
-        } catch (wpUpdateError) {
-          console.error('[Push Images] WordPress update error:', wpUpdateError.message);
-          // Try alternative approach - update content field with a marker to force Elementor refresh
-          console.log('[Push Images] Trying alternative update approach...');
+        }
+
+        // Step 7: Create NEW page with images (same as Push All's createElementorPage)
+        console.log('[Push Images] Creating new page with images...');
+        newPageResult = await createElementorPage(wpCredentials, {
+          title: article.keyword || 'Article',
+          slug: existingSlug,
+          elementorMeta,
+          status: 'draft'
+        });
+
+        if (newPageResult.success) {
+          pageUpdated = true;
+          console.log('[Push Images] ✅ New page created with images!');
+          console.log('[Push Images] New page ID:', newPageResult.id);
+          console.log('[Push Images] New page URL:', newPageResult.link);
+
+          // Step 8: Update article with new page info
+          await sql`
+            UPDATE articles
+            SET wp_post_id = ${newPageResult.id},
+                wp_post_url = ${newPageResult.link},
+                wp_published_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${articleId}
+          `;
+          console.log('[Push Images] ✅ Article updated with new page info');
+        } else {
+          console.error('[Push Images] Failed to create new page');
         }
       } catch (updateError) {
-        console.error('[Push Images] Error updating page:', updateError.message);
+        console.error('[Push Images] Error re-creating page:', updateError.message);
       }
     }
 
@@ -625,7 +675,9 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
       pushed: successCount,
       skipped: skippedCount,
       pageUpdated,
-      message: `${successCount} images uploaded, ${skippedCount} skipped${pageUpdated ? ', page updated' : ''}`,
+      newPageId: newPageResult?.id || null,
+      newPageUrl: newPageResult?.link || null,
+      message: `${successCount} images uploaded, ${skippedCount} skipped${pageUpdated ? ', page re-created with images' : ''}`,
       results
     });
 
