@@ -232,6 +232,7 @@ const App: React.FC = () => {
     });
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
+    const [currentWebsiteSeoPlugin, setCurrentWebsiteSeoPlugin] = useState<string>('rankmath');
     const [filterByClientId, setFilterByClientId] = useState<number | undefined>(undefined);
     const [currentWorkflowContext, setCurrentWorkflowContext] = useState<{
       workflowName?: string;
@@ -508,6 +509,20 @@ const App: React.FC = () => {
             prevProjectIdRef.current = currentId;
         }
     }, [currentProject]);
+
+    // Fetch website's SEO plugin when website changes
+    useEffect(() => {
+        if (currentWebsiteId) {
+            fetch(`/api/websites/${currentWebsiteId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.website?.seo_plugin) {
+                        setCurrentWebsiteSeoPlugin(data.website.seo_plugin);
+                    }
+                })
+                .catch(err => console.error('Failed to fetch website SEO plugin:', err));
+        }
+    }, [currentWebsiteId]);
 
     // Effect to trigger auto-save when project state changes
     useEffect(() => {
@@ -1450,7 +1465,7 @@ const App: React.FC = () => {
                                                         postId: publishData.page.id,
                                                         metaTitle: metaTitles[0],
                                                         metaDescription: metaDescriptions[0],
-                                                        seoPlugin: currentProject.state.seoPlugin || 'rankmath',
+                                                        seoPlugin: currentWebsiteSeoPlugin || 'rankmath',
                                                         postType: 'pages'
                                                     })
                                                 });
@@ -1611,7 +1626,7 @@ const App: React.FC = () => {
                                 postId: data.page.id,
                                 metaTitle: result.metaTitles[0],
                                 metaDescription: result.metaDescriptions[0],
-                                seoPlugin: currentProject.state.seoPlugin || 'rankmath',
+                                seoPlugin: currentWebsiteSeoPlugin || 'rankmath',
                                 postType: 'pages'
                             })
                         });
@@ -1668,7 +1683,7 @@ const App: React.FC = () => {
                                 postId: data.id,
                                 metaTitle: result.metaTitles[0],
                                 metaDescription: result.metaDescriptions[0],
-                                seoPlugin: currentProject.state.seoPlugin || 'rankmath',
+                                seoPlugin: currentWebsiteSeoPlugin || 'rankmath',
                                 postType: currentProject.state.wpContentType
                             })
                         });
@@ -2835,7 +2850,7 @@ const App: React.FC = () => {
                                         title="Change in Websites settings"
                                     >
                                         {(() => {
-                                            const plugin = currentProject.state.seoPlugin || 'rankmath';
+                                            const plugin = currentWebsiteSeoPlugin || 'rankmath';
                                             const names: Record<string, string> = {
                                                 'aioseo': 'All in One SEO',
                                                 'yoast': 'Yoast SEO',
