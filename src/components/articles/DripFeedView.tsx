@@ -434,7 +434,9 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
   // Test Mode functions
   const fetchTestStatus = async () => {
     try {
-      const res = await fetch('/api/drip-feed/test-status');
+      // Send client's local time to server
+      const clientTime = new Date().toISOString();
+      const res = await fetch(`/api/drip-feed/test-status?clientTime=${encodeURIComponent(clientTime)}`);
       if (res.ok) {
         const data = await res.json();
         setTestStatus(data);
@@ -457,7 +459,8 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           articleIds: selectedTestArticles,
-          minutesFromNow: minuteOffsets
+          minutesFromNow: minuteOffsets,
+          clientTime: new Date().toISOString() // Send client's local time
         })
       });
 
@@ -483,7 +486,8 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
     try {
       const res = await fetch('/api/drip-feed/process-now', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientTime: new Date().toISOString() }) // Send client's local time
       });
 
       const data = await res.json();
@@ -491,7 +495,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
         if (data.processed === 0) {
           showToast('No articles due for publishing', 'info');
         } else {
-          showToast(`Processed ${data.processed}: ${data.successful} success, ${data.failed} failed`, data.failed > 0 ? 'error' : 'success');
+          showToast(`Published: ${data.results[0]?.keyword || 'article'}`, data.failed > 0 ? 'error' : 'success');
         }
         fetchTestStatus();
         fetchData();
@@ -1213,16 +1217,16 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
               </div>
             </div>
 
-            {/* Due Articles List */}
+            {/* Pending Articles - Horizontal scrolling */}
             {testStatus && testStatus.pending.length > 0 && (
-              <div className="bg-slate-900/50 rounded-lg p-3 flex-1 min-w-[300px]">
-                <div className="text-xs text-orange-400 font-semibold mb-2">Pending Articles</div>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
+              <div className="bg-slate-900/50 rounded-lg p-2 flex-1">
+                <div className="text-xs text-orange-400 font-semibold mb-1">Pending ({testStatus.pendingCount})</div>
+                <div className="flex gap-2 overflow-x-auto pb-1">
                   {testStatus.pending.map((p) => (
                     <div
                       key={p.id}
-                      className={`flex items-center gap-2 text-xs px-2 py-1 rounded ${
-                        p.isDueNow ? 'bg-green-600/20 text-green-400' : 'bg-slate-800 text-gray-300'
+                      className={`flex-shrink-0 flex items-center gap-1.5 text-xs px-2 py-1 rounded ${
+                        p.isDueNow ? 'bg-green-600/20 text-green-400 border border-green-500/50' : 'bg-slate-800 text-gray-300'
                       }`}
                     >
                       <input
@@ -1237,9 +1241,9 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
                         }}
                         className="w-3 h-3"
                       />
-                      <span className="font-mono text-gray-500 w-28">{p.scheduledFor}</span>
-                      <span className="truncate flex-1">{p.keyword}</span>
-                      {p.isDueNow && <span className="text-green-400 font-semibold">DUE</span>}
+                      <span className="font-mono text-gray-500">{p.scheduledFor.split(' ')[1]}</span>
+                      <span className="max-w-[120px] truncate">{p.keyword}</span>
+                      {p.isDueNow && <span className="text-green-400 font-bold">DUE</span>}
                     </div>
                   ))}
                 </div>
@@ -1247,8 +1251,8 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
             )}
           </div>
 
-          <div className="mt-3 text-xs text-gray-500">
-            <strong className="text-orange-400">How to test:</strong> Select articles → Click a time button (1 min, 2 min, etc.) → Wait or click "Process Now" to trigger immediately
+          <div className="mt-2 text-xs text-gray-500">
+            <strong className="text-orange-400">How to test:</strong> Select articles → Click time button → Click "Process Now" (publishes one at a time)
           </div>
         </div>
       )}

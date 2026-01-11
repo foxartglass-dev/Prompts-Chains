@@ -499,20 +499,21 @@ router.get('/log/:websiteId', requireDb, async (req, res) => {
 router.post('/test-schedule/:websiteId', requireDb, async (req, res) => {
   try {
     const { websiteId } = req.params;
-    const { articleIds, minutesFromNow = [1, 2, 3, 4] } = req.body;
+    const { articleIds, minutesFromNow = [1, 2, 3, 4], clientTime } = req.body;
 
     if (!articleIds || articleIds.length === 0) {
       return res.status(400).json({ error: 'No articles selected' });
     }
 
     const results = [];
-    const now = new Date();
+    // Use client time if provided, otherwise fall back to server time
+    const now = clientTime ? new Date(clientTime) : new Date();
 
     for (let i = 0; i < articleIds.length; i++) {
       const articleId = articleIds[i];
       const minutes = minutesFromNow[i] || minutesFromNow[0] || 1;
 
-      // Calculate scheduled time (minutes from now)
+      // Calculate scheduled time (minutes from now in client's timezone)
       const scheduledTime = new Date(now.getTime() + minutes * 60 * 1000);
       const scheduledDate = scheduledTime.toISOString().split('T')[0];
       const scheduledTimeStr = scheduledTime.toTimeString().split(' ')[0].substring(0, 5);
@@ -565,16 +566,18 @@ router.post('/test-schedule/:websiteId', requireDb, async (req, res) => {
   }
 });
 
-// POST process-now - Manually trigger the cron job (for testing)
+// POST process-now - Manually trigger processing ONE article (for testing)
 router.post('/process-now', requireDb, async (req, res) => {
   try {
     console.log('[Drip Feed] Manual process triggered');
 
-    const now = new Date();
+    const { clientTime } = req.body || {};
+    // Use client time if provided, otherwise use server time
+    const now = clientTime ? new Date(clientTime) : new Date();
     const currentDate = now.toISOString().split('T')[0];
     const currentTime = now.toTimeString().split(' ')[0].substring(0, 5);
 
-    // Get all due articles (same logic as cron)
+    // Get NEXT due article only (LIMIT 1 for one-at-a-time testing)
     const dueArticles = await sql`
       SELECT s.*, a.keyword, a.final_content, a.selected_meta_title,
              a.selected_meta_description, a.generated_images,
@@ -587,10 +590,10 @@ router.post('/process-now', requireDb, async (req, res) => {
         AND (s.scheduled_date < ${currentDate}
              OR (s.scheduled_date = ${currentDate} AND s.scheduled_time <= ${currentTime}))
       ORDER BY s.scheduled_date, s.scheduled_time
-      LIMIT 10
+      LIMIT 1
     `;
 
-    console.log(`[Drip Feed] Found ${dueArticles.length} articles due for publishing`);
+    console.log(`[Drip Feed] Found ${dueArticles.length} article(s) due for publishing (processing 1)`);
 
     if (dueArticles.length === 0) {
       return res.json({
@@ -625,13 +628,15 @@ router.post('/process-now', requireDb, async (req, res) => {
 // GET test status - Check what's scheduled and when cron will pick it up
 router.get('/test-status', requireDb, async (req, res) => {
   try {
-    const now = new Date();
+    const { clientTime } = req.query;
+    // Use client time if provided, otherwise use server time
+    const now = clientTime ? new Date(clientTime) : new Date();
     const currentDate = now.toISOString().split('T')[0];
     const currentTime = now.toTimeString().split(' ')[0].substring(0, 5);
 
     // Get all pending schedules
     const pending = await sql`
-      SELECT s.*, a.keyword,
+      SELECT s.*, a.keyword, a.selected_meta_title, a.selected_meta_description,
              s.scheduled_date || ' ' || s.scheduled_time as scheduled_datetime
       FROM drip_feed_schedules s
       JOIN articles a ON s.article_id = a.id
@@ -654,6 +659,8 @@ router.get('/test-status', requireDb, async (req, res) => {
         id: p.id,
         articleId: p.article_id,
         keyword: p.keyword,
+        selected_meta_title: p.selected_meta_title,
+        selected_meta_description: p.selected_meta_description,
         scheduledFor: `${p.scheduled_date} ${p.scheduled_time}`,
         isDueNow: dueNow.some(d => d.id === p.id)
       })),
