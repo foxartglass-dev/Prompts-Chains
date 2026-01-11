@@ -105,6 +105,10 @@ interface AudienceAvatar {
   specificCombinations?: PlaceholderCombination[];
   randomCount?: number; // How many random combinations to generate
   referenceImages?: ReferenceImage[];
+  // Multi-prompt per tag system
+  isGlobal?: boolean; // If true, this is a global prompt that applies to multiple tags
+  appliesTo?: string[]; // Which tags this global prompt applies to (e.g., ["H", "J", "C"])
+  subIndex?: number; // Position within a tag (for H-1, H-2, H-3 ordering)
 }
 
 // ========== PROMPT SETS (Multiple prompt collections) ==========
@@ -534,6 +538,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Active avatar
   const [activeAvatarId, setActiveAvatarId] = useState<number>(1);
   const [activeVariationId, setActiveVariationId] = useState<string | null>(null);
+  // Selected tag tab for multi-prompt per tag system (H, J, C, or 'global')
+  const [selectedTagTab, setSelectedTagTab] = useState<string | null>(null);
 
   // Legacy Chat (keeping for backwards compatibility)
   const [chatInput, setChatInput] = useState('');
@@ -1298,6 +1304,62 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Get active avatar
   const activeAvatar = settings.audience_avatars.find(a => a.id === activeAvatarId) || settings.audience_avatars[0];
 
+  // ========== Multi-prompt per tag system ==========
+  // Group avatars by tag (including global ones)
+  const avatarsByTag = useMemo(() => {
+    const grouped: { [tag: string]: AudienceAvatar[] } = {};
+    const globalAvatars: AudienceAvatar[] = [];
+    const untaggedAvatars: AudienceAvatar[] = [];
+
+    settings.audience_avatars.forEach(avatar => {
+      if (avatar.isGlobal) {
+        globalAvatars.push(avatar);
+      } else if (avatar.tag) {
+        if (!grouped[avatar.tag]) {
+          grouped[avatar.tag] = [];
+        }
+        grouped[avatar.tag].push(avatar);
+      } else {
+        untaggedAvatars.push(avatar);
+      }
+    });
+
+    // Sort avatars within each tag by subIndex
+    Object.keys(grouped).forEach(tag => {
+      grouped[tag].sort((a, b) => (a.subIndex || 0) - (b.subIndex || 0));
+    });
+
+    return { grouped, globalAvatars, untaggedAvatars };
+  }, [settings.audience_avatars]);
+
+  // Get all unique tags (from Tag Manager and existing avatars)
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    tags.forEach(t => tagSet.add(t.name));
+    settings.audience_avatars.forEach(a => {
+      if (a.tag && !a.isGlobal) tagSet.add(a.tag);
+    });
+    return Array.from(tagSet);
+  }, [tags, settings.audience_avatars]);
+
+  // Initialize selectedTagTab to first available tag
+  useEffect(() => {
+    if (!selectedTagTab && allTags.length > 0) {
+      setSelectedTagTab(allTags[0]);
+    }
+  }, [allTags, selectedTagTab]);
+
+  // Get avatars for currently selected tag tab
+  const avatarsForSelectedTag = useMemo(() => {
+    if (selectedTagTab === 'global') {
+      return avatarsByTag.globalAvatars;
+    }
+    if (selectedTagTab) {
+      return avatarsByTag.grouped[selectedTagTab] || [];
+    }
+    return [];
+  }, [selectedTagTab, avatarsByTag]);
+
   // Get unique variations for filtering
   const uniqueVariations = [...new Set(settings.image_bank.map(img => img.variation))];
   // Get unique models for filtering
@@ -1783,18 +1845,38 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   };
 
   // Audience Avatar Handlers
-  const handleAddAvatar = () => {
+  const handleAddAvatar = (forTag?: string, isGlobal?: boolean) => {
     const newId = Math.max(...settings.audience_avatars.map(a => a.id), 0) + 1;
+
+    // Calculate next subIndex for this tag
+    let nextSubIndex = 1;
+    if (forTag && !isGlobal) {
+      const existingForTag = settings.audience_avatars.filter(a => a.tag === forTag && !a.isGlobal);
+      nextSubIndex = existingForTag.length + 1;
+    } else if (isGlobal) {
+      const existingGlobal = settings.audience_avatars.filter(a => a.isGlobal);
+      nextSubIndex = existingGlobal.length + 1;
+    }
+
     const newAvatar: AudienceAvatar = {
       id: newId,
-      name: `Avatar ${newId}`,
+      name: isGlobal ? `Global ${nextSubIndex}` : forTag ? `${forTag}-${nextSubIndex}` : `Avatar ${newId}`,
       mainPrompt: '',
-      variations: []
+      variations: [],
+      tag: isGlobal ? undefined : forTag,
+      isGlobal: isGlobal || false,
+      appliesTo: isGlobal ? allTags : undefined,
+      subIndex: nextSubIndex
     };
     updateSettings({
       audience_avatars: [...settings.audience_avatars, newAvatar]
     });
     setActiveAvatarId(newId);
+    if (forTag) {
+      setSelectedTagTab(forTag);
+    } else if (isGlobal) {
+      setSelectedTagTab('global');
+    }
   };
 
   const handleRemoveAvatar = (id: number) => {
@@ -7938,22 +8020,107 @@ Start by introducing yourself and asking about their business in a friendly way.
 
             {!avatarsCollapsed && <div className="mt-3">
 
+            {/* ========== TWO-LEVEL TAB SYSTEM ========== */}
+            {/* Level 1: Tag tabs (H, J, C) + Global */}
+            <div className="flex flex-wrap items-center gap-1 mb-2 border-b border-slate-700 pb-2">
+              {allTags.map((tag) => {
+                const count = avatarsByTag.grouped[tag]?.length || 0;
+                const isSelected = selectedTagTab === tag;
+                return (
+                  <div key={tag} className="flex items-center">
+                    <button
+                      onClick={() => {
+                        setSelectedTagTab(tag);
+                        // Select first avatar for this tag if exists
+                        const avatarsForTag = avatarsByTag.grouped[tag] || [];
+                        if (avatarsForTag.length > 0) {
+                          setActiveAvatarId(avatarsForTag[0].id);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-t-lg text-sm font-medium transition ${
+                        isSelected
+                          ? 'bg-brand-cyan text-slate-900 border-b-2 border-brand-cyan'
+                          : 'bg-slate-800 text-brand-gold/70 hover:bg-slate-700 hover:text-brand-gold'
+                      }`}
+                    >
+                      {tag}
+                      {count > 0 && (
+                        <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleAddAvatar(tag); }}
+                      className="px-1.5 py-1.5 text-brand-cyan/50 hover:text-brand-cyan hover:bg-slate-700/50 rounded transition text-xs"
+                      title={`Add prompt for ${tag}`}
+                    >
+                      +
+                    </button>
+                  </div>
+                );
+              })}
+              {/* Global section tab */}
+              <div className="flex items-center ml-2 border-l border-slate-600 pl-2">
+                <button
+                  onClick={() => {
+                    setSelectedTagTab('global');
+                    // Select first global avatar if exists
+                    if (avatarsByTag.globalAvatars.length > 0) {
+                      setActiveAvatarId(avatarsByTag.globalAvatars[0].id);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-t-lg text-sm font-medium transition flex items-center gap-1.5 ${
+                    selectedTagTab === 'global'
+                      ? 'bg-emerald-600 text-white border-b-2 border-emerald-500'
+                      : 'bg-slate-800 text-emerald-400/70 hover:bg-slate-700 hover:text-emerald-400'
+                  }`}
+                >
+                  🌐 Global
+                  {avatarsByTag.globalAvatars.length > 0 && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${selectedTagTab === 'global' ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                      {avatarsByTag.globalAvatars.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleAddAvatar(undefined, true); }}
+                  className="px-1.5 py-1.5 text-emerald-400/50 hover:text-emerald-400 hover:bg-slate-700/50 rounded transition text-xs"
+                  title="Add global prompt"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Level 2: Sub-tabs within selected tag (H-1, H-2, etc.) */}
             <div className="flex flex-wrap gap-2 mb-4">
-              {settings.audience_avatars.map((avatar) => (
+              {avatarsForSelectedTag.map((avatar, idx) => (
                 <button
                   key={avatar.id}
                   onClick={() => setActiveAvatarId(avatar.id)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${activeAvatarId === avatar.id ? 'bg-brand-gold text-slate-900' : 'bg-slate-800 text-brand-gold hover:bg-slate-700'}`}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                    activeAvatarId === avatar.id
+                      ? selectedTagTab === 'global' ? 'bg-emerald-600 text-white' : 'bg-brand-gold text-slate-900'
+                      : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
+                  }`}
                 >
-                  <span>{avatar.name}{avatar.tag ? ` (${avatar.tag})` : ''}</span>
-                  {settings.audience_avatars.length > 1 && !avatar.tag && (
-                    <span onClick={(e) => { e.stopPropagation(); handleRemoveAvatar(avatar.id); }} className="hover:text-red-500 cursor-pointer">&times;</span>
-                  )}
-                  {avatar.tag && (
-                    <span className="bg-brand-cyan/20 text-brand-cyan text-[10px] px-1.5 rounded">TAG</span>
+                  <span>{avatar.name}</span>
+                  {avatarsForSelectedTag.length > 1 && (
+                    <span
+                      onClick={(e) => { e.stopPropagation(); handleRemoveAvatar(avatar.id); }}
+                      className="hover:text-red-500 cursor-pointer"
+                    >
+                      &times;
+                    </span>
                   )}
                 </button>
               ))}
+              {avatarsForSelectedTag.length === 0 && (
+                <div className="text-sm text-brand-gold/50 py-2">
+                  No prompts for {selectedTagTab === 'global' ? 'Global' : selectedTagTab}. Click + to add one.
+                </div>
+              )}
             </div>
 
             {activeAvatar && (
@@ -7984,6 +8151,43 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </button>
                   </div>
                 </div>
+
+                {/* Global Avatar: "Applies to" tag checkboxes */}
+                {activeAvatar.isGlobal && (
+                  <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-3">
+                    <label className="block text-xs text-emerald-400 font-medium mb-2">
+                      Applies to Tags:
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {allTags.map(tag => {
+                        const isChecked = activeAvatar.appliesTo?.includes(tag) ?? false;
+                        return (
+                          <button
+                            key={tag}
+                            onClick={() => {
+                              const currentAppliesTo = activeAvatar.appliesTo || [];
+                              const newAppliesTo = isChecked
+                                ? currentAppliesTo.filter(t => t !== tag)
+                                : [...currentAppliesTo, tag];
+                              handleUpdateAvatar(activeAvatar.id, { appliesTo: newAppliesTo });
+                            }}
+                            className={`px-3 py-1.5 rounded text-sm font-medium transition flex items-center gap-1.5 ${
+                              isChecked
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                            }`}
+                          >
+                            <span className="text-xs">{isChecked ? '☑' : '☐'}</span>
+                            {tag}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-emerald-400/60 mt-2">
+                      This global prompt will be used for articles with these tags
+                    </p>
+                  </div>
+                )}
 
                 {/* Main Prompt - shown in both modes */}
                 <div>
