@@ -150,16 +150,17 @@ CREATE TABLE IF NOT EXISTS notification_settings (
   -- Channel toggles
   toast_enabled BOOLEAN DEFAULT true,
   browser_enabled BOOLEAN DEFAULT false,
-  sms_enabled BOOLEAN DEFAULT false,
 
-  -- SMS configuration (for Twilio)
-  sms_phone_number VARCHAR(20),
-  sms_verified BOOLEAN DEFAULT false,
+  -- Pushover configuration (push notifications - $5 one-time)
+  pushover_enabled BOOLEAN DEFAULT false,
+  pushover_user_keys JSONB DEFAULT '[]',   -- Array of { key, name, enabled } for multiple recipients
 
-  -- Twilio credentials (stored securely)
-  twilio_account_sid TEXT,
-  twilio_auth_token TEXT,
-  twilio_phone_number VARCHAR(20),         -- The sender number
+  -- What to notify about
+  notify_on_publish BOOLEAN DEFAULT false, -- Notify on successful publish
+  notify_on_failure BOOLEAN DEFAULT true,  -- Notify on publish failure
+  notify_on_missing_meta BOOLEAN DEFAULT true,  -- Notify when meta not selected before publish
+  notify_daily_summary BOOLEAN DEFAULT false,   -- Daily summary of drip feed activity
+  notify_queue_empty BOOLEAN DEFAULT true,      -- Notify when queue is empty
 
   -- Error notification settings
   error_repeat_interval INTEGER DEFAULT 5, -- Minutes between repeat error notifications
@@ -169,8 +170,8 @@ CREATE TABLE IF NOT EXISTS notification_settings (
 );
 
 -- Insert default notification settings if not exists
-INSERT INTO notification_settings (id, toast_enabled, browser_enabled, sms_enabled)
-VALUES (1, true, false, false)
+INSERT INTO notification_settings (id, pushover_enabled)
+VALUES (1, false)
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================

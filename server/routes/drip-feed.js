@@ -492,14 +492,25 @@ router.get('/log/:websiteId', requireDb, async (req, res) => {
 });
 
 // ============================================
-// NOTIFICATION SETTINGS
+// NOTIFICATION SETTINGS (Pushover)
 // ============================================
 
 // GET notification settings
 router.get('/notifications/settings', requireDb, async (req, res) => {
   try {
     const settings = await sql`SELECT * FROM notification_settings WHERE id = 1`;
-    res.json({ settings: settings[0] || {} });
+
+    if (settings.length === 0) {
+      // Create default settings
+      const newSettings = await sql`
+        INSERT INTO notification_settings (id, pushover_enabled)
+        VALUES (1, false)
+        RETURNING *
+      `;
+      return res.json({ settings: newSettings[0] });
+    }
+
+    res.json({ settings: settings[0] });
   } catch (error) {
     console.error('Error fetching notification settings:', error);
     res.status(500).json({ error: error.message });
@@ -510,27 +521,31 @@ router.get('/notifications/settings', requireDb, async (req, res) => {
 router.put('/notifications/settings', requireDb, async (req, res) => {
   try {
     const {
-      toast_enabled,
-      browser_enabled,
-      sms_enabled,
-      sms_phone_number,
-      twilio_account_sid,
-      twilio_auth_token,
-      twilio_phone_number,
-      error_repeat_interval
+      pushover_enabled,
+      pushover_user_keys,  // Array of { key, name, enabled }
+      notify_on_publish,
+      notify_on_failure,
+      notify_on_missing_meta,
+      notify_daily_summary,
+      notify_queue_empty
     } = req.body;
+
+    // Ensure settings row exists
+    await sql`
+      INSERT INTO notification_settings (id) VALUES (1)
+      ON CONFLICT (id) DO NOTHING
+    `;
 
     const settings = await sql`
       UPDATE notification_settings
       SET
-        toast_enabled = COALESCE(${toast_enabled}, toast_enabled),
-        browser_enabled = COALESCE(${browser_enabled}, browser_enabled),
-        sms_enabled = COALESCE(${sms_enabled}, sms_enabled),
-        sms_phone_number = COALESCE(${sms_phone_number}, sms_phone_number),
-        twilio_account_sid = COALESCE(${twilio_account_sid}, twilio_account_sid),
-        twilio_auth_token = COALESCE(${twilio_auth_token}, twilio_auth_token),
-        twilio_phone_number = COALESCE(${twilio_phone_number}, twilio_phone_number),
-        error_repeat_interval = COALESCE(${error_repeat_interval}, error_repeat_interval),
+        pushover_enabled = COALESCE(${pushover_enabled}, pushover_enabled),
+        pushover_user_keys = COALESCE(${JSON.stringify(pushover_user_keys)}, pushover_user_keys),
+        notify_on_publish = COALESCE(${notify_on_publish}, notify_on_publish),
+        notify_on_failure = COALESCE(${notify_on_failure}, notify_on_failure),
+        notify_on_missing_meta = COALESCE(${notify_on_missing_meta}, notify_on_missing_meta),
+        notify_daily_summary = COALESCE(${notify_daily_summary}, notify_daily_summary),
+        notify_queue_empty = COALESCE(${notify_queue_empty}, notify_queue_empty),
         updated_at = NOW()
       WHERE id = 1
       RETURNING *
@@ -539,6 +554,34 @@ router.put('/notifications/settings', requireDb, async (req, res) => {
     res.json({ success: true, settings: settings[0] });
   } catch (error) {
     console.error('Error updating notification settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST test Pushover notification
+router.post('/notifications/test', requireDb, async (req, res) => {
+  try {
+    const { userKey } = req.body;
+
+    if (!userKey) {
+      return res.status(400).json({ error: 'User key is required' });
+    }
+
+    const { sendPushover } = await import('../services/pushover.js');
+
+    const result = await sendPushover({
+      message: 'This is a test notification from PromptFlow Drip Feed!',
+      title: 'Test Notification',
+      userKey
+    });
+
+    if (result.skipped) {
+      return res.status(400).json({ error: result.reason || 'Notification skipped' });
+    }
+
+    res.json({ success: result.success, result });
+  } catch (error) {
+    console.error('Error sending test notification:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -789,6 +832,12 @@ async function publishArticle(article) {
 
     console.log(`[Drip Feed] ✅ Successfully published: ${article.keyword}`);
 
+    // Send Pushover notification on success (if enabled)
+    await sendNotificationIfEnabled('published', {
+      keyword: article.keyword,
+      url: wpPostUrl
+    });
+
     return {
       success: true,
       articleId,
@@ -827,12 +876,64 @@ async function publishArticle(article) {
       )
     `;
 
+    // Send Pushover notification on failure (if enabled)
+    await sendNotificationIfEnabled('failed', {
+      keyword: article.keyword,
+      error: error.message
+    });
+
     return {
       success: false,
       articleId,
       keyword: article.keyword,
       error: error.message
     };
+  }
+}
+
+/**
+ * Send Pushover notification if enabled
+ */
+async function sendNotificationIfEnabled(type, data) {
+  try {
+    // Get notification settings
+    const settings = await sql`SELECT * FROM notification_settings WHERE id = 1`;
+    const config = settings[0];
+
+    if (!config || !config.pushover_enabled) {
+      return; // Notifications not enabled
+    }
+
+    // Check if this notification type is enabled
+    const typeMap = {
+      published: 'notify_on_publish',
+      failed: 'notify_on_failure',
+      no_meta: 'notify_on_missing_meta',
+      daily_summary: 'notify_daily_summary',
+      queue_empty: 'notify_queue_empty'
+    };
+
+    const settingKey = typeMap[type];
+    if (settingKey && config[settingKey] === false) {
+      return; // This notification type is disabled
+    }
+
+    // Get enabled user keys
+    const userKeys = (config.pushover_user_keys || [])
+      .filter(u => u.enabled !== false)
+      .map(u => u.key);
+
+    if (userKeys.length === 0) {
+      return; // No user keys configured
+    }
+
+    // Send the notification
+    const { notifyDripFeed } = await import('../services/pushover.js');
+    await notifyDripFeed(type, data, userKeys);
+
+  } catch (error) {
+    console.error('[Drip Feed] Error sending notification:', error.message);
+    // Don't throw - notifications failing shouldn't break the publish flow
   }
 }
 

@@ -39,6 +39,22 @@ interface DripFeedStats {
   needsAttention: number;
 }
 
+interface PushoverUser {
+  key: string;
+  name: string;
+  enabled: boolean;
+}
+
+interface NotificationSettings {
+  pushover_enabled: boolean;
+  pushover_user_keys: PushoverUser[];
+  notify_on_publish: boolean;
+  notify_on_failure: boolean;
+  notify_on_missing_meta: boolean;
+  notify_daily_summary: boolean;
+  notify_queue_empty: boolean;
+}
+
 interface DripFeedViewProps {
   websiteId?: number;
 }
@@ -67,8 +83,23 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
   // UI state
   const [showSettings, setShowSettings] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
+
+  // Notification settings state
+  const [notifSettings, setNotifSettings] = useState<NotificationSettings>({
+    pushover_enabled: false,
+    pushover_user_keys: [],
+    notify_on_publish: false,
+    notify_on_failure: true,
+    notify_on_missing_meta: true,
+    notify_daily_summary: false,
+    notify_queue_empty: true
+  });
+  const [newUserKey, setNewUserKey] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [testingNotification, setTestingNotification] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!websiteId) {
@@ -78,10 +109,11 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
 
     setLoading(true);
     try {
-      const [settingsRes, schedulesRes, statsRes] = await Promise.all([
+      const [settingsRes, schedulesRes, statsRes, notifRes] = await Promise.all([
         fetch(`/api/drip-feed/settings/${websiteId}`),
         fetch(`/api/drip-feed/schedule/${websiteId}`),
-        fetch(`/api/drip-feed/stats/${websiteId}`)
+        fetch(`/api/drip-feed/stats/${websiteId}`),
+        fetch('/api/drip-feed/notifications/settings')
       ]);
 
       if (settingsRes.ok) {
@@ -108,6 +140,21 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
       if (statsRes.ok) {
         const data = await statsRes.json();
         setStats(data);
+      }
+
+      if (notifRes.ok) {
+        const data = await notifRes.json();
+        if (data.settings) {
+          setNotifSettings({
+            pushover_enabled: data.settings.pushover_enabled ?? false,
+            pushover_user_keys: data.settings.pushover_user_keys || [],
+            notify_on_publish: data.settings.notify_on_publish ?? false,
+            notify_on_failure: data.settings.notify_on_failure ?? true,
+            notify_on_missing_meta: data.settings.notify_on_missing_meta ?? true,
+            notify_daily_summary: data.settings.notify_daily_summary ?? false,
+            notify_queue_empty: data.settings.notify_queue_empty ?? true
+          });
+        }
       }
     } catch (err) {
       console.error('Error fetching drip feed data:', err);
@@ -193,6 +240,79 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
 
   const removeSkipDate = (date: string) => {
     setSkipDates(skipDates.filter(d => d !== date));
+  };
+
+  // Notification settings functions
+  const saveNotificationSettings = async () => {
+    try {
+      const res = await fetch('/api/drip-feed/notifications/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notifSettings)
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || 'Failed to save notification settings');
+      }
+    } catch (err) {
+      setError('Failed to save notification settings');
+    }
+  };
+
+  const addPushoverUser = () => {
+    if (!newUserKey.trim()) return;
+
+    const newUser: PushoverUser = {
+      key: newUserKey.trim(),
+      name: newUserName.trim() || 'User ' + (notifSettings.pushover_user_keys.length + 1),
+      enabled: true
+    };
+
+    setNotifSettings({
+      ...notifSettings,
+      pushover_user_keys: [...notifSettings.pushover_user_keys, newUser]
+    });
+    setNewUserKey('');
+    setNewUserName('');
+  };
+
+  const removePushoverUser = (key: string) => {
+    setNotifSettings({
+      ...notifSettings,
+      pushover_user_keys: notifSettings.pushover_user_keys.filter(u => u.key !== key)
+    });
+  };
+
+  const togglePushoverUser = (key: string) => {
+    setNotifSettings({
+      ...notifSettings,
+      pushover_user_keys: notifSettings.pushover_user_keys.map(u =>
+        u.key === key ? { ...u, enabled: !u.enabled } : u
+      )
+    });
+  };
+
+  const testNotification = async (userKey: string) => {
+    setTestingNotification(true);
+    try {
+      const res = await fetch('/api/drip-feed/notifications/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userKey })
+      });
+
+      if (res.ok) {
+        alert('Test notification sent! Check your Pushover app.');
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Failed to send test notification');
+      }
+    } catch (err) {
+      setError('Failed to send test notification');
+    } finally {
+      setTestingNotification(false);
+    }
   };
 
   const formatDate = (dateStr: string) => {
@@ -336,6 +456,22 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               Calendar
+            </button>
+
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                showNotifications
+                  ? 'bg-brand-cyan text-slate-900'
+                  : notifSettings.pushover_enabled
+                    ? 'bg-green-600/20 border border-green-500/50 text-green-400'
+                    : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              Notifications
             </button>
           </div>
         </div>
@@ -550,6 +686,134 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Notifications Panel (collapsible) */}
+      {showNotifications && (
+        <div className="flex-shrink-0 bg-slate-800/30 border-b border-slate-700 px-4 py-3">
+          <div className="flex flex-wrap items-start gap-6">
+            {/* Enable Toggle */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={notifSettings.pushover_enabled}
+                onChange={(e) => setNotifSettings({ ...notifSettings, pushover_enabled: e.target.checked })}
+                className="w-4 h-4 rounded border-gray-600 bg-slate-700 text-brand-cyan"
+              />
+              <span className="text-sm text-white font-medium">Enable Pushover</span>
+            </label>
+
+            {/* Notification Types */}
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-400">Notify on:</span>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifSettings.notify_on_failure}
+                  onChange={(e) => setNotifSettings({ ...notifSettings, notify_on_failure: e.target.checked })}
+                  className="w-3.5 h-3.5 rounded border-gray-600 bg-slate-700 text-brand-cyan"
+                />
+                <span className="text-xs text-gray-300">Failures</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifSettings.notify_on_missing_meta}
+                  onChange={(e) => setNotifSettings({ ...notifSettings, notify_on_missing_meta: e.target.checked })}
+                  className="w-3.5 h-3.5 rounded border-gray-600 bg-slate-700 text-brand-cyan"
+                />
+                <span className="text-xs text-gray-300">Missing Meta</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifSettings.notify_on_publish}
+                  onChange={(e) => setNotifSettings({ ...notifSettings, notify_on_publish: e.target.checked })}
+                  className="w-3.5 h-3.5 rounded border-gray-600 bg-slate-700 text-brand-cyan"
+                />
+                <span className="text-xs text-gray-300">Publishes</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifSettings.notify_queue_empty}
+                  onChange={(e) => setNotifSettings({ ...notifSettings, notify_queue_empty: e.target.checked })}
+                  className="w-3.5 h-3.5 rounded border-gray-600 bg-slate-700 text-brand-cyan"
+                />
+                <span className="text-xs text-gray-300">Queue Empty</span>
+              </label>
+            </div>
+
+            {/* Save Button */}
+            <button
+              onClick={saveNotificationSettings}
+              className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm"
+            >
+              Save
+            </button>
+          </div>
+
+          {/* User Keys Section */}
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <span className="text-sm text-gray-400">Recipients:</span>
+
+            {/* Existing Users */}
+            {notifSettings.pushover_user_keys.map((user) => (
+              <div
+                key={user.key}
+                className={`flex items-center gap-2 px-2 py-1 rounded text-xs ${
+                  user.enabled ? 'bg-green-600/20 text-green-400' : 'bg-slate-700 text-gray-400'
+                }`}
+              >
+                <button
+                  onClick={() => togglePushoverUser(user.key)}
+                  className="hover:opacity-75"
+                >
+                  {user.enabled ? '●' : '○'}
+                </button>
+                <span>{user.name}</span>
+                <button
+                  onClick={() => testNotification(user.key)}
+                  disabled={testingNotification}
+                  className="px-1.5 py-0.5 bg-blue-600/30 hover:bg-blue-600/50 rounded text-blue-400"
+                >
+                  Test
+                </button>
+                <button
+                  onClick={() => removePushoverUser(user.key)}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+
+            {/* Add New User */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newUserName}
+                onChange={(e) => setNewUserName(e.target.value)}
+                placeholder="Name"
+                className="w-24 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
+              />
+              <input
+                type="text"
+                value={newUserKey}
+                onChange={(e) => setNewUserKey(e.target.value)}
+                placeholder="User Key"
+                className="w-48 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs font-mono"
+              />
+              <button
+                onClick={addPushoverUser}
+                disabled={!newUserKey.trim()}
+                className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-white text-xs font-medium disabled:opacity-50"
+              >
+                + Add
+              </button>
+            </div>
           </div>
         </div>
       )}
