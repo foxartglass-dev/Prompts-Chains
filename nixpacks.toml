@@ -31,7 +31,5 @@ cmds = ["npm run build"]
 [start]
 cmd = "bash start.sh"
 
-[variables]
-PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
-# Nix installs chromium here - this is the standard Nix profile path
-PUPPETEER_EXECUTABLE_PATH = "/root/.nix-profile/bin/chromium"
+# Note: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD and PUPPETEER_EXECUTABLE_PATH
+# should be set in Railway dashboard, not here, to avoid Dockerfile ENV issues

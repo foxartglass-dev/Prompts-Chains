@@ -72,6 +72,7 @@ interface PlaceholderCategory {
   placeholder: string; // The placeholder text: "{Cleaning_Item}"
   options: PlaceholderOption[];
   isRandomized?: boolean; // If true, pick random option instead of keyword matching
+  enabled?: boolean; // If false, category is disabled but not deleted (for testing)
 }
 
 // An option within a category
@@ -104,6 +105,10 @@ interface AudienceAvatar {
   specificCombinations?: PlaceholderCombination[];
   randomCount?: number; // How many random combinations to generate
   referenceImages?: ReferenceImage[];
+  // Multi-prompt per tag system
+  isGlobal?: boolean; // If true, this is a global prompt that applies to multiple tags
+  appliesTo?: string[]; // Which tags this global prompt applies to (e.g., ["H", "J", "C"])
+  subIndex?: number; // Position within a tag (for H-1, H-2, H-3 ordering)
 }
 
 // ========== PROMPT SETS (Multiple prompt collections) ==========
@@ -199,6 +204,49 @@ interface JournalSeries {
   closedNotes?: string; // Notes when closing out
   createdAt: string;
   closedAt?: string;
+}
+
+// ========== PROMPT TEMPLATE SYSTEM ==========
+// Save and reuse prompt sections, text snippets, and placeholder categories
+
+// A parsed section from a prompt (e.g., "Pose / camera angle (CRITICAL):" + text)
+interface PromptSection {
+  id: string;
+  title: string; // e.g., "Pose / camera angle (CRITICAL):"
+  text: string; // The content under the title
+  order: number;
+}
+
+// A saved prompt template with multiple sections
+interface PromptSectionTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string; // e.g., "Cleaning", "Construction", "Universal"
+  sections: PromptSection[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// A text snippet that can be inserted at cursor
+interface TextSnippet {
+  id: string;
+  name: string; // Display name
+  text: string; // The actual text content
+  category: string; // e.g., "Camera Angle", "Eye Expression", "Logo Strategy"
+  tags?: string[]; // Optional tags for filtering
+  createdAt: string;
+}
+
+// Saved placeholder category template (for reusing placeholder categories across projects)
+interface PlaceholderCategoryTemplate {
+  id: string;
+  name: string;
+  category: string; // Company type: "Cleaning", "Construction", etc.
+  placeholder: string; // The placeholder text: "{Cleaning_Item}"
+  options: PlaceholderOption[];
+  isRandomized?: boolean;
+  createdAt: string;
 }
 
 // Models that support vision/images (for chat assistants)
@@ -379,6 +427,8 @@ interface ImageCreationSettings {
   worker_model: string;
   integration_mode: 'live' | 'bank';
   fallback_to_live: boolean;
+  // When bank is empty and falls back to live, which prompt source to use
+  fallback_prompt_mode: 'main_prompt' | 'guided_gpt' | 'smart_prompt';
   image_order: string[];
   variation_order_mode: 'sequential' | 'random' | 'manual';
   manual_variation_order: string[];
@@ -410,8 +460,18 @@ interface ImageCreationSettings {
     avoidList: string; // Things to avoid
     defaultSubject: string; // Default subject if no match
   } | null;
+  // Per-tag guardrails for Guided GPT (like conditional snippets)
+  // Key is the tag name (e.g., "H", "J", "C"), value is the description for that tag
+  guided_guardrails_by_tag: { [tagName: string]: string } | null;
   // Prompt Problem Areas - High priority prompting issues with solutions
   prompt_problem_areas: PromptProblemArea[];
+  // ========== PROMPT TEMPLATE SYSTEM ==========
+  // Saved prompt templates with sections
+  prompt_templates: PromptSectionTemplate[];
+  // Text snippet bank organized by category
+  text_snippets: TextSnippet[];
+  // Saved placeholder category templates
+  placeholder_category_templates: PlaceholderCategoryTemplate[];
 }
 
 enum LogStatus {
@@ -453,6 +513,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   worker_model: 'gpt-4o-mini', // Default to cheaper model for worker
   integration_mode: 'bank',
   fallback_to_live: true,
+  fallback_prompt_mode: 'main_prompt', // Default: use Main Prompt when falling back to live
   image_order: [],
   variation_order_mode: 'sequential',
   manual_variation_order: [],
@@ -474,8 +535,13 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   // Guided GPT mode settings
   guided_model: 'gpt-4o',
   guided_guardrails: null,
+  guided_guardrails_by_tag: null, // Per-tag descriptions for Guided GPT (like conditional snippets)
   // Prompt Problem Areas - High priority prompting issues
-  prompt_problem_areas: []
+  prompt_problem_areas: [],
+  // Prompt Template System
+  prompt_templates: [],
+  text_snippets: [],
+  placeholder_category_templates: []
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -526,6 +592,18 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Active avatar
   const [activeAvatarId, setActiveAvatarId] = useState<number>(1);
   const [activeVariationId, setActiveVariationId] = useState<string | null>(null);
+  // Selected tag tab for multi-prompt per tag system (H, J, C, or 'global')
+  const [selectedTagTab, setSelectedTagTab] = useState<string | null>(null);
+
+  // ========== PROMPT TEMPLATE SYSTEM STATE ==========
+  // 'save' = save current prompt as template, 'apply' = browse and apply templates, 'edit' = edit a template
+  const [showPromptTemplatePopup, setShowPromptTemplatePopup] = useState<'save' | 'apply' | 'edit' | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<PromptSectionTemplate | null>(null);
+  const [showTextSnippetBank, setShowTextSnippetBank] = useState(false);
+  const [snippetCategoryFilter, setSnippetCategoryFilter] = useState<string>('all');
+  const [showPlaceholderTemplates, setShowPlaceholderTemplates] = useState(false);
+  // For apply template - track which sections/text to include
+  const [templateSectionSelections, setTemplateSectionSelections] = useState<{ [sectionId: string]: { title: boolean; text: boolean } }>({});
 
   // Legacy Chat (keeping for backwards compatibility)
   const [chatInput, setChatInput] = useState('');
@@ -1290,6 +1368,289 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Get active avatar
   const activeAvatar = settings.audience_avatars.find(a => a.id === activeAvatarId) || settings.audience_avatars[0];
 
+  // ========== Multi-prompt per tag system ==========
+  // Group avatars by tag (including global ones)
+  const avatarsByTag = useMemo(() => {
+    const grouped: { [tag: string]: AudienceAvatar[] } = {};
+    const globalAvatars: AudienceAvatar[] = [];
+    const untaggedAvatars: AudienceAvatar[] = [];
+
+    settings.audience_avatars.forEach(avatar => {
+      if (avatar.isGlobal) {
+        globalAvatars.push(avatar);
+      } else if (avatar.tag) {
+        if (!grouped[avatar.tag]) {
+          grouped[avatar.tag] = [];
+        }
+        grouped[avatar.tag].push(avatar);
+      } else {
+        untaggedAvatars.push(avatar);
+      }
+    });
+
+    // Sort avatars within each tag by subIndex
+    Object.keys(grouped).forEach(tag => {
+      grouped[tag].sort((a, b) => (a.subIndex || 0) - (b.subIndex || 0));
+    });
+
+    return { grouped, globalAvatars, untaggedAvatars };
+  }, [settings.audience_avatars]);
+
+  // Get all unique tags (from Tag Manager and existing avatars)
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    tags.forEach(t => tagSet.add(t.name));
+    settings.audience_avatars.forEach(a => {
+      if (a.tag && !a.isGlobal) tagSet.add(a.tag);
+    });
+    return Array.from(tagSet);
+  }, [tags, settings.audience_avatars]);
+
+  // Initialize selectedTagTab to first available tag
+  useEffect(() => {
+    if (!selectedTagTab && allTags.length > 0) {
+      setSelectedTagTab(allTags[0]);
+    }
+  }, [allTags, selectedTagTab]);
+
+  // Get avatars for currently selected tag tab
+  const avatarsForSelectedTag = useMemo(() => {
+    if (selectedTagTab === 'global') {
+      return avatarsByTag.globalAvatars;
+    }
+    if (selectedTagTab) {
+      return avatarsByTag.grouped[selectedTagTab] || [];
+    }
+    return [];
+  }, [selectedTagTab, avatarsByTag]);
+
+  // ========== PROMPT TEMPLATE SYSTEM HELPERS ==========
+
+  /**
+   * Parse a prompt into sections based on title patterns
+   * Looks for patterns like "Title (CRITICAL):" or "Title:" at the start of lines
+   */
+  const parsePromptIntoSections = useCallback((prompt: string): PromptSection[] => {
+    if (!prompt.trim()) return [];
+
+    // Pattern to match section titles: starts with word(s), optionally has (CRITICAL), ends with :
+    // Examples: "Pose / camera angle (CRITICAL):", "Eye/expression (CRITICAL):", "Environment realism:"
+    const sectionPattern = /^([A-Za-z][A-Za-z0-9\s\/\-_]*(?:\s*\([^)]+\))?)\s*:\s*$/gm;
+
+    const lines = prompt.split('\n');
+    const sections: PromptSection[] = [];
+    let currentSection: { title: string; textLines: string[]; startLine: number } | null = null;
+    let order = 0;
+
+    lines.forEach((line, idx) => {
+      const trimmedLine = line.trim();
+
+      // Check if this line is a section title
+      const titleMatch = trimmedLine.match(/^([A-Za-z][A-Za-z0-9\s\/\-_]*(?:\s*\([^)]+\))?)\s*:\s*$/);
+
+      if (titleMatch && trimmedLine.endsWith(':')) {
+        // Save previous section if exists
+        if (currentSection) {
+          sections.push({
+            id: `section-${order}`,
+            title: currentSection.title,
+            text: currentSection.textLines.join('\n').trim(),
+            order: order++
+          });
+        }
+        // Start new section
+        currentSection = {
+          title: trimmedLine,
+          textLines: [],
+          startLine: idx
+        };
+      } else if (currentSection) {
+        // Add line to current section's text
+        currentSection.textLines.push(line);
+      } else if (trimmedLine) {
+        // Text before first section title - create an intro section
+        if (sections.length === 0 && !currentSection) {
+          currentSection = {
+            title: '(Introduction)',
+            textLines: [line],
+            startLine: idx
+          };
+        }
+      }
+    });
+
+    // Don't forget the last section
+    if (currentSection) {
+      sections.push({
+        id: `section-${order}`,
+        title: currentSection.title,
+        text: currentSection.textLines.join('\n').trim(),
+        order
+      });
+    }
+
+    return sections;
+  }, []);
+
+  /**
+   * Get unique categories from text snippets
+   */
+  const snippetCategories = useMemo(() => {
+    const cats = new Set(settings.text_snippets.map(s => s.category));
+    return Array.from(cats).sort();
+  }, [settings.text_snippets]);
+
+  /**
+   * Get unique categories from prompt templates
+   */
+  const templateCategories = useMemo(() => {
+    const cats = new Set(settings.prompt_templates.map(t => t.category).filter(Boolean));
+    return Array.from(cats).sort();
+  }, [settings.prompt_templates]);
+
+  /**
+   * Save current prompt as a new template
+   */
+  const handleSavePromptTemplate = (name: string, description: string, category: string) => {
+    if (!activeAvatar) return;
+
+    const sections = parsePromptIntoSections(activeAvatar.mainPrompt);
+    const newTemplate: PromptSectionTemplate = {
+      id: `template-${Date.now()}`,
+      name,
+      description,
+      category: category || undefined,
+      sections,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    updateSettings({
+      prompt_templates: [...settings.prompt_templates, newTemplate]
+    });
+    showNotification(`Template "${name}" saved with ${sections.length} sections`, 'success');
+    setShowPromptTemplatePopup(null);
+  };
+
+  /**
+   * Apply selected parts of a template to current prompt
+   */
+  const handleApplyTemplate = (template: PromptSectionTemplate, selections: { [sectionId: string]: { title: boolean; text: boolean } }) => {
+    if (!activeAvatar) return;
+
+    const parts: string[] = [];
+    template.sections.forEach(section => {
+      const sel = selections[section.id] || { title: false, text: false };
+      if (sel.title && sel.text) {
+        parts.push(`${section.title}\n${section.text}`);
+      } else if (sel.title) {
+        parts.push(section.title);
+      } else if (sel.text) {
+        parts.push(section.text);
+      }
+    });
+
+    const newPrompt = parts.join('\n\n');
+    handleUpdateAvatar(activeAvatar.id, { mainPrompt: newPrompt });
+    showNotification(`Applied ${parts.length} sections from template`, 'success');
+    setShowPromptTemplatePopup(null);
+  };
+
+  /**
+   * Delete a prompt template
+   */
+  const handleDeleteTemplate = (templateId: string) => {
+    updateSettings({
+      prompt_templates: settings.prompt_templates.filter(t => t.id !== templateId)
+    });
+    showNotification('Template deleted', 'success');
+  };
+
+  /**
+   * Save a text snippet
+   */
+  const handleSaveTextSnippet = (name: string, text: string, category: string) => {
+    const newSnippet: TextSnippet = {
+      id: `snippet-${Date.now()}`,
+      name,
+      text,
+      category,
+      createdAt: new Date().toISOString()
+    };
+
+    updateSettings({
+      text_snippets: [...settings.text_snippets, newSnippet]
+    });
+    showNotification(`Text snippet "${name}" saved`, 'success');
+  };
+
+  /**
+   * Insert text snippet at cursor in main prompt
+   */
+  const handleInsertSnippet = (snippet: TextSnippet) => {
+    if (!activeAvatar || !mainPromptRef.current) return;
+
+    const textarea = mainPromptRef.current;
+    const start = textarea.selectionStart;
+    const text = activeAvatar.mainPrompt;
+    const newText = text.substring(0, start) + snippet.text + text.substring(start);
+
+    handleUpdateAvatar(activeAvatar.id, { mainPrompt: newText });
+    setShowTextSnippetBank(false);
+    showNotification(`Inserted "${snippet.name}"`, 'success');
+  };
+
+  /**
+   * Delete a text snippet
+   */
+  const handleDeleteSnippet = (snippetId: string) => {
+    updateSettings({
+      text_snippets: settings.text_snippets.filter(s => s.id !== snippetId)
+    });
+    showNotification('Snippet deleted', 'success');
+  };
+
+  /**
+   * Save current placeholder category as template
+   */
+  const handleSavePlaceholderCategoryTemplate = (category: PlaceholderCategory, companyCategory: string) => {
+    const newTemplate: PlaceholderCategoryTemplate = {
+      id: `placeholder-template-${Date.now()}`,
+      name: category.name,
+      category: companyCategory,
+      placeholder: category.placeholder,
+      options: category.options,
+      isRandomized: category.isRandomized,
+      createdAt: new Date().toISOString()
+    };
+
+    updateSettings({
+      placeholder_category_templates: [...settings.placeholder_category_templates, newTemplate]
+    });
+    showNotification(`Placeholder category "${category.name}" saved as template`, 'success');
+  };
+
+  /**
+   * Apply placeholder category template to current avatar
+   */
+  const handleApplyPlaceholderTemplate = (template: PlaceholderCategoryTemplate) => {
+    if (!activeAvatar) return;
+
+    const newCategory: PlaceholderCategory = {
+      id: `cat-${Date.now()}`,
+      name: template.name,
+      placeholder: template.placeholder,
+      options: template.options.map(opt => ({ ...opt })),
+      isRandomized: template.isRandomized
+    };
+
+    const existingCategories = activeAvatar.placeholderCategories || [];
+    handleUpdateAvatar(activeAvatar.id, {
+      placeholderCategories: [...existingCategories, newCategory]
+    });
+    showNotification(`Applied placeholder category "${template.name}"`, 'success');
+  };
+
   // Get unique variations for filtering
   const uniqueVariations = [...new Set(settings.image_bank.map(img => img.variation))];
   // Get unique models for filtering
@@ -1775,18 +2136,38 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   };
 
   // Audience Avatar Handlers
-  const handleAddAvatar = () => {
+  const handleAddAvatar = (forTag?: string, isGlobal?: boolean) => {
     const newId = Math.max(...settings.audience_avatars.map(a => a.id), 0) + 1;
+
+    // Calculate next subIndex for this tag
+    let nextSubIndex = 1;
+    if (forTag && !isGlobal) {
+      const existingForTag = settings.audience_avatars.filter(a => a.tag === forTag && !a.isGlobal);
+      nextSubIndex = existingForTag.length + 1;
+    } else if (isGlobal) {
+      const existingGlobal = settings.audience_avatars.filter(a => a.isGlobal);
+      nextSubIndex = existingGlobal.length + 1;
+    }
+
     const newAvatar: AudienceAvatar = {
       id: newId,
-      name: `Avatar ${newId}`,
+      name: isGlobal ? `Global ${nextSubIndex}` : forTag ? `${forTag}-${nextSubIndex}` : `Avatar ${newId}`,
       mainPrompt: '',
-      variations: []
+      variations: [],
+      tag: isGlobal ? undefined : forTag,
+      isGlobal: isGlobal || false,
+      appliesTo: isGlobal ? allTags : undefined,
+      subIndex: nextSubIndex
     };
     updateSettings({
       audience_avatars: [...settings.audience_avatars, newAvatar]
     });
     setActiveAvatarId(newId);
+    if (forTag) {
+      setSelectedTagTab(forTag);
+    } else if (isGlobal) {
+      setSelectedTagTab('global');
+    }
   };
 
   const handleRemoveAvatar = (id: number) => {
@@ -5298,6 +5679,46 @@ Start by introducing yourself and asking about their business in a friendly way.
                           />
                         </div>
 
+                        {/* Per-Tag Conditional Descriptions (like Conditional Snippets) */}
+                        {tags.length > 0 && (
+                          <div className="mt-4 border-t border-emerald-500/30 pt-4">
+                            <label className="text-[10px] text-emerald-400 mb-2 block font-medium flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                              </svg>
+                              Per-Tag Context (Conditional Descriptions):
+                              <span className="text-[9px] text-emerald-300/60 font-normal ml-1">
+                                Like conditional snippets - auto-selected based on article tag
+                              </span>
+                            </label>
+                            <div className={`grid grid-cols-1 gap-2 ${tags.length === 2 ? 'md:grid-cols-2' : tags.length >= 3 ? 'md:grid-cols-3' : ''}`}>
+                              {tags.map(tag => (
+                                <div key={tag.id} className="bg-slate-900/50 rounded-lg p-2 border border-emerald-500/20">
+                                  <label className="text-[10px] text-brand-gold font-semibold mb-1 block">
+                                    For Tag: {tag.name}
+                                  </label>
+                                  <textarea
+                                    value={settings.guided_guardrails_by_tag?.[tag.name] || ''}
+                                    onChange={(e) => updateSettings({
+                                      guided_guardrails_by_tag: {
+                                        ...settings.guided_guardrails_by_tag,
+                                        [tag.name]: e.target.value
+                                      }
+                                    })}
+                                    placeholder={`Description for ${tag.name} articles...`}
+                                    className="w-full p-2 text-xs bg-slate-800 border border-emerald-500/20 rounded text-white placeholder-slate-500 resize-none"
+                                    rows={3}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            <p className="text-[9px] text-emerald-300/50 mt-2">
+                              When generating images for an article with a specific tag (e.g., "H"), the GPT will receive the context description for that tag.
+                              This helps it understand the target audience and setting.
+                            </p>
+                          </div>
+                        )}
+
                         {/* AI Prompt Assistant Chat */}
                         <div className="mt-4 border-t border-emerald-500/30 pt-4">
                           <button
@@ -7138,6 +7559,56 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     </div>
 
+                    {/* Fallback Prompt Source - Only show when bank_first is selected */}
+                    {settings.smart_matching_mode === 'bank_first' && (
+                      <div className="bg-brand-cyan/10 rounded-lg p-3 border border-brand-cyan/30">
+                        <label className="text-xs text-brand-cyan mb-2 block font-medium">
+                          When bank is empty, generate using:
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateSettings({ fallback_prompt_mode: 'main_prompt' })}
+                            className={`p-2 rounded text-xs font-medium transition-all ${
+                              settings.fallback_prompt_mode === 'main_prompt'
+                                ? 'bg-brand-gold text-slate-900'
+                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            }`}
+                          >
+                            Main Prompt
+                            <span className="block text-[10px] opacity-70 mt-0.5">Avatar template</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateSettings({ fallback_prompt_mode: 'guided_gpt' })}
+                            className={`p-2 rounded text-xs font-medium transition-all ${
+                              settings.fallback_prompt_mode === 'guided_gpt'
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            }`}
+                          >
+                            Guided GPT
+                            <span className="block text-[10px] opacity-70 mt-0.5">GPT + guardrails</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateSettings({ fallback_prompt_mode: 'smart_prompt' })}
+                            className={`p-2 rounded text-xs font-medium transition-all ${
+                              settings.fallback_prompt_mode === 'smart_prompt'
+                                ? 'bg-purple-600 text-white'
+                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            }`}
+                          >
+                            Smart Prompt
+                            <span className="block text-[10px] opacity-70 mt-0.5">Legacy</span>
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-brand-cyan/70 mt-2">
+                          If no matching images found in bank, the system will generate live images using this prompt source.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Category Matching Rules */}
                     {activeAvatar?.placeholderCategories && activeAvatar.placeholderCategories.length > 0 && (
                       <div className="bg-slate-800/50 rounded-lg p-3 border border-purple-500/20">
@@ -7219,9 +7690,9 @@ Start by introducing yourself and asking about their business in a friendly way.
 
               {/* ─────────────────────────────────────────────────────
                   SECTION 3: Matching Rules - CONDITIONAL based on Smart Matching toggle
-                  NOTE: Only shown when Image Source is "Pull from Bank"
+                  NOTE: Shown for both Bank mode AND Generate Live (Main Prompt/Guided GPT) modes
               ───────────────────────────────────────────────────── */}
-              {settings.integration_mode === 'bank' && (
+              {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode !== 'smart_prompt')) && (
               <div className={`rounded-lg p-4 border ${settings.smart_matching_enabled ? 'bg-slate-800/50 border-emerald-500/30' : 'bg-slate-800/30 border-cyan-500/30'}`}>
                 <div className="flex items-center gap-2 mb-4">
                   <svg className={`w-5 h-5 ${settings.smart_matching_enabled ? 'text-emerald-400' : 'text-cyan-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -7840,28 +8311,113 @@ Start by introducing yourself and asking about their business in a friendly way.
 
             {!avatarsCollapsed && <div className="mt-3">
 
+            {/* ========== TWO-LEVEL TAB SYSTEM ========== */}
+            {/* Level 1: Tag tabs (H, J, C) + Global */}
+            <div className="flex flex-wrap items-center gap-1 mb-2 border-b border-slate-700 pb-2">
+              {allTags.map((tag) => {
+                const count = avatarsByTag.grouped[tag]?.length || 0;
+                const isSelected = selectedTagTab === tag;
+                return (
+                  <div key={tag} className="flex items-center">
+                    <button
+                      onClick={() => {
+                        setSelectedTagTab(tag);
+                        // Select first avatar for this tag if exists
+                        const avatarsForTag = avatarsByTag.grouped[tag] || [];
+                        if (avatarsForTag.length > 0) {
+                          setActiveAvatarId(avatarsForTag[0].id);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-t-lg text-sm font-medium transition ${
+                        isSelected
+                          ? 'bg-brand-cyan text-slate-900 border-b-2 border-brand-cyan'
+                          : 'bg-slate-800 text-brand-gold/70 hover:bg-slate-700 hover:text-brand-gold'
+                      }`}
+                    >
+                      {tag}
+                      {count > 0 && (
+                        <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleAddAvatar(tag); }}
+                      className="px-1.5 py-1.5 text-brand-cyan/50 hover:text-brand-cyan hover:bg-slate-700/50 rounded transition text-xs"
+                      title={`Add prompt for ${tag}`}
+                    >
+                      +
+                    </button>
+                  </div>
+                );
+              })}
+              {/* Global section tab */}
+              <div className="flex items-center ml-2 border-l border-slate-600 pl-2">
+                <button
+                  onClick={() => {
+                    setSelectedTagTab('global');
+                    // Select first global avatar if exists
+                    if (avatarsByTag.globalAvatars.length > 0) {
+                      setActiveAvatarId(avatarsByTag.globalAvatars[0].id);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-t-lg text-sm font-medium transition flex items-center gap-1.5 ${
+                    selectedTagTab === 'global'
+                      ? 'bg-emerald-600 text-white border-b-2 border-emerald-500'
+                      : 'bg-slate-800 text-emerald-400/70 hover:bg-slate-700 hover:text-emerald-400'
+                  }`}
+                >
+                  🌐 Global
+                  {avatarsByTag.globalAvatars.length > 0 && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${selectedTagTab === 'global' ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                      {avatarsByTag.globalAvatars.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleAddAvatar(undefined, true); }}
+                  className="px-1.5 py-1.5 text-emerald-400/50 hover:text-emerald-400 hover:bg-slate-700/50 rounded transition text-xs"
+                  title="Add global prompt"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Level 2: Sub-tabs within selected tag (H-1, H-2, etc.) */}
             <div className="flex flex-wrap gap-2 mb-4">
-              {settings.audience_avatars.map((avatar) => (
+              {avatarsForSelectedTag.map((avatar, idx) => (
                 <button
                   key={avatar.id}
                   onClick={() => setActiveAvatarId(avatar.id)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${activeAvatarId === avatar.id ? 'bg-brand-gold text-slate-900' : 'bg-slate-800 text-brand-gold hover:bg-slate-700'}`}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                    activeAvatarId === avatar.id
+                      ? selectedTagTab === 'global' ? 'bg-emerald-600 text-white' : 'bg-brand-gold text-slate-900'
+                      : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
+                  }`}
                 >
-                  <span>{avatar.name}{avatar.tag ? ` (${avatar.tag})` : ''}</span>
-                  {settings.audience_avatars.length > 1 && !avatar.tag && (
-                    <span onClick={(e) => { e.stopPropagation(); handleRemoveAvatar(avatar.id); }} className="hover:text-red-500 cursor-pointer">&times;</span>
-                  )}
-                  {avatar.tag && (
-                    <span className="bg-brand-cyan/20 text-brand-cyan text-[10px] px-1.5 rounded">TAG</span>
+                  <span>{avatar.name}</span>
+                  {avatarsForSelectedTag.length > 1 && (
+                    <span
+                      onClick={(e) => { e.stopPropagation(); handleRemoveAvatar(avatar.id); }}
+                      className="hover:text-red-500 cursor-pointer"
+                    >
+                      &times;
+                    </span>
                   )}
                 </button>
               ))}
+              {avatarsForSelectedTag.length === 0 && (
+                <div className="text-sm text-brand-gold/50 py-2">
+                  No prompts for {selectedTagTab === 'global' ? 'Global' : selectedTagTab}. Click + to add one.
+                </div>
+              )}
             </div>
 
             {activeAvatar && (
               <div className="space-y-3">
                 <div className="flex gap-3 items-end">
-                  <div className="flex-1">
+                  <div className="w-48">
                     <label className="block text-xs text-brand-gold/70 mb-1">Avatar Name</label>
                     <input
                       type="text"
@@ -7885,7 +8441,68 @@ Start by introducing yourself and asking about their business in a friendly way.
                       Advanced
                     </button>
                   </div>
+                  {/* Prompt Template Buttons */}
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button
+                      onClick={() => setShowPromptTemplatePopup('save')}
+                      className="px-3 py-1.5 bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/50 rounded text-emerald-300 text-xs font-medium transition"
+                      title="Save current prompt as template"
+                    >
+                      Save Template
+                    </button>
+                    <button
+                      onClick={() => setShowPromptTemplatePopup('apply')}
+                      className="px-3 py-1.5 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 rounded text-purple-300 text-xs font-medium transition"
+                      title="Apply a saved template"
+                    >
+                      Templates
+                    </button>
+                    <button
+                      onClick={() => setShowTextSnippetBank(true)}
+                      className="px-3 py-1.5 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-xs font-medium transition"
+                      title="Insert text snippets"
+                    >
+                      Text Bank
+                    </button>
+                  </div>
                 </div>
+
+                {/* Global Avatar: "Applies to" tag checkboxes */}
+                {activeAvatar.isGlobal && (
+                  <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-3">
+                    <label className="block text-xs text-emerald-400 font-medium mb-2">
+                      Applies to Tags:
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {allTags.map(tag => {
+                        const isChecked = activeAvatar.appliesTo?.includes(tag) ?? false;
+                        return (
+                          <button
+                            key={tag}
+                            onClick={() => {
+                              const currentAppliesTo = activeAvatar.appliesTo || [];
+                              const newAppliesTo = isChecked
+                                ? currentAppliesTo.filter(t => t !== tag)
+                                : [...currentAppliesTo, tag];
+                              handleUpdateAvatar(activeAvatar.id, { appliesTo: newAppliesTo });
+                            }}
+                            className={`px-3 py-1.5 rounded text-sm font-medium transition flex items-center gap-1.5 ${
+                              isChecked
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                            }`}
+                          >
+                            <span className="text-xs">{isChecked ? '☑' : '☐'}</span>
+                            {tag}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-emerald-400/60 mt-2">
+                      This global prompt will be used for articles with these tags
+                    </p>
+                  </div>
+                )}
 
                 {/* Main Prompt - shown in both modes */}
                 <div>
@@ -7962,19 +8579,65 @@ Start by introducing yourself and asking about their business in a friendly way.
                           </span>
                         )}
                       </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleAddPlaceholderCategory(); }}
-                        className="px-2 py-1 bg-purple-600/50 hover:bg-purple-600 rounded text-white text-xs transition"
-                      >
-                        + Add Category
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleAddPlaceholderCategory(); }}
+                          className="px-2 py-1 bg-purple-600/50 hover:bg-purple-600 rounded text-white text-xs transition"
+                        >
+                          + Add Category
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowPlaceholderTemplates(true); }}
+                          className="px-2 py-1 bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/50 rounded text-orange-300 text-xs transition"
+                          title="Apply placeholder category from template"
+                        >
+                          From Template
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Quick Category Toggles - Compact row showing all categories with on/off */}
+                    {(activeAvatar.placeholderCategories || []).length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 px-2 py-2 bg-slate-900/50 rounded-lg border border-purple-500/20">
+                        <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle:</span>
+                        {(activeAvatar.placeholderCategories || []).map(cat => (
+                          <button
+                            key={cat.id}
+                            onClick={() => handleUpdatePlaceholderCategory(cat.id, { enabled: cat.enabled === false ? true : false })}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                              cat.enabled !== false
+                                ? 'bg-emerald-600/40 border border-emerald-500 text-emerald-300'
+                                : 'bg-slate-700/50 border border-slate-600 text-slate-500 line-through'
+                            }`}
+                            title={cat.enabled !== false ? `Click to disable "${cat.name}"` : `Click to enable "${cat.name}"`}
+                          >
+                            {cat.enabled !== false ? '✓' : '○'} {cat.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Category List */}
                     {!categoriesCollapsed && (<>
                     {(activeAvatar.placeholderCategories || []).map((category, catIndex) => (
-                      <div key={category.id} className="bg-slate-800/50 rounded-lg p-3 space-y-2">
+                      <div key={category.id} className={`rounded-lg p-3 space-y-2 transition-all ${
+                        category.enabled !== false
+                          ? 'bg-slate-800/50'
+                          : 'bg-slate-900/30 opacity-50 border border-dashed border-slate-600'
+                      }`}>
                         <div className="flex items-center gap-2">
+                          {/* On/Off Toggle */}
+                          <button
+                            onClick={() => handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false })}
+                            className={`w-5 h-5 rounded flex items-center justify-center text-xs transition ${
+                              category.enabled !== false
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-700 text-slate-500'
+                            }`}
+                            title={category.enabled !== false ? 'Click to disable' : 'Click to enable'}
+                          >
+                            {category.enabled !== false ? '✓' : '○'}
+                          </button>
                           <input
                             type="text"
                             value={category.name}
@@ -7983,6 +8646,18 @@ Start by introducing yourself and asking about their business in a friendly way.
                             placeholder="Category name (e.g., Cleaning_Item)"
                           />
                           <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
+                          <button
+                            onClick={() => {
+                              const companyCategory = prompt('Enter company/type category (e.g., Cleaning, Construction):');
+                              if (companyCategory) {
+                                handleSavePlaceholderCategoryTemplate(category, companyCategory);
+                              }
+                            }}
+                            className="px-2 py-1 bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/50 rounded text-orange-300 text-[10px] transition"
+                            title="Save this category as a reusable template"
+                          >
+                            Save Template
+                          </button>
                           <button
                             onClick={() => handleRemovePlaceholderCategory(category.id)}
                             className="p-1 bg-red-600/50 hover:bg-red-600 rounded text-white transition"
@@ -10107,6 +10782,492 @@ Start by introducing yourself and asking about their business in a friendly way.
           }
         }}
       />
+
+      {/* ========== PROMPT TEMPLATE SYSTEM POPUPS ========== */}
+
+      {/* Save Template Popup */}
+      {showPromptTemplatePopup === 'save' && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-slate-900 rounded-xl w-[600px] max-h-[80vh] flex flex-col border border-emerald-500/30">
+            <div className="flex items-center justify-between p-4 border-b border-emerald-500/30">
+              <h2 className="text-lg font-semibold text-emerald-400">Save Prompt as Template</h2>
+              <button onClick={() => setShowPromptTemplatePopup(null)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 space-y-4">
+              {(() => {
+                const [templateName, setTemplateName] = React.useState('');
+                const [templateDesc, setTemplateDesc] = React.useState('');
+                const [templateCategory, setTemplateCategory] = React.useState('');
+                const sections = activeAvatar ? parsePromptIntoSections(activeAvatar.mainPrompt) : [];
+
+                return (
+                  <>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Template Name *</label>
+                      <input
+                        type="text"
+                        value={templateName}
+                        onChange={(e) => setTemplateName(e.target.value)}
+                        placeholder="e.g., Cleaning Company Prompt"
+                        className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Description</label>
+                      <textarea
+                        value={templateDesc}
+                        onChange={(e) => setTemplateDesc(e.target.value)}
+                        placeholder="What this template is for..."
+                        rows={2}
+                        className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white resize-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Category</label>
+                      <input
+                        type="text"
+                        value={templateCategory}
+                        onChange={(e) => setTemplateCategory(e.target.value)}
+                        placeholder="e.g., Cleaning, Construction, Universal"
+                        className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white"
+                        list="template-categories"
+                      />
+                      <datalist id="template-categories">
+                        {templateCategories.map(cat => <option key={cat} value={cat} />)}
+                      </datalist>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-2">Detected Sections ({sections.length})</label>
+                      <div className="space-y-2 max-h-48 overflow-auto">
+                        {sections.map(section => (
+                          <div key={section.id} className="bg-slate-800 rounded p-2 border border-slate-700">
+                            <div className="text-emerald-300 text-sm font-medium">{section.title}</div>
+                            {section.text && (
+                              <div className="text-gray-400 text-xs mt-1 line-clamp-2">{section.text}</div>
+                            )}
+                          </div>
+                        ))}
+                        {sections.length === 0 && (
+                          <p className="text-gray-500 text-sm">No sections detected. Add section titles ending with ":" (e.g., "Pose / camera angle (CRITICAL):")</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button onClick={() => setShowPromptTemplatePopup(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm">Cancel</button>
+                      <button
+                        onClick={() => handleSavePromptTemplate(templateName, templateDesc, templateCategory)}
+                        disabled={!templateName.trim()}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-white font-medium text-sm disabled:opacity-50"
+                      >
+                        Save Template
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Apply/Browse Templates Popup */}
+      {showPromptTemplatePopup === 'apply' && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-slate-900 rounded-xl w-[700px] max-h-[85vh] flex flex-col border border-purple-500/30">
+            <div className="flex items-center justify-between p-4 border-b border-purple-500/30">
+              <h2 className="text-lg font-semibold text-purple-400">Prompt Templates</h2>
+              <button onClick={() => setShowPromptTemplatePopup(null)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              {settings.prompt_templates.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <p className="mb-2">No templates saved yet</p>
+                  <button
+                    onClick={() => setShowPromptTemplatePopup('save')}
+                    className="text-purple-400 hover:text-purple-300"
+                  >
+                    Save your first template →
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {settings.prompt_templates.map(template => (
+                    <div key={template.id} className="bg-slate-800 rounded-lg border border-purple-500/30 overflow-hidden">
+                      <div className="p-3 border-b border-slate-700 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-purple-300 font-medium">{template.name}</h3>
+                          {template.category && <span className="text-xs text-purple-400/60 bg-purple-900/30 px-2 py-0.5 rounded">{template.category}</span>}
+                          {template.description && <p className="text-gray-400 text-xs mt-1">{template.description}</p>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingTemplate(template);
+                              // Initialize all sections as selected
+                              const selections: { [key: string]: { title: boolean; text: boolean } } = {};
+                              template.sections.forEach(s => {
+                                selections[s.id] = { title: true, text: true };
+                              });
+                              setTemplateSectionSelections(selections);
+                            }}
+                            className="px-3 py-1 bg-purple-600/30 hover:bg-purple-600/50 rounded text-purple-300 text-xs"
+                          >
+                            Apply
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTemplate(template.id)}
+                            className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 rounded text-red-300 text-xs"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                      <div className="p-3 space-y-1 max-h-32 overflow-auto">
+                        {template.sections.map(section => (
+                          <div key={section.id} className="text-xs">
+                            <span className="text-gray-300">{section.title}</span>
+                            {section.text && <span className="text-gray-500 ml-2">({section.text.substring(0, 50)}...)</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Apply Template with Section Selection */}
+      {editingTemplate && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-slate-900 rounded-xl w-[650px] max-h-[85vh] flex flex-col border border-purple-500/30">
+            <div className="flex items-center justify-between p-4 border-b border-purple-500/30">
+              <div>
+                <h2 className="text-lg font-semibold text-purple-400">Apply: {editingTemplate.name}</h2>
+                <p className="text-xs text-gray-400">Select which parts to include</p>
+              </div>
+              <button onClick={() => setEditingTemplate(null)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-gray-400">Sections</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const newSel: typeof templateSectionSelections = {};
+                      editingTemplate.sections.forEach(s => {
+                        newSel[s.id] = { title: true, text: true };
+                      });
+                      setTemplateSectionSelections(newSel);
+                    }}
+                    className="text-xs text-purple-400 hover:text-purple-300"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newSel: typeof templateSectionSelections = {};
+                      editingTemplate.sections.forEach(s => {
+                        newSel[s.id] = { title: true, text: false };
+                      });
+                      setTemplateSectionSelections(newSel);
+                    }}
+                    className="text-xs text-purple-400 hover:text-purple-300"
+                  >
+                    Titles Only
+                  </button>
+                  <button
+                    onClick={() => {
+                      const newSel: typeof templateSectionSelections = {};
+                      editingTemplate.sections.forEach(s => {
+                        newSel[s.id] = { title: false, text: false };
+                      });
+                      setTemplateSectionSelections(newSel);
+                    }}
+                    className="text-xs text-gray-400 hover:text-gray-300"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {editingTemplate.sections.map(section => {
+                  const sel = templateSectionSelections[section.id] || { title: false, text: false };
+                  return (
+                    <div key={section.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                      <div className="flex items-center gap-3 mb-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={sel.title}
+                            onChange={(e) => setTemplateSectionSelections({
+                              ...templateSectionSelections,
+                              [section.id]: { ...sel, title: e.target.checked }
+                            })}
+                            className="accent-purple-500"
+                          />
+                          <span className="text-purple-300 font-medium text-sm">Title</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={sel.text}
+                            onChange={(e) => setTemplateSectionSelections({
+                              ...templateSectionSelections,
+                              [section.id]: { ...sel, text: e.target.checked }
+                            })}
+                            className="accent-purple-500"
+                          />
+                          <span className="text-purple-300 font-medium text-sm">Text</span>
+                        </label>
+                      </div>
+                      <div className={`text-sm ${sel.title ? 'text-white' : 'text-gray-500'}`}>{section.title}</div>
+                      {section.text && (
+                        <div className={`text-xs mt-1 ${sel.text ? 'text-gray-300' : 'text-gray-600'}`}>
+                          {section.text.substring(0, 200)}{section.text.length > 200 ? '...' : ''}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-purple-500/30">
+              <button onClick={() => setEditingTemplate(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm">Cancel</button>
+              <button
+                onClick={() => {
+                  handleApplyTemplate(editingTemplate, templateSectionSelections);
+                  setEditingTemplate(null);
+                }}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded text-white font-medium text-sm"
+              >
+                Apply Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Text Snippet Bank Popup */}
+      {showTextSnippetBank && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-slate-900 rounded-xl w-[700px] max-h-[85vh] flex flex-col border border-blue-500/30">
+            <div className="flex items-center justify-between p-4 border-b border-blue-500/30">
+              <h2 className="text-lg font-semibold text-blue-400">Text Snippet Bank</h2>
+              <button onClick={() => setShowTextSnippetBank(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              {/* Add New Snippet Form */}
+              {(() => {
+                const [newSnippetName, setNewSnippetName] = React.useState('');
+                const [newSnippetText, setNewSnippetText] = React.useState('');
+                const [newSnippetCategory, setNewSnippetCategory] = React.useState('');
+                const [showAddForm, setShowAddForm] = React.useState(false);
+
+                return (
+                  <>
+                    {!showAddForm ? (
+                      <button
+                        onClick={() => setShowAddForm(true)}
+                        className="mb-4 px-3 py-2 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-sm w-full"
+                      >
+                        + Add New Snippet
+                      </button>
+                    ) : (
+                      <div className="mb-4 bg-slate-800 rounded-lg p-3 border border-blue-500/30">
+                        <div className="space-y-3">
+                          <div className="flex gap-3">
+                            <input
+                              type="text"
+                              value={newSnippetName}
+                              onChange={(e) => setNewSnippetName(e.target.value)}
+                              placeholder="Snippet name"
+                              className="flex-1 bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm"
+                            />
+                            <input
+                              type="text"
+                              value={newSnippetCategory}
+                              onChange={(e) => setNewSnippetCategory(e.target.value)}
+                              placeholder="Category"
+                              list="snippet-categories"
+                              className="w-40 bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm"
+                            />
+                            <datalist id="snippet-categories">
+                              {snippetCategories.map(cat => <option key={cat} value={cat} />)}
+                            </datalist>
+                          </div>
+                          <textarea
+                            value={newSnippetText}
+                            onChange={(e) => setNewSnippetText(e.target.value)}
+                            placeholder="Snippet text..."
+                            rows={3}
+                            className="w-full bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm resize-none"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button onClick={() => setShowAddForm(false)} className="px-3 py-1 bg-slate-600 hover:bg-slate-500 rounded text-white text-xs">Cancel</button>
+                            <button
+                              onClick={() => {
+                                if (newSnippetName.trim() && newSnippetText.trim() && newSnippetCategory.trim()) {
+                                  handleSaveTextSnippet(newSnippetName, newSnippetText, newSnippetCategory);
+                                  setNewSnippetName('');
+                                  setNewSnippetText('');
+                                  setNewSnippetCategory('');
+                                  setShowAddForm(false);
+                                }
+                              }}
+                              disabled={!newSnippetName.trim() || !newSnippetText.trim() || !newSnippetCategory.trim()}
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs disabled:opacity-50"
+                            >
+                              Save Snippet
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Category Filter */}
+                    {snippetCategories.length > 0 && (
+                      <div className="mb-4 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setSnippetCategoryFilter('all')}
+                          className={`px-3 py-1 rounded text-xs font-medium transition ${snippetCategoryFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
+                        >
+                          All
+                        </button>
+                        {snippetCategories.map(cat => (
+                          <button
+                            key={cat}
+                            onClick={() => setSnippetCategoryFilter(cat)}
+                            className={`px-3 py-1 rounded text-xs font-medium transition ${snippetCategoryFilter === cat ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Snippets List */}
+                    {settings.text_snippets.length === 0 ? (
+                      <div className="text-center py-8 text-gray-400">
+                        <p>No snippets saved yet</p>
+                        <p className="text-sm mt-1">Add reusable text blocks for quick insertion</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {settings.text_snippets
+                          .filter(s => snippetCategoryFilter === 'all' || s.category === snippetCategoryFilter)
+                          .map(snippet => (
+                            <div key={snippet.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700 hover:border-blue-500/50 transition group">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-blue-300 font-medium text-sm">{snippet.name}</span>
+                                  <span className="text-xs text-blue-400/60 bg-blue-900/30 px-2 py-0.5 rounded">{snippet.category}</span>
+                                </div>
+                                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
+                                  <button
+                                    onClick={() => handleInsertSnippet(snippet)}
+                                    className="px-2 py-1 bg-blue-600/50 hover:bg-blue-600 rounded text-white text-xs"
+                                  >
+                                    Insert
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteSnippet(snippet.id)}
+                                    className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 rounded text-red-300 text-xs"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                              <p className="text-gray-400 text-xs line-clamp-2">{snippet.text}</p>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Placeholder Category Templates Popup */}
+      {showPlaceholderTemplates && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-slate-900 rounded-xl w-[650px] max-h-[85vh] flex flex-col border border-orange-500/30">
+            <div className="flex items-center justify-between p-4 border-b border-orange-500/30">
+              <h2 className="text-lg font-semibold text-orange-400">Placeholder Category Templates</h2>
+              <button onClick={() => setShowPlaceholderTemplates(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              {settings.placeholder_category_templates.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <p className="mb-2">No placeholder templates saved yet</p>
+                  <p className="text-sm">Save a placeholder category from any avatar to create a template</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Group by category */}
+                  {(() => {
+                    const grouped = settings.placeholder_category_templates.reduce((acc, t) => {
+                      const cat = t.category || 'Uncategorized';
+                      if (!acc[cat]) acc[cat] = [];
+                      acc[cat].push(t);
+                      return acc;
+                    }, {} as { [key: string]: PlaceholderCategoryTemplate[] });
+
+                    return Object.entries(grouped).map(([category, templates]) => (
+                      <div key={category}>
+                        <h3 className="text-orange-400/70 text-xs font-medium mb-2 uppercase tracking-wide">{category}</h3>
+                        <div className="space-y-2">
+                          {templates.map(template => (
+                            <div key={template.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700 hover:border-orange-500/50 transition">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-orange-300 font-medium">{template.name}</span>
+                                  <span className="text-xs text-purple-400 font-mono">{template.placeholder}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => {
+                                      handleApplyPlaceholderTemplate(template);
+                                      setShowPlaceholderTemplates(false);
+                                    }}
+                                    className="px-3 py-1 bg-orange-600/50 hover:bg-orange-600 rounded text-white text-xs"
+                                  >
+                                    Apply
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      updateSettings({
+                                        placeholder_category_templates: settings.placeholder_category_templates.filter(t => t.id !== template.id)
+                                      });
+                                      showNotification('Template deleted', 'success');
+                                    }}
+                                    className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 rounded text-red-300 text-xs"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="text-xs text-gray-400">
+                                {template.options.length} options: {template.options.slice(0, 3).map(o => o.text.substring(0, 30)).join(', ')}
+                                {template.options.length > 3 && '...'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -38,6 +38,40 @@ import { getImageBank } from '../services/image-bank.js';
 const router = express.Router();
 
 /**
+ * Select a random avatar from all avatars that match a given tag
+ * Considers:
+ * - Tag-specific avatars (avatar.tag === targetTag)
+ * - Global avatars with this tag in appliesTo
+ * @param {Array} avatars - All audience avatars
+ * @param {string|null} targetTag - The tag to match (e.g., "H", "J", "C")
+ * @returns {Object|null} A randomly selected matching avatar, or null if none found
+ */
+function selectAvatarForTag(avatars, targetTag) {
+  if (!avatars || avatars.length === 0) return null;
+  if (!targetTag) return avatars[0]; // No tag specified, return first avatar
+
+  // Find all matching avatars
+  const matchingAvatars = avatars.filter(avatar => {
+    // Tag-specific match
+    if (avatar.tag === targetTag && !avatar.isGlobal) return true;
+    // Global avatar with this tag in appliesTo
+    if (avatar.isGlobal && avatar.appliesTo?.includes(targetTag)) return true;
+    return false;
+  });
+
+  if (matchingAvatars.length === 0) {
+    // No matching avatars, fall back to first avatar
+    console.log(`[Avatar Selection] No matching avatars for tag "${targetTag}", using first avatar`);
+    return avatars[0];
+  }
+
+  // Randomly select one from matching avatars
+  const selectedAvatar = matchingAvatars[Math.floor(Math.random() * matchingAvatars.length)];
+  console.log(`[Avatar Selection] Selected "${selectedAvatar.name}" from ${matchingAvatars.length} matching avatars for tag "${targetTag}"`);
+  return selectedAvatar;
+}
+
+/**
  * Clean content before processing
  * - Remove markdown # at start of text (H1)
  * - Remove AI outline markers (H1:, ## Intro, etc.)
@@ -437,6 +471,8 @@ router.post('/publish', async (req, res) => {
 
           // Get prompt mode settings for Generate Live
           const livePromptMode = config.live_prompt_mode || 'smart_prompt';
+          // Fallback prompt mode - used when bank is empty and falls back to live
+          const fallbackPromptMode = config.fallback_prompt_mode || 'main_prompt';
           const smartPromptGuidance = config.smart_prompt_guidance || '';
           const avatars = config.audience_avatars || [];
 
@@ -445,12 +481,28 @@ router.post('/publish', async (req, res) => {
           const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
 
           // Find matching avatar for this article
-          const targetAvatar = articleTag ? avatars.find(a => a.tag === articleTag) : avatars[0];
+          // Select avatar using multi-prompt per tag system (randomly picks from matching avatars)
+          const targetAvatar = selectAvatarForTag(avatars, articleTag);
+
+          // Get per-tag guardrails if available (merge with base guardrails)
+          const baseGuardrails = config.guided_guardrails || {};
+          const perTagDescription = articleTag && config.guided_guardrails_by_tag?.[articleTag]
+            ? config.guided_guardrails_by_tag[articleTag]
+            : '';
+
+          // Merge per-tag context into guardrails instructions
+          const mergedGuardrails = perTagDescription ? {
+            ...baseGuardrails,
+            instructions: `${baseGuardrails.instructions || ''}\n\nContext for this audience (${articleTag}): ${perTagDescription}`.trim()
+          } : baseGuardrails;
 
           // Store these for use in Generate Live
           config._livePromptMode = livePromptMode;
+          config._fallbackPromptMode = fallbackPromptMode;
           config._smartPromptGuidance = smartPromptGuidance;
           config._targetAvatar = targetAvatar;
+          config._mergedGuardrails = mergedGuardrails;
+          config._articleTag = articleTag;
 
           console.log('[Elementor Publish] Integration mode:', integrationMode);
           console.log('[Elementor Publish] Smart matching mode:', smartMatchingMode);
@@ -534,15 +586,15 @@ router.post('/publish', async (req, res) => {
           const tagMatch = keyword?.match(/\(([A-Z])\)/i);
           const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
 
-          // Find matching avatar by tag
-          let targetAvatar = articleTag ? avatars.find(a => a.tag === articleTag) : avatars[0];
+          // Find matching avatar by tag (using multi-prompt per tag system)
+          let targetAvatar = selectAvatarForTag(avatars, articleTag);
 
           // Debug logging
           console.log('[Image Bank] Keyword:', keyword);
           console.log('[Image Bank] Article tag:', articleTag);
           console.log('[Image Bank] Bank size:', imageBank.length);
-          console.log('[Image Bank] Avatars:', avatars.map(a => ({ name: a.name, tag: a.tag })));
-          console.log('[Image Bank] Target avatar:', targetAvatar?.name, targetAvatar?.tag);
+          console.log('[Image Bank] Avatars:', avatars.map(a => ({ name: a.name, tag: a.tag, isGlobal: a.isGlobal, appliesTo: a.appliesTo })));
+          console.log('[Image Bank] Target avatar:', targetAvatar?.name, targetAvatar?.tag, targetAvatar?.isGlobal ? '(global)' : '');
 
           // Get available images from bank matching the tag
           // In draft mode: allow images without wpUrl (they won't be embedded in WP page)
@@ -1099,6 +1151,9 @@ router.post('/publish', async (req, res) => {
     let guidedGuardrails = null;
     let guidedModel = 'gpt-4o';
 
+    // Determine if this is a fallback from bank mode (bank was tried but had insufficient images)
+    const isFallbackFromBank = effectiveUseBank && imagesFromBank > 0 && imagesFromBank < dynamicMaxImages;
+
     if (workflowId && isDatabaseEnabled()) {
       try {
         const settingsResult = await sql`
@@ -1106,29 +1161,57 @@ router.post('/publish', async (req, res) => {
         `;
         if (settingsResult.length > 0) {
           const config = settingsResult[0];
-          livePromptMode = config.live_prompt_mode || 'smart_prompt';
+
+          // Use fallback_prompt_mode when falling back from bank, otherwise use live_prompt_mode
+          if (isFallbackFromBank || (effectiveUseBank && imagesFromBank === 0)) {
+            // Fallback scenario: bank was tried but empty or insufficient
+            livePromptMode = config.fallback_prompt_mode || config.live_prompt_mode || 'main_prompt';
+            console.log('[Elementor Publish] Using FALLBACK prompt mode:', livePromptMode);
+          } else {
+            // Direct Generate Live mode
+            livePromptMode = config.live_prompt_mode || 'smart_prompt';
+          }
+
           smartPromptGuidance = config.smart_prompt_guidance || '';
           matchPlurals = config.match_plurals !== false;
 
-          // Find the target avatar for this article
+          // Find the target avatar for this article (using multi-prompt per tag system)
           const avatars = config.audience_avatars || [];
           const tagMatch = keyword?.match(/\(([A-Z])\)/i);
           const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
-          targetAvatar = articleTag ? avatars.find(a => a.tag === articleTag) : avatars[0];
+          targetAvatar = selectAvatarForTag(avatars, articleTag);
 
-          // Get guided GPT settings if in guided mode
-          guidedGuardrails = targetAvatar?.guardrails || config.guided_guardrails || null;
+          // Get per-tag guardrails if available (merge with base guardrails)
+          const baseGuardrails = config.guided_guardrails || {};
+          const perTagDescription = articleTag && config.guided_guardrails_by_tag?.[articleTag]
+            ? config.guided_guardrails_by_tag[articleTag]
+            : '';
+
+          // Merge per-tag context into guardrails instructions
+          if (perTagDescription) {
+            guidedGuardrails = {
+              ...baseGuardrails,
+              instructions: `${baseGuardrails.instructions || ''}\n\nContext for this audience (${articleTag}): ${perTagDescription}`.trim()
+            };
+            console.log('[Elementor Publish] Using per-tag guardrails for tag:', articleTag);
+          } else {
+            guidedGuardrails = targetAvatar?.guardrails || baseGuardrails || null;
+          }
+
           guidedModel = config.guided_model || 'gpt-4o';
 
           console.log('[Elementor Publish] Generate Live settings:');
           console.log('  - Prompt mode:', livePromptMode);
+          console.log('  - Is fallback from bank:', isFallbackFromBank || (effectiveUseBank && imagesFromBank === 0));
           console.log('  - Target avatar:', targetAvatar?.name || 'None');
+          console.log('  - Article tag:', articleTag || 'None');
           if (livePromptMode === 'main_prompt' && targetAvatar?.mainPrompt) {
             console.log('  - Main prompt:', targetAvatar.mainPrompt.substring(0, 50) + '...');
           }
           if (livePromptMode === 'guided_gpt') {
             console.log('  - Guided model:', guidedModel);
             console.log('  - Has guardrails:', !!guidedGuardrails?.instructions);
+            console.log('  - Has per-tag context:', !!perTagDescription);
           }
         }
       } catch (err) {

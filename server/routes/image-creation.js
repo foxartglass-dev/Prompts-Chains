@@ -5,6 +5,7 @@
 
 import express from 'express';
 import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import Replicate from 'replicate';
 import { sql, isDatabaseEnabled } from '../db/index.js';
 import fetch from 'node-fetch';
@@ -560,7 +561,8 @@ router.post('/batch-generate', async (req, res) => {
 
 /**
  * POST /api/image-creation/chat
- * Chat with GPT-4o about image prompts, get critiques, suggestions
+ * Chat with AI about image prompts, get critiques, suggestions
+ * Supports multiple providers: OpenAI, Anthropic (Claude), Google (Gemini)
  * Supports image attachments for analysis
  */
 router.post('/chat', async (req, res) => {
@@ -572,46 +574,36 @@ router.post('/chat', async (req, res) => {
       openaiApiKey
     } = req.body;
 
-    const apiKey = openaiApiKey || process.env.OPENAI_API_KEY;
-
-    if (!apiKey) {
-      return res.status(400).json({ error: 'OpenAI API key is required' });
-    }
-
     if (!messages.length) {
       return res.status(400).json({ error: 'Messages required' });
     }
 
-    const openai = new OpenAI({ apiKey });
+    // Determine provider based on model name
+    const isAnthropicModel = model.includes('claude');
+    const isGeminiModel = model.includes('gemini');
+    const isOpenAIModel = !isAnthropicModel && !isGeminiModel;
 
-    // Format messages for OpenAI API
-    const formattedMessages = messages.map(msg => {
-      if (msg.images && msg.images.length > 0) {
-        // Message with images
-        return {
-          role: msg.role,
-          content: [
-            { type: 'text', text: msg.content },
-            ...msg.images.map(img => ({
-              type: 'image_url',
-              image_url: { url: img, detail: 'auto' }
-            }))
-          ]
-        };
+    // Validate we have the right API key
+    let apiKey;
+    if (isAnthropicModel) {
+      apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        return res.status(400).json({ error: 'Anthropic API key not configured. Please add ANTHROPIC_API_KEY to your environment variables.' });
       }
-      return {
-        role: msg.role,
-        content: msg.content
-      };
-    });
-
-    // Check if first message is already a system message (custom context injection)
-    const hasCustomSystemMessage = messages.length > 0 && messages[0].role === 'system';
+    } else if (isGeminiModel) {
+      apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(400).json({ error: 'Gemini API key not configured. Please add GEMINI_API_KEY to your environment variables.' });
+      }
+    } else {
+      apiKey = openaiApiKey || process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        return res.status(400).json({ error: 'OpenAI API key not configured' });
+      }
+    }
 
     // Default system message for image prompt assistance
-    const defaultSystemMessage = {
-      role: 'system',
-      content: `You are an expert image prompt engineer helping create consistent, high-quality image generation prompts for a business marketing context.
+    const defaultSystemContent = `You are an expert image prompt engineer helping create consistent, high-quality image generation prompts for a business marketing context.
 
 Your role:
 1. Analyze reference images to understand visual style
@@ -628,18 +620,156 @@ When analyzing images, focus on:
 - Background treatment
 - Overall aesthetic/mood
 
-When creating prompts, be specific and technical. Include details about lighting, camera angle, color grading, and mood.`
-    };
+When creating prompts, be specific and technical. Include details about lighting, camera angle, color grading, and mood.`;
 
-    // Build final messages array
-    // If custom system message exists, don't add default; otherwise prepend default
+    // Check if first message is already a system message (custom context injection)
+    const hasCustomSystemMessage = messages.length > 0 && messages[0].role === 'system';
+
+    console.log(`[Image Chat] Using provider: ${isAnthropicModel ? 'Anthropic' : isGeminiModel ? 'Google' : 'OpenAI'}, model: ${model}`);
+
+    // ========== ANTHROPIC CLAUDE ==========
+    if (isAnthropicModel) {
+      const anthropic = new Anthropic({ apiKey });
+
+      // Format messages for Claude
+      // Claude uses 'system' as a top-level param, not in messages array
+      let systemPrompt = hasCustomSystemMessage ? messages[0].content : defaultSystemContent;
+      let claudeMessages = hasCustomSystemMessage ? messages.slice(1) : messages;
+
+      // Format for Claude API
+      const formattedMessages = claudeMessages.map(msg => {
+        if (msg.images && msg.images.length > 0) {
+          // Message with images - Claude uses different format
+          const content = [
+            { type: 'text', text: msg.content || '' }
+          ];
+
+          for (const img of msg.images) {
+            // Claude expects base64 data without the data URL prefix
+            if (img.startsWith('data:')) {
+              const [header, base64Data] = img.split(',');
+              const mediaType = header.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+              content.push({
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: mediaType,
+                  data: base64Data
+                }
+              });
+            }
+          }
+          return { role: msg.role === 'assistant' ? 'assistant' : 'user', content };
+        }
+        return { role: msg.role === 'assistant' ? 'assistant' : 'user', content: msg.content };
+      });
+
+      const response = await anthropic.messages.create({
+        model: model,
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: formattedMessages
+      });
+
+      return res.json({
+        success: true,
+        message: {
+          role: 'assistant',
+          content: response.content[0].text
+        },
+        usage: { input_tokens: response.usage?.input_tokens, output_tokens: response.usage?.output_tokens }
+      });
+    }
+
+    // ========== GOOGLE GEMINI ==========
+    if (isGeminiModel) {
+      // Use Google's Gemini API via REST
+      const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+      // Build Gemini format messages
+      const systemContent = hasCustomSystemMessage ? messages[0].content : defaultSystemContent;
+      const chatMessages = hasCustomSystemMessage ? messages.slice(1) : messages;
+
+      const contents = chatMessages.map(msg => {
+        const parts = [{ text: msg.content || '' }];
+
+        if (msg.images && msg.images.length > 0) {
+          for (const img of msg.images) {
+            if (img.startsWith('data:')) {
+              const [header, base64Data] = img.split(',');
+              const mimeType = header.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+              parts.push({
+                inline_data: {
+                  mime_type: mimeType,
+                  data: base64Data
+                }
+              });
+            }
+          }
+        }
+
+        return {
+          role: msg.role === 'assistant' ? 'model' : 'user',
+          parts
+        };
+      });
+
+      const geminiResponse = await fetch(geminiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemContent }] },
+          contents,
+          generationConfig: { maxOutputTokens: 2000 }
+        })
+      });
+
+      const geminiData = await geminiResponse.json();
+
+      if (geminiData.error) {
+        throw new Error(geminiData.error.message || 'Gemini API error');
+      }
+
+      const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
+
+      return res.json({
+        success: true,
+        message: {
+          role: 'assistant',
+          content: responseText
+        },
+        usage: geminiData.usageMetadata
+      });
+    }
+
+    // ========== OPENAI ==========
+    const openai = new OpenAI({ apiKey });
+
+    // Format messages for OpenAI API
+    const formattedMessages = messages.map(msg => {
+      if (msg.images && msg.images.length > 0) {
+        return {
+          role: msg.role,
+          content: [
+            { type: 'text', text: msg.content },
+            ...msg.images.map(img => ({
+              type: 'image_url',
+              image_url: { url: img, detail: 'auto' }
+            }))
+          ]
+        };
+      }
+      return { role: msg.role, content: msg.content };
+    });
+
+    const defaultSystemMessage = { role: 'system', content: defaultSystemContent };
+
     let finalMessages = hasCustomSystemMessage
       ? formattedMessages
       : [defaultSystemMessage, ...formattedMessages];
 
-    // If context images provided, add them to the first user message
+    // Add context images to first user message if provided
     if (contextImages.length > 0 && !hasCustomSystemMessage) {
-      // Find first user message and add context images
       const firstUserIdx = finalMessages.findIndex(m => m.role === 'user');
       if (firstUserIdx >= 0) {
         const userMsg = finalMessages[firstUserIdx];
@@ -653,17 +783,29 @@ When creating prompts, be specific and technical. Include details about lighting
             ...existingContent,
             ...contextImages.map(img => ({
               type: 'image_url',
-              image_url: { url: img, detail: 'low' } // Use 'low' for context images to save tokens
+              image_url: { url: img, detail: 'low' }
             }))
           ]
         };
       }
     }
 
+    // Use gpt-4o as fallback for unknown OpenAI models
+    const validOpenAIModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'gpt-5.2-2025-12-11'];
+    const actualModel = validOpenAIModels.includes(model) ? model : 'gpt-4o';
+
+    if (actualModel !== model) {
+      console.log(`[Image Chat] Unknown model "${model}", falling back to ${actualModel}`);
+    }
+
+    // GPT-5.2 uses max_completion_tokens instead of max_tokens
+    const isGPT5 = actualModel.includes('gpt-5');
+    const tokenParam = isGPT5 ? { max_completion_tokens: 2000 } : { max_tokens: 2000 };
+
     const response = await openai.chat.completions.create({
-      model: model,
+      model: actualModel,
       messages: finalMessages,
-      max_tokens: 2000
+      ...tokenParam
     });
 
     res.json({
@@ -677,7 +819,10 @@ When creating prompts, be specific and technical. Include details about lighting
 
   } catch (error) {
     console.error('Chat error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Chat failed'
+    });
   }
 });
 
