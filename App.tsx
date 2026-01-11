@@ -1344,6 +1344,17 @@ const App: React.FC = () => {
                                     // Publish via Elementor (with Image Bank integration if enabled)
                                     // Image toggle (wpPublishMode): 'off' = no images, 'draft'/'wordpress' = include images
                                     const includeImages = currentProject.state.wpPublishMode !== 'off';
+
+                                    // Validate workflowId exists when images are enabled
+                                    if (includeImages && !currentWorkflowId) {
+                                        addLog(`[${itemLabel}] Error: Workflow not fully loaded. Please wait a moment and try again.`, LogStatus.ERROR, item.id);
+                                        return {
+                                            success: false,
+                                            item,
+                                            error: 'Workflow not loaded - cannot process images'
+                                        };
+                                    }
+
                                     if (includeImages) {
                                         addLog(`[${itemLabel}] Processing images...`, LogStatus.WORKING, item.id);
                                     }
@@ -1563,6 +1574,12 @@ const App: React.FC = () => {
             let data;
 
             if (useElementor) {
+                // Validate workflowId exists for image bank lookup
+                if (!currentWorkflowId) {
+                    addLog(`[${result.item.name}] Error: Workflow not fully loaded. Please wait a moment and try again.`, LogStatus.ERROR, result.item.id);
+                    throw new Error('Workflow not loaded - cannot process images');
+                }
+
                 // Use Elementor publishing endpoint (with Image Bank integration)
                 addLog(`[${result.item.name}] Processing images...`, LogStatus.WORKING, result.item.id);
                 response = await fetch('/api/elementor/publish', {
