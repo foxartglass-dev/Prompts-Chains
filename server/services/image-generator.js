@@ -579,50 +579,77 @@ export async function generateArticleImages(chunks, options = {}, apiKey) {
 
   console.log(`[Image Generator] Generating ${prompts.length} images with ${model}`);
 
-  // Generate each image with its specific size
-  let imageIndex = 0;
-  for (const slot of imageSlots) {
-    if (!slot.prompt) continue;
+  // PARALLEL GENERATION: Process images in concurrent batches to reduce total time
+  // This is critical for staying under Railway's 100-second request timeout
+  // OpenAI gpt-image-1.5: 5 concurrent (OpenAI allows burst, rate limits per minute)
+  // Replicate models: 3 concurrent (external API, more conservative)
+  const isReplicateModel = ['flux-1.1-pro', 'seedream-4', 'ideogram-v3-turbo'].includes(model);
+  const concurrencyLimit = isReplicateModel ? 3 : 5;
 
-    try {
-      const image = await generateImage(slot.prompt, {
-        model,
-        quality,
-        size: slot.size
-      }, apiKey);
+  console.log(`[Image Generator] Using concurrency: ${concurrencyLimit} (${isReplicateModel ? 'Replicate' : 'OpenAI'})`);
 
-      if (onProgress) {
-        onProgress(imageIndex, imageSlots.length, image);
+  // Filter to only slots with prompts
+  const slotsWithPrompts = imageSlots.filter(slot => slot.prompt);
+
+  // Process in concurrent batches
+  for (let batchStart = 0; batchStart < slotsWithPrompts.length; batchStart += concurrencyLimit) {
+    const batch = slotsWithPrompts.slice(batchStart, batchStart + concurrencyLimit);
+
+    console.log(`[Image Generator] Processing batch ${Math.floor(batchStart / concurrencyLimit) + 1}: ${batch.length} images in parallel`);
+
+    // Generate all images in this batch concurrently
+    const batchResults = await Promise.allSettled(
+      batch.map(async (slot, batchIndex) => {
+        const globalIndex = batchStart + batchIndex;
+        try {
+          const image = await generateImage(slot.prompt, {
+            model,
+            quality,
+            size: slot.size
+          }, apiKey);
+
+          if (onProgress) {
+            onProgress(globalIndex, slotsWithPrompts.length, image);
+          }
+
+          return { slot, image, success: true };
+        } catch (error) {
+          logError(`Image generation FAILED for ${slot.type}: ${error.message}`);
+          console.error(`[Image Generator] Failed for ${slot.type}:`, error.message);
+          return { slot, error, success: false };
+        }
+      })
+    );
+
+    // Process results and assign to chunks
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled' && result.value.success) {
+        const { slot, image } = result.value;
+
+        if (slot.chunkIndex === -1) {
+          // Hero image goes in intro
+          chunks.intro.imageData = {
+            url: image.url,
+            width: image.width,
+            height: image.height,
+            alt: 'Hero image',
+            type: 'hero',
+            requestedSize: slot.size,
+            autoSized: true
+          };
+        } else {
+          // Inline image goes in chunk
+          chunks.chunks[slot.chunkIndex].imageData = {
+            url: image.url,
+            width: image.width,
+            height: image.height,
+            alt: chunks.chunks[slot.chunkIndex].heading || '',
+            type: 'inline',
+            side: slot.side
+          };
+        }
       }
-
-      if (slot.chunkIndex === -1) {
-        // Hero image goes in intro
-        chunks.intro.imageData = {
-          url: image.url,
-          width: image.width,
-          height: image.height,
-          alt: 'Hero image',
-          type: 'hero',
-          requestedSize: slot.size, // Track auto-sized dimensions
-          autoSized: true
-        };
-      } else {
-        // Inline image goes in chunk
-        chunks.chunks[slot.chunkIndex].imageData = {
-          url: image.url,
-          width: image.width,
-          height: image.height,
-          alt: chunks.chunks[slot.chunkIndex].heading || '',
-          type: 'inline',
-          side: slot.side
-        };
-      }
-    } catch (error) {
-      logError(`Image generation FAILED for ${slot.type}: ${error.message}`);
-      console.error(`[Image Generator] Failed for ${slot.type}:`, error.message);
     }
-
-    imageIndex++;
   }
 
   // Final state summary

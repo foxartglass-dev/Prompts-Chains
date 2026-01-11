@@ -730,16 +730,27 @@ async function uploadImagesToWordPress(chunks, wpCredentials, onProgress = null)
     }
   }
 
-  // Upload intro/hero image
+  // PARALLEL UPLOAD: Upload all images concurrently to reduce total time
+  // WordPress can handle multiple concurrent uploads
+  const uploadTasks = [];
+
+  // Queue hero image upload
   if (chunks.intro?.imageData?.url) {
-    await uploadChunkImage(chunks.intro, 'hero');
+    uploadTasks.push(uploadChunkImage(chunks.intro, 'hero'));
   }
 
-  // Upload chunk images
+  // Queue chunk image uploads
   for (let i = 0; i < chunks.chunks.length; i++) {
     if (chunks.chunks[i].imageData?.url) {
-      await uploadChunkImage(chunks.chunks[i], `section-${i + 1}`);
+      uploadTasks.push(uploadChunkImage(chunks.chunks[i], `section-${i + 1}`));
     }
+  }
+
+  // Execute all uploads in parallel
+  if (uploadTasks.length > 0) {
+    console.log(`[WP Upload] Uploading ${uploadTasks.length} images in parallel...`);
+    await Promise.allSettled(uploadTasks);
+    console.log(`[WP Upload] All uploads complete`);
   }
 
   return chunks;
