@@ -145,6 +145,14 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
   const [schedulingTest, setSchedulingTest] = useState(false);
   const [selectedTestArticles, setSelectedTestArticles] = useState<number[]>([]);
 
+  // Toast message state (auto-dismissing)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000); // Auto-dismiss after 4 seconds
+  };
+
   const fetchData = useCallback(async () => {
     if (!websiteId) {
       setLoading(false);
@@ -347,7 +355,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
       });
 
       if (res.ok) {
-        alert('Test notification sent! Check your Pushover app.');
+        showToast('Test notification sent! Check your Pushover app.', 'success');
       } else {
         const data = await res.json();
         setError(data.error || 'Failed to send test notification');
@@ -411,7 +419,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
       });
 
       if (res.ok) {
-        alert('Test SMS sent! Check your phone.');
+        showToast('Test SMS sent! Check your phone.', 'success');
       } else {
         const data = await res.json();
         setError(data.error || 'Failed to send test SMS');
@@ -455,7 +463,8 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
 
       const data = await res.json();
       if (res.ok) {
-        alert(`Scheduled ${data.results.filter((r: { success: boolean }) => r.success).length} articles for testing!\n\n${data.results.map((r: { keyword?: string; minutesFromNow?: number; scheduledFor?: string }) => `• ${r.keyword}: ${r.minutesFromNow} min (${r.scheduledFor})`).join('\n')}`);
+        const count = data.results.filter((r: { success: boolean }) => r.success).length;
+        showToast(`Scheduled ${count} article(s) for testing`, 'success');
         setSelectedTestArticles([]);
         fetchTestStatus();
         fetchData();
@@ -480,9 +489,9 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
       const data = await res.json();
       if (res.ok) {
         if (data.processed === 0) {
-          alert(`No articles due for publishing.\n\nCurrent time: ${data.currentTime}\n\nSchedule articles for testing first.`);
+          showToast('No articles due for publishing', 'info');
         } else {
-          alert(`Processed ${data.processed} articles!\n\n✅ Successful: ${data.successful}\n❌ Failed: ${data.failed}`);
+          showToast(`Processed ${data.processed}: ${data.successful} success, ${data.failed} failed`, data.failed > 0 ? 'error' : 'success');
         }
         fetchTestStatus();
         fetchData();
@@ -686,6 +695,18 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
           <div className="mt-2 p-2 bg-red-500/20 border border-red-500/50 rounded text-red-400 text-sm flex items-center justify-between">
             <span>{error}</span>
             <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300">&times;</button>
+          </div>
+        )}
+
+        {/* Toast Message (auto-dismissing) */}
+        {toast && (
+          <div className={`mt-2 p-2 rounded text-sm flex items-center justify-between ${
+            toast.type === 'success' ? 'bg-green-500/20 border border-green-500/50 text-green-400' :
+            toast.type === 'error' ? 'bg-red-500/20 border border-red-500/50 text-red-400' :
+            'bg-blue-500/20 border border-blue-500/50 text-blue-400'
+          }`}>
+            <span>{toast.message}</span>
+            <button onClick={() => setToast(null)} className="opacity-70 hover:opacity-100">&times;</button>
           </div>
         )}
       </div>
