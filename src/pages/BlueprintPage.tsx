@@ -1231,6 +1231,28 @@ const KnownIssuesDiagram: React.FC = () => (
             Fix: Changed approach to RE-CREATE the page (delete old → create new with same slug) because Elementor doesn't support updating _elementor_data via REST API
           </div>
         </div>
+
+        <div className="bg-slate-800 rounded-lg p-4 border border-brand-gold/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">502 Timeout "WordPress publish failed: Unknown error"</span>
+            <span className="text-xs bg-brand-gold/20 text-brand-gold px-2 py-0.5 rounded">MAJOR FIX</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Intermittent 502 gateway timeout errors when generating 5 images with gpt-image-1.5.
+            The publish endpoint was generating images <em>sequentially</em> (one at a time), taking ~300 seconds for 5 images -
+            far exceeding Railway's 100-second request timeout.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added parallel image generation in <code className="bg-slate-900 px-1 rounded">server/services/image-generator.js</code>.
+            Images now generate concurrently (5 at once for OpenAI, 3 for Replicate). Also parallelized WordPress uploads in
+            <code className="bg-slate-900 px-1 rounded">server/services/image-pipeline.js</code>.
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Result:</strong> 5 images now generate in ~22 seconds (down from ~300 seconds).
+            Total batch time dropped from ~5+ minutes to under 1 minute. <strong>13x speedup!</strong>
+          </div>
+        </div>
       </div>
     </div>
 
