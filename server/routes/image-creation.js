@@ -13,6 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { generateImage } from '../services/image-generator.js';
 import { uploadMedia } from '../services/wordpress-publisher.js';
+import githubLogger from '../services/github-logger.js';
 
 const router = express.Router();
 
@@ -1718,6 +1719,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
   } catch (error) {
     console.error('[Image Creation API] Save settings error:', error);
     console.error('[Image Creation API] Stack:', error.stack);
+
+    // Push logs to GitHub so Claude can see them
+    githubLogger.pushLogsToGitHub('image-creation-error').catch(err => {
+      console.error('[GitHub Logger] Failed to push error logs:', err.message);
+    });
+
     res.status(500).json({
       error: error.message,
       stack: error.stack,
