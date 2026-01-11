@@ -65,6 +65,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
   const [isEnabled, setIsEnabled] = useState(false);
 
   // UI state
+  const [showSettings, setShowSettings] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -77,7 +78,6 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
 
     setLoading(true);
     try {
-      // Fetch settings, schedules, and stats in parallel
       const [settingsRes, schedulesRes, statsRes] = await Promise.all([
         fetch(`/api/drip-feed/settings/${websiteId}`),
         fetch(`/api/drip-feed/schedule/${websiteId}`),
@@ -87,7 +87,6 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
       if (settingsRes.ok) {
         const data = await settingsRes.json();
         setSettings(data.settings);
-        // Update form state
         setArticlesPerDay(data.settings.articles_per_day || 7);
         setVarianceEnabled(data.settings.variance_enabled ?? true);
         setVarianceMin(data.settings.variance_min || 6);
@@ -149,6 +148,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
       if (res.ok) {
         const data = await res.json();
         setSettings(data.settings);
+        setShowSettings(false);
       } else {
         const data = await res.json();
         setError(data.error || 'Failed to save settings');
@@ -214,7 +214,6 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
 
   const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  // Calendar helpers
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -222,18 +221,15 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
     const lastDay = new Date(year, month + 1, 0);
     const days: Date[] = [];
 
-    // Add padding days from previous month
     for (let i = 0; i < firstDay.getDay(); i++) {
       const d = new Date(year, month, -i);
       days.unshift(d);
     }
 
-    // Add days of current month
     for (let i = 1; i <= lastDay.getDate(); i++) {
       days.push(new Date(year, month, i));
     }
 
-    // Add padding days from next month
     const remaining = 42 - days.length;
     for (let i = 1; i <= remaining; i++) {
       days.push(new Date(year, month + 1, i));
@@ -262,433 +258,384 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
   }
 
   return (
-    <div className="h-full overflow-auto p-6">
-      {/* Error Banner */}
-      {error && (
-        <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300">&times;</button>
-        </div>
-      )}
-
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header with Enable Toggle */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-brand-gold">Drip Feed</h2>
-            <p className="text-gray-400 text-sm">Auto-publish articles on a schedule</p>
-          </div>
+    <div className="h-full flex flex-col">
+      {/* Compact Top Bar */}
+      <div className="flex-shrink-0 bg-slate-800/80 border-b border-slate-700 px-4 py-2">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left: Toggle + Stats */}
           <div className="flex items-center gap-4">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <span className={`text-sm font-medium ${isEnabled ? 'text-green-400' : 'text-gray-400'}`}>
-                {isEnabled ? 'Enabled' : 'Disabled'}
-              </span>
-              <div
-                onClick={() => setIsEnabled(!isEnabled)}
-                className={`relative w-14 h-7 rounded-full transition-colors cursor-pointer ${
-                  isEnabled ? 'bg-green-600' : 'bg-slate-600'
-                }`}
-              >
-                <div
-                  className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                    isEnabled ? 'translate-x-8' : 'translate-x-1'
-                  }`}
-                />
-              </div>
-            </label>
-            <button
-              onClick={saveSettings}
-              disabled={saving}
-              className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded-lg text-slate-900 font-medium text-sm transition disabled:opacity-50"
+            {/* Enable Toggle */}
+            <div
+              onClick={() => setIsEnabled(!isEnabled)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition ${
+                isEnabled ? 'bg-green-600/20 border border-green-500/50' : 'bg-slate-700 border border-slate-600'
+              }`}
             >
-              {saving ? 'Saving...' : 'Save Settings'}
-            </button>
-          </div>
-        </div>
-
-        {/* Stats Cards */}
-        {stats && (
-          <div className="grid grid-cols-5 gap-4">
-            <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-              <div className="text-3xl font-bold text-amber-400">{stats.pending}</div>
-              <div className="text-sm text-gray-400">Queued</div>
-            </div>
-            <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-              <div className="text-3xl font-bold text-green-400">{stats.published}</div>
-              <div className="text-sm text-gray-400">Published</div>
-            </div>
-            <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-              <div className="text-3xl font-bold text-red-400">{stats.failed}</div>
-              <div className="text-sm text-gray-400">Failed</div>
-            </div>
-            <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-              <div className="text-3xl font-bold text-brand-cyan">{stats.todayCount}</div>
-              <div className="text-sm text-gray-400">Today</div>
-            </div>
-            <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-              <div className={`text-3xl font-bold ${stats.needsAttention > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
-                {stats.needsAttention}
-              </div>
-              <div className="text-sm text-gray-400">Need Meta</div>
-            </div>
-          </div>
-        )}
-
-        {/* Settings Panel */}
-        <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-          <h3 className="text-lg font-semibold text-white mb-4">Schedule Settings</h3>
-
-          <div className="grid grid-cols-2 gap-6">
-            {/* Left Column */}
-            <div className="space-y-4">
-              {/* Articles Per Day */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Articles Per Day
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={articlesPerDay}
-                    onChange={(e) => setArticlesPerDay(parseInt(e.target.value) || 1)}
-                    min="1"
-                    max="50"
-                    className="w-20 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-center"
-                  />
-                  <div className="flex flex-col">
-                    <button
-                      onClick={() => setArticlesPerDay(Math.min(50, articlesPerDay + 1))}
-                      className="px-2 py-0.5 bg-slate-600 hover:bg-slate-500 rounded-t text-gray-300 text-xs"
-                    >
-                      ▲
-                    </button>
-                    <button
-                      onClick={() => setArticlesPerDay(Math.max(1, articlesPerDay - 1))}
-                      className="px-2 py-0.5 bg-slate-600 hover:bg-slate-500 rounded-b text-gray-300 text-xs"
-                    >
-                      ▼
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Variance */}
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer mb-2">
-                  <input
-                    type="checkbox"
-                    checked={varianceEnabled}
-                    onChange={(e) => setVarianceEnabled(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-600 bg-slate-700 text-brand-cyan"
-                  />
-                  <span className="text-sm font-medium text-gray-300">Enable Variance</span>
-                </label>
-                {varianceEnabled && (
-                  <div className="flex items-center gap-2 ml-6">
-                    <span className="text-sm text-gray-400">Range:</span>
-                    <input
-                      type="number"
-                      value={varianceMin}
-                      onChange={(e) => setVarianceMin(parseInt(e.target.value) || 1)}
-                      min="1"
-                      max={articlesPerDay}
-                      className="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-center text-sm"
-                    />
-                    <span className="text-gray-400">to</span>
-                    <input
-                      type="number"
-                      value={varianceMax}
-                      onChange={(e) => setVarianceMax(parseInt(e.target.value) || 1)}
-                      min={varianceMin}
-                      max="50"
-                      className="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-center text-sm"
-                    />
-                    <span className="text-sm text-gray-500">per day</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Publish Time Window */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Publish Time Window
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="time"
-                    value={publishTimeStart}
-                    onChange={(e) => setPublishTimeStart(e.target.value)}
-                    className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
-                  />
-                  <span className="text-gray-400">to</span>
-                  <input
-                    type="time"
-                    value={publishTimeEnd}
-                    onChange={(e) => setPublishTimeEnd(e.target.value)}
-                    className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
-                  />
-                </div>
-              </div>
-
-              {/* First Day Monitor */}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={firstDayMonitor}
-                  onChange={(e) => setFirstDayMonitor(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-600 bg-slate-700 text-brand-cyan"
-                />
-                <span className="text-sm text-gray-300">First Day Monitor</span>
-                <span className="text-xs text-gray-500">(Notify on each publish for first 10 articles)</span>
-              </label>
-            </div>
-
-            {/* Right Column - Skip Days */}
-            <div className="space-y-4">
-              {/* Skip Weekdays */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Skip Every Week
-                </label>
-                <div className="flex gap-2">
-                  {weekdayNames.map((name, index) => (
-                    <button
-                      key={index}
-                      onClick={() => toggleWeekday(index)}
-                      className={`px-3 py-1.5 rounded text-sm font-medium transition ${
-                        skipWeekdays.includes(index)
-                          ? 'bg-red-600 text-white'
-                          : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                      }`}
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Skip Specific Dates */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Skip Specific Dates
-                </label>
-                <div className="flex items-center gap-2 mb-2">
-                  <input
-                    type="date"
-                    value={selectedDate || ''}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
-                  />
-                  <button
-                    onClick={() => {
-                      if (selectedDate) {
-                        addSkipDate(selectedDate);
-                        setSelectedDate(null);
-                      }
-                    }}
-                    disabled={!selectedDate}
-                    className="px-3 py-2 bg-red-600 hover:bg-red-500 rounded text-white text-sm font-medium disabled:opacity-50"
-                  >
-                    Add Skip Day
-                  </button>
-                </div>
-                {skipDates.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {skipDates.map((date) => (
-                      <span
-                        key={date}
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-red-600/30 text-red-400 rounded text-sm"
-                      >
-                        {formatDate(date)}
-                        <button
-                          onClick={() => removeSkipDate(date)}
-                          className="hover:text-red-300"
-                        >
-                          &times;
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Schedule Queue (The Hopper) */}
-        <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">
-              Schedule Queue
-              <span className="ml-2 text-sm font-normal text-gray-400">
-                ({schedules.filter(s => s.status === 'pending').length} pending)
+              <div className={`w-3 h-3 rounded-full ${isEnabled ? 'bg-green-400' : 'bg-gray-500'}`} />
+              <span className={`text-sm font-medium ${isEnabled ? 'text-green-400' : 'text-gray-400'}`}>
+                {isEnabled ? 'Active' : 'Paused'}
               </span>
-            </h3>
+            </div>
+
+            {/* Inline Stats */}
+            {stats && (
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-amber-400 font-medium">{stats.pending} queued</span>
+                <span className="text-gray-500">|</span>
+                <span className="text-green-400">{stats.published} published</span>
+                {stats.failed > 0 && (
+                  <>
+                    <span className="text-gray-500">|</span>
+                    <span className="text-red-400">{stats.failed} failed</span>
+                  </>
+                )}
+                {stats.needsAttention > 0 && (
+                  <>
+                    <span className="text-gray-500">|</span>
+                    <span className="text-amber-400 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      {stats.needsAttention} need meta
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Settings Dropdown + Actions */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                showSettings
+                  ? 'bg-brand-cyan text-slate-900'
+                  : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Schedule Settings
+              <svg className={`w-3 h-3 transition-transform ${showSettings ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
             <button
               onClick={() => setShowCalendar(!showCalendar)}
-              className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-gray-300 text-sm flex items-center gap-2"
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                showCalendar
+                  ? 'bg-brand-cyan text-slate-900'
+                  : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+              }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              {showCalendar ? 'Hide Calendar' : 'Show Calendar'}
+              Calendar
+            </button>
+          </div>
+        </div>
+
+        {/* Error Banner */}
+        {error && (
+          <div className="mt-2 p-2 bg-red-500/20 border border-red-500/50 rounded text-red-400 text-sm flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300">&times;</button>
+          </div>
+        )}
+      </div>
+
+      {/* Collapsible Settings Panel */}
+      {showSettings && (
+        <div className="flex-shrink-0 bg-slate-800/50 border-b border-slate-700 px-4 py-4">
+          <div className="flex flex-wrap items-start gap-6">
+            {/* Articles Per Day + Variance */}
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-400">Articles/day:</span>
+              <input
+                type="number"
+                value={articlesPerDay}
+                onChange={(e) => setArticlesPerDay(parseInt(e.target.value) || 1)}
+                min="1"
+                max="50"
+                className="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-center text-sm"
+              />
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={varianceEnabled}
+                  onChange={(e) => setVarianceEnabled(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-gray-600 bg-slate-700 text-brand-cyan"
+                />
+                <span className="text-sm text-gray-400">Variance</span>
+              </label>
+              {varianceEnabled && (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={varianceMin}
+                    onChange={(e) => setVarianceMin(parseInt(e.target.value) || 1)}
+                    min="1"
+                    className="w-12 bg-slate-700 border border-slate-600 rounded px-1.5 py-1 text-white text-center text-sm"
+                  />
+                  <span className="text-gray-500">-</span>
+                  <input
+                    type="number"
+                    value={varianceMax}
+                    onChange={(e) => setVarianceMax(parseInt(e.target.value) || 1)}
+                    min={varianceMin}
+                    className="w-12 bg-slate-700 border border-slate-600 rounded px-1.5 py-1 text-white text-center text-sm"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Time Window */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">Time:</span>
+              <input
+                type="time"
+                value={publishTimeStart}
+                onChange={(e) => setPublishTimeStart(e.target.value)}
+                className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-sm"
+              />
+              <span className="text-gray-500">to</span>
+              <input
+                type="time"
+                value={publishTimeEnd}
+                onChange={(e) => setPublishTimeEnd(e.target.value)}
+                className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-sm"
+              />
+            </div>
+
+            {/* Skip Weekdays */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">Skip:</span>
+              <div className="flex gap-1">
+                {weekdayNames.map((name, index) => (
+                  <button
+                    key={index}
+                    onClick={() => toggleWeekday(index)}
+                    className={`px-2 py-1 rounded text-xs font-medium transition ${
+                      skipWeekdays.includes(index)
+                        ? 'bg-red-600 text-white'
+                        : 'bg-slate-700 text-gray-400 hover:bg-slate-600'
+                    }`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* First Day Monitor */}
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={firstDayMonitor}
+                onChange={(e) => setFirstDayMonitor(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-gray-600 bg-slate-700 text-brand-cyan"
+              />
+              <span className="text-sm text-gray-400">First Day Monitor</span>
+            </label>
+
+            {/* Save Button */}
+            <button
+              onClick={saveSettings}
+              disabled={saving}
+              className="px-4 py-1.5 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm transition disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
 
-          {/* Calendar View */}
-          {showCalendar && (
-            <div className="mb-6 bg-slate-900 rounded-lg p-4 border border-slate-700">
-              <div className="flex items-center justify-between mb-4">
-                <button
-                  onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
-                  className="p-2 hover:bg-slate-700 rounded"
-                >
-                  &lt;
-                </button>
-                <span className="text-white font-medium">
-                  {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                </span>
-                <button
-                  onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
-                  className="p-2 hover:bg-slate-700 rounded"
-                >
-                  &gt;
-                </button>
-              </div>
-              <div className="grid grid-cols-7 gap-1">
-                {weekdayNames.map((name) => (
-                  <div key={name} className="text-center text-xs text-gray-500 py-2">
-                    {name}
-                  </div>
+          {/* Skip Dates Row */}
+          <div className="mt-3 flex items-center gap-3">
+            <span className="text-sm text-gray-400">Skip dates:</span>
+            <input
+              type="date"
+              value={selectedDate || ''}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-sm"
+            />
+            <button
+              onClick={() => {
+                if (selectedDate) {
+                  addSkipDate(selectedDate);
+                  setSelectedDate(null);
+                }
+              }}
+              disabled={!selectedDate}
+              className="px-2 py-1 bg-red-600 hover:bg-red-500 rounded text-white text-xs font-medium disabled:opacity-50"
+            >
+              + Add
+            </button>
+            {skipDates.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {skipDates.map((date) => (
+                  <span
+                    key={date}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-600/30 text-red-400 rounded text-xs"
+                  >
+                    {formatDate(date)}
+                    <button onClick={() => removeSkipDate(date)} className="hover:text-red-300">&times;</button>
+                  </span>
                 ))}
-                {getDaysInMonth(calendarMonth).map((date, index) => {
-                  const dateStr = date.toISOString().split('T')[0];
-                  const isCurrentMonth = date.getMonth() === calendarMonth.getMonth();
-                  const isToday = dateStr === new Date().toISOString().split('T')[0];
-                  const isSkipped = skipWeekdays.includes(date.getDay()) || skipDates.includes(dateStr);
-                  const scheduledCount = groupedSchedules[dateStr]?.length || 0;
-
-                  return (
-                    <div
-                      key={index}
-                      className={`relative p-2 text-center rounded ${
-                        !isCurrentMonth
-                          ? 'text-gray-600'
-                          : isSkipped
-                            ? 'bg-red-900/30 text-red-400'
-                            : isToday
-                              ? 'bg-brand-cyan/20 text-brand-cyan'
-                              : 'text-gray-300'
-                      }`}
-                    >
-                      <span className="text-sm">{date.getDate()}</span>
-                      {scheduledCount > 0 && (
-                        <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[10px] text-amber-400 font-bold">
-                          {scheduledCount}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        </div>
+      )}
 
-          {/* Grouped Schedule List */}
-          {Object.keys(groupedSchedules).length > 0 ? (
-            <div className="space-y-4 max-h-[500px] overflow-auto">
-              {Object.entries(groupedSchedules)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([date, articles]) => {
-                  const isSkipped = skipWeekdays.includes(new Date(date + 'T00:00:00').getDay()) ||
-                                   skipDates.includes(date);
-
-                  return (
-                    <div key={date} className="bg-slate-900 rounded-lg overflow-hidden">
-                      <div className={`px-4 py-2 flex items-center justify-between ${
-                        isSkipped ? 'bg-red-900/30' : 'bg-slate-800'
-                      }`}>
-                        <span className={`font-medium ${isSkipped ? 'text-red-400' : 'text-white'}`}>
-                          {formatDate(date)}
-                          {isSkipped && ' - SKIPPED'}
-                        </span>
-                        <span className="text-sm text-gray-400">{articles.length} article{articles.length !== 1 ? 's' : ''}</span>
-                      </div>
-                      <div className="divide-y divide-slate-800">
-                        {articles.map((article) => (
-                          <div
-                            key={article.id}
-                            className="px-4 py-3 flex items-center justify-between hover:bg-slate-800/50"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm text-gray-400 w-20">
-                                {formatTime(article.scheduled_time)}
-                              </span>
-                              <span className="text-white">{article.keyword}</span>
-                              {!article.selected_meta_title && (
-                                <span className="px-2 py-0.5 bg-amber-600/30 text-amber-400 rounded text-xs">
-                                  No Meta
-                                </span>
-                              )}
-                              <span className={`px-2 py-0.5 rounded text-xs ${
-                                article.status === 'pending' ? 'bg-blue-600/30 text-blue-400' :
-                                article.status === 'published' ? 'bg-green-600/30 text-green-400' :
-                                article.status === 'failed' ? 'bg-red-600/30 text-red-400' :
-                                'bg-gray-600/30 text-gray-400'
-                              }`}>
-                                {article.status}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {article.wp_post_url && (
-                                <a
-                                  href={article.wp_post_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 rounded text-blue-400 text-xs"
-                                >
-                                  View
-                                </a>
-                              )}
-                              {article.status === 'pending' && (
-                                <button
-                                  onClick={() => removeFromSchedule(article.id)}
-                                  className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 rounded text-red-400 text-xs"
-                                >
-                                  Remove
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <svg className="w-12 h-12 mx-auto opacity-30 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      {/* Calendar Panel (collapsible) */}
+      {showCalendar && (
+        <div className="flex-shrink-0 bg-slate-800/30 border-b border-slate-700 px-4 py-3">
+          <div className="flex items-center justify-between mb-3">
+            <button
+              onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
+              className="p-1 hover:bg-slate-700 rounded text-gray-400"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
               </svg>
-              <p>No articles scheduled yet</p>
-              <p className="text-sm mt-1">Go to Articles tab and select articles to add to the drip feed</p>
-            </div>
-          )}
-        </div>
+            </button>
+            <span className="text-white font-medium text-sm">
+              {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </span>
+            <button
+              onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
+              className="p-1 hover:bg-slate-700 rounded text-gray-400"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {weekdayNames.map((name) => (
+              <div key={name} className="text-center text-xs text-gray-500 py-1">
+                {name}
+              </div>
+            ))}
+            {getDaysInMonth(calendarMonth).map((date, index) => {
+              const dateStr = date.toISOString().split('T')[0];
+              const isCurrentMonth = date.getMonth() === calendarMonth.getMonth();
+              const isToday = dateStr === new Date().toISOString().split('T')[0];
+              const isSkipped = skipWeekdays.includes(date.getDay()) || skipDates.includes(dateStr);
+              const scheduledCount = groupedSchedules[dateStr]?.length || 0;
 
-        {/* Instructions */}
-        <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/50">
-          <h4 className="text-sm font-medium text-brand-gold mb-2">How to use Drip Feed</h4>
-          <ol className="text-sm text-gray-400 space-y-1 list-decimal list-inside">
-            <li>Configure your settings above (articles per day, time window, skip days)</li>
-            <li>Go to the <strong className="text-white">Articles</strong> tab</li>
-            <li>Select articles using the checkboxes</li>
-            <li>Click <strong className="text-white">Add to Drip Feed</strong></li>
-            <li>Enable the drip feed using the toggle above</li>
-            <li>Articles will auto-publish according to your schedule</li>
-          </ol>
+              return (
+                <div
+                  key={index}
+                  className={`relative p-1.5 text-center rounded text-sm ${
+                    !isCurrentMonth
+                      ? 'text-gray-600'
+                      : isSkipped
+                        ? 'bg-red-900/30 text-red-400'
+                        : isToday
+                          ? 'bg-brand-cyan/20 text-brand-cyan font-medium'
+                          : 'text-gray-300'
+                  }`}
+                >
+                  {date.getDate()}
+                  {scheduledCount > 0 && (
+                    <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[9px] text-amber-400 font-bold">
+                      {scheduledCount}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
+      )}
+
+      {/* Main Content: Schedule Queue */}
+      <div className="flex-1 overflow-auto p-4">
+        {Object.keys(groupedSchedules).length > 0 ? (
+          <div className="space-y-3">
+            {Object.entries(groupedSchedules)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([date, articles]) => {
+                const isSkipped = skipWeekdays.includes(new Date(date + 'T00:00:00').getDay()) ||
+                                 skipDates.includes(date);
+
+                return (
+                  <div key={date} className="bg-slate-800/50 rounded-lg overflow-hidden border border-slate-700/50">
+                    <div className={`px-3 py-1.5 flex items-center justify-between ${
+                      isSkipped ? 'bg-red-900/20' : 'bg-slate-700/50'
+                    }`}>
+                      <span className={`text-sm font-medium ${isSkipped ? 'text-red-400' : 'text-white'}`}>
+                        {formatDate(date)}
+                        {isSkipped && <span className="ml-2 text-xs opacity-75">SKIPPED</span>}
+                      </span>
+                      <span className="text-xs text-gray-400">{articles.length} article{articles.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="divide-y divide-slate-700/50">
+                      {articles.map((article) => (
+                        <div
+                          key={article.id}
+                          className="px-3 py-2 flex items-center justify-between hover:bg-slate-700/30"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-gray-500 w-16">
+                              {formatTime(article.scheduled_time)}
+                            </span>
+                            <span className="text-sm text-white">{article.keyword}</span>
+                            {!article.selected_meta_title && (
+                              <span className="px-1.5 py-0.5 bg-amber-600/30 text-amber-400 rounded text-[10px]">
+                                No Meta
+                              </span>
+                            )}
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                              article.status === 'pending' ? 'bg-blue-600/30 text-blue-400' :
+                              article.status === 'published' ? 'bg-green-600/30 text-green-400' :
+                              article.status === 'failed' ? 'bg-red-600/30 text-red-400' :
+                              'bg-gray-600/30 text-gray-400'
+                            }`}>
+                              {article.status}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {article.wp_post_url && (
+                              <a
+                                href={article.wp_post_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-0.5 bg-blue-600/30 hover:bg-blue-600/50 rounded text-blue-400 text-xs"
+                              >
+                                View
+                              </a>
+                            )}
+                            {article.status === 'pending' && (
+                              <button
+                                onClick={() => removeFromSchedule(article.id)}
+                                className="px-2 py-0.5 bg-red-600/30 hover:bg-red-600/50 rounded text-red-400 text-xs"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-3">
+            <svg className="w-12 h-12 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <p>No articles scheduled</p>
+            <p className="text-sm text-gray-600">Select articles in the Articles tab and click "Add to Drip Feed"</p>
+          </div>
+        )}
       </div>
     </div>
   );
