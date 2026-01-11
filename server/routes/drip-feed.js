@@ -379,7 +379,9 @@ router.get('/due', requireDb, async (req, res) => {
       SELECT s.*, a.keyword, a.final_content, a.selected_meta_title,
              a.selected_meta_description, a.generated_images,
              w.wp_url, w.wp_user, w.wp_app_password, w.seo_plugin,
-             COALESCE(ds.timezone, 'America/Chicago') as timezone
+             COALESCE(ds.timezone, 'America/Chicago') as timezone,
+             TO_CHAR(s.scheduled_date, 'YYYY-MM-DD') as scheduled_date_str,
+             TO_CHAR(s.scheduled_time, 'HH24:MI') as scheduled_time_str
       FROM drip_feed_schedules s
       JOIN articles a ON s.article_id = a.id
       JOIN websites w ON s.website_id = w.id
@@ -391,8 +393,8 @@ router.get('/due', requireDb, async (req, res) => {
     // Filter to find articles that are due based on their website's timezone
     const dueArticles = pendingArticles.filter(article => {
       const { currentDate, currentTime } = getCurrentTimeInTimezone(article.timezone);
-      return article.scheduled_date < currentDate ||
-             (article.scheduled_date === currentDate && article.scheduled_time <= currentTime);
+      return article.scheduled_date_str < currentDate ||
+             (article.scheduled_date_str === currentDate && article.scheduled_time_str <= currentTime);
     });
 
     res.json({ dueArticles, count: dueArticles.length });
@@ -411,7 +413,9 @@ router.post('/process', requireDb, async (req, res) => {
              a.selected_meta_description, a.generated_images,
              w.wp_url, w.wp_user, w.wp_app_password, w.seo_plugin,
              w.id as website_id,
-             COALESCE(ds.timezone, 'America/Chicago') as timezone
+             COALESCE(ds.timezone, 'America/Chicago') as timezone,
+             TO_CHAR(s.scheduled_date, 'YYYY-MM-DD') as scheduled_date_str,
+             TO_CHAR(s.scheduled_time, 'HH24:MI') as scheduled_time_str
       FROM drip_feed_schedules s
       JOIN articles a ON s.article_id = a.id
       JOIN websites w ON s.website_id = w.id
@@ -424,8 +428,8 @@ router.post('/process', requireDb, async (req, res) => {
     // Filter to find articles that are due based on their website's timezone
     const dueArticles = pendingArticles.filter(article => {
       const { currentDate, currentTime } = getCurrentTimeInTimezone(article.timezone);
-      return article.scheduled_date < currentDate ||
-             (article.scheduled_date === currentDate && article.scheduled_time <= currentTime);
+      return article.scheduled_date_str < currentDate ||
+             (article.scheduled_date_str === currentDate && article.scheduled_time_str <= currentTime);
     }).slice(0, 10); // Limit to 10 for processing
 
     console.log(`[Drip Feed] Found ${dueArticles.length} articles due for publishing`);
@@ -643,7 +647,9 @@ router.post('/process-now', requireDb, async (req, res) => {
              a.selected_meta_description, a.generated_images,
              w.wp_url, w.wp_user, w.wp_app_password, w.seo_plugin,
              w.id as website_id,
-             COALESCE(ds.timezone, 'America/Chicago') as timezone
+             COALESCE(ds.timezone, 'America/Chicago') as timezone,
+             TO_CHAR(s.scheduled_date, 'YYYY-MM-DD') as scheduled_date_str,
+             TO_CHAR(s.scheduled_time, 'HH24:MI') as scheduled_time_str
       FROM drip_feed_schedules s
       JOIN articles a ON s.article_id = a.id
       JOIN websites w ON s.website_id = w.id
@@ -656,8 +662,8 @@ router.post('/process-now', requireDb, async (req, res) => {
     // Filter to find articles that are due based on their website's timezone
     const dueArticles = pendingArticles.filter(article => {
       const { currentDate, currentTime } = getCurrentTimeInTimezone(article.timezone);
-      return article.scheduled_date < currentDate ||
-             (article.scheduled_date === currentDate && article.scheduled_time <= currentTime);
+      return article.scheduled_date_str < currentDate ||
+             (article.scheduled_date_str === currentDate && article.scheduled_time_str <= currentTime);
     }).slice(0, 1); // Only process 1 for manual trigger
 
     // Get current time for response (use first article's timezone or default)
@@ -703,8 +709,9 @@ router.get('/test-status', requireDb, async (req, res) => {
     // Get all pending schedules with their website's timezone
     const pending = await sql`
       SELECT s.*, a.keyword, a.selected_meta_title, a.selected_meta_description,
-             s.scheduled_date || ' ' || s.scheduled_time as scheduled_datetime,
-             COALESCE(ds.timezone, 'America/Chicago') as timezone
+             COALESCE(ds.timezone, 'America/Chicago') as timezone,
+             TO_CHAR(s.scheduled_date, 'YYYY-MM-DD') as scheduled_date_str,
+             TO_CHAR(s.scheduled_time, 'HH24:MI') as scheduled_time_str
       FROM drip_feed_schedules s
       JOIN articles a ON s.article_id = a.id
       LEFT JOIN drip_feed_settings ds ON s.website_id = ds.website_id
@@ -720,8 +727,8 @@ router.get('/test-status', requireDb, async (req, res) => {
     // Calculate which are due now based on timezone
     const dueNow = pending.filter(p => {
       const { currentDate: tzDate, currentTime: tzTime } = getCurrentTimeInTimezone(p.timezone);
-      return p.scheduled_date < tzDate ||
-             (p.scheduled_date === tzDate && p.scheduled_time <= tzTime);
+      return p.scheduled_date_str < tzDate ||
+             (p.scheduled_date_str === tzDate && p.scheduled_time_str <= tzTime);
     });
 
     res.json({
@@ -735,7 +742,7 @@ router.get('/test-status', requireDb, async (req, res) => {
         keyword: p.keyword,
         selected_meta_title: p.selected_meta_title,
         selected_meta_description: p.selected_meta_description,
-        scheduledFor: `${p.scheduled_date} ${p.scheduled_time}`,
+        scheduledFor: `${p.scheduled_date_str} ${p.scheduled_time_str}`,
         isDueNow: dueNow.some(d => d.id === p.id)
       })),
       note: 'Cron runs every 5 minutes. Articles with isDueNow=true will be processed on next cron run.'

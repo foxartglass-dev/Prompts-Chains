@@ -105,7 +105,9 @@ async function runDripFeedCycle() {
              w.wp_url, w.wp_user, w.wp_app_password, w.seo_plugin,
              w.id as website_id,
              ds.is_enabled, ds.first_day_monitor,
-             COALESCE(ds.timezone, 'America/Chicago') as timezone
+             COALESCE(ds.timezone, 'America/Chicago') as timezone,
+             TO_CHAR(s.scheduled_date, 'YYYY-MM-DD') as scheduled_date_str,
+             TO_CHAR(s.scheduled_time, 'HH24:MI') as scheduled_time_str
       FROM drip_feed_schedules s
       JOIN articles a ON s.article_id = a.id
       JOIN websites w ON s.website_id = w.id
@@ -116,11 +118,20 @@ async function runDripFeedCycle() {
       LIMIT 50
     `;
 
+    console.log(`[Drip Feed Scheduler] Found ${pendingArticles.length} pending articles`);
+
     // Filter to find articles that are due based on their website's timezone
     const dueArticles = pendingArticles.filter(article => {
       const { currentDate, currentTime } = getCurrentTimeInTimezone(article.timezone);
-      return article.scheduled_date < currentDate ||
-             (article.scheduled_date === currentDate && article.scheduled_time <= currentTime);
+      const schedDate = article.scheduled_date_str;
+      const schedTime = article.scheduled_time_str;
+
+      const isDue = schedDate < currentDate ||
+             (schedDate === currentDate && schedTime <= currentTime);
+
+      console.log(`[Drip Feed Scheduler] Article ${article.article_id}: scheduled ${schedDate} ${schedTime}, current ${currentDate} ${currentTime}, isDue: ${isDue}`);
+
+      return isDue;
     }).slice(0, 5); // Limit to 5 for processing
 
     if (dueArticles.length === 0) {
