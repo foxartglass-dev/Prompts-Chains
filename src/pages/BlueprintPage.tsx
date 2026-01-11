@@ -5,7 +5,7 @@ interface BlueprintPageProps {
   onClose: () => void;
 }
 
-type BlueprintTab = 'start-here' | 'image-flow' | 'push-all' | 'individual-buttons' | 'data-sources' | 'golden-rules' | 'known-issues' | 'drip-feed' | 'notes' | 'agent-template';
+type BlueprintTab = 'start-here' | 'image-flow' | 'image-recycle' | 'push-all' | 'individual-buttons' | 'data-sources' | 'golden-rules' | 'known-issues' | 'drip-feed' | 'changelog' | 'notes' | 'agent-template';
 
 const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<BlueprintTab>('start-here');
@@ -15,12 +15,14 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
   const tabs: { id: BlueprintTab; label: string }[] = [
     { id: 'start-here', label: 'Start Here' },
     { id: 'image-flow', label: 'Image Flow' },
+    { id: 'image-recycle', label: 'Image Recycle' },
     { id: 'push-all', label: 'Push All to WP' },
     { id: 'individual-buttons', label: 'Individual Buttons' },
     { id: 'data-sources', label: 'Data Sources' },
     { id: 'golden-rules', label: 'Golden Rules' },
     { id: 'known-issues', label: 'Known Issues' },
     { id: 'drip-feed', label: 'Drip Feed' },
+    { id: 'changelog', label: 'Changelog' },
     { id: 'notes', label: 'Notes' },
     { id: 'agent-template', label: 'Agent Template' },
   ];
@@ -74,12 +76,14 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
         <main className="flex-1 overflow-auto p-6">
           {activeTab === 'start-here' && <NewAgentStartHere />}
           {activeTab === 'image-flow' && <ImageFlowDiagram />}
+          {activeTab === 'image-recycle' && <ImageRecycleDiagram />}
           {activeTab === 'push-all' && <PushAllDiagram />}
           {activeTab === 'individual-buttons' && <IndividualButtonsDiagram />}
           {activeTab === 'data-sources' && <DataSourcesDiagram />}
           {activeTab === 'golden-rules' && <GoldenRules />}
           {activeTab === 'known-issues' && <KnownIssuesDiagram />}
           {activeTab === 'drip-feed' && <DripFeedDiagram />}
+          {activeTab === 'changelog' && <ChangelogDiagram />}
           {activeTab === 'notes' && <NotesEditor />}
           {activeTab === 'agent-template' && <AgentTemplate />}
         </main>
@@ -2067,6 +2071,506 @@ const AgentTemplate: React.FC = () => (
         </div>
       </div>
 
+    </div>
+  </div>
+);
+
+// Image Recycle System - Technical documentation for recycling test images
+const ImageRecycleDiagram: React.FC = () => (
+  <div className="space-y-6">
+    <div className="text-center mb-8">
+      <h2 className="text-2xl font-bold text-brand-cyan mb-2">Image Recycle System</h2>
+      <p className="text-gray-400">Recycle testing images back to Image Bank for reuse (Jan 2026)</p>
+    </div>
+
+    {/* Overview */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">System Overview</h3>
+      <p className="text-gray-300 text-sm mb-4">
+        When testing the system, images get "used" but never actually published to a live site.
+        The Image Recycle system allows these test images to be moved back into the reusable Image Bank.
+      </p>
+      <div className="flex flex-col items-center gap-4 mt-6">
+        {/* Flow Diagram */}
+        <div className="flex gap-8 justify-center items-center flex-wrap">
+          <div className="bg-slate-700 rounded-lg p-4 border-2 border-yellow-500 w-48 text-center">
+            <div className="text-yellow-500 font-bold mb-2">DRAFT IMAGE BANK</div>
+            <div className="text-xs text-gray-400">draft_image_bank table</div>
+            <div className="text-xs text-gray-400 mt-1">249 draft images</div>
+          </div>
+          <div className="text-4xl text-brand-cyan">→</div>
+          <div className="bg-slate-700 rounded-lg p-4 border-2 border-green-500 w-48 text-center">
+            <div className="text-green-500 font-bold mb-2">IMAGE BANK</div>
+            <div className="text-xs text-gray-400">image_bank_items table</div>
+            <div className="text-xs text-gray-400 mt-1">Reusable images</div>
+          </div>
+        </div>
+        <div className="flex gap-8 justify-center items-center flex-wrap mt-4">
+          <div className="bg-slate-700 rounded-lg p-4 border-2 border-red-500 w-48 text-center">
+            <div className="text-red-500 font-bold mb-2">USED/ARCHIVE</div>
+            <div className="text-xs text-gray-400">image_bank_items (used=true)</div>
+            <div className="text-xs text-gray-400 mt-1">44 used images</div>
+          </div>
+          <div className="text-4xl text-brand-cyan">→</div>
+          <div className="bg-slate-700 rounded-lg p-4 border-2 border-green-500 w-48 text-center">
+            <div className="text-green-500 font-bold mb-2">AVAILABLE</div>
+            <div className="text-xs text-gray-400">image_bank_items (used=false)</div>
+            <div className="text-xs text-gray-400 mt-1">Ready for reuse</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Database Field Mapping */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-gold/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">Field Mapping: draft_image_bank → image_bank_items</h3>
+      <p className="text-sm text-gray-400 mb-4">When recycling from Draft Bank to Image Bank, fields are mapped as follows:</p>
+
+      <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-slate-700">
+              <th className="py-2 text-yellow-500">draft_image_bank</th>
+              <th className="py-2 text-green-500">image_bank_items</th>
+              <th className="py-2 text-gray-400">Notes</th>
+            </tr>
+          </thead>
+          <tbody className="text-gray-300">
+            <tr className="border-b border-slate-800">
+              <td className="py-2">url</td>
+              <td className="py-2">url</td>
+              <td className="py-2 text-xs text-gray-500">Direct copy</td>
+            </tr>
+            <tr className="border-b border-slate-800">
+              <td className="py-2">prompt</td>
+              <td className="py-2">prompt</td>
+              <td className="py-2 text-xs text-gray-500">Direct copy</td>
+            </tr>
+            <tr className="border-b border-slate-800">
+              <td className="py-2">model</td>
+              <td className="py-2">model</td>
+              <td className="py-2 text-xs text-gray-500">Direct copy</td>
+            </tr>
+            <tr className="border-b border-slate-800">
+              <td className="py-2">avatar_tag</td>
+              <td className="py-2">avatar_tag</td>
+              <td className="py-2 text-xs text-gray-500">Direct copy</td>
+            </tr>
+            <tr className="border-b border-slate-800">
+              <td className="py-2 text-yellow-400">item_type</td>
+              <td className="py-2 text-green-400">title + tags[]</td>
+              <td className="py-2 text-xs text-gray-500">Used as title AND added to tags</td>
+            </tr>
+            <tr className="border-b border-slate-800">
+              <td className="py-2 text-yellow-400">item_category</td>
+              <td className="py-2 text-green-400">category</td>
+              <td className="py-2 text-xs text-gray-500">Renamed field</td>
+            </tr>
+            <tr className="border-b border-slate-800">
+              <td className="py-2 text-yellow-400">page_keyword</td>
+              <td className="py-2 text-green-400">tags[]</td>
+              <td className="py-2 text-xs text-gray-500">Added to tags array</td>
+            </tr>
+            <tr className="border-b border-slate-800">
+              <td className="py-2">metadata</td>
+              <td className="py-2">metadata</td>
+              <td className="py-2 text-xs text-gray-500">Extended with recycle info</td>
+            </tr>
+            <tr>
+              <td className="py-2 text-gray-500">-</td>
+              <td className="py-2">'recycled' tag</td>
+              <td className="py-2 text-xs text-gray-500">Always added to tags</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-4 p-3 bg-slate-800 rounded-lg text-xs text-gray-400">
+        <strong className="text-brand-gold">Metadata added on recycle:</strong>
+        <code className="block mt-2 text-gray-300">{`{ recycledFrom: 'draft_image_bank', originalDraftId: 123, originalStatus: 'draft', recycledAt: '2026-01-11T...' }`}</code>
+      </div>
+    </div>
+
+    {/* API Endpoints */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">API Endpoints</h3>
+
+      <div className="space-y-6">
+        {/* Endpoint 1 */}
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="bg-green-600 text-white text-xs px-2 py-1 rounded font-bold">POST</span>
+            <code className="text-brand-cyan">/api/image-bank/:workflowId/recycle-from-draft</code>
+          </div>
+          <div className="text-sm text-gray-400 mb-3">Copy images from Draft Image Bank to regular Image Bank</div>
+
+          <div className="grid md:grid-cols-2 gap-4 text-xs">
+            <div>
+              <div className="text-brand-gold mb-2">Request Body:</div>
+              <pre className="bg-slate-800 p-2 rounded text-gray-300">{`{
+  "statuses": ["draft", "sent"],  // Which statuses to include
+  "deleteAfterRecycle": false     // Remove from draft after copy
+}`}</pre>
+            </div>
+            <div>
+              <div className="text-green-400 mb-2">Response:</div>
+              <pre className="bg-slate-800 p-2 rounded text-gray-300">{`{
+  "success": true,
+  "data": {
+    "recycled": 249,
+    "deleted": 0,
+    "message": "Recycled 249 images to Image Bank"
+  }
+}`}</pre>
+            </div>
+          </div>
+        </div>
+
+        {/* Endpoint 2 */}
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="bg-green-600 text-white text-xs px-2 py-1 rounded font-bold">POST</span>
+            <code className="text-brand-cyan">/api/image-bank/:workflowId/restore-all-used</code>
+          </div>
+          <div className="text-sm text-gray-400 mb-3">Mark all used images as available again (set used=false)</div>
+
+          <div className="grid md:grid-cols-2 gap-4 text-xs">
+            <div>
+              <div className="text-brand-gold mb-2">Request Body:</div>
+              <pre className="bg-slate-800 p-2 rounded text-gray-300">{`{}`}</pre>
+              <div className="text-gray-500 mt-1">No body required</div>
+            </div>
+            <div>
+              <div className="text-green-400 mb-2">Response:</div>
+              <pre className="bg-slate-800 p-2 rounded text-gray-300">{`{
+  "success": true,
+  "data": {
+    "restored": 44
+  }
+}`}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Database Operations */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-purple-500/30">
+      <h3 className="text-lg font-bold text-purple-400 mb-4">Database Operations</h3>
+
+      <div className="space-y-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="text-brand-gold font-semibold mb-2">Recycle from Draft Bank:</div>
+          <div className="text-xs text-gray-400 mb-2">File: server/services/image-bank.js → recycleFromDraftBank()</div>
+          <pre className="text-xs bg-slate-800 p-3 rounded text-gray-300 overflow-x-auto">{`// 1. Get draft images matching criteria
+SELECT * FROM draft_image_bank
+WHERE workflow_id = $1 AND status = ANY($2)
+
+// 2. Insert into image_bank_items with field mapping
+INSERT INTO image_bank_items (workflow_id, external_id, url, title, ...)
+
+// 3. Optionally delete from draft bank
+DELETE FROM draft_image_bank WHERE id = ANY($recycledIds)`}</pre>
+        </div>
+
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="text-brand-gold font-semibold mb-2">Restore Used Images:</div>
+          <div className="text-xs text-gray-400 mb-2">File: server/services/image-bank.js → restoreAllUsedImages()</div>
+          <pre className="text-xs bg-slate-800 p-3 rounded text-gray-300 overflow-x-auto">{`UPDATE image_bank_items
+SET used = false, used_on = null, used_at = null, updated_at = NOW()
+WHERE workflow_id = $1 AND used = true
+RETURNING id`}</pre>
+        </div>
+      </div>
+    </div>
+
+    {/* Frontend State Management */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Frontend State Management</h3>
+      <div className="text-xs text-gray-400 mb-4">File: src/components/ImageCreationSection.tsx</div>
+
+      <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs">
+        <pre className="text-gray-300">{`// Selection state for Draft Bank images
+const [selectedDraftImages, setSelectedDraftImages] = useState<Set<number>>(new Set());
+
+// Selection state for Used/Archive images (string IDs)
+const [selectedUsedImages, setSelectedUsedImages] = useState<Set<string>>(new Set());
+
+// Quick preview modal
+const [quickPreview, setQuickPreview] = useState<string | null>(null);
+
+// Expand All view modals
+const [draftBankExpandedView, setDraftBankExpandedView] = useState(false);
+const [usedBankExpandedView, setUsedBankExpandedView] = useState(false);
+
+// Stats loaded on mount (not just when opened)
+const fetchDraftBankStatsOnly = async () => {
+  const response = await fetch(\`/api/draft-image-bank/\${workflowId}/stats\`);
+  // Updates header without loading full image data
+};
+
+useEffect(() => {
+  if (workflowId) fetchDraftBankStatsOnly();
+}, [workflowId]);`}</pre>
+      </div>
+
+      <div className="mt-4 p-3 bg-yellow-900/30 rounded-lg text-xs text-yellow-300">
+        <strong>Note:</strong> Draft images use numeric IDs (from database), Used images use string IDs (external_id field).
+        This is why we have separate Set types.
+      </div>
+    </div>
+
+    {/* Key Files */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Key Files Reference</h3>
+      <div className="grid md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <h4 className="font-semibold text-brand-gold mb-2">Backend</h4>
+          <ul className="space-y-2 text-gray-300">
+            <li className="flex justify-between">
+              <code className="text-xs">server/services/image-bank.js</code>
+              <span className="text-xs text-gray-500">recycleFromDraftBank(), restoreAllUsedImages()</span>
+            </li>
+            <li className="flex justify-between">
+              <code className="text-xs">server/routes/image-bank.js</code>
+              <span className="text-xs text-gray-500">API endpoints</span>
+            </li>
+            <li className="flex justify-between">
+              <code className="text-xs">server/services/draft-image-bank.js</code>
+              <span className="text-xs text-gray-500">getDraftImageBank() - fixed sql.unsafe</span>
+            </li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="font-semibold text-brand-gold mb-2">Frontend</h4>
+          <ul className="space-y-2 text-gray-300">
+            <li className="flex justify-between">
+              <code className="text-xs">src/components/ImageCreationSection.tsx</code>
+              <span className="text-xs text-gray-500">All UI components</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    {/* Critical SQL Fix */}
+    <div className="bg-red-900/20 rounded-xl p-6 border border-red-500">
+      <h3 className="text-lg font-bold text-red-400 mb-4">Critical Fix: sql.unsafe() Pattern</h3>
+      <p className="text-sm text-gray-300 mb-4">
+        The Draft Image Bank was showing 0 images due to <code className="bg-slate-900 px-1 rounded">sql.unsafe()</code> throwing empty errors.
+        This is the fix pattern to use for conditional filters:
+      </p>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="text-red-400 font-semibold mb-2">BROKEN (sql.unsafe):</div>
+          <pre className="text-xs text-gray-300 overflow-x-auto">{`// This throws empty {} errors
+let query = 'SELECT * FROM table WHERE workflow_id = $1';
+if (status) query += ' AND status = $2';
+await sql.unsafe(query, [workflowId, status]);`}</pre>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="text-green-400 font-semibold mb-2">FIXED (tagged template):</div>
+          <pre className="text-xs text-gray-300 overflow-x-auto">{`// Use NULL check pattern instead
+await sql\`
+  SELECT * FROM table
+  WHERE workflow_id = \${workflowId}
+    AND (\${status || null}::text IS NULL
+         OR status = \${status || null})
+\`;`}</pre>
+        </div>
+      </div>
+
+      <div className="mt-4 p-3 bg-red-900/30 rounded-lg text-xs text-red-300">
+        <strong>Rule:</strong> Never use <code>sql.unsafe()</code> in this codebase. Always use tagged templates with the NULL check pattern for optional filters.
+      </div>
+    </div>
+  </div>
+);
+
+// Changelog - Searchable list of features and fixes with dates
+const ChangelogDiagram: React.FC = () => (
+  <div className="space-y-6">
+    <div className="text-center mb-8">
+      <h2 className="text-2xl font-bold text-brand-cyan mb-2">Changelog</h2>
+      <p className="text-gray-400">Searchable history of features and fixes</p>
+    </div>
+
+    {/* January 2026 */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">January 2026</h3>
+
+      <div className="space-y-4">
+        {/* Jan 11 */}
+        <div className="border-l-4 border-brand-cyan pl-4">
+          <div className="text-sm text-brand-cyan font-semibold">Jan 11, 2026</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Draft Image Bank not displaying images</strong>
+                <div className="text-xs text-gray-500">sql.unsafe() throwing empty errors → Rewrote with tagged templates</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Draft Bank header showed 0 until opened</strong>
+                <div className="text-xs text-gray-500">Added fetchDraftBankStatsOnly() on component mount</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Image Recycle Feature</strong>
+                <div className="text-xs text-gray-500">Draft Bank → Image Bank recycling, Used → Available restore</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Image Selection & Expand All</strong>
+                <div className="text-xs text-gray-500">Checkboxes, Select All, full-screen grid view modal</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DOCS</span>
+              <div>
+                <strong>Blueprint: Image Recycle tab</strong>
+                <div className="text-xs text-gray-500">Technical documentation with field mappings, API endpoints, SQL patterns</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DOCS</span>
+              <div>
+                <strong>Blueprint: Changelog tab</strong>
+                <div className="text-xs text-gray-500">Searchable feature/fix history</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        {/* Jan 10 */}
+        <div className="border-l-4 border-brand-gold pl-4">
+          <div className="text-sm text-brand-gold font-semibold">Jan 10, 2026</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>502 Timeout on image generation</strong>
+                <div className="text-xs text-gray-500">Parallelized image generation: 5 images now ~22s instead of ~300s (13x speedup)</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>workflowId race condition</strong>
+                <div className="text-xs text-gray-500">Added validation in App.tsx before publish calls</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        {/* Earlier Jan */}
+        <div className="border-l-4 border-gray-600 pl-4">
+          <div className="text-sm text-gray-400 font-semibold">Earlier in January</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Image Creation settings 500 error</strong>
+                <div className="text-xs text-gray-500">Invalid nested SQL template literals → if/else blocks</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>website_id column doesn't exist</strong>
+                <div className="text-xs text-gray-500">Added try-catch fallback for missing migration</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>guided_guardrails column doesn't exist</strong>
+                <div className="text-xs text-gray-500">Added to INSERT fallback check</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Staging WordPress credentials fallback</strong>
+                <div className="text-xs text-gray-500">Removed incorrect fallback to workflow credentials</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Article button pushing images</strong>
+                <div className="text-xs text-gray-500">Added articleOnly: true parameter</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Meta push "Invalid post ID"</strong>
+                <div className="text-xs text-gray-500">Try /pages/ first, fallback to /posts/</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Images button not embedding images</strong>
+                <div className="text-xs text-gray-500">Delete → Recreate page approach (Elementor can't update _elementor_data via REST)</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    {/* Quick Reference */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-gold/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">Quick Reference: Common Patterns</h3>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="text-brand-cyan font-semibold mb-2">SQL Optional Filters</div>
+          <code className="text-xs text-gray-300 block">{`(\${val || null}::text IS NULL OR col = \${val || null})`}</code>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="text-brand-cyan font-semibold mb-2">Stats on Mount</div>
+          <code className="text-xs text-gray-300 block">useEffect fetch stats separately from data</code>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="text-brand-cyan font-semibold mb-2">WordPress Page Type</div>
+          <code className="text-xs text-gray-300 block">Try /pages/ first, then /posts/</code>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="text-brand-cyan font-semibold mb-2">Elementor Updates</div>
+          <code className="text-xs text-gray-300 block">Delete page → Recreate with same slug</code>
+        </div>
+      </div>
+    </div>
+
+    {/* Legend */}
+    <div className="bg-slate-800/30 rounded-lg p-4 flex gap-6 justify-center text-sm">
+      <div className="flex items-center gap-2">
+        <span className="text-green-400 font-bold">FIX</span>
+        <span className="text-gray-400">Bug fix</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-blue-400 font-bold">FEAT</span>
+        <span className="text-gray-400">New feature</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-purple-400 font-bold">DOCS</span>
+        <span className="text-gray-400">Documentation</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-yellow-400 font-bold">PERF</span>
+        <span className="text-gray-400">Performance</span>
+      </div>
     </div>
   </div>
 );
