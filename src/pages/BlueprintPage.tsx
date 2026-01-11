@@ -464,6 +464,68 @@ const ImageFlowDiagram: React.FC = () => (
         The Elementor publish step uses <code className="bg-slate-800 px-1 rounded">wpMediaUrl</code> to embed in the page.
       </div>
     </div>
+
+    {/* Staging WordPress System */}
+    <div className="bg-purple-900/20 rounded-xl p-6 border border-purple-500">
+      <h3 className="text-lg font-bold text-purple-400 mb-4">Staging WordPress (Image Media Library)</h3>
+      <div className="space-y-4">
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-purple-400 font-semibold mb-2">Why Staging?</div>
+          <div className="text-sm text-gray-300">
+            WordPress hosts block large base64 image uploads via ModSecurity. Instead of weakening client site security,
+            we use a central staging site to convert base64 → wpUrl, then use that URL everywhere.
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-brand-cyan font-semibold mb-2">Flow:</div>
+          <div className="flex items-center justify-center gap-2 text-sm text-gray-300 flex-wrap">
+            <span className="bg-slate-700 px-2 py-1 rounded">AI generates base64</span>
+            <span className="text-brand-cyan">→</span>
+            <span className="bg-purple-800 px-2 py-1 rounded">Upload to Staging WP</span>
+            <span className="text-brand-cyan">→</span>
+            <span className="bg-slate-700 px-2 py-1 rounded">Get wpUrl back</span>
+            <span className="text-brand-cyan">→</span>
+            <span className="bg-slate-700 px-2 py-1 rounded">Use URL on client sites</span>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-green-400 font-semibold mb-2">Where Credentials Are Stored:</div>
+          <div className="text-sm text-gray-300 space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="text-green-400">✓</span>
+              <div>
+                <strong>Database:</strong> <code className="bg-slate-900 px-1 rounded">global_settings</code> table
+                <div className="text-xs text-gray-400 mt-1">
+                  Columns: <code className="bg-slate-900 px-1 rounded">staging_wp_url</code>,
+                  <code className="bg-slate-900 px-1 rounded">staging_wp_user</code>,
+                  <code className="bg-slate-900 px-1 rounded">staging_wp_password</code>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-green-400">✓</span>
+              <div>
+                <strong>UI:</strong> WordPress Settings (top nav) → Staging WordPress section
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-yellow-400 font-semibold mb-2">Credential Priority Order:</div>
+          <div className="text-sm text-gray-300 space-y-1">
+            <div>1. <strong>Global staging credentials</strong> (from WordPress Settings) ← <span className="text-green-400">preferred</span></div>
+            <div>2. Explicit params in request (legacy)</div>
+            <div>3. Workflow's website credentials (fallback)</div>
+          </div>
+          <div className="mt-2 text-xs text-gray-400">
+            Code: <code className="bg-slate-900 px-1 rounded">server/routes/image-creation.js</code> batch-generate endpoint
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 );
 
@@ -1037,68 +1099,17 @@ const KnownIssuesDiagram: React.FC = () => (
     </div>
 
     {/* Active Issues */}
-    <div className="bg-red-900/20 rounded-xl p-6 border border-red-500">
-      <h3 className="text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
+    {/* No current critical issues - workflowId issue was fixed Jan 2026 */}
+    <div className="bg-green-900/20 rounded-xl p-6 border border-green-500/50">
+      <h3 className="text-lg font-bold text-green-400 mb-4 flex items-center gap-2">
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        Intermittent Issue: Missing workflowId
+        No Critical Issues Currently
       </h3>
-
-      <div className="space-y-4">
-        <div className="bg-slate-800 rounded-lg p-4">
-          <div className="text-red-400 font-semibold mb-2">Symptom:</div>
-          <div className="text-sm text-gray-300">
-            "WordPress publish failed: Unknown error" - happens randomly, worked on retry without code changes
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-lg p-4">
-          <div className="text-yellow-400 font-semibold mb-2">Root Cause:</div>
-          <div className="text-sm text-gray-300">
-            The <code className="bg-slate-900 px-1 rounded">workflowId</code> is not being passed to the
-            <code className="bg-slate-900 px-1 rounded">/api/elementor/publish</code> endpoint.
-            This prevents the image bank lookup from working.
-          </div>
-          <div className="mt-2 text-xs text-gray-400">
-            Log shows: <code className="bg-slate-900 px-1 rounded">[Elementor Publish] No workflowId or database not enabled</code>
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-lg p-4">
-          <div className="text-blue-400 font-semibold mb-2">Likely Cause:</div>
-          <div className="text-sm text-gray-300">
-            Frontend state synchronization / race condition - the workflow state might not be fully loaded
-            when the user clicks "Start Workflow" or "Push All".
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-lg p-4">
-          <div className="text-green-400 font-semibold mb-2">Potential Fix (NOT IMPLEMENTED):</div>
-          <div className="text-sm text-gray-300">
-            Add validation in <code className="bg-slate-900 px-1 rounded">App.tsx</code> before calling publish endpoint:
-          </div>
-          <pre className="mt-2 text-xs bg-slate-900 p-2 rounded text-brand-cyan">{`if (!workflowId) {
-  addLog('Error: Workflow not loaded. Please try again.', LogStatus.ERROR);
-  return;
-}`}</pre>
-          <div className="mt-2 text-xs text-yellow-400">
-            Note: This fix was NOT implemented because the system is currently working and we didn't want to risk breaking it.
-          </div>
-        </div>
-
-        <div className="bg-slate-800 rounded-lg p-4">
-          <div className="text-purple-400 font-semibold mb-2">Frequency:</div>
-          <div className="text-sm text-gray-300">
-            Rare - observed once, did not reproduce on second attempt. May be related to:
-            <ul className="mt-2 ml-4 text-xs text-gray-400 space-y-1">
-              <li>- Browser caching</li>
-              <li>- Page not fully loaded when clicking Run</li>
-              <li>- Network timing issues</li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      <p className="text-gray-400 text-sm">
+        All previously documented issues have been resolved. See "Recently Resolved" section below for history.
+      </p>
     </div>
 
     {/* Resolved Issues */}
@@ -1106,6 +1117,36 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues (Jan 2026)</h3>
 
       <div className="space-y-4">
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">workflowId race condition causing "Unknown error"</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> On fresh page load, clicking "Start Workflow" too fast resulted in "WordPress publish failed: Unknown error"
+            because <code className="bg-slate-900 px-1 rounded">currentWorkflowId</code> was still undefined.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added validation in <code className="bg-slate-900 px-1 rounded">App.tsx</code> before publish calls.
+            Now shows clear message: "Workflow not fully loaded. Please wait a moment and try again."
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Staging WordPress credentials not persisting</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> WordPress Settings &gt; Staging WordPress was saving to localStorage only - backend couldn't access it.
+            Images were using "Publishing to WordPress" credentials instead.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Staging credentials now save to <code className="bg-slate-900 px-1 rounded">global_settings</code> table in database.
+            Backend checks global staging credentials FIRST, then falls back to workflow website.
+          </div>
+        </div>
+
         <div className="bg-slate-800 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-green-400">✓</span>
