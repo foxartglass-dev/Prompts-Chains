@@ -31,7 +31,7 @@ cmds = ["npm run build"]
 [start]
 cmd = "bash start.sh"
 
+# Environment variables for Puppeteer/Chrome
 [variables]
 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
-# Nix installs chromium here - this is the standard Nix profile path
 PUPPETEER_EXECUTABLE_PATH = "/root/.nix-profile/bin/chromium"
