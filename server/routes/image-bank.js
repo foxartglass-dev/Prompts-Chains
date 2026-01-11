@@ -166,4 +166,54 @@ router.post('/:workflowId/migrate', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/image-bank/:workflowId/restore-all-used
+ * Restore all used images back to available (set used=false)
+ * Use case: Testing mode - recycle images that were marked as used but never went to a live site
+ */
+router.post('/:workflowId/restore-all-used', async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+    console.log(`[Image Bank] Restoring all used images for workflow ${workflowId}`);
+
+    const result = await imageBankService.restoreAllUsedImages(parseInt(workflowId));
+
+    console.log(`[Image Bank] Restored ${result.restored} images`);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('[Image Bank] Restore all used error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/image-bank/:workflowId/recycle-from-draft
+ * Copy images from Draft Image Bank to regular Image Bank
+ * Use case: Testing mode - recycle draft images that were never used on a live site
+ *
+ * Body options:
+ * - statuses: Array of statuses to include (default: ['draft', 'sent'])
+ * - deleteAfterRecycle: Boolean - remove from draft bank after copying (default: false)
+ */
+router.post('/:workflowId/recycle-from-draft', async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+    const { statuses, deleteAfterRecycle } = req.body;
+
+    console.log(`[Image Bank] Recycling from draft bank for workflow ${workflowId}`);
+    console.log(`[Image Bank] Options: statuses=${JSON.stringify(statuses)}, deleteAfterRecycle=${deleteAfterRecycle}`);
+
+    const result = await imageBankService.recycleFromDraftBank(parseInt(workflowId), {
+      statuses: statuses || ['draft', 'sent'],
+      deleteAfterRecycle: deleteAfterRecycle || false
+    });
+
+    console.log(`[Image Bank] ${result.message}`);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('[Image Bank] Recycle from draft error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;

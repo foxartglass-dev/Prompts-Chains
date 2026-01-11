@@ -576,6 +576,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [draftBankPageFilter, setDraftBankPageFilter] = useState<string>('all');
   const [draftBankItemTypes, setDraftBankItemTypes] = useState<{item_type: string; count: number}[]>([]);
   const [draftBankLoading, setDraftBankLoading] = useState(false);
+  const [selectedDraftImages, setSelectedDraftImages] = useState<Set<number>>(new Set());
+  const [recyclingDraft, setRecyclingDraft] = useState(false);
+  const [recyclingUsed, setRecyclingUsed] = useState(false);
 
   // Image title editing
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
@@ -4235,6 +4238,108 @@ Start by introducing yourself and asking about their business in a friendly way.
       console.error('[Image Bank] Archive API failed:', err);
     }
     showNotification(image?.archived ? 'Image restored from archive' : 'Image archived', 'info');
+  };
+
+  // Recycle images from Draft Bank to Image Bank
+  const handleRecycleFromDraft = async (selectedOnly: boolean = false) => {
+    if (!workflowId) return;
+    setRecyclingDraft(true);
+
+    try {
+      // Determine which images to recycle
+      const imagesToRecycle = selectedOnly && selectedDraftImages.size > 0
+        ? draftBankImages.filter(img => selectedDraftImages.has(img.id))
+        : draftBankImages.filter(img => img.status === 'draft' || img.status === 'sent');
+
+      if (imagesToRecycle.length === 0) {
+        showNotification('No images to recycle', 'info');
+        setRecyclingDraft(false);
+        return;
+      }
+
+      const res = await fetch(`/api/image-bank/${workflowId}/recycle-from-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          statuses: ['draft', 'sent'],
+          deleteAfterRecycle: true // Remove from draft bank after copying
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showNotification(`Recycled ${data.data.recycled} images to Image Bank`, 'success');
+        // Refresh both image bank and draft bank
+        await loadSettings();
+        await fetchDraftBank();
+        setSelectedDraftImages(new Set());
+      } else {
+        showNotification(`Failed to recycle: ${data.error}`, 'error');
+      }
+    } catch (err) {
+      console.error('[Recycle] Error:', err);
+      showNotification('Failed to recycle images', 'error');
+    }
+
+    setRecyclingDraft(false);
+  };
+
+  // Restore all used images back to available
+  const handleRecycleAllUsed = async () => {
+    if (!workflowId) return;
+    if (usedImages.length === 0) {
+      showNotification('No used images to restore', 'info');
+      return;
+    }
+
+    setRecyclingUsed(true);
+
+    try {
+      const res = await fetch(`/api/image-bank/${workflowId}/restore-all-used`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showNotification(`Restored ${data.data.restored} images to available`, 'success');
+        // Refresh image bank
+        await loadSettings();
+      } else {
+        showNotification(`Failed to restore: ${data.error}`, 'error');
+      }
+    } catch (err) {
+      console.error('[Recycle Used] Error:', err);
+      showNotification('Failed to restore images', 'error');
+    }
+
+    setRecyclingUsed(false);
+  };
+
+  // Toggle selection of a draft image
+  const toggleDraftImageSelection = (imageId: number) => {
+    setSelectedDraftImages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(imageId)) {
+        newSet.delete(imageId);
+      } else {
+        newSet.add(imageId);
+      }
+      return newSet;
+    });
+  };
+
+  // Select/deselect all visible draft images
+  const toggleAllDraftImageSelection = () => {
+    const visibleIds = draftBankImages
+      .filter(img => img.status === 'draft' || img.status === 'sent')
+      .map(img => img.id);
+
+    if (selectedDraftImages.size === visibleIds.length) {
+      setSelectedDraftImages(new Set());
+    } else {
+      setSelectedDraftImages(new Set(visibleIds));
+    }
   };
 
   // ========== UPLOAD TO BANK ==========
@@ -9065,6 +9170,35 @@ Start by introducing yourself and asking about their business in a friendly way.
                   {draftBankLoading && (
                     <span className="text-xs text-amber-400 animate-pulse">Loading...</span>
                   )}
+
+                  {/* Recycle Button */}
+                  {(draftBankStats.draft > 0 || draftBankStats.sent > 0) && (
+                    <div className="ml-auto flex items-center gap-2">
+                      <button
+                        onClick={toggleAllDraftImageSelection}
+                        className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+                      >
+                        {selectedDraftImages.size === draftBankImages.filter(i => i.status !== 'replaced').length ? 'Deselect All' : 'Select All'}
+                      </button>
+                      <button
+                        onClick={() => handleRecycleFromDraft(false)}
+                        disabled={recyclingDraft}
+                        className="px-3 py-1 text-xs bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded transition flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {recyclingDraft ? (
+                          <>
+                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            Recycling...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                            Recycle All to Image Bank
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Image Grid */}
@@ -9072,6 +9206,23 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <div className="grid grid-cols-4 gap-3">
                     {draftBankImages.map((img) => (
                       <div key={img.id} className="relative group">
+                        {/* Selection checkbox (only for non-replaced images) */}
+                        {img.status !== 'replaced' && (
+                          <button
+                            onClick={() => toggleDraftImageSelection(img.id)}
+                            className={`absolute top-1 right-1 z-20 w-5 h-5 rounded border-2 flex items-center justify-center transition ${
+                              selectedDraftImages.has(img.id)
+                                ? 'bg-brand-cyan border-brand-cyan'
+                                : 'bg-slate-800/80 border-slate-500 hover:border-brand-cyan'
+                            }`}
+                          >
+                            {selectedDraftImages.has(img.id) && (
+                              <svg className="w-3 h-3 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        )}
                         {/* Status badge */}
                         <div className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded text-[9px] text-white ${
                           img.status === 'draft' ? 'bg-amber-600/90' :
@@ -9080,20 +9231,23 @@ Start by introducing yourself and asking about their business in a friendly way.
                         }`}>
                           {img.status.toUpperCase()}
                         </div>
-                        {/* Item type tag */}
+                        {/* Item type tag - moved below checkbox */}
                         {img.item_type && (
-                          <div className="absolute top-1 right-1 z-10 px-1.5 py-0.5 bg-slate-900/90 rounded text-[9px] text-amber-300">
+                          <div className="absolute top-7 right-1 z-10 px-1.5 py-0.5 bg-slate-900/90 rounded text-[9px] text-amber-300">
                             {img.item_type}
                           </div>
                         )}
                         <img
                           src={img.url}
                           alt={img.item_type || 'Draft image'}
-                          className={`w-full h-24 object-cover rounded border ${
+                          className={`w-full h-24 object-cover rounded border cursor-pointer ${
+                            selectedDraftImages.has(img.id) ? 'ring-2 ring-brand-cyan' : ''
+                          } ${
                             img.status === 'draft' ? 'border-amber-500/30' :
                             img.status === 'sent' ? 'border-green-500/30 opacity-70' :
                             'border-red-500/30 opacity-50'
                           }`}
+                          onClick={() => img.status !== 'replaced' && toggleDraftImageSelection(img.id)}
                         />
                         {/* Hover overlay */}
                         <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
@@ -9128,6 +9282,28 @@ Start by introducing yourself and asking about their business in a friendly way.
             </button>
             {isUsedOpen && (
               <div className="p-4 border-t border-purple-500/30 space-y-3">
+                {/* Recycle All Button */}
+                {usedImages.length > 0 && (
+                  <div className="flex justify-end mb-2">
+                    <button
+                      onClick={handleRecycleAllUsed}
+                      disabled={recyclingUsed}
+                      className="px-3 py-1.5 text-xs bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded transition flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {recyclingUsed ? (
+                        <>
+                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                          Restoring...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                          Restore All to Available ({usedImages.length})
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
                 {usedImages.length > 0 ? (
                   <div className="grid grid-cols-4 gap-3">
                     {usedImages.map((img) => (
