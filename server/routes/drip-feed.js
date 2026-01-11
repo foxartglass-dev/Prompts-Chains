@@ -492,7 +492,7 @@ router.get('/log/:websiteId', requireDb, async (req, res) => {
 });
 
 // ============================================
-// NOTIFICATION SETTINGS (Pushover)
+// NOTIFICATION SETTINGS (Pushover + Email-to-SMS)
 // ============================================
 
 // GET notification settings
@@ -503,8 +503,8 @@ router.get('/notifications/settings', requireDb, async (req, res) => {
     if (settings.length === 0) {
       // Create default settings
       const newSettings = await sql`
-        INSERT INTO notification_settings (id, pushover_enabled)
-        VALUES (1, false)
+        INSERT INTO notification_settings (id, pushover_enabled, email_sms_enabled)
+        VALUES (1, false, false)
         RETURNING *
       `;
       return res.json({ settings: newSettings[0] });
@@ -523,6 +523,8 @@ router.put('/notifications/settings', requireDb, async (req, res) => {
     const {
       pushover_enabled,
       pushover_user_keys,  // Array of { key, name, enabled }
+      email_sms_enabled,
+      email_sms_recipients, // Array of { phone, carrier, name, enabled }
       notify_on_publish,
       notify_on_failure,
       notify_on_missing_meta,
@@ -541,6 +543,8 @@ router.put('/notifications/settings', requireDb, async (req, res) => {
       SET
         pushover_enabled = COALESCE(${pushover_enabled}, pushover_enabled),
         pushover_user_keys = COALESCE(${JSON.stringify(pushover_user_keys)}, pushover_user_keys),
+        email_sms_enabled = COALESCE(${email_sms_enabled}, email_sms_enabled),
+        email_sms_recipients = COALESCE(${JSON.stringify(email_sms_recipients)}, email_sms_recipients),
         notify_on_publish = COALESCE(${notify_on_publish}, notify_on_publish),
         notify_on_failure = COALESCE(${notify_on_failure}, notify_on_failure),
         notify_on_missing_meta = COALESCE(${notify_on_missing_meta}, notify_on_missing_meta),
@@ -584,6 +588,51 @@ router.post('/notifications/test', requireDb, async (req, res) => {
     console.error('Error sending test notification:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// POST test Email-to-SMS notification
+router.post('/notifications/test-sms', requireDb, async (req, res) => {
+  try {
+    const { phone, carrier } = req.body;
+
+    if (!phone || !carrier) {
+      return res.status(400).json({ error: 'Phone number and carrier are required' });
+    }
+
+    const { sendSms } = await import('../services/email-sms.js');
+
+    const result = await sendSms({
+      message: 'Test from PromptFlow Drip Feed!',
+      recipients: [{ phone, carrier, enabled: true }]
+    });
+
+    if (result.skipped) {
+      return res.status(400).json({ error: result.reason || 'SMS skipped' });
+    }
+
+    res.json({ success: result.success, result });
+  } catch (error) {
+    console.error('Error sending test SMS:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET supported carriers for Email-to-SMS
+router.get('/notifications/carriers', (req, res) => {
+  const carriers = [
+    { id: 'verizon', name: 'Verizon' },
+    { id: 'att', name: 'AT&T' },
+    { id: 'tmobile', name: 'T-Mobile' },
+    { id: 'sprint', name: 'Sprint' },
+    { id: 'uscellular', name: 'US Cellular' },
+    { id: 'boost', name: 'Boost Mobile' },
+    { id: 'cricket', name: 'Cricket' },
+    { id: 'metropcs', name: 'MetroPCS' },
+    { id: 'googlefi', name: 'Google Fi' },
+    { id: 'mint', name: 'Mint Mobile' },
+    { id: 'visible', name: 'Visible' }
+  ];
+  res.json({ carriers });
 });
 
 // GET pending notifications

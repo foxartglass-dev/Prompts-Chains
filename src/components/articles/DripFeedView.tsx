@@ -45,15 +45,39 @@ interface PushoverUser {
   enabled: boolean;
 }
 
+interface SmsRecipient {
+  phone: string;
+  carrier: string;
+  name: string;
+  enabled: boolean;
+}
+
 interface NotificationSettings {
   pushover_enabled: boolean;
   pushover_user_keys: PushoverUser[];
+  email_sms_enabled: boolean;
+  email_sms_recipients: SmsRecipient[];
   notify_on_publish: boolean;
   notify_on_failure: boolean;
   notify_on_missing_meta: boolean;
   notify_daily_summary: boolean;
   notify_queue_empty: boolean;
 }
+
+// Carrier options for Email-to-SMS
+const SMS_CARRIERS = [
+  { id: 'verizon', name: 'Verizon' },
+  { id: 'att', name: 'AT&T' },
+  { id: 'tmobile', name: 'T-Mobile' },
+  { id: 'sprint', name: 'Sprint' },
+  { id: 'uscellular', name: 'US Cellular' },
+  { id: 'boost', name: 'Boost Mobile' },
+  { id: 'cricket', name: 'Cricket' },
+  { id: 'metropcs', name: 'MetroPCS' },
+  { id: 'googlefi', name: 'Google Fi' },
+  { id: 'mint', name: 'Mint Mobile' },
+  { id: 'visible', name: 'Visible' }
+];
 
 interface DripFeedViewProps {
   websiteId?: number;
@@ -91,15 +115,23 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>({
     pushover_enabled: false,
     pushover_user_keys: [],
+    email_sms_enabled: false,
+    email_sms_recipients: [],
     notify_on_publish: false,
     notify_on_failure: true,
     notify_on_missing_meta: true,
     notify_daily_summary: false,
     notify_queue_empty: true
   });
+  // Pushover state
   const [newUserKey, setNewUserKey] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [testingNotification, setTestingNotification] = useState(false);
+  // Email-to-SMS state
+  const [newSmsPhone, setNewSmsPhone] = useState('');
+  const [newSmsCarrier, setNewSmsCarrier] = useState('verizon');
+  const [newSmsName, setNewSmsName] = useState('');
+  const [testingSms, setTestingSms] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!websiteId) {
@@ -315,6 +347,70 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
     }
   };
 
+  // Email-to-SMS functions
+  const addSmsRecipient = () => {
+    if (!newSmsPhone.trim()) return;
+
+    // Clean phone number - remove non-digits
+    const cleanPhone = newSmsPhone.replace(/\D/g, '');
+    if (cleanPhone.length !== 10 && !(cleanPhone.length === 11 && cleanPhone.startsWith('1'))) {
+      setError('Phone number must be 10 digits');
+      return;
+    }
+
+    const newRecipient: SmsRecipient = {
+      phone: cleanPhone.length === 11 ? cleanPhone.slice(1) : cleanPhone,
+      carrier: newSmsCarrier,
+      name: newSmsName.trim() || 'Recipient ' + (notifSettings.email_sms_recipients.length + 1),
+      enabled: true
+    };
+
+    setNotifSettings({
+      ...notifSettings,
+      email_sms_recipients: [...notifSettings.email_sms_recipients, newRecipient]
+    });
+    setNewSmsPhone('');
+    setNewSmsName('');
+  };
+
+  const removeSmsRecipient = (phone: string) => {
+    setNotifSettings({
+      ...notifSettings,
+      email_sms_recipients: notifSettings.email_sms_recipients.filter(r => r.phone !== phone)
+    });
+  };
+
+  const toggleSmsRecipient = (phone: string) => {
+    setNotifSettings({
+      ...notifSettings,
+      email_sms_recipients: notifSettings.email_sms_recipients.map(r =>
+        r.phone === phone ? { ...r, enabled: !r.enabled } : r
+      )
+    });
+  };
+
+  const testSmsNotification = async (phone: string, carrier: string) => {
+    setTestingSms(true);
+    try {
+      const res = await fetch('/api/drip-feed/notifications/test-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, carrier })
+      });
+
+      if (res.ok) {
+        alert('Test SMS sent! Check your phone.');
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Failed to send test SMS');
+      }
+    } catch (err) {
+      setError('Failed to send test SMS');
+    } finally {
+      setTestingSms(false);
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr + 'T00:00:00');
     return date.toLocaleDateString('en-US', {
@@ -463,7 +559,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                 showNotifications
                   ? 'bg-brand-cyan text-slate-900'
-                  : notifSettings.pushover_enabled
+                  : (notifSettings.pushover_enabled || notifSettings.email_sms_enabled)
                     ? 'bg-green-600/20 border border-green-500/50 text-green-400'
                     : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
               }`}
@@ -693,19 +789,8 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
       {/* Notifications Panel (collapsible) */}
       {showNotifications && (
         <div className="flex-shrink-0 bg-slate-800/30 border-b border-slate-700 px-4 py-3">
-          <div className="flex flex-wrap items-start gap-6">
-            {/* Enable Toggle */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={notifSettings.pushover_enabled}
-                onChange={(e) => setNotifSettings({ ...notifSettings, pushover_enabled: e.target.checked })}
-                className="w-4 h-4 rounded border-gray-600 bg-slate-700 text-brand-cyan"
-              />
-              <span className="text-sm text-white font-medium">Enable Pushover</span>
-            </label>
-
-            {/* Notification Types */}
+          {/* Top Row: Notification Types + Save */}
+          <div className="flex flex-wrap items-center gap-6 mb-3">
             <div className="flex items-center gap-4">
               <span className="text-sm text-gray-400">Notify on:</span>
               <label className="flex items-center gap-1.5 cursor-pointer">
@@ -745,8 +830,6 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
                 <span className="text-xs text-gray-300">Queue Empty</span>
               </label>
             </div>
-
-            {/* Save Button */}
             <button
               onClick={saveNotificationSettings}
               className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm"
@@ -755,64 +838,152 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
             </button>
           </div>
 
-          {/* User Keys Section */}
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <span className="text-sm text-gray-400">Recipients:</span>
+          {/* Two notification methods side by side */}
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* Pushover Section ($5 app) */}
+            <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+              <div className="flex items-center gap-2 mb-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifSettings.pushover_enabled}
+                    onChange={(e) => setNotifSettings({ ...notifSettings, pushover_enabled: e.target.checked })}
+                    className="w-4 h-4 rounded border-gray-600 bg-slate-700 text-brand-cyan"
+                  />
+                  <span className="text-sm text-white font-medium">Pushover</span>
+                </label>
+                <span className="text-xs text-gray-500">($5 one-time)</span>
+              </div>
 
-            {/* Existing Users */}
-            {notifSettings.pushover_user_keys.map((user) => (
-              <div
-                key={user.key}
-                className={`flex items-center gap-2 px-2 py-1 rounded text-xs ${
-                  user.enabled ? 'bg-green-600/20 text-green-400' : 'bg-slate-700 text-gray-400'
-                }`}
-              >
+              {/* Pushover Recipients */}
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                {notifSettings.pushover_user_keys.map((user) => (
+                  <div
+                    key={user.key}
+                    className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs ${
+                      user.enabled ? 'bg-green-600/20 text-green-400' : 'bg-slate-700 text-gray-400'
+                    }`}
+                  >
+                    <button onClick={() => togglePushoverUser(user.key)} className="hover:opacity-75">
+                      {user.enabled ? '●' : '○'}
+                    </button>
+                    <span>{user.name}</span>
+                    <button
+                      onClick={() => testNotification(user.key)}
+                      disabled={testingNotification}
+                      className="px-1 py-0.5 bg-blue-600/30 hover:bg-blue-600/50 rounded text-blue-400"
+                    >
+                      Test
+                    </button>
+                    <button onClick={() => removePushoverUser(user.key)} className="text-red-400 hover:text-red-300">
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add Pushover User */}
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={newUserName}
+                  onChange={(e) => setNewUserName(e.target.value)}
+                  placeholder="Name"
+                  className="w-20 bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-white text-xs"
+                />
+                <input
+                  type="text"
+                  value={newUserKey}
+                  onChange={(e) => setNewUserKey(e.target.value)}
+                  placeholder="User Key"
+                  className="flex-1 bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-white text-xs font-mono"
+                />
                 <button
-                  onClick={() => togglePushoverUser(user.key)}
-                  className="hover:opacity-75"
+                  onClick={addPushoverUser}
+                  disabled={!newUserKey.trim()}
+                  className="px-2 py-0.5 bg-green-600 hover:bg-green-500 rounded text-white text-xs font-medium disabled:opacity-50"
                 >
-                  {user.enabled ? '●' : '○'}
-                </button>
-                <span>{user.name}</span>
-                <button
-                  onClick={() => testNotification(user.key)}
-                  disabled={testingNotification}
-                  className="px-1.5 py-0.5 bg-blue-600/30 hover:bg-blue-600/50 rounded text-blue-400"
-                >
-                  Test
-                </button>
-                <button
-                  onClick={() => removePushoverUser(user.key)}
-                  className="text-red-400 hover:text-red-300"
-                >
-                  &times;
+                  +
                 </button>
               </div>
-            ))}
+            </div>
 
-            {/* Add New User */}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={newUserName}
-                onChange={(e) => setNewUserName(e.target.value)}
-                placeholder="Name"
-                className="w-24 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
-              />
-              <input
-                type="text"
-                value={newUserKey}
-                onChange={(e) => setNewUserKey(e.target.value)}
-                placeholder="User Key"
-                className="w-48 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs font-mono"
-              />
-              <button
-                onClick={addPushoverUser}
-                disabled={!newUserKey.trim()}
-                className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-white text-xs font-medium disabled:opacity-50"
-              >
-                + Add
-              </button>
+            {/* Email-to-SMS Section (FREE) */}
+            <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+              <div className="flex items-center gap-2 mb-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifSettings.email_sms_enabled}
+                    onChange={(e) => setNotifSettings({ ...notifSettings, email_sms_enabled: e.target.checked })}
+                    className="w-4 h-4 rounded border-gray-600 bg-slate-700 text-brand-gold"
+                  />
+                  <span className="text-sm text-white font-medium">Email-to-SMS</span>
+                </label>
+                <span className="text-xs text-green-400">(FREE)</span>
+              </div>
+
+              {/* SMS Recipients */}
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                {notifSettings.email_sms_recipients.map((recipient) => (
+                  <div
+                    key={recipient.phone}
+                    className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-xs ${
+                      recipient.enabled ? 'bg-brand-gold/20 text-brand-gold' : 'bg-slate-700 text-gray-400'
+                    }`}
+                  >
+                    <button onClick={() => toggleSmsRecipient(recipient.phone)} className="hover:opacity-75">
+                      {recipient.enabled ? '●' : '○'}
+                    </button>
+                    <span>{recipient.name}</span>
+                    <span className="text-gray-500">({SMS_CARRIERS.find(c => c.id === recipient.carrier)?.name})</span>
+                    <button
+                      onClick={() => testSmsNotification(recipient.phone, recipient.carrier)}
+                      disabled={testingSms}
+                      className="px-1 py-0.5 bg-blue-600/30 hover:bg-blue-600/50 rounded text-blue-400"
+                    >
+                      Test
+                    </button>
+                    <button onClick={() => removeSmsRecipient(recipient.phone)} className="text-red-400 hover:text-red-300">
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add SMS Recipient */}
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={newSmsName}
+                  onChange={(e) => setNewSmsName(e.target.value)}
+                  placeholder="Name"
+                  className="w-20 bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-white text-xs"
+                />
+                <input
+                  type="tel"
+                  value={newSmsPhone}
+                  onChange={(e) => setNewSmsPhone(e.target.value)}
+                  placeholder="Phone (10 digits)"
+                  className="w-28 bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-white text-xs"
+                />
+                <select
+                  value={newSmsCarrier}
+                  onChange={(e) => setNewSmsCarrier(e.target.value)}
+                  className="flex-1 bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-white text-xs"
+                >
+                  {SMS_CARRIERS.map((carrier) => (
+                    <option key={carrier.id} value={carrier.id}>{carrier.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={addSmsRecipient}
+                  disabled={!newSmsPhone.trim()}
+                  className="px-2 py-0.5 bg-brand-gold hover:bg-brand-gold/80 rounded text-slate-900 text-xs font-medium disabled:opacity-50"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
         </div>
