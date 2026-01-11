@@ -234,6 +234,44 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     }
   };
 
+  // Auto-save meta when user clicks on an option (instant save)
+  const autoSaveMeta = async (titleIdx: number | null, descIdx: number | null) => {
+    if (!selectedArticle) return;
+
+    const metaTitle = titleIdx !== null && selectedArticle.meta_titles
+      ? selectedArticle.meta_titles[titleIdx]
+      : (selectedArticle.selected_meta_title || null);
+    const metaDesc = descIdx !== null && selectedArticle.meta_descriptions
+      ? selectedArticle.meta_descriptions[descIdx]
+      : (selectedArticle.selected_meta_description || null);
+
+    if (!metaTitle && !metaDesc) return;
+
+    try {
+      const res = await fetch(`/api/articles/${selectedArticle.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedMetaTitle: metaTitle,
+          selectedMetaDescription: metaDesc
+        })
+      });
+
+      if (res.ok) {
+        setMetaSaved(true);
+        setSelectedArticle({
+          ...selectedArticle,
+          selected_meta_title: metaTitle,
+          selected_meta_description: metaDesc
+        });
+        fetchArticles(); // Refresh list silently
+      }
+    } catch (err) {
+      // Silent fail for auto-save, user can manually save if needed
+      console.error('Auto-save meta failed:', err);
+    }
+  };
+
   const saveArticle = async () => {
     if (!selectedArticle) return;
     setSaving(true);
@@ -1684,13 +1722,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                                     ? 'bg-brand-gold/20 border-brand-gold'
                                     : 'bg-slate-800 border-transparent hover:border-brand-gold/50'
                                 }`}
-                                onClick={() => { setSelectedTitleIndex(i); setUseCustomTitle(false); setMetaSaved(false); }}
+                                onClick={() => { setSelectedTitleIndex(i); setUseCustomTitle(false); autoSaveMeta(i, selectedDescIndex); }}
                               >
                                 <input
                                   type="radio"
                                   name="metaTitle"
                                   checked={selectedTitleIndex === i && !useCustomTitle}
-                                  onChange={() => { setSelectedTitleIndex(i); setUseCustomTitle(false); setMetaSaved(false); }}
+                                  onChange={() => { setSelectedTitleIndex(i); setUseCustomTitle(false); autoSaveMeta(i, selectedDescIndex); }}
                                   className="mt-1 accent-yellow-500"
                                 />
                                 <div className="flex-1">
@@ -1767,13 +1805,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                                     ? 'bg-brand-cyan/20 border-brand-cyan'
                                     : 'bg-slate-800 border-transparent hover:border-brand-cyan/50'
                                 }`}
-                                onClick={() => { setSelectedDescIndex(i); setUseCustomDesc(false); setMetaSaved(false); }}
+                                onClick={() => { setSelectedDescIndex(i); setUseCustomDesc(false); autoSaveMeta(selectedTitleIndex, i); }}
                               >
                                 <input
                                   type="radio"
                                   name="metaDesc"
                                   checked={selectedDescIndex === i && !useCustomDesc}
-                                  onChange={() => { setSelectedDescIndex(i); setUseCustomDesc(false); setMetaSaved(false); }}
+                                  onChange={() => { setSelectedDescIndex(i); setUseCustomDesc(false); autoSaveMeta(selectedTitleIndex, i); }}
                                   className="mt-1 accent-cyan-500"
                                 />
                                 <div className="flex-1">
