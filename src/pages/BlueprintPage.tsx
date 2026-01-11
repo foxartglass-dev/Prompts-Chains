@@ -1135,15 +1135,60 @@ const KnownIssuesDiagram: React.FC = () => (
         <div className="bg-slate-800 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-green-400">✓</span>
-            <span className="font-semibold text-white">Staging WordPress credentials not persisting</span>
+            <span className="font-semibold text-white">Staging WordPress credentials fallback removed</span>
           </div>
           <div className="text-sm text-gray-400">
-            <strong>Problem:</strong> WordPress Settings &gt; Staging WordPress was saving to localStorage only - backend couldn't access it.
-            Images were using "Publishing to WordPress" credentials instead.
+            <strong>Problem:</strong> The batch-generate endpoint was falling back to workflow's "Publishing to WordPress" credentials
+            when staging credentials weren't configured. This is wrong - staging credentials should ONLY come from WordPress Settings.
           </div>
           <div className="text-sm text-gray-400 mt-2">
-            <strong>Fix:</strong> Staging credentials now save to <code className="bg-slate-900 px-1 rounded">global_settings</code> table in database.
-            Backend checks global staging credentials FIRST, then falls back to workflow website.
+            <strong>Fix:</strong> Removed fallback logic in <code className="bg-slate-900 px-1 rounded">server/routes/image-creation.js</code>.
+            Now returns 400 error if staging credentials not configured, with message directing to WordPress Settings.
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Image Creation settings 500 error on save</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> PUT <code className="bg-slate-900 px-1 rounded">/api/image-creation/settings/:workflowId</code> returned 500
+            because code used invalid SQL syntax: nested template literals like <code className="bg-slate-900 px-1 rounded">WHERE $&#123;condition ? sql`col=X` : sql`col=Y`&#125;</code>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Replaced with if/else blocks using separate SQL queries.
+            File: <code className="bg-slate-900 px-1 rounded">server/routes/image-creation.js</code> lines ~1520-1680.
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">website_id column doesn't exist error</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Image Creation settings save failed with "column website_id does not exist"
+            because the website-level settings feature requires a migration that may not have run.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added try-catch around website_id queries. If column doesn't exist, falls back to workflow-level settings.
+            Migration file: <code className="bg-slate-900 px-1 rounded">server/db/migrations/012_image_creation_website_level.sql</code>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">guided_guardrails column doesn't exist error</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> INSERT into image_creation_settings failed because <code className="bg-slate-900 px-1 rounded">guided_guardrails</code>
+            column doesn't exist. The fallback check only looked for <code className="bg-slate-900 px-1 rounded">live_prompt_mode</code>.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added <code className="bg-slate-900 px-1 rounded">guided_guardrails</code> and <code className="bg-slate-900 px-1 rounded">prompt_problem_areas</code>
+            to the INSERT fallback check at line ~1429 in <code className="bg-slate-900 px-1 rounded">server/routes/image-creation.js</code>.
           </div>
         </div>
 
