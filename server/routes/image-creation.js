@@ -1514,40 +1514,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       } else {
         // Try UPDATE with all columns first, fallback if columns don't exist
         try {
-          await sql`
-            UPDATE image_creation_settings
-            SET
-              enabled = COALESCE(${enabled}, enabled),
-              prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
-              image_generation_model = COALESCE(${image_generation_model}, image_generation_model),
-              image_quality = COALESCE(${image_quality}, image_quality),
-              reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
-              logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
-              audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
-              image_bank = ${image_bank ? JSON.stringify(image_bank) : '[]'}::jsonb,
-              image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
-              auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
-              chat_history = COALESCE(${chat_history ? JSON.stringify(chat_history) : null}::jsonb, chat_history),
-              consultant_chat_history = COALESCE(${consultant_chat_history ? JSON.stringify(consultant_chat_history) : null}::jsonb, consultant_chat_history),
-              consultant_model = COALESCE(${consultant_model}, consultant_model),
-              worker_chat_history = COALESCE(${worker_chat_history ? JSON.stringify(worker_chat_history) : null}::jsonb, worker_chat_history),
-              worker_model = COALESCE(${worker_model}, worker_model),
-              integration_mode = COALESCE(${integration_mode}, integration_mode),
-              fallback_to_live = COALESCE(${fallback_to_live}, fallback_to_live),
-              image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
-              variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
-              manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
-              live_prompt_mode = COALESCE(${live_prompt_mode}, live_prompt_mode),
-              smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
-              guided_guardrails = COALESCE(${guided_guardrails ? JSON.stringify(guided_guardrails) : null}::jsonb, guided_guardrails),
-              prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
-              updated_at = CURRENT_TIMESTAMP
-            WHERE ${saveToWebsite ? sql`website_id = ${websiteId}` : sql`workflow_id = ${workflowId}`}
-          `;
-        } catch (updateErr) {
-          // If it failed due to missing column, try without live_prompt_mode columns
-          if (updateErr.message?.includes('live_prompt_mode') || updateErr.message?.includes('smart_prompt_guidance') || updateErr.message?.includes('guided_guardrails')) {
-            console.log('[Image Creation API] Falling back to UPDATE without live_prompt columns');
+          // Use separate UPDATE statements based on saveToWebsite flag
+          // (Cannot use ternary with sql tagged template literals)
+          if (saveToWebsite) {
             await sql`
               UPDATE image_creation_settings
               SET
@@ -1571,9 +1540,105 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
                 variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
                 manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+                live_prompt_mode = COALESCE(${live_prompt_mode}, live_prompt_mode),
+                smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
+                guided_guardrails = COALESCE(${guided_guardrails ? JSON.stringify(guided_guardrails) : null}::jsonb, guided_guardrails),
+                prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
                 updated_at = CURRENT_TIMESTAMP
-              WHERE ${saveToWebsite ? sql`website_id = ${websiteId}` : sql`workflow_id = ${workflowId}`}
+              WHERE website_id = ${websiteId}
             `;
+          } else {
+            await sql`
+              UPDATE image_creation_settings
+              SET
+                enabled = COALESCE(${enabled}, enabled),
+                prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
+                image_generation_model = COALESCE(${image_generation_model}, image_generation_model),
+                image_quality = COALESCE(${image_quality}, image_quality),
+                reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
+                logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
+                audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
+                image_bank = ${image_bank ? JSON.stringify(image_bank) : '[]'}::jsonb,
+                image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
+                auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
+                chat_history = COALESCE(${chat_history ? JSON.stringify(chat_history) : null}::jsonb, chat_history),
+                consultant_chat_history = COALESCE(${consultant_chat_history ? JSON.stringify(consultant_chat_history) : null}::jsonb, consultant_chat_history),
+                consultant_model = COALESCE(${consultant_model}, consultant_model),
+                worker_chat_history = COALESCE(${worker_chat_history ? JSON.stringify(worker_chat_history) : null}::jsonb, worker_chat_history),
+                worker_model = COALESCE(${worker_model}, worker_model),
+                integration_mode = COALESCE(${integration_mode}, integration_mode),
+                fallback_to_live = COALESCE(${fallback_to_live}, fallback_to_live),
+                image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
+                variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
+                manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+                live_prompt_mode = COALESCE(${live_prompt_mode}, live_prompt_mode),
+                smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
+                guided_guardrails = COALESCE(${guided_guardrails ? JSON.stringify(guided_guardrails) : null}::jsonb, guided_guardrails),
+                prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
+                updated_at = CURRENT_TIMESTAMP
+              WHERE workflow_id = ${workflowId}
+            `;
+          }
+        } catch (updateErr) {
+          // If it failed due to missing column, try without live_prompt_mode columns
+          if (updateErr.message?.includes('live_prompt_mode') || updateErr.message?.includes('smart_prompt_guidance') || updateErr.message?.includes('guided_guardrails')) {
+            console.log('[Image Creation API] Falling back to UPDATE without live_prompt columns');
+            // Use separate UPDATE statements based on saveToWebsite flag
+            if (saveToWebsite) {
+              await sql`
+                UPDATE image_creation_settings
+                SET
+                  enabled = COALESCE(${enabled}, enabled),
+                  prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
+                  image_generation_model = COALESCE(${image_generation_model}, image_generation_model),
+                  image_quality = COALESCE(${image_quality}, image_quality),
+                  reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
+                  logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
+                  audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
+                  image_bank = ${image_bank ? JSON.stringify(image_bank) : '[]'}::jsonb,
+                  image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
+                  auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
+                  chat_history = COALESCE(${chat_history ? JSON.stringify(chat_history) : null}::jsonb, chat_history),
+                  consultant_chat_history = COALESCE(${consultant_chat_history ? JSON.stringify(consultant_chat_history) : null}::jsonb, consultant_chat_history),
+                  consultant_model = COALESCE(${consultant_model}, consultant_model),
+                  worker_chat_history = COALESCE(${worker_chat_history ? JSON.stringify(worker_chat_history) : null}::jsonb, worker_chat_history),
+                  worker_model = COALESCE(${worker_model}, worker_model),
+                  integration_mode = COALESCE(${integration_mode}, integration_mode),
+                  fallback_to_live = COALESCE(${fallback_to_live}, fallback_to_live),
+                  image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
+                  variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
+                  manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE website_id = ${websiteId}
+              `;
+            } else {
+              await sql`
+                UPDATE image_creation_settings
+                SET
+                  enabled = COALESCE(${enabled}, enabled),
+                  prompt_assistant_model = COALESCE(${prompt_assistant_model}, prompt_assistant_model),
+                  image_generation_model = COALESCE(${image_generation_model}, image_generation_model),
+                  image_quality = COALESCE(${image_quality}, image_quality),
+                  reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
+                  logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
+                  audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
+                  image_bank = ${image_bank ? JSON.stringify(image_bank) : '[]'}::jsonb,
+                  image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
+                  auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
+                  chat_history = COALESCE(${chat_history ? JSON.stringify(chat_history) : null}::jsonb, chat_history),
+                  consultant_chat_history = COALESCE(${consultant_chat_history ? JSON.stringify(consultant_chat_history) : null}::jsonb, consultant_chat_history),
+                  consultant_model = COALESCE(${consultant_model}, consultant_model),
+                  worker_chat_history = COALESCE(${worker_chat_history ? JSON.stringify(worker_chat_history) : null}::jsonb, worker_chat_history),
+                  worker_model = COALESCE(${worker_model}, worker_model),
+                  integration_mode = COALESCE(${integration_mode}, integration_mode),
+                  fallback_to_live = COALESCE(${fallback_to_live}, fallback_to_live),
+                  image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
+                  variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
+                  manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE workflow_id = ${workflowId}
+              `;
+            }
           } else {
             throw updateErr;
           }
@@ -1585,20 +1650,38 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
     // Try to update smart_matching columns and algorithm rules (silently fail if they don't exist)
     const tryUpdateSmartMatching = async () => {
       try {
-        await sql`
-          UPDATE image_creation_settings
-          SET
-            smart_matching_enabled = COALESCE(${smart_matching_enabled}, smart_matching_enabled),
-            smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode),
-            placement_rule = COALESCE(${placement_rule}, placement_rule),
-            smart_matching_rule = COALESCE(${smart_matching_rule}, smart_matching_rule),
-            match_plurals = COALESCE(${match_plurals}, match_plurals),
-            matching_rule_1 = COALESCE(${matching_rule_1}, matching_rule_1),
-            matching_rule_2 = COALESCE(${matching_rule_2}, matching_rule_2),
-            matching_rule_3 = COALESCE(${matching_rule_3}, matching_rule_3),
-            matching_rule_4 = COALESCE(${matching_rule_4}, matching_rule_4)
-          WHERE ${saveToWebsite ? sql`website_id = ${websiteId}` : sql`workflow_id = ${workflowId}`}
-        `;
+        // Use separate UPDATE statements based on saveToWebsite flag
+        if (saveToWebsite) {
+          await sql`
+            UPDATE image_creation_settings
+            SET
+              smart_matching_enabled = COALESCE(${smart_matching_enabled}, smart_matching_enabled),
+              smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode),
+              placement_rule = COALESCE(${placement_rule}, placement_rule),
+              smart_matching_rule = COALESCE(${smart_matching_rule}, smart_matching_rule),
+              match_plurals = COALESCE(${match_plurals}, match_plurals),
+              matching_rule_1 = COALESCE(${matching_rule_1}, matching_rule_1),
+              matching_rule_2 = COALESCE(${matching_rule_2}, matching_rule_2),
+              matching_rule_3 = COALESCE(${matching_rule_3}, matching_rule_3),
+              matching_rule_4 = COALESCE(${matching_rule_4}, matching_rule_4)
+            WHERE website_id = ${websiteId}
+          `;
+        } else {
+          await sql`
+            UPDATE image_creation_settings
+            SET
+              smart_matching_enabled = COALESCE(${smart_matching_enabled}, smart_matching_enabled),
+              smart_matching_mode = COALESCE(${smart_matching_mode}, smart_matching_mode),
+              placement_rule = COALESCE(${placement_rule}, placement_rule),
+              smart_matching_rule = COALESCE(${smart_matching_rule}, smart_matching_rule),
+              match_plurals = COALESCE(${match_plurals}, match_plurals),
+              matching_rule_1 = COALESCE(${matching_rule_1}, matching_rule_1),
+              matching_rule_2 = COALESCE(${matching_rule_2}, matching_rule_2),
+              matching_rule_3 = COALESCE(${matching_rule_3}, matching_rule_3),
+              matching_rule_4 = COALESCE(${matching_rule_4}, matching_rule_4)
+            WHERE workflow_id = ${workflowId}
+          `;
+        }
         return true;
       } catch (err) {
         if (err.message?.includes('smart_matching') || err.message?.includes('placement_rule') || err.message?.includes('match_plurals') || err.message?.includes('matching_rule')) {
