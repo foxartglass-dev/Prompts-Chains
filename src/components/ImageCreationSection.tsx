@@ -581,6 +581,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [recyclingUsed, setRecyclingUsed] = useState(false);
   const [selectedUsedImages, setSelectedUsedImages] = useState<Set<string>>(new Set());
   const [quickPreview, setQuickPreview] = useState<{url: string; title?: string; section: 'draft' | 'used'} | null>(null);
+  const [draftBankExpandedView, setDraftBankExpandedView] = useState(false);
+  const [usedBankExpandedView, setUsedBankExpandedView] = useState(false);
 
   // Image title editing
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
@@ -998,7 +1000,32 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setDraftBankLoading(false);
   };
 
-  // Fetch draft bank when opened or filters change
+  /**
+   * Fetch ONLY draft bank stats (for header display when collapsed)
+   * This is separate from fetchDraftBank so we can show accurate counts without loading all images
+   */
+  const fetchDraftBankStatsOnly = async () => {
+    if (!workflowId) return;
+    try {
+      const statsRes = await fetch(`/api/draft-image-bank/${workflowId}/stats`);
+      const statsData = await statsRes.json();
+      if (statsData.success) {
+        setDraftBankStats(statsData.data);
+        console.log('[Draft Bank] Stats loaded on mount:', statsData.data);
+      }
+    } catch (error) {
+      console.error('[Draft Bank] Failed to fetch stats:', error);
+    }
+  };
+
+  // Fetch draft bank stats on mount (so header shows correct count even when collapsed)
+  useEffect(() => {
+    if (workflowId) {
+      fetchDraftBankStatsOnly();
+    }
+  }, [workflowId]);
+
+  // Fetch draft bank images when opened or filters change
   useEffect(() => {
     if (isDraftBankOpen && workflowId) {
       fetchDraftBank();
@@ -9262,6 +9289,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                     Refresh
                   </button>
 
+                  {/* Expand All button - shows full-size images in scrollable grid */}
+                  {draftBankImages.length > 0 && (
+                    <button
+                      onClick={() => setDraftBankExpandedView(true)}
+                      className="px-2 py-1 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded transition flex items-center gap-1"
+                      title="View all images in full size"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                      </svg>
+                      Expand All
+                    </button>
+                  )}
+
                   {/* Recycle Button */}
                   {(draftBankStats.draft > 0 || draftBankStats.sent > 0) && (
                     <div className="ml-auto flex items-center gap-2">
@@ -9385,12 +9426,25 @@ Start by introducing yourself and asking about their business in a friendly way.
                 {/* Action Buttons */}
                 {usedImages.length > 0 && (
                   <div className="flex justify-between items-center mb-2">
-                    <button
-                      onClick={toggleAllUsedImageSelection}
-                      className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded transition"
-                    >
-                      {selectedUsedImages.size === usedImages.length ? 'Deselect All' : 'Select All'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={toggleAllUsedImageSelection}
+                        className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+                      >
+                        {selectedUsedImages.size === usedImages.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                      {/* Expand All button */}
+                      <button
+                        onClick={() => setUsedBankExpandedView(true)}
+                        className="px-2 py-1 text-xs bg-purple-600 hover:bg-purple-500 text-white rounded transition flex items-center gap-1"
+                        title="View all images in full size"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                        </svg>
+                        Expand All
+                      </button>
+                    </div>
                     <button
                       onClick={handleRestoreSelectedUsed}
                       disabled={recyclingUsed}
@@ -9491,6 +9545,172 @@ Start by introducing yourself and asking about their business in a friendly way.
             {quickPreview.title && (
               <div className="mt-2 text-center text-white text-lg">{quickPreview.title}</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Draft Bank Expanded View - Full-size scrollable grid */}
+      {draftBankExpandedView && (
+        <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-amber-500/30 bg-slate-900">
+            <h2 className="text-xl font-bold text-amber-400 flex items-center gap-2">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              Draft Image Bank ({draftBankImages.length} images)
+            </h2>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={toggleAllDraftImageSelection}
+                className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+              >
+                {selectedDraftImages.size === draftBankImages.filter(i => i.status !== 'replaced').length ? 'Deselect All' : 'Select All'}
+              </button>
+              <button
+                onClick={() => handleRecycleFromDraft(false)}
+                disabled={recyclingDraft || draftBankImages.length === 0}
+                className="px-3 py-1.5 text-sm bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded transition disabled:opacity-50"
+              >
+                Recycle All to Image Bank
+              </button>
+              <button
+                onClick={() => setDraftBankExpandedView(false)}
+                className="p-2 hover:bg-slate-800 rounded-full text-white transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {/* Scrollable Grid */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {draftBankImages.map((img) => (
+                <div key={img.id} className="relative group">
+                  {/* Selection checkbox */}
+                  {img.status !== 'replaced' && (
+                    <button
+                      onClick={() => toggleDraftImageSelection(img.id)}
+                      className={`absolute top-2 right-2 z-10 w-6 h-6 rounded border-2 flex items-center justify-center transition ${
+                        selectedDraftImages.has(img.id)
+                          ? 'bg-brand-cyan border-brand-cyan'
+                          : 'bg-slate-800/80 border-slate-400 hover:border-brand-cyan'
+                      }`}
+                    >
+                      {selectedDraftImages.has(img.id) && (
+                        <svg className="w-4 h-4 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                  {/* Status badge */}
+                  <div className={`absolute top-2 left-2 z-10 px-2 py-1 rounded text-xs text-white ${
+                    img.status === 'draft' ? 'bg-amber-600' :
+                    img.status === 'sent' ? 'bg-green-600' :
+                    'bg-red-600'
+                  }`}>
+                    {img.status.toUpperCase()}
+                  </div>
+                  {/* Full-size image */}
+                  <img
+                    src={img.url}
+                    alt={img.item_type || 'Draft image'}
+                    className={`w-full h-auto rounded-lg border-2 cursor-pointer ${
+                      selectedDraftImages.has(img.id) ? 'border-brand-cyan' : 'border-slate-700'
+                    } ${img.status === 'replaced' ? 'opacity-50' : ''}`}
+                    onClick={() => img.status !== 'replaced' && toggleDraftImageSelection(img.id)}
+                  />
+                  {/* Info overlay */}
+                  <div className="mt-2 text-center">
+                    {img.item_type && <span className="text-sm text-amber-400 block">{img.item_type}</span>}
+                    {img.page_keyword && <span className="text-xs text-slate-400">{img.page_keyword}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Used/Archive Expanded View - Full-size scrollable grid */}
+      {usedBankExpandedView && (
+        <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-purple-500/30 bg-slate-900">
+            <h2 className="text-xl font-bold text-purple-400 flex items-center gap-2">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+              Used/Archive ({usedImages.length} images)
+            </h2>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={toggleAllUsedImageSelection}
+                className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+              >
+                {selectedUsedImages.size === usedImages.length ? 'Deselect All' : 'Select All'}
+              </button>
+              <button
+                onClick={handleRestoreSelectedUsed}
+                disabled={recyclingUsed || usedImages.length === 0}
+                className="px-3 py-1.5 text-sm bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded transition disabled:opacity-50"
+              >
+                {selectedUsedImages.size > 0 ? `Restore Selected (${selectedUsedImages.size})` : `Restore All (${usedImages.length})`}
+              </button>
+              <button
+                onClick={() => setUsedBankExpandedView(false)}
+                className="p-2 hover:bg-slate-800 rounded-full text-white transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {/* Scrollable Grid */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {usedImages.map((img) => (
+                <div key={img.id} className="relative group">
+                  {/* Selection checkbox */}
+                  <button
+                    onClick={() => toggleUsedImageSelection(img.id)}
+                    className={`absolute top-2 right-2 z-10 w-6 h-6 rounded border-2 flex items-center justify-center transition ${
+                      selectedUsedImages.has(img.id)
+                        ? 'bg-brand-cyan border-brand-cyan'
+                        : 'bg-slate-800/80 border-slate-400 hover:border-brand-cyan'
+                    }`}
+                  >
+                    {selectedUsedImages.has(img.id) && (
+                      <svg className="w-4 h-4 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                  {/* Used badge */}
+                  <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded text-xs text-white bg-purple-600">
+                    USED
+                  </div>
+                  {/* Full-size image */}
+                  <img
+                    src={img.url}
+                    alt={img.variation || 'Used image'}
+                    className={`w-full h-auto rounded-lg border-2 cursor-pointer ${
+                      selectedUsedImages.has(img.id) ? 'border-brand-cyan' : 'border-slate-700'
+                    }`}
+                    onClick={() => toggleUsedImageSelection(img.id)}
+                  />
+                  {/* Info overlay */}
+                  <div className="mt-2 text-center">
+                    {img.variation && <span className="text-sm text-purple-400 block">{img.variation}</span>}
+                    {img.avatarTag && <span className="text-xs text-slate-400">Tag: {img.avatarTag}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
