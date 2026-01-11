@@ -14,7 +14,19 @@ interface DripFeedSettings {
   notification_hours: number[];
   first_day_monitor: boolean;
   is_enabled: boolean;
+  timezone: string;
 }
+
+// Common US timezones for the dropdown
+const TIMEZONES = [
+  { id: 'America/New_York', label: 'Eastern (ET)', offset: 'UTC-5/UTC-4' },
+  { id: 'America/Chicago', label: 'Central (CT)', offset: 'UTC-6/UTC-5' },
+  { id: 'America/Denver', label: 'Mountain (MT)', offset: 'UTC-7/UTC-6' },
+  { id: 'America/Los_Angeles', label: 'Pacific (PT)', offset: 'UTC-8/UTC-7' },
+  { id: 'America/Anchorage', label: 'Alaska (AKT)', offset: 'UTC-9/UTC-8' },
+  { id: 'Pacific/Honolulu', label: 'Hawaii (HST)', offset: 'UTC-10' },
+  { id: 'UTC', label: 'UTC', offset: 'UTC' },
+];
 
 interface ScheduledArticle {
   id: number;
@@ -103,6 +115,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
   const [skipDates, setSkipDates] = useState<string[]>([]);
   const [firstDayMonitor, setFirstDayMonitor] = useState(true);
   const [isEnabled, setIsEnabled] = useState(false);
+  const [timezone, setTimezone] = useState('America/Chicago');
 
   // UI state
   const [showSettings, setShowSettings] = useState(false);
@@ -181,6 +194,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
         setSkipDates(data.settings.skip_dates || []);
         setFirstDayMonitor(data.settings.first_day_monitor ?? true);
         setIsEnabled(data.settings.is_enabled ?? false);
+        setTimezone(data.settings.timezone || 'America/Chicago');
       }
 
       if (schedulesRes.ok) {
@@ -240,7 +254,8 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
           skip_weekdays: skipWeekdays,
           skip_dates: skipDates,
           first_day_monitor: firstDayMonitor,
-          is_enabled: isEnabled
+          is_enabled: isEnabled,
+          timezone: timezone
         })
       });
 
@@ -533,6 +548,34 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
     return `${hour12}:${minutes} ${ampm}`;
+  };
+
+  // Get current time in the user's configured timezone
+  const getCurrentTimeInTimezone = () => {
+    const now = new Date();
+    return now.toLocaleString('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).replace(',', '');
+  };
+
+  // Format a datetime for display (used in test status)
+  const formatDateTimeInTimezone = (dateStr: string, timeStr: string) => {
+    // Create date in UTC, then format in user's timezone
+    const dateTime = new Date(`${dateStr}T${timeStr}:00Z`);
+    return dateTime.toLocaleString('en-US', {
+      timeZone: timezone,
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
   };
 
   const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -845,6 +888,22 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
               <span className="text-xs text-gray-400">First Day Monitor</span>
             </label>
 
+            {/* Timezone */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400">Timezone:</span>
+              <select
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-white text-xs"
+              >
+                {TIMEZONES.map((tz) => (
+                  <option key={tz.id} value={tz.id}>
+                    {tz.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Save Button */}
             <button
               onClick={saveSettings}
@@ -1133,7 +1192,8 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
               {testStatus ? (
                 <div className="space-y-1 text-xs">
                   <div className="text-gray-300">
-                    Time: <span className="text-white font-mono">{testStatus.currentTime}</span>
+                    Time: <span className="text-white font-mono">{getCurrentTimeInTimezone()}</span>
+                    <span className="text-gray-500 ml-1">({TIMEZONES.find(t => t.id === timezone)?.label || timezone})</span>
                   </div>
                   <div className="text-gray-300">
                     Pending: <span className="text-yellow-400">{testStatus.pendingCount}</span>

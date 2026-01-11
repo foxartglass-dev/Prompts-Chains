@@ -739,6 +739,7 @@ async function setup() {
         notification_hours JSONB DEFAULT '[24, 12, 6]',
         first_day_monitor BOOLEAN DEFAULT true,
         is_enabled BOOLEAN DEFAULT false,
+        timezone VARCHAR(50) DEFAULT 'America/Chicago',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )

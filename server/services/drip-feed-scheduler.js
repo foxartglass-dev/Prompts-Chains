@@ -16,6 +16,34 @@ let isRunning = false;
 let lastRun = null;
 let schedulerEnabled = true;
 
+// Helper function to get current date and time in a specific timezone
+const getCurrentTimeInTimezone = (timezone = 'America/Chicago') => {
+  const now = new Date();
+
+  // Get date parts in the specified timezone
+  const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const currentDate = dateFormatter.format(now); // YYYY-MM-DD format
+
+  // Get time parts in the specified timezone
+  const timeFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const timeParts = timeFormatter.formatToParts(now);
+  const hour = timeParts.find(p => p.type === 'hour')?.value || '00';
+  const minute = timeParts.find(p => p.type === 'minute')?.value || '00';
+  const currentTime = `${hour}:${minute}`;
+
+  return { currentDate, currentTime };
+};
+
 /**
  * Initialize the drip feed scheduler
  * Call this when the server starts
@@ -68,30 +96,32 @@ async function runDripFeedCycle() {
   lastRun = new Date();
 
   try {
-    const now = new Date();
-    const currentDate = now.toISOString().split('T')[0];
-    const currentTime = now.toTimeString().split(' ')[0].substring(0, 5);
+    console.log(`[Drip Feed Scheduler] Running cycle...`);
 
-    console.log(`[Drip Feed Scheduler] Running cycle at ${currentDate} ${currentTime}`);
-
-    // Get all due articles from websites with drip feed enabled
-    const dueArticles = await sql`
+    // Get all pending articles with their timezone settings
+    const pendingArticles = await sql`
       SELECT s.*, a.keyword, a.final_content, a.selected_meta_title,
              a.selected_meta_description, a.generated_images,
              w.wp_url, w.wp_user, w.wp_app_password, w.seo_plugin,
              w.id as website_id,
-             ds.is_enabled, ds.first_day_monitor
+             ds.is_enabled, ds.first_day_monitor,
+             COALESCE(ds.timezone, 'America/Chicago') as timezone
       FROM drip_feed_schedules s
       JOIN articles a ON s.article_id = a.id
       JOIN websites w ON s.website_id = w.id
       LEFT JOIN drip_feed_settings ds ON s.website_id = ds.website_id
       WHERE s.status = 'pending'
-        AND (s.scheduled_date < ${currentDate}
-             OR (s.scheduled_date = ${currentDate} AND s.scheduled_time <= ${currentTime}))
         AND (ds.is_enabled = true OR ds.is_enabled IS NULL)
       ORDER BY s.scheduled_date, s.scheduled_time
-      LIMIT 5
+      LIMIT 50
     `;
+
+    // Filter to find articles that are due based on their website's timezone
+    const dueArticles = pendingArticles.filter(article => {
+      const { currentDate, currentTime } = getCurrentTimeInTimezone(article.timezone);
+      return article.scheduled_date < currentDate ||
+             (article.scheduled_date === currentDate && article.scheduled_time <= currentTime);
+    }).slice(0, 5); // Limit to 5 for processing
 
     if (dueArticles.length === 0) {
       console.log('[Drip Feed Scheduler] No articles due for publishing');
