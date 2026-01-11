@@ -1277,6 +1277,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
     }
 
     console.log('[Image Creation API] Existing record:', existing.length > 0 ? existing[0].id : 'none', saveToWebsite ? '(website-level)' : '(workflow-level)');
+    console.log('[Image Creation API] DEBUG: websiteId=', websiteId, 'workflowId=', workflowId, 'saveToWebsite=', saveToWebsite, 'existing.length=', existing.length);
 
     // Helper function to save core settings
     // Uses fallback logic if newer columns (live_prompt_mode, etc.) don't exist in the database
@@ -1716,7 +1717,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
   } catch (error) {
     console.error('[Image Creation API] Save settings error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('[Image Creation API] Stack:', error.stack);
+    res.status(500).json({
+      error: error.message,
+      stack: error.stack,
+      hint: 'Check server logs for full details'
+    });
   }
 });
 
