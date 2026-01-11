@@ -1253,6 +1253,93 @@ const KnownIssuesDiagram: React.FC = () => (
             Total batch time dropped from ~5+ minutes to under 1 minute. <strong>13x speedup!</strong>
           </div>
         </div>
+
+        <div className="bg-slate-800 rounded-lg p-4 border border-brand-cyan/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Draft Image Bank not displaying images</span>
+            <span className="text-xs bg-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded">Jan 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Draft Image Bank showed stats (249 draft) but grid said "No draft images yet".
+            Error log: <code className="bg-slate-900 px-1 rounded">[Draft Image Bank] Get error: {'{}'}</code>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> <code className="bg-slate-900 px-1 rounded">sql.unsafe()</code> was throwing empty errors.
+            Rewrote <code className="bg-slate-900 px-1 rounded">getDraftImageBank()</code> in <code className="bg-slate-900 px-1 rounded">server/services/draft-image-bank.js</code>
+            to use tagged templates with conditional NULL checks (matching pattern used by working stats endpoint).
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4 border border-brand-cyan/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Draft Bank header showed 0 until opened</span>
+            <span className="text-xs bg-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded">Jan 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Header showed "Draft Image Bank (0 in draft)" even with 249 images,
+            because stats only loaded when section was opened.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added <code className="bg-slate-900 px-1 rounded">fetchDraftBankStatsOnly()</code> function
+            that runs on component mount. Stats now display correctly in collapsed header.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* New Features Added */}
+    <div className="bg-blue-900/20 rounded-xl p-6 border border-blue-500">
+      <h3 className="text-lg font-bold text-blue-400 mb-4">New Features Added (Jan 2026)</h3>
+
+      <div className="space-y-4">
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-blue-400">★</span>
+            <span className="font-semibold text-white">Image Recycle Feature (Testing Mode)</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Purpose:</strong> Recycle test images back to Image Bank instead of wasting them.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Features:</strong>
+            <ul className="list-disc list-inside mt-1 space-y-1">
+              <li><strong>Draft Bank → Image Bank:</strong> "Recycle All to Image Bank" button copies draft images to reusable bank</li>
+              <li><strong>Used/Archive → Available:</strong> "Restore All to Available" button marks used images as available again</li>
+              <li>Images keep all metadata (tags, category, avatar tag, etc.)</li>
+              <li>After recycle, images are removed from Draft Bank to prevent duplicates</li>
+            </ul>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Files:</strong> <code className="bg-slate-900 px-1 rounded">server/services/image-bank.js</code>,
+            <code className="bg-slate-900 px-1 rounded">server/routes/image-bank.js</code>,
+            <code className="bg-slate-900 px-1 rounded">src/components/ImageCreationSection.tsx</code>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-blue-400">★</span>
+            <span className="font-semibold text-white">Image Selection & Expand All View</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Purpose:</strong> Quickly review and select images for recycling/restoring.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Features:</strong>
+            <ul className="list-disc list-inside mt-1 space-y-1">
+              <li><strong>Selection checkboxes:</strong> Click images or checkboxes to select in Draft Bank and Used/Archive</li>
+              <li><strong>Select All/Deselect All:</strong> Quick bulk selection buttons</li>
+              <li><strong>Expand All button:</strong> Opens full-screen scrollable grid with full-size images</li>
+              <li><strong>Single image expand:</strong> Click expand icon on any thumbnail to preview full-size</li>
+              <li><strong>Refresh button:</strong> Manual refresh for Draft Bank images</li>
+            </ul>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Location:</strong> Image Bank section → Draft Image Bank / Used Archive panels
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1488,32 +1575,56 @@ const body = {
     {/* Next Steps */}
     <div className="bg-brand-cyan/10 rounded-xl p-6 border border-brand-cyan">
       <h3 className="text-lg font-bold text-brand-cyan mb-4">To Complete Drip Feed Feature</h3>
+      <p className="text-sm text-yellow-400 mb-4">Status: Planned (Jan 2026) - Implementation pending</p>
 
       <div className="space-y-3 text-sm">
         <div className="flex items-start gap-2">
           <span className="text-brand-cyan font-bold">1.</span>
           <div className="text-gray-300">
-            <strong>Add UI in ArticleListView.tsx:</strong> Multi-select articles + "Schedule Drip Feed" button
+            <strong>Database:</strong> Create <code className="bg-slate-900 px-1 rounded">drip_feed_schedules</code> and
+            <code className="bg-slate-900 px-1 rounded">drip_feed_settings</code> tables
           </div>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-brand-cyan font-bold">2.</span>
           <div className="text-gray-300">
-            <strong>Create DripFeedModal component:</strong> Date picker, interval selector, preview of schedule
+            <strong>Article Selection:</strong> Add checkboxes to ArticleListView + "Add to Drip Feed" button
           </div>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-brand-cyan font-bold">3.</span>
           <div className="text-gray-300">
-            <strong>Add schedule status view:</strong> Show pending/published/failed schedules
+            <strong>Settings Modal:</strong> Articles/day, variance range (e.g., 6-8), publish time window
           </div>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-brand-cyan font-bold">4.</span>
           <div className="text-gray-300">
-            <strong>Test with WordPress:</strong> Verify scheduled posts appear correctly
+            <strong>Skip Days:</strong> Calendar to select dates to skip (holidays), option for weekly skips (every Sunday)
           </div>
         </div>
+        <div className="flex items-start gap-2">
+          <span className="text-brand-cyan font-bold">5.</span>
+          <div className="text-gray-300">
+            <strong>Queue View:</strong> Visual calendar showing scheduled articles by day
+          </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-brand-cyan font-bold">6.</span>
+          <div className="text-gray-300">
+            <strong>Publishing:</strong> Either manual trigger or server cron to push articles to WordPress
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 p-3 bg-slate-800 rounded-lg">
+        <h4 className="font-semibold text-white mb-2">Planned Settings Features:</h4>
+        <ul className="text-sm text-gray-400 space-y-1">
+          <li>• <strong>Variance toggle:</strong> Instead of exactly 7/day, random between 6-8 (looks more natural to Google)</li>
+          <li>• <strong>Skip specific dates:</strong> Holidays, special events</li>
+          <li>• <strong>Skip weekly days:</strong> Skip every Sunday, or just specific Sundays</li>
+          <li>• <strong>Publish time window:</strong> Randomize publish times between 8am-6pm</li>
+        </ul>
       </div>
     </div>
   </div>
