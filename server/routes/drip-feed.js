@@ -538,24 +538,50 @@ router.get('/log/:websiteId', requireDb, async (req, res) => {
 router.post('/test-schedule/:websiteId', requireDb, async (req, res) => {
   try {
     const { websiteId } = req.params;
-    const { articleIds, minutesFromNow = [1, 2, 3, 4], clientTime } = req.body;
+    const { articleIds, minutesFromNow = [1, 2, 3, 4] } = req.body;
 
     if (!articleIds || articleIds.length === 0) {
       return res.status(400).json({ error: 'No articles selected' });
     }
 
+    // Get the website's timezone setting
+    const settings = await sql`
+      SELECT COALESCE(timezone, 'America/Chicago') as timezone
+      FROM drip_feed_settings
+      WHERE website_id = ${websiteId}
+    `;
+    const timezone = settings[0]?.timezone || 'America/Chicago';
+
     const results = [];
-    // Use client time if provided, otherwise fall back to server time
-    const now = clientTime ? new Date(clientTime) : new Date();
 
     for (let i = 0; i < articleIds.length; i++) {
       const articleId = articleIds[i];
       const minutes = minutesFromNow[i] || minutesFromNow[0] || 1;
 
-      // Calculate scheduled time (minutes from now in client's timezone)
+      // Calculate scheduled time in the user's timezone
+      const now = new Date();
       const scheduledTime = new Date(now.getTime() + minutes * 60 * 1000);
-      const scheduledDate = scheduledTime.toISOString().split('T')[0];
-      const scheduledTimeStr = scheduledTime.toTimeString().split(' ')[0].substring(0, 5);
+
+      // Get date in user's timezone (YYYY-MM-DD format)
+      const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const scheduledDate = dateFormatter.format(scheduledTime);
+
+      // Get time in user's timezone (HH:MM format)
+      const timeFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      const timeParts = timeFormatter.formatToParts(scheduledTime);
+      const hour = timeParts.find(p => p.type === 'hour')?.value || '00';
+      const minute = timeParts.find(p => p.type === 'minute')?.value || '00';
+      const scheduledTimeStr = `${hour}:${minute}`;
 
       try {
         // Delete existing schedule for this article if any
@@ -583,7 +609,7 @@ router.post('/test-schedule/:websiteId', requireDb, async (req, res) => {
           success: true
         });
 
-        console.log(`[Test Schedule] Article ${articleId} scheduled for ${minutes} minute(s) from now: ${scheduledDate} ${scheduledTimeStr}`);
+        console.log(`[Test Schedule] Article ${articleId} scheduled for ${minutes} minute(s) from now: ${scheduledDate} ${scheduledTimeStr} (${timezone})`);
       } catch (err) {
         results.push({
           articleId,
@@ -597,6 +623,7 @@ router.post('/test-schedule/:websiteId', requireDb, async (req, res) => {
       success: true,
       message: `Scheduled ${results.filter(r => r.success).length} articles for testing`,
       results,
+      timezone,
       note: 'Cron runs every 5 minutes. Use "Process Now" to trigger immediately.'
     });
   } catch (error) {

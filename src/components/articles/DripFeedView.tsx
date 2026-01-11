@@ -669,8 +669,17 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
             )}
           </div>
 
-          {/* Right: Settings Dropdown + Actions */}
+          {/* Right: Time Display + Settings Dropdown + Actions */}
           <div className="flex items-center gap-2">
+            {/* Current Time Display */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 rounded-lg text-sm">
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-white font-mono">{getCurrentTimeInTimezone()}</span>
+              <span className="text-gray-500 text-xs">({TIMEZONES.find(t => t.id === timezone)?.label?.split(' ')[0] || 'CT'})</span>
+            </div>
+
             <button
               onClick={() => setShowSettings(!showSettings)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
@@ -1281,30 +1290,36 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
               <div className="bg-slate-900/50 rounded-lg p-2 flex-1">
                 <div className="text-xs text-orange-400 font-semibold mb-1">Pending ({testStatus.pendingCount})</div>
                 <div className="flex gap-2 overflow-x-auto pb-1">
-                  {testStatus.pending.map((p) => (
-                    <div
-                      key={p.id}
-                      className={`flex-shrink-0 flex items-center gap-1.5 text-xs px-2 py-1 rounded ${
-                        p.isDueNow ? 'bg-green-600/20 text-green-400 border border-green-500/50' : 'bg-slate-800 text-gray-300'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedTestArticles.includes(p.articleId)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedTestArticles([...selectedTestArticles, p.articleId]);
-                          } else {
-                            setSelectedTestArticles(selectedTestArticles.filter(id => id !== p.articleId));
-                          }
-                        }}
-                        className="w-3 h-3"
-                      />
-                      <span className="font-mono text-gray-500">{p.scheduledFor.split(' ')[1]}</span>
-                      <span className="max-w-[120px] truncate">{p.keyword}</span>
-                      {p.isDueNow && <span className="text-green-400 font-bold">DUE</span>}
-                    </div>
-                  ))}
+                  {testStatus.pending.map((p) => {
+                    // Extract time from scheduledFor (handles various formats)
+                    const timeMatch = p.scheduledFor?.match(/(\d{1,2}:\d{2})/);
+                    const displayTime = timeMatch ? formatTime(timeMatch[1]) : p.scheduledFor;
+
+                    return (
+                      <div
+                        key={p.id}
+                        className={`flex-shrink-0 flex items-center gap-2 text-xs px-2 py-1.5 rounded ${
+                          p.isDueNow ? 'bg-green-600/20 text-green-400 border border-green-500/50' : 'bg-slate-800 text-gray-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedTestArticles.includes(p.articleId)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTestArticles([...selectedTestArticles, p.articleId]);
+                            } else {
+                              setSelectedTestArticles(selectedTestArticles.filter(id => id !== p.articleId));
+                            }
+                          }}
+                          className="w-3 h-3"
+                        />
+                        <span className={`font-mono ${p.isDueNow ? 'text-green-400' : 'text-amber-400'}`}>{displayTime}</span>
+                        <span className="max-w-[150px] truncate text-white">{p.keyword || 'No keyword'}</span>
+                        {p.isDueNow && <span className="bg-green-500 text-white px-1 rounded text-[10px] font-bold">DUE</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
