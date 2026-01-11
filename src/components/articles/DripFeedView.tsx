@@ -133,6 +133,18 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
   const [newSmsName, setNewSmsName] = useState('');
   const [testingSms, setTestingSms] = useState(false);
 
+  // Test mode state
+  const [showTestMode, setShowTestMode] = useState(false);
+  const [testStatus, setTestStatus] = useState<{
+    currentTime: string;
+    pendingCount: number;
+    dueNowCount: number;
+    pending: Array<{ id: number; articleId: number; keyword: string; scheduledFor: string; isDueNow: boolean }>;
+  } | null>(null);
+  const [processingTest, setProcessingTest] = useState(false);
+  const [schedulingTest, setSchedulingTest] = useState(false);
+  const [selectedTestArticles, setSelectedTestArticles] = useState<number[]>([]);
+
   const fetchData = useCallback(async () => {
     if (!websiteId) {
       setLoading(false);
@@ -411,6 +423,88 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
     }
   };
 
+  // Test Mode functions
+  const fetchTestStatus = async () => {
+    try {
+      const res = await fetch('/api/drip-feed/test-status');
+      if (res.ok) {
+        const data = await res.json();
+        setTestStatus(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch test status:', err);
+    }
+  };
+
+  const scheduleTestArticles = async (minuteOffsets: number[]) => {
+    if (!websiteId || selectedTestArticles.length === 0) {
+      setError('Select articles to schedule for testing');
+      return;
+    }
+
+    setSchedulingTest(true);
+    try {
+      const res = await fetch(`/api/drip-feed/test-schedule/${websiteId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleIds: selectedTestArticles,
+          minutesFromNow: minuteOffsets
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Scheduled ${data.results.filter((r: { success: boolean }) => r.success).length} articles for testing!\n\n${data.results.map((r: { keyword?: string; minutesFromNow?: number; scheduledFor?: string }) => `• ${r.keyword}: ${r.minutesFromNow} min (${r.scheduledFor})`).join('\n')}`);
+        setSelectedTestArticles([]);
+        fetchTestStatus();
+        fetchData();
+      } else {
+        setError(data.error || 'Failed to schedule test');
+      }
+    } catch (err) {
+      setError('Failed to schedule test');
+    } finally {
+      setSchedulingTest(false);
+    }
+  };
+
+  const processNow = async () => {
+    setProcessingTest(true);
+    try {
+      const res = await fetch('/api/drip-feed/process-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        if (data.processed === 0) {
+          alert(`No articles due for publishing.\n\nCurrent time: ${data.currentTime}\n\nSchedule articles for testing first.`);
+        } else {
+          alert(`Processed ${data.processed} articles!\n\n✅ Successful: ${data.successful}\n❌ Failed: ${data.failed}`);
+        }
+        fetchTestStatus();
+        fetchData();
+      } else {
+        setError(data.error || 'Failed to process');
+      }
+    } catch (err) {
+      setError('Failed to process');
+    } finally {
+      setProcessingTest(false);
+    }
+  };
+
+  // Fetch test status when test mode is opened
+  useEffect(() => {
+    if (showTestMode) {
+      fetchTestStatus();
+      const interval = setInterval(fetchTestStatus, 10000); // Refresh every 10 seconds
+      return () => clearInterval(interval);
+    }
+  }, [showTestMode]);
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr + 'T00:00:00');
     return date.toLocaleDateString('en-US', {
@@ -568,6 +662,21 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
               Notifications
+            </button>
+
+            {/* Test Mode Button */}
+            <button
+              onClick={() => setShowTestMode(!showTestMode)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                showTestMode
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-orange-600/20 border border-orange-500/50 text-orange-400 hover:bg-orange-600/30'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              Test Mode
             </button>
           </div>
         </div>
@@ -989,6 +1098,140 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
         </div>
       )}
 
+      {/* Test Mode Panel */}
+      {showTestMode && (
+        <div className="flex-shrink-0 bg-orange-900/20 border-b border-orange-500/30 px-4 py-3">
+          <div className="flex flex-wrap items-start gap-4">
+            {/* Current Status */}
+            <div className="bg-slate-900/50 rounded-lg p-3 min-w-[200px]">
+              <div className="text-xs text-orange-400 font-semibold mb-2">Current Status</div>
+              {testStatus ? (
+                <div className="space-y-1 text-xs">
+                  <div className="text-gray-300">
+                    Time: <span className="text-white font-mono">{testStatus.currentTime}</span>
+                  </div>
+                  <div className="text-gray-300">
+                    Pending: <span className="text-yellow-400">{testStatus.pendingCount}</span>
+                  </div>
+                  <div className="text-gray-300">
+                    Due Now: <span className={testStatus.dueNowCount > 0 ? 'text-green-400' : 'text-gray-500'}>{testStatus.dueNowCount}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500">Loading...</div>
+              )}
+              <button
+                onClick={fetchTestStatus}
+                className="mt-2 text-xs text-orange-400 hover:text-orange-300"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {/* Quick Schedule Buttons */}
+            <div className="bg-slate-900/50 rounded-lg p-3">
+              <div className="text-xs text-orange-400 font-semibold mb-2">Quick Schedule Selected</div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => scheduleTestArticles([1])}
+                  disabled={schedulingTest || selectedTestArticles.length === 0}
+                  className="px-3 py-1 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 rounded text-white text-xs font-medium"
+                >
+                  1 min
+                </button>
+                <button
+                  onClick={() => scheduleTestArticles([2])}
+                  disabled={schedulingTest || selectedTestArticles.length === 0}
+                  className="px-3 py-1 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 rounded text-white text-xs font-medium"
+                >
+                  2 min
+                </button>
+                <button
+                  onClick={() => scheduleTestArticles([1, 2, 3, 4])}
+                  disabled={schedulingTest || selectedTestArticles.length < 2}
+                  className="px-3 py-1 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 rounded text-white text-xs font-medium"
+                >
+                  Staggered (1,2,3,4)
+                </button>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                {selectedTestArticles.length === 0
+                  ? 'Select articles from queue below'
+                  : `${selectedTestArticles.length} article(s) selected`}
+              </div>
+            </div>
+
+            {/* Process Now Button */}
+            <div className="bg-slate-900/50 rounded-lg p-3">
+              <div className="text-xs text-orange-400 font-semibold mb-2">Manual Trigger</div>
+              <button
+                onClick={processNow}
+                disabled={processingTest}
+                className="px-4 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 rounded text-white text-sm font-medium flex items-center gap-2"
+              >
+                {processingTest ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Process Now
+                  </>
+                )}
+              </button>
+              <div className="mt-1 text-xs text-gray-500">
+                Publish all due articles immediately
+              </div>
+            </div>
+
+            {/* Due Articles List */}
+            {testStatus && testStatus.pending.length > 0 && (
+              <div className="bg-slate-900/50 rounded-lg p-3 flex-1 min-w-[300px]">
+                <div className="text-xs text-orange-400 font-semibold mb-2">Pending Articles</div>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {testStatus.pending.map((p) => (
+                    <div
+                      key={p.id}
+                      className={`flex items-center gap-2 text-xs px-2 py-1 rounded ${
+                        p.isDueNow ? 'bg-green-600/20 text-green-400' : 'bg-slate-800 text-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedTestArticles.includes(p.articleId)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTestArticles([...selectedTestArticles, p.articleId]);
+                          } else {
+                            setSelectedTestArticles(selectedTestArticles.filter(id => id !== p.articleId));
+                          }
+                        }}
+                        className="w-3 h-3"
+                      />
+                      <span className="font-mono text-gray-500 w-28">{p.scheduledFor}</span>
+                      <span className="truncate flex-1">{p.keyword}</span>
+                      {p.isDueNow && <span className="text-green-400 font-semibold">DUE</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3 text-xs text-gray-500">
+            <strong className="text-orange-400">How to test:</strong> Select articles → Click a time button (1 min, 2 min, etc.) → Wait or click "Process Now" to trigger immediately
+          </div>
+        </div>
+      )}
+
       {/* Main Content: Schedule Queue */}
       <div className="flex-1 overflow-auto p-4">
         {Object.keys(groupedSchedules).length > 0 ? (
@@ -1017,6 +1260,21 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
                           className="px-3 py-2 flex items-center justify-between hover:bg-slate-700/30"
                         >
                           <div className="flex items-center gap-3">
+                            {/* Test Mode Checkbox */}
+                            {showTestMode && article.status === 'pending' && (
+                              <input
+                                type="checkbox"
+                                checked={selectedTestArticles.includes(article.article_id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedTestArticles([...selectedTestArticles, article.article_id]);
+                                  } else {
+                                    setSelectedTestArticles(selectedTestArticles.filter(id => id !== article.article_id));
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-orange-500 bg-slate-700 text-orange-500"
+                              />
+                            )}
                             <span className="text-xs text-gray-500 w-16">
                               {formatTime(article.scheduled_time)}
                             </span>

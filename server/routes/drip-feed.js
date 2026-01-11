@@ -492,6 +492,180 @@ router.get('/log/:websiteId', requireDb, async (req, res) => {
 });
 
 // ============================================
+// TEST MODE - Quick scheduling for testing cron job
+// ============================================
+
+// POST test schedule - Schedule articles for 1, 2, 3, 4 minutes from now
+router.post('/test-schedule/:websiteId', requireDb, async (req, res) => {
+  try {
+    const { websiteId } = req.params;
+    const { articleIds, minutesFromNow = [1, 2, 3, 4] } = req.body;
+
+    if (!articleIds || articleIds.length === 0) {
+      return res.status(400).json({ error: 'No articles selected' });
+    }
+
+    const results = [];
+    const now = new Date();
+
+    for (let i = 0; i < articleIds.length; i++) {
+      const articleId = articleIds[i];
+      const minutes = minutesFromNow[i] || minutesFromNow[0] || 1;
+
+      // Calculate scheduled time (minutes from now)
+      const scheduledTime = new Date(now.getTime() + minutes * 60 * 1000);
+      const scheduledDate = scheduledTime.toISOString().split('T')[0];
+      const scheduledTimeStr = scheduledTime.toTimeString().split(' ')[0].substring(0, 5);
+
+      try {
+        // Delete existing schedule for this article if any
+        await sql`DELETE FROM drip_feed_schedules WHERE article_id = ${articleId}`;
+
+        // Create new test schedule
+        const schedule = await sql`
+          INSERT INTO drip_feed_schedules (
+            website_id, article_id, scheduled_date, scheduled_time, status, is_manual_time
+          ) VALUES (
+            ${websiteId}, ${articleId}, ${scheduledDate}, ${scheduledTimeStr}, 'pending', true
+          )
+          RETURNING *
+        `;
+
+        // Get article keyword for display
+        const article = await sql`SELECT keyword FROM articles WHERE id = ${articleId}`;
+
+        results.push({
+          articleId,
+          keyword: article[0]?.keyword,
+          scheduledFor: `${scheduledDate} ${scheduledTimeStr}`,
+          minutesFromNow: minutes,
+          scheduleId: schedule[0].id,
+          success: true
+        });
+
+        console.log(`[Test Schedule] Article ${articleId} scheduled for ${minutes} minute(s) from now: ${scheduledDate} ${scheduledTimeStr}`);
+      } catch (err) {
+        results.push({
+          articleId,
+          error: err.message,
+          success: false
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Scheduled ${results.filter(r => r.success).length} articles for testing`,
+      results,
+      note: 'Cron runs every 5 minutes. Use "Process Now" to trigger immediately.'
+    });
+  } catch (error) {
+    console.error('Error creating test schedule:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST process-now - Manually trigger the cron job (for testing)
+router.post('/process-now', requireDb, async (req, res) => {
+  try {
+    console.log('[Drip Feed] Manual process triggered');
+
+    const now = new Date();
+    const currentDate = now.toISOString().split('T')[0];
+    const currentTime = now.toTimeString().split(' ')[0].substring(0, 5);
+
+    // Get all due articles (same logic as cron)
+    const dueArticles = await sql`
+      SELECT s.*, a.keyword, a.final_content, a.selected_meta_title,
+             a.selected_meta_description, a.generated_images,
+             w.wp_url, w.wp_user, w.wp_app_password, w.seo_plugin,
+             w.id as website_id
+      FROM drip_feed_schedules s
+      JOIN articles a ON s.article_id = a.id
+      JOIN websites w ON s.website_id = w.id
+      WHERE s.status = 'pending'
+        AND (s.scheduled_date < ${currentDate}
+             OR (s.scheduled_date = ${currentDate} AND s.scheduled_time <= ${currentTime}))
+      ORDER BY s.scheduled_date, s.scheduled_time
+      LIMIT 10
+    `;
+
+    console.log(`[Drip Feed] Found ${dueArticles.length} articles due for publishing`);
+
+    if (dueArticles.length === 0) {
+      return res.json({
+        processed: 0,
+        message: 'No articles due for publishing',
+        currentTime: `${currentDate} ${currentTime}`
+      });
+    }
+
+    const results = [];
+    for (const article of dueArticles) {
+      const result = await publishArticle(article);
+      results.push(result);
+    }
+
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+
+    res.json({
+      processed: results.length,
+      successful,
+      failed,
+      results,
+      currentTime: `${currentDate} ${currentTime}`
+    });
+  } catch (error) {
+    console.error('Error in manual process:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET test status - Check what's scheduled and when cron will pick it up
+router.get('/test-status', requireDb, async (req, res) => {
+  try {
+    const now = new Date();
+    const currentDate = now.toISOString().split('T')[0];
+    const currentTime = now.toTimeString().split(' ')[0].substring(0, 5);
+
+    // Get all pending schedules
+    const pending = await sql`
+      SELECT s.*, a.keyword,
+             s.scheduled_date || ' ' || s.scheduled_time as scheduled_datetime
+      FROM drip_feed_schedules s
+      JOIN articles a ON s.article_id = a.id
+      WHERE s.status = 'pending'
+      ORDER BY s.scheduled_date, s.scheduled_time
+      LIMIT 20
+    `;
+
+    // Calculate which are due now
+    const dueNow = pending.filter(p => {
+      return p.scheduled_date < currentDate ||
+             (p.scheduled_date === currentDate && p.scheduled_time <= currentTime);
+    });
+
+    res.json({
+      currentTime: `${currentDate} ${currentTime}`,
+      pendingCount: pending.length,
+      dueNowCount: dueNow.length,
+      pending: pending.map(p => ({
+        id: p.id,
+        articleId: p.article_id,
+        keyword: p.keyword,
+        scheduledFor: `${p.scheduled_date} ${p.scheduled_time}`,
+        isDueNow: dueNow.some(d => d.id === p.id)
+      })),
+      note: 'Cron runs every 5 minutes. Articles with isDueNow=true will be processed on next cron run.'
+    });
+  } catch (error) {
+    console.error('Error fetching test status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // NOTIFICATION SETTINGS (Pushover + Email-to-SMS)
 // ============================================
 
