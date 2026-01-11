@@ -581,16 +581,15 @@ router.post('/chat', async (req, res) => {
       messages = [], // Array of {role, content, images?}
       model = 'gpt-4o',
       contextImages = [], // Additional context images to include
-      openaiApiKey,
-      enable_web_tools = false // Enable web search and fetch capabilities
+      openaiApiKey
     } = req.body;
 
     if (!messages.length) {
       return res.status(400).json({ error: 'Messages required' });
     }
 
-    // Check if web tools can be enabled
-    const useWebTools = enable_web_tools && areWebToolsAvailable();
+    // Web tools are automatically enabled when BRAVE_SEARCH_API_KEY is configured
+    const useWebTools = areWebToolsAvailable();
 
     // Determine provider based on model name
     const isAnthropicModel = model.includes('claude');

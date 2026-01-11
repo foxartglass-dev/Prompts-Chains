@@ -1,5 +1,11 @@
 import express from 'express';
 import { sql, isDatabaseEnabled } from '../db/index.js';
+import {
+  openaiWebTools,
+  executeWebTool,
+  webToolsSystemPrompt,
+  areWebToolsAvailable
+} from '../services/web-tools-integration.js';
 
 const router = express.Router();
 
@@ -216,7 +222,9 @@ router.post('/chat', async (req, res) => {
       });
     }
 
-    const systemPrompt = `You are an AI assistant helping the user capture and formulate feature ideas for their software project "PromptFlow" - an AI content automation platform.
+    const useWebTools = areWebToolsAvailable();
+
+    let systemPrompt = `You are an AI assistant helping the user capture and formulate feature ideas for their software project "PromptFlow" - an AI content automation platform.
 
 Your role is to:
 1. Listen to the user's ideas (they may ramble or speak in fragments)
@@ -244,24 +252,74 @@ Priority guide:
 
 Be conversational, helpful, and help the user think through their ideas. Don't be too formal.`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    if (useWebTools) {
+      systemPrompt += webToolsSystemPrompt;
+    }
+
+    const apiOptions = {
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages
+      ],
+      temperature: 0.7
+    };
+
+    if (useWebTools) {
+      apiOptions.tools = openaiWebTools;
+      apiOptions.tool_choice = 'auto';
+    }
+
+    let response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages
-        ],
-        temperature: 0.7
-      })
+      body: JSON.stringify(apiOptions)
     });
 
-    const data = await response.json();
-    const assistantMessage = data.choices?.[0]?.message?.content || "I'm having trouble processing that. Could you try again?";
+    let data = await response.json();
+    let assistantMsg = data.choices?.[0]?.message;
+    let allMessages = [...apiOptions.messages];
+
+    // Handle tool calls in a loop
+    let iterations = 0;
+    while (assistantMsg?.tool_calls?.length > 0 && iterations < 5) {
+      iterations++;
+      console.log(`[Ideas Chat] Processing ${assistantMsg.tool_calls.length} tool call(s)`);
+
+      allMessages.push(assistantMsg);
+
+      for (const toolCall of assistantMsg.tool_calls) {
+        const toolResult = await executeWebTool(toolCall.function.name, JSON.parse(toolCall.function.arguments));
+        allMessages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(toolResult)
+        });
+      }
+
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: allMessages,
+          temperature: 0.7,
+          tools: openaiWebTools,
+          tool_choice: 'auto'
+        })
+      });
+
+      data = await response.json();
+      assistantMsg = data.choices?.[0]?.message;
+    }
+
+    const assistantMessage = assistantMsg?.content || "I'm having trouble processing that. Could you try again?";
 
     // Check if there's an idea to extract
     let suggestedIdea = null;

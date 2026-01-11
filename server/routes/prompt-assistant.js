@@ -1,5 +1,12 @@
 import express from 'express';
 import { sql, isDatabaseEnabled } from '../db/index.js';
+import {
+  openaiWebTools,
+  claudeWebTools,
+  executeWebTool,
+  webToolsSystemPrompt,
+  areWebToolsAvailable
+} from '../services/web-tools-integration.js';
 
 const router = express.Router();
 
@@ -117,66 +124,172 @@ Be concise but thorough. Focus on practical, actionable advice based on how mode
 
 // Call OpenAI API with vision support
 async function callOpenAI(messages, model, apiKey, maxTokens = 2048) {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const useWebTools = areWebToolsAvailable();
+  const systemPrompt = useWebTools
+    ? ASSISTANT_SYSTEM_PROMPT + webToolsSystemPrompt
+    : ASSISTANT_SYSTEM_PROMPT;
+
+  const apiOptions = {
+    model,
+    max_completion_tokens: maxTokens,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...messages
+    ],
+  };
+
+  if (useWebTools) {
+    apiOptions.tools = openaiWebTools;
+    apiOptions.tool_choice = 'auto';
+  }
+
+  let response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model,
-      max_completion_tokens: maxTokens,
-      messages: [
-        { role: 'system', content: ASSISTANT_SYSTEM_PROMPT },
-        ...messages
-      ],
-    }),
+    body: JSON.stringify(apiOptions),
   });
 
-  const data = await response.json();
+  let data = await response.json();
 
   if (!response.ok) {
     throw new Error(data.error?.message || `OpenAI API error: ${response.status}`);
   }
 
+  let assistantMessage = data.choices[0]?.message;
+  let allMessages = [...apiOptions.messages];
+  let totalUsage = { inputTokens: data.usage?.prompt_tokens || 0, outputTokens: data.usage?.completion_tokens || 0 };
+
+  // Handle tool calls in a loop
+  let iterations = 0;
+  while (assistantMessage?.tool_calls?.length > 0 && iterations < 5) {
+    iterations++;
+    console.log(`[Prompt Assistant] Processing ${assistantMessage.tool_calls.length} tool call(s)`);
+
+    allMessages.push(assistantMessage);
+
+    for (const toolCall of assistantMessage.tool_calls) {
+      const toolResult = await executeWebTool(toolCall.function.name, JSON.parse(toolCall.function.arguments));
+      allMessages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: JSON.stringify(toolResult)
+      });
+    }
+
+    response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        max_completion_tokens: maxTokens,
+        messages: allMessages,
+        tools: openaiWebTools,
+        tool_choice: 'auto'
+      }),
+    });
+
+    data = await response.json();
+    assistantMessage = data.choices[0]?.message;
+    totalUsage.inputTokens += data.usage?.prompt_tokens || 0;
+    totalUsage.outputTokens += data.usage?.completion_tokens || 0;
+  }
+
   return {
-    content: data.choices[0]?.message?.content || '',
-    usage: {
-      inputTokens: data.usage?.prompt_tokens,
-      outputTokens: data.usage?.completion_tokens,
-    },
+    content: assistantMessage?.content || '',
+    usage: totalUsage,
   };
 }
 
 // Call Anthropic API with vision support
 async function callAnthropic(messages, model, apiKey, maxTokens = 2048) {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const useWebTools = areWebToolsAvailable();
+  const systemPrompt = useWebTools
+    ? ASSISTANT_SYSTEM_PROMPT + webToolsSystemPrompt
+    : ASSISTANT_SYSTEM_PROMPT;
+
+  const apiOptions = {
+    model,
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages,
+  };
+
+  if (useWebTools) {
+    apiOptions.tools = claudeWebTools;
+  }
+
+  let response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'x-api-key': apiKey,
       'anthropic-version': '2024-01-01',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      system: ASSISTANT_SYSTEM_PROMPT,
-      messages,
-    }),
+    body: JSON.stringify(apiOptions),
   });
 
-  const data = await response.json();
+  let data = await response.json();
 
   if (!response.ok) {
     throw new Error(data.error?.message || `Anthropic API error: ${response.status}`);
   }
 
+  let currentMessages = [...messages];
+  let totalUsage = { inputTokens: data.usage?.input_tokens || 0, outputTokens: data.usage?.output_tokens || 0 };
+
+  // Handle tool use in a loop
+  let iterations = 0;
+  while (data.stop_reason === 'tool_use' && iterations < 5) {
+    iterations++;
+    const toolUseBlocks = data.content.filter(block => block.type === 'tool_use');
+    console.log(`[Prompt Assistant] Claude requesting ${toolUseBlocks.length} tool(s)`);
+
+    currentMessages.push({ role: 'assistant', content: data.content });
+
+    const toolResults = [];
+    for (const toolUse of toolUseBlocks) {
+      const result = await executeWebTool(toolUse.name, toolUse.input);
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: JSON.stringify(result)
+      });
+    }
+
+    currentMessages.push({ role: 'user', content: toolResults });
+
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2024-01-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: currentMessages,
+        tools: claudeWebTools
+      }),
+    });
+
+    data = await response.json();
+    totalUsage.inputTokens += data.usage?.input_tokens || 0;
+    totalUsage.outputTokens += data.usage?.output_tokens || 0;
+  }
+
+  const textContent = data.content?.find(block => block.type === 'text');
+
   return {
-    content: data.content?.[0]?.text || '',
-    usage: {
-      inputTokens: data.usage?.input_tokens,
-      outputTokens: data.usage?.output_tokens,
-    },
+    content: textContent?.text || '',
+    usage: totalUsage,
   };
 }
 

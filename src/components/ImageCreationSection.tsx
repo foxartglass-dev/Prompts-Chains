@@ -9145,16 +9145,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                       Sync to Worker
                     </button>
                     <button
-                      onClick={() => updateSettings({ web_tools_enabled: !settings.web_tools_enabled })}
-                      className={`px-2 py-1 ${settings.web_tools_enabled ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-slate-600/50 hover:bg-slate-600'} rounded text-white text-xs transition flex items-center gap-1`}
-                      title={settings.web_tools_enabled ? 'Web search/fetch enabled - AI can browse the internet' : 'Enable web search/fetch for AI'}
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
-                      {settings.web_tools_enabled ? 'Web ON' : 'Web OFF'}
-                    </button>
-                    <button
                       onClick={() => handleClearChatHistory('consultant')}
                       className="px-2 py-1 bg-red-600/50 hover:bg-red-600 rounded text-white text-xs transition"
                     >
