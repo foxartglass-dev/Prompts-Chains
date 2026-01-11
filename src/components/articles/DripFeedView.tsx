@@ -692,76 +692,76 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
 
       {/* Collapsible Settings Panel */}
       {showSettings && (
-        <div className="flex-shrink-0 bg-slate-800/50 border-b border-slate-700 px-4 py-4">
-          <div className="flex flex-wrap items-start gap-6">
+        <div className="flex-shrink-0 bg-slate-800/50 border-b border-slate-700 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-4">
             {/* Articles Per Day + Variance */}
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-400">Articles/day:</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">Articles/day:</span>
               <input
                 type="number"
                 value={articlesPerDay}
                 onChange={(e) => setArticlesPerDay(parseInt(e.target.value) || 1)}
                 min="1"
                 max="50"
-                className="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-center text-sm"
+                className="w-12 bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-white text-center text-xs"
               />
-              <label className="flex items-center gap-1.5 cursor-pointer">
+              <label className="flex items-center gap-1 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={varianceEnabled}
                   onChange={(e) => setVarianceEnabled(e.target.checked)}
-                  className="w-3.5 h-3.5 rounded border-gray-600 bg-slate-700 text-brand-cyan"
+                  className="w-3 h-3 rounded border-gray-600 bg-slate-700 text-brand-cyan"
                 />
-                <span className="text-sm text-gray-400">Variance</span>
+                <span className="text-xs text-gray-400">Variance</span>
               </label>
               {varianceEnabled && (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5">
                   <input
                     type="number"
                     value={varianceMin}
                     onChange={(e) => setVarianceMin(parseInt(e.target.value) || 1)}
                     min="1"
-                    className="w-12 bg-slate-700 border border-slate-600 rounded px-1.5 py-1 text-white text-center text-sm"
+                    className="w-10 bg-slate-700 border border-slate-600 rounded px-1 py-0.5 text-white text-center text-xs"
                   />
-                  <span className="text-gray-500">-</span>
+                  <span className="text-gray-500 text-xs">-</span>
                   <input
                     type="number"
                     value={varianceMax}
                     onChange={(e) => setVarianceMax(parseInt(e.target.value) || 1)}
                     min={varianceMin}
-                    className="w-12 bg-slate-700 border border-slate-600 rounded px-1.5 py-1 text-white text-center text-sm"
+                    className="w-10 bg-slate-700 border border-slate-600 rounded px-1 py-0.5 text-white text-center text-xs"
                   />
                 </div>
               )}
             </div>
 
             {/* Time Window */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-400">Time:</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400">Time:</span>
               <input
                 type="time"
                 value={publishTimeStart}
                 onChange={(e) => setPublishTimeStart(e.target.value)}
-                className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-sm"
+                className="bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-white text-xs"
               />
-              <span className="text-gray-500">to</span>
+              <span className="text-gray-500 text-xs">to</span>
               <input
                 type="time"
                 value={publishTimeEnd}
                 onChange={(e) => setPublishTimeEnd(e.target.value)}
-                className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-sm"
+                className="bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-white text-xs"
               />
             </div>
 
             {/* Skip Weekdays */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-400">Skip:</span>
-              <div className="flex gap-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400">Skip:</span>
+              <div className="flex gap-0.5">
                 {weekdayNames.map((name, index) => (
                   <button
                     key={index}
                     onClick={() => toggleWeekday(index)}
-                    className={`px-2 py-1 rounded text-xs font-medium transition ${
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition ${
                       skipWeekdays.includes(index)
                         ? 'bg-red-600 text-white'
                         : 'bg-slate-700 text-gray-400 hover:bg-slate-600'
@@ -773,61 +773,61 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
               </div>
             </div>
 
+            {/* Skip Dates */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400">Skip dates:</span>
+              <input
+                type="date"
+                value={selectedDate || ''}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-white text-xs"
+              />
+              <button
+                onClick={() => {
+                  if (selectedDate) {
+                    addSkipDate(selectedDate);
+                    setSelectedDate(null);
+                  }
+                }}
+                disabled={!selectedDate}
+                className="px-1.5 py-0.5 bg-red-600 hover:bg-red-500 rounded text-white text-[10px] font-medium disabled:opacity-50"
+              >
+                + Add
+              </button>
+              {skipDates.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {skipDates.map((date) => (
+                    <span
+                      key={date}
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-600/30 text-red-400 rounded text-[10px]"
+                    >
+                      {formatDate(date)}
+                      <button onClick={() => removeSkipDate(date)} className="hover:text-red-300">&times;</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* First Day Monitor */}
-            <label className="flex items-center gap-1.5 cursor-pointer">
+            <label className="flex items-center gap-1 cursor-pointer">
               <input
                 type="checkbox"
                 checked={firstDayMonitor}
                 onChange={(e) => setFirstDayMonitor(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-gray-600 bg-slate-700 text-brand-cyan"
+                className="w-3 h-3 rounded border-gray-600 bg-slate-700 text-brand-cyan"
               />
-              <span className="text-sm text-gray-400">First Day Monitor</span>
+              <span className="text-xs text-gray-400">First Day Monitor</span>
             </label>
 
             {/* Save Button */}
             <button
               onClick={saveSettings}
               disabled={saving}
-              className="px-4 py-1.5 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm transition disabled:opacity-50"
+              className="px-3 py-1 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-xs transition disabled:opacity-50"
             >
               {saving ? 'Saving...' : 'Save'}
             </button>
-          </div>
-
-          {/* Skip Dates Row */}
-          <div className="mt-3 flex items-center gap-3">
-            <span className="text-sm text-gray-400">Skip dates:</span>
-            <input
-              type="date"
-              value={selectedDate || ''}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-sm"
-            />
-            <button
-              onClick={() => {
-                if (selectedDate) {
-                  addSkipDate(selectedDate);
-                  setSelectedDate(null);
-                }
-              }}
-              disabled={!selectedDate}
-              className="px-2 py-1 bg-red-600 hover:bg-red-500 rounded text-white text-xs font-medium disabled:opacity-50"
-            >
-              + Add
-            </button>
-            {skipDates.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {skipDates.map((date) => (
-                  <span
-                    key={date}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-600/30 text-red-400 rounded text-xs"
-                  >
-                    {formatDate(date)}
-                    <button onClick={() => removeSkipDate(date)} className="hover:text-red-300">&times;</button>
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       )}
