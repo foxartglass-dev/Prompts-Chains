@@ -579,6 +579,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [selectedDraftImages, setSelectedDraftImages] = useState<Set<number>>(new Set());
   const [recyclingDraft, setRecyclingDraft] = useState(false);
   const [recyclingUsed, setRecyclingUsed] = useState(false);
+  const [selectedUsedImages, setSelectedUsedImages] = useState<Set<string>>(new Set());
+  const [quickPreview, setQuickPreview] = useState<{url: string; title?: string; section: 'draft' | 'used'} | null>(null);
 
   // Image title editing
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
@@ -4340,6 +4342,82 @@ Start by introducing yourself and asking about their business in a friendly way.
     } else {
       setSelectedDraftImages(new Set(visibleIds));
     }
+  };
+
+  // Toggle selection of a used image
+  const toggleUsedImageSelection = (imageId: string) => {
+    setSelectedUsedImages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(imageId)) {
+        newSet.delete(imageId);
+      } else {
+        newSet.add(imageId);
+      }
+      return newSet;
+    });
+  };
+
+  // Select/deselect all used images
+  const toggleAllUsedImageSelection = () => {
+    if (selectedUsedImages.size === usedImages.length) {
+      setSelectedUsedImages(new Set());
+    } else {
+      setSelectedUsedImages(new Set(usedImages.map(img => img.id)));
+    }
+  };
+
+  // Restore selected used images (or all if none selected)
+  const handleRestoreSelectedUsed = async () => {
+    if (!workflowId) return;
+
+    const imagesToRestore = selectedUsedImages.size > 0
+      ? usedImages.filter(img => selectedUsedImages.has(img.id))
+      : usedImages;
+
+    if (imagesToRestore.length === 0) {
+      showNotification('No images to restore', 'info');
+      return;
+    }
+
+    setRecyclingUsed(true);
+
+    try {
+      // If all images are selected or none selected, use bulk restore
+      if (selectedUsedImages.size === 0 || selectedUsedImages.size === usedImages.length) {
+        const res = await fetch(`/api/image-bank/${workflowId}/restore-all-used`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+          showNotification(`Restored ${data.data.restored} images to available`, 'success');
+        } else {
+          showNotification(`Failed to restore: ${data.error}`, 'error');
+        }
+      } else {
+        // Restore selected images one by one
+        let restored = 0;
+        for (const img of imagesToRestore) {
+          const apiId = img.dbId || img.id;
+          await fetch(`/api/image-bank/${workflowId}/${apiId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ used: false, usedOn: null })
+          });
+          restored++;
+        }
+        showNotification(`Restored ${restored} images to available`, 'success');
+      }
+
+      // Refresh image bank and clear selection
+      await loadSettings();
+      setSelectedUsedImages(new Set());
+    } catch (err) {
+      console.error('[Restore Used] Error:', err);
+      showNotification('Failed to restore images', 'error');
+    }
+
+    setRecyclingUsed(false);
   };
 
   // ========== UPLOAD TO BANK ==========
@@ -9171,6 +9249,19 @@ Start by introducing yourself and asking about their business in a friendly way.
                     <span className="text-xs text-amber-400 animate-pulse">Loading...</span>
                   )}
 
+                  {/* Refresh button */}
+                  <button
+                    onClick={() => fetchDraftBank()}
+                    disabled={draftBankLoading}
+                    className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded transition flex items-center gap-1 disabled:opacity-50"
+                    title="Refresh draft images"
+                  >
+                    <svg className={`w-3.5 h-3.5 ${draftBankLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </button>
+
                   {/* Recycle Button */}
                   {(draftBankStats.draft > 0 || draftBankStats.sent > 0) && (
                     <div className="ml-auto flex items-center gap-2">
@@ -9223,6 +9314,15 @@ Start by introducing yourself and asking about their business in a friendly way.
                             )}
                           </button>
                         )}
+                        {/* Expand button */}
+                        <button
+                          onClick={() => setQuickPreview({ url: img.url, title: img.item_type || img.page_keyword, section: 'draft' })}
+                          className="absolute top-1 left-7 z-20 w-5 h-5 rounded bg-slate-800/80 border border-slate-500 hover:border-brand-cyan flex items-center justify-center transition"
+                        >
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                          </svg>
+                        </button>
                         {/* Status badge */}
                         <div className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded text-[9px] text-white ${
                           img.status === 'draft' ? 'bg-amber-600/90' :
@@ -9282,11 +9382,17 @@ Start by introducing yourself and asking about their business in a friendly way.
             </button>
             {isUsedOpen && (
               <div className="p-4 border-t border-purple-500/30 space-y-3">
-                {/* Recycle All Button */}
+                {/* Action Buttons */}
                 {usedImages.length > 0 && (
-                  <div className="flex justify-end mb-2">
+                  <div className="flex justify-between items-center mb-2">
                     <button
-                      onClick={handleRecycleAllUsed}
+                      onClick={toggleAllUsedImageSelection}
+                      className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+                    >
+                      {selectedUsedImages.size === usedImages.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                    <button
+                      onClick={handleRestoreSelectedUsed}
                       disabled={recyclingUsed}
                       className="px-3 py-1.5 text-xs bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded transition flex items-center gap-1.5 disabled:opacity-50"
                     >
@@ -9298,7 +9404,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       ) : (
                         <>
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                          Restore All to Available ({usedImages.length})
+                          {selectedUsedImages.size > 0 ? `Restore Selected (${selectedUsedImages.size})` : `Restore All (${usedImages.length})`}
                         </>
                       )}
                     </button>
@@ -9308,17 +9414,45 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <div className="grid grid-cols-4 gap-3">
                     {usedImages.map((img) => (
                       <div key={img.id} className="relative group">
-                        <img src={img.url} alt={img.variation} className="w-full h-24 object-cover rounded border border-purple-500/30 opacity-70" />
+                        {/* Selection checkbox */}
+                        <button
+                          onClick={() => toggleUsedImageSelection(img.id)}
+                          className={`absolute top-1 right-1 z-20 w-5 h-5 rounded border-2 flex items-center justify-center transition ${
+                            selectedUsedImages.has(img.id)
+                              ? 'bg-brand-cyan border-brand-cyan'
+                              : 'bg-slate-800/80 border-slate-500 hover:border-brand-cyan'
+                          }`}
+                        >
+                          {selectedUsedImages.has(img.id) && (
+                            <svg className="w-3 h-3 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        {/* Expand button */}
+                        <button
+                          onClick={() => setQuickPreview({ url: img.url, title: img.variation || img.title, section: 'used' })}
+                          className="absolute top-1 left-7 z-20 w-5 h-5 rounded bg-slate-800/80 border border-slate-500 hover:border-brand-cyan flex items-center justify-center transition"
+                        >
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                          </svg>
+                        </button>
                         <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-purple-600/90 rounded text-[9px] text-white">USED</div>
-                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
+                        <img
+                          src={img.url}
+                          alt={img.variation}
+                          className={`w-full h-24 object-cover rounded border cursor-pointer ${
+                            selectedUsedImages.has(img.id) ? 'ring-2 ring-brand-cyan border-brand-cyan' : 'border-purple-500/30'
+                          } opacity-70`}
+                          onClick={() => toggleUsedImageSelection(img.id)}
+                        />
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1 pointer-events-none">
                           <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
                           {img.avatarTag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatarTag}</span>}
                           {img.usedOn && (
-                            img.usedOn.startsWith('http')
-                              ? <a href={img.usedOn} target="_blank" rel="noopener noreferrer" className="text-[9px] text-brand-cyan underline">View Page</a>
-                              : <span className="text-[9px] text-purple-300">Used on: {img.usedOn}</span>
+                            <span className="text-[9px] text-purple-300">Used on: {typeof img.usedOn === 'string' && img.usedOn.length > 30 ? img.usedOn.slice(0, 30) + '...' : img.usedOn}</span>
                           )}
-                          <button onClick={() => handleRestoreFromUsed(img.id)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Restore</button>
                         </div>
                       </div>
                     ))}
@@ -9334,6 +9468,30 @@ Start by introducing yourself and asking about their business in a friendly way.
       {saving && (
         <div className="fixed bottom-4 right-4 bg-brand-cyan text-slate-900 px-4 py-2 rounded-lg shadow-lg text-sm font-medium">
           Saving...
+        </div>
+      )}
+
+      {/* Quick Image Preview Modal (for Draft Bank and Used/Archive) */}
+      {quickPreview && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setQuickPreview(null)}>
+          <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setQuickPreview(null)}
+              className="absolute -top-10 right-0 p-2 text-white hover:text-brand-cyan transition"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <img
+              src={quickPreview.url}
+              alt={quickPreview.title || 'Preview'}
+              className="w-full h-auto max-h-[85vh] object-contain rounded-lg"
+            />
+            {quickPreview.title && (
+              <div className="mt-2 text-center text-white text-lg">{quickPreview.title}</div>
+            )}
+          </div>
         </div>
       )}
 
