@@ -1253,23 +1253,35 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
     // Check if settings exist - prefer website-level, fall back to workflow-level
     let existing = [];
     let saveToWebsite = false;
+    let websiteColumnExists = true;
 
     if (websiteId) {
-      // Check for website-level settings first
-      existing = await sql`
-        SELECT id FROM image_creation_settings WHERE website_id = ${websiteId}
-      `;
-      if (existing.length > 0) {
-        saveToWebsite = true;
-        console.log('[Image Creation API] Found existing WEBSITE-level settings:', existing[0].id);
-      } else {
-        // No website settings exist - will create new website-level settings
-        saveToWebsite = true;
-        console.log('[Image Creation API] No website settings - will create website-level settings');
+      // Check for website-level settings first (with fallback if column doesn't exist)
+      try {
+        existing = await sql`
+          SELECT id FROM image_creation_settings WHERE website_id = ${websiteId}
+        `;
+        if (existing.length > 0) {
+          saveToWebsite = true;
+          console.log('[Image Creation API] Found existing WEBSITE-level settings:', existing[0].id);
+        } else {
+          // No website settings exist - will create new website-level settings
+          saveToWebsite = true;
+          console.log('[Image Creation API] No website settings - will create website-level settings');
+        }
+      } catch (websiteErr) {
+        // website_id column might not exist - fall back to workflow-level
+        if (websiteErr.message?.includes('website_id') || websiteErr.message?.includes('column')) {
+          console.log('[Image Creation API] website_id column not available, using workflow-level settings');
+          websiteColumnExists = false;
+          saveToWebsite = false;
+        } else {
+          throw websiteErr;
+        }
       }
     }
 
-    // If no website or no website preference, check workflow-level
+    // If no website or website column doesn't exist, check workflow-level
     if (!saveToWebsite) {
       existing = await sql`
         SELECT id FROM image_creation_settings WHERE workflow_id = ${workflowId}
@@ -1278,7 +1290,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
     }
 
     console.log('[Image Creation API] Existing record:', existing.length > 0 ? existing[0].id : 'none', saveToWebsite ? '(website-level)' : '(workflow-level)');
-    console.log('[Image Creation API] DEBUG: websiteId=', websiteId, 'workflowId=', workflowId, 'saveToWebsite=', saveToWebsite, 'existing.length=', existing.length);
+    console.log('[Image Creation API] DEBUG: websiteId=', websiteId, 'workflowId=', workflowId, 'saveToWebsite=', saveToWebsite, 'existing.length=', existing.length, 'websiteColumnExists=', websiteColumnExists);
+
+    // If website column doesn't exist, force workflow-level
+    if (!websiteColumnExists) {
+      saveToWebsite = false;
+    }
 
     // Helper function to save core settings
     // Uses fallback logic if newer columns (live_prompt_mode, etc.) don't exist in the database
