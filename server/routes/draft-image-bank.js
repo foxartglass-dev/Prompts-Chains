@@ -19,6 +19,9 @@ router.get('/:workflowId', async (req, res) => {
     const { workflowId } = req.params;
     const { status, articleId, itemType, itemCategory, avatarTag, pageKeyword, limit } = req.query;
 
+    console.log(`[Draft Image Bank] GET images for workflow ${workflowId}`);
+    console.log(`[Draft Image Bank] Query params:`, { status, articleId, itemType, itemCategory, avatarTag, pageKeyword, limit });
+
     const options = {};
     if (status) options.status = status;
     if (articleId) options.articleId = parseInt(articleId);
@@ -29,6 +32,8 @@ router.get('/:workflowId', async (req, res) => {
     if (limit) options.limit = parseInt(limit);
 
     const images = await draftBankService.getDraftImageBank(parseInt(workflowId), options);
+    console.log(`[Draft Image Bank] Returning ${images.length} images for workflow ${workflowId}`);
+
     res.json({ success: true, data: images });
   } catch (error) {
     console.error('[Draft Image Bank] Get error:', error);

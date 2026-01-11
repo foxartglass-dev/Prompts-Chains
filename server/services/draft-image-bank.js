@@ -15,55 +15,22 @@ export async function getDraftImageBank(workflowId, options = {}) {
 
   const { status, articleId, itemType, itemCategory, avatarTag, pageKeyword, limit = 500 } = options;
 
-  // Build dynamic query based on filters
-  let query = `
+  // Use tagged template with conditional filters (NULL means "no filter")
+  // This avoids sql.unsafe() which can cause issues
+  const result = await sql`
     SELECT * FROM draft_image_bank
-    WHERE workflow_id = $1
+    WHERE workflow_id = ${workflowId}
+      AND (${status || null}::text IS NULL OR status = ${status || null})
+      AND (${articleId || null}::int IS NULL OR article_id = ${articleId || null})
+      AND (${itemType || null}::text IS NULL OR item_type = ${itemType || null})
+      AND (${itemCategory || null}::text IS NULL OR item_category = ${itemCategory || null})
+      AND (${avatarTag || null}::text IS NULL OR avatar_tag = ${avatarTag || null})
+      AND (${pageKeyword || null}::text IS NULL OR page_keyword = ${pageKeyword || null})
+    ORDER BY created_at DESC
+    LIMIT ${limit}
   `;
-  const params = [workflowId];
-  let paramIndex = 2;
 
-  if (status) {
-    query += ` AND status = $${paramIndex}`;
-    params.push(status);
-    paramIndex++;
-  }
-
-  if (articleId) {
-    query += ` AND article_id = $${paramIndex}`;
-    params.push(articleId);
-    paramIndex++;
-  }
-
-  if (itemType) {
-    query += ` AND item_type = $${paramIndex}`;
-    params.push(itemType);
-    paramIndex++;
-  }
-
-  if (itemCategory) {
-    query += ` AND item_category = $${paramIndex}`;
-    params.push(itemCategory);
-    paramIndex++;
-  }
-
-  if (avatarTag) {
-    query += ` AND avatar_tag = $${paramIndex}`;
-    params.push(avatarTag);
-    paramIndex++;
-  }
-
-  if (pageKeyword) {
-    query += ` AND page_keyword = $${paramIndex}`;
-    params.push(pageKeyword);
-    paramIndex++;
-  }
-
-  query += ` ORDER BY created_at DESC LIMIT $${paramIndex}`;
-  params.push(limit);
-
-  // Use tagged template for the query
-  return await sql.unsafe(query, params);
+  return result;
 }
 
 /**

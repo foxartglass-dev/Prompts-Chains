@@ -196,6 +196,97 @@ export async function getImageBankStats(workflowId) {
 }
 
 /**
+ * Restore all used images back to available
+ * Sets used=false for all images where used=true
+ */
+export async function restoreAllUsedImages(workflowId) {
+  if (!isDatabaseEnabled()) return { restored: 0 };
+
+  const result = await sql`
+    UPDATE image_bank_items
+    SET used = false, used_on = null, used_at = null, updated_at = NOW()
+    WHERE workflow_id = ${workflowId} AND used = true
+    RETURNING id
+  `;
+
+  return { restored: result.length };
+}
+
+/**
+ * Recycle images from Draft Image Bank into the regular Image Bank
+ * Copies images from draft_image_bank to image_bank_items, then optionally deletes from draft
+ *
+ * Field mapping:
+ * - url → url
+ * - prompt → prompt
+ * - model → model
+ * - avatar_tag → avatar_tag
+ * - item_type → title (and added to tags)
+ * - item_category → category
+ * - metadata → metadata
+ */
+export async function recycleFromDraftBank(workflowId, options = {}) {
+  if (!isDatabaseEnabled()) return { recycled: 0 };
+
+  const { statuses = ['draft', 'sent'], deleteAfterRecycle = false } = options;
+
+  // Get draft images to recycle
+  const draftImages = await sql`
+    SELECT * FROM draft_image_bank
+    WHERE workflow_id = ${workflowId} AND status = ANY(${statuses})
+  `;
+
+  if (draftImages.length === 0) {
+    return { recycled: 0, message: 'No draft images found to recycle' };
+  }
+
+  // Map draft images to image bank format
+  const imagesToAdd = draftImages.map(draft => ({
+    id: `recycled-${draft.id}-${Date.now()}`,
+    url: draft.url,
+    title: draft.item_type || draft.page_keyword || null,
+    category: draft.item_category || null,
+    avatarTag: draft.avatar_tag || null,
+    prompt: draft.prompt || null,
+    model: draft.model || null,
+    orientation: 'vertical',
+    used: false,
+    archived: false,
+    tags: [
+      draft.item_type,
+      draft.item_category,
+      draft.page_keyword,
+      'recycled'
+    ].filter(Boolean),
+    metadata: {
+      ...draft.metadata,
+      recycledFrom: 'draft_image_bank',
+      originalDraftId: draft.id,
+      originalStatus: draft.status,
+      recycledAt: new Date().toISOString()
+    }
+  }));
+
+  // Insert into image bank
+  const recycled = await addImagesToBank(workflowId, imagesToAdd);
+
+  // Optionally delete from draft bank
+  if (deleteAfterRecycle && recycled.length > 0) {
+    const recycledIds = draftImages.map(d => d.id);
+    await sql`
+      DELETE FROM draft_image_bank
+      WHERE id = ANY(${recycledIds}) AND workflow_id = ${workflowId}
+    `;
+  }
+
+  return {
+    recycled: recycled.length,
+    deleted: deleteAfterRecycle ? draftImages.length : 0,
+    message: `Recycled ${recycled.length} images to Image Bank${deleteAfterRecycle ? ' and removed from Draft Bank' : ''}`
+  };
+}
+
+/**
  * Migrate existing image_bank from settings JSON to new table
  */
 export async function migrateImageBankFromSettings(workflowId) {

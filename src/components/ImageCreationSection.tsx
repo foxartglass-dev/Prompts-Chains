@@ -576,6 +576,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [draftBankPageFilter, setDraftBankPageFilter] = useState<string>('all');
   const [draftBankItemTypes, setDraftBankItemTypes] = useState<{item_type: string; count: number}[]>([]);
   const [draftBankLoading, setDraftBankLoading] = useState(false);
+  const [selectedDraftImages, setSelectedDraftImages] = useState<Set<number>>(new Set());
+  const [recyclingDraft, setRecyclingDraft] = useState(false);
+  const [recyclingUsed, setRecyclingUsed] = useState(false);
+  const [selectedUsedImages, setSelectedUsedImages] = useState<Set<string>>(new Set());
+  const [quickPreview, setQuickPreview] = useState<{url: string; title?: string; section: 'draft' | 'used'} | null>(null);
+  const [draftBankExpandedView, setDraftBankExpandedView] = useState(false);
+  const [usedBankExpandedView, setUsedBankExpandedView] = useState(false);
 
   // Image title editing
   const [editingImageId, setEditingImageId] = useState<string | null>(null);
@@ -993,7 +1000,32 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setDraftBankLoading(false);
   };
 
-  // Fetch draft bank when opened or filters change
+  /**
+   * Fetch ONLY draft bank stats (for header display when collapsed)
+   * This is separate from fetchDraftBank so we can show accurate counts without loading all images
+   */
+  const fetchDraftBankStatsOnly = async () => {
+    if (!workflowId) return;
+    try {
+      const statsRes = await fetch(`/api/draft-image-bank/${workflowId}/stats`);
+      const statsData = await statsRes.json();
+      if (statsData.success) {
+        setDraftBankStats(statsData.data);
+        console.log('[Draft Bank] Stats loaded on mount:', statsData.data);
+      }
+    } catch (error) {
+      console.error('[Draft Bank] Failed to fetch stats:', error);
+    }
+  };
+
+  // Fetch draft bank stats on mount (so header shows correct count even when collapsed)
+  useEffect(() => {
+    if (workflowId) {
+      fetchDraftBankStatsOnly();
+    }
+  }, [workflowId]);
+
+  // Fetch draft bank images when opened or filters change
   useEffect(() => {
     if (isDraftBankOpen && workflowId) {
       fetchDraftBank();
@@ -4235,6 +4267,184 @@ Start by introducing yourself and asking about their business in a friendly way.
       console.error('[Image Bank] Archive API failed:', err);
     }
     showNotification(image?.archived ? 'Image restored from archive' : 'Image archived', 'info');
+  };
+
+  // Recycle images from Draft Bank to Image Bank
+  const handleRecycleFromDraft = async (selectedOnly: boolean = false) => {
+    if (!workflowId) return;
+    setRecyclingDraft(true);
+
+    try {
+      // Determine which images to recycle
+      const imagesToRecycle = selectedOnly && selectedDraftImages.size > 0
+        ? draftBankImages.filter(img => selectedDraftImages.has(img.id))
+        : draftBankImages.filter(img => img.status === 'draft' || img.status === 'sent');
+
+      if (imagesToRecycle.length === 0) {
+        showNotification('No images to recycle', 'info');
+        setRecyclingDraft(false);
+        return;
+      }
+
+      const res = await fetch(`/api/image-bank/${workflowId}/recycle-from-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          statuses: ['draft', 'sent'],
+          deleteAfterRecycle: true // Remove from draft bank after copying
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showNotification(`Recycled ${data.data.recycled} images to Image Bank`, 'success');
+        // Refresh both image bank and draft bank
+        await loadSettings();
+        await fetchDraftBank();
+        setSelectedDraftImages(new Set());
+      } else {
+        showNotification(`Failed to recycle: ${data.error}`, 'error');
+      }
+    } catch (err) {
+      console.error('[Recycle] Error:', err);
+      showNotification('Failed to recycle images', 'error');
+    }
+
+    setRecyclingDraft(false);
+  };
+
+  // Restore all used images back to available
+  const handleRecycleAllUsed = async () => {
+    if (!workflowId) return;
+    if (usedImages.length === 0) {
+      showNotification('No used images to restore', 'info');
+      return;
+    }
+
+    setRecyclingUsed(true);
+
+    try {
+      const res = await fetch(`/api/image-bank/${workflowId}/restore-all-used`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        showNotification(`Restored ${data.data.restored} images to available`, 'success');
+        // Refresh image bank
+        await loadSettings();
+      } else {
+        showNotification(`Failed to restore: ${data.error}`, 'error');
+      }
+    } catch (err) {
+      console.error('[Recycle Used] Error:', err);
+      showNotification('Failed to restore images', 'error');
+    }
+
+    setRecyclingUsed(false);
+  };
+
+  // Toggle selection of a draft image
+  const toggleDraftImageSelection = (imageId: number) => {
+    setSelectedDraftImages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(imageId)) {
+        newSet.delete(imageId);
+      } else {
+        newSet.add(imageId);
+      }
+      return newSet;
+    });
+  };
+
+  // Select/deselect all visible draft images
+  const toggleAllDraftImageSelection = () => {
+    const visibleIds = draftBankImages
+      .filter(img => img.status === 'draft' || img.status === 'sent')
+      .map(img => img.id);
+
+    if (selectedDraftImages.size === visibleIds.length) {
+      setSelectedDraftImages(new Set());
+    } else {
+      setSelectedDraftImages(new Set(visibleIds));
+    }
+  };
+
+  // Toggle selection of a used image
+  const toggleUsedImageSelection = (imageId: string) => {
+    setSelectedUsedImages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(imageId)) {
+        newSet.delete(imageId);
+      } else {
+        newSet.add(imageId);
+      }
+      return newSet;
+    });
+  };
+
+  // Select/deselect all used images
+  const toggleAllUsedImageSelection = () => {
+    if (selectedUsedImages.size === usedImages.length) {
+      setSelectedUsedImages(new Set());
+    } else {
+      setSelectedUsedImages(new Set(usedImages.map(img => img.id)));
+    }
+  };
+
+  // Restore selected used images (or all if none selected)
+  const handleRestoreSelectedUsed = async () => {
+    if (!workflowId) return;
+
+    const imagesToRestore = selectedUsedImages.size > 0
+      ? usedImages.filter(img => selectedUsedImages.has(img.id))
+      : usedImages;
+
+    if (imagesToRestore.length === 0) {
+      showNotification('No images to restore', 'info');
+      return;
+    }
+
+    setRecyclingUsed(true);
+
+    try {
+      // If all images are selected or none selected, use bulk restore
+      if (selectedUsedImages.size === 0 || selectedUsedImages.size === usedImages.length) {
+        const res = await fetch(`/api/image-bank/${workflowId}/restore-all-used`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+          showNotification(`Restored ${data.data.restored} images to available`, 'success');
+        } else {
+          showNotification(`Failed to restore: ${data.error}`, 'error');
+        }
+      } else {
+        // Restore selected images one by one
+        let restored = 0;
+        for (const img of imagesToRestore) {
+          const apiId = img.dbId || img.id;
+          await fetch(`/api/image-bank/${workflowId}/${apiId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ used: false, usedOn: null })
+          });
+          restored++;
+        }
+        showNotification(`Restored ${restored} images to available`, 'success');
+      }
+
+      // Refresh image bank and clear selection
+      await loadSettings();
+      setSelectedUsedImages(new Set());
+    } catch (err) {
+      console.error('[Restore Used] Error:', err);
+      showNotification('Failed to restore images', 'error');
+    }
+
+    setRecyclingUsed(false);
   };
 
   // ========== UPLOAD TO BANK ==========
@@ -9065,6 +9275,62 @@ Start by introducing yourself and asking about their business in a friendly way.
                   {draftBankLoading && (
                     <span className="text-xs text-amber-400 animate-pulse">Loading...</span>
                   )}
+
+                  {/* Refresh button */}
+                  <button
+                    onClick={() => fetchDraftBank()}
+                    disabled={draftBankLoading}
+                    className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded transition flex items-center gap-1 disabled:opacity-50"
+                    title="Refresh draft images"
+                  >
+                    <svg className={`w-3.5 h-3.5 ${draftBankLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </button>
+
+                  {/* Expand All button - shows full-size images in scrollable grid */}
+                  {draftBankImages.length > 0 && (
+                    <button
+                      onClick={() => setDraftBankExpandedView(true)}
+                      className="px-2 py-1 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded transition flex items-center gap-1"
+                      title="View all images in full size"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                      </svg>
+                      Expand All
+                    </button>
+                  )}
+
+                  {/* Recycle Button */}
+                  {(draftBankStats.draft > 0 || draftBankStats.sent > 0) && (
+                    <div className="ml-auto flex items-center gap-2">
+                      <button
+                        onClick={toggleAllDraftImageSelection}
+                        className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+                      >
+                        {selectedDraftImages.size === draftBankImages.filter(i => i.status !== 'replaced').length ? 'Deselect All' : 'Select All'}
+                      </button>
+                      <button
+                        onClick={() => handleRecycleFromDraft(false)}
+                        disabled={recyclingDraft}
+                        className="px-3 py-1 text-xs bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded transition flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {recyclingDraft ? (
+                          <>
+                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            Recycling...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                            Recycle All to Image Bank
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Image Grid */}
@@ -9072,6 +9338,32 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <div className="grid grid-cols-4 gap-3">
                     {draftBankImages.map((img) => (
                       <div key={img.id} className="relative group">
+                        {/* Selection checkbox (only for non-replaced images) */}
+                        {img.status !== 'replaced' && (
+                          <button
+                            onClick={() => toggleDraftImageSelection(img.id)}
+                            className={`absolute top-1 right-1 z-20 w-5 h-5 rounded border-2 flex items-center justify-center transition ${
+                              selectedDraftImages.has(img.id)
+                                ? 'bg-brand-cyan border-brand-cyan'
+                                : 'bg-slate-800/80 border-slate-500 hover:border-brand-cyan'
+                            }`}
+                          >
+                            {selectedDraftImages.has(img.id) && (
+                              <svg className="w-3 h-3 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        )}
+                        {/* Expand button */}
+                        <button
+                          onClick={() => setQuickPreview({ url: img.url, title: img.item_type || img.page_keyword, section: 'draft' })}
+                          className="absolute top-1 left-7 z-20 w-5 h-5 rounded bg-slate-800/80 border border-slate-500 hover:border-brand-cyan flex items-center justify-center transition"
+                        >
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                          </svg>
+                        </button>
                         {/* Status badge */}
                         <div className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded text-[9px] text-white ${
                           img.status === 'draft' ? 'bg-amber-600/90' :
@@ -9080,20 +9372,23 @@ Start by introducing yourself and asking about their business in a friendly way.
                         }`}>
                           {img.status.toUpperCase()}
                         </div>
-                        {/* Item type tag */}
+                        {/* Item type tag - moved below checkbox */}
                         {img.item_type && (
-                          <div className="absolute top-1 right-1 z-10 px-1.5 py-0.5 bg-slate-900/90 rounded text-[9px] text-amber-300">
+                          <div className="absolute top-7 right-1 z-10 px-1.5 py-0.5 bg-slate-900/90 rounded text-[9px] text-amber-300">
                             {img.item_type}
                           </div>
                         )}
                         <img
                           src={img.url}
                           alt={img.item_type || 'Draft image'}
-                          className={`w-full h-24 object-cover rounded border ${
+                          className={`w-full h-24 object-cover rounded border cursor-pointer ${
+                            selectedDraftImages.has(img.id) ? 'ring-2 ring-brand-cyan' : ''
+                          } ${
                             img.status === 'draft' ? 'border-amber-500/30' :
                             img.status === 'sent' ? 'border-green-500/30 opacity-70' :
                             'border-red-500/30 opacity-50'
                           }`}
+                          onClick={() => img.status !== 'replaced' && toggleDraftImageSelection(img.id)}
                         />
                         {/* Hover overlay */}
                         <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
@@ -9128,21 +9423,90 @@ Start by introducing yourself and asking about their business in a friendly way.
             </button>
             {isUsedOpen && (
               <div className="p-4 border-t border-purple-500/30 space-y-3">
+                {/* Action Buttons */}
+                {usedImages.length > 0 && (
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={toggleAllUsedImageSelection}
+                        className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+                      >
+                        {selectedUsedImages.size === usedImages.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                      {/* Expand All button */}
+                      <button
+                        onClick={() => setUsedBankExpandedView(true)}
+                        className="px-2 py-1 text-xs bg-purple-600 hover:bg-purple-500 text-white rounded transition flex items-center gap-1"
+                        title="View all images in full size"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                        </svg>
+                        Expand All
+                      </button>
+                    </div>
+                    <button
+                      onClick={handleRestoreSelectedUsed}
+                      disabled={recyclingUsed}
+                      className="px-3 py-1.5 text-xs bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded transition flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {recyclingUsed ? (
+                        <>
+                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                          Restoring...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                          {selectedUsedImages.size > 0 ? `Restore Selected (${selectedUsedImages.size})` : `Restore All (${usedImages.length})`}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
                 {usedImages.length > 0 ? (
                   <div className="grid grid-cols-4 gap-3">
                     {usedImages.map((img) => (
                       <div key={img.id} className="relative group">
-                        <img src={img.url} alt={img.variation} className="w-full h-24 object-cover rounded border border-purple-500/30 opacity-70" />
+                        {/* Selection checkbox */}
+                        <button
+                          onClick={() => toggleUsedImageSelection(img.id)}
+                          className={`absolute top-1 right-1 z-20 w-5 h-5 rounded border-2 flex items-center justify-center transition ${
+                            selectedUsedImages.has(img.id)
+                              ? 'bg-brand-cyan border-brand-cyan'
+                              : 'bg-slate-800/80 border-slate-500 hover:border-brand-cyan'
+                          }`}
+                        >
+                          {selectedUsedImages.has(img.id) && (
+                            <svg className="w-3 h-3 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        {/* Expand button */}
+                        <button
+                          onClick={() => setQuickPreview({ url: img.url, title: img.variation || img.title, section: 'used' })}
+                          className="absolute top-1 left-7 z-20 w-5 h-5 rounded bg-slate-800/80 border border-slate-500 hover:border-brand-cyan flex items-center justify-center transition"
+                        >
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                          </svg>
+                        </button>
                         <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-purple-600/90 rounded text-[9px] text-white">USED</div>
-                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1">
+                        <img
+                          src={img.url}
+                          alt={img.variation}
+                          className={`w-full h-24 object-cover rounded border cursor-pointer ${
+                            selectedUsedImages.has(img.id) ? 'ring-2 ring-brand-cyan border-brand-cyan' : 'border-purple-500/30'
+                          } opacity-70`}
+                          onClick={() => toggleUsedImageSelection(img.id)}
+                        />
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition rounded flex flex-col items-center justify-center p-1 gap-1 pointer-events-none">
                           <span className="text-sm text-white font-bold tracking-wider font-serif">{img.variation}</span>
                           {img.avatarTag && <span className="text-[9px] text-brand-cyan">Tag: {img.avatarTag}</span>}
                           {img.usedOn && (
-                            img.usedOn.startsWith('http')
-                              ? <a href={img.usedOn} target="_blank" rel="noopener noreferrer" className="text-[9px] text-brand-cyan underline">View Page</a>
-                              : <span className="text-[9px] text-purple-300">Used on: {img.usedOn}</span>
+                            <span className="text-[9px] text-purple-300">Used on: {typeof img.usedOn === 'string' && img.usedOn.length > 30 ? img.usedOn.slice(0, 30) + '...' : img.usedOn}</span>
                           )}
-                          <button onClick={() => handleRestoreFromUsed(img.id)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Restore</button>
                         </div>
                       </div>
                     ))}
@@ -9158,6 +9522,196 @@ Start by introducing yourself and asking about their business in a friendly way.
       {saving && (
         <div className="fixed bottom-4 right-4 bg-brand-cyan text-slate-900 px-4 py-2 rounded-lg shadow-lg text-sm font-medium">
           Saving...
+        </div>
+      )}
+
+      {/* Quick Image Preview Modal (for Draft Bank and Used/Archive) */}
+      {quickPreview && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setQuickPreview(null)}>
+          <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setQuickPreview(null)}
+              className="absolute -top-10 right-0 p-2 text-white hover:text-brand-cyan transition"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <img
+              src={quickPreview.url}
+              alt={quickPreview.title || 'Preview'}
+              className="w-full h-auto max-h-[85vh] object-contain rounded-lg"
+            />
+            {quickPreview.title && (
+              <div className="mt-2 text-center text-white text-lg">{quickPreview.title}</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Draft Bank Expanded View - Full-size scrollable grid */}
+      {draftBankExpandedView && (
+        <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-amber-500/30 bg-slate-900">
+            <h2 className="text-xl font-bold text-amber-400 flex items-center gap-2">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              Draft Image Bank ({draftBankImages.length} images)
+            </h2>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={toggleAllDraftImageSelection}
+                className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+              >
+                {selectedDraftImages.size === draftBankImages.filter(i => i.status !== 'replaced').length ? 'Deselect All' : 'Select All'}
+              </button>
+              <button
+                onClick={() => handleRecycleFromDraft(false)}
+                disabled={recyclingDraft || draftBankImages.length === 0}
+                className="px-3 py-1.5 text-sm bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded transition disabled:opacity-50"
+              >
+                Recycle All to Image Bank
+              </button>
+              <button
+                onClick={() => setDraftBankExpandedView(false)}
+                className="p-2 hover:bg-slate-800 rounded-full text-white transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {/* Scrollable Grid */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {draftBankImages.map((img) => (
+                <div key={img.id} className="relative group">
+                  {/* Selection checkbox */}
+                  {img.status !== 'replaced' && (
+                    <button
+                      onClick={() => toggleDraftImageSelection(img.id)}
+                      className={`absolute top-2 right-2 z-10 w-6 h-6 rounded border-2 flex items-center justify-center transition ${
+                        selectedDraftImages.has(img.id)
+                          ? 'bg-brand-cyan border-brand-cyan'
+                          : 'bg-slate-800/80 border-slate-400 hover:border-brand-cyan'
+                      }`}
+                    >
+                      {selectedDraftImages.has(img.id) && (
+                        <svg className="w-4 h-4 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                  {/* Status badge */}
+                  <div className={`absolute top-2 left-2 z-10 px-2 py-1 rounded text-xs text-white ${
+                    img.status === 'draft' ? 'bg-amber-600' :
+                    img.status === 'sent' ? 'bg-green-600' :
+                    'bg-red-600'
+                  }`}>
+                    {img.status.toUpperCase()}
+                  </div>
+                  {/* Full-size image */}
+                  <img
+                    src={img.url}
+                    alt={img.item_type || 'Draft image'}
+                    className={`w-full h-auto rounded-lg border-2 cursor-pointer ${
+                      selectedDraftImages.has(img.id) ? 'border-brand-cyan' : 'border-slate-700'
+                    } ${img.status === 'replaced' ? 'opacity-50' : ''}`}
+                    onClick={() => img.status !== 'replaced' && toggleDraftImageSelection(img.id)}
+                  />
+                  {/* Info overlay */}
+                  <div className="mt-2 text-center">
+                    {img.item_type && <span className="text-sm text-amber-400 block">{img.item_type}</span>}
+                    {img.page_keyword && <span className="text-xs text-slate-400">{img.page_keyword}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Used/Archive Expanded View - Full-size scrollable grid */}
+      {usedBankExpandedView && (
+        <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-purple-500/30 bg-slate-900">
+            <h2 className="text-xl font-bold text-purple-400 flex items-center gap-2">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+              Used/Archive ({usedImages.length} images)
+            </h2>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={toggleAllUsedImageSelection}
+                className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+              >
+                {selectedUsedImages.size === usedImages.length ? 'Deselect All' : 'Select All'}
+              </button>
+              <button
+                onClick={handleRestoreSelectedUsed}
+                disabled={recyclingUsed || usedImages.length === 0}
+                className="px-3 py-1.5 text-sm bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded transition disabled:opacity-50"
+              >
+                {selectedUsedImages.size > 0 ? `Restore Selected (${selectedUsedImages.size})` : `Restore All (${usedImages.length})`}
+              </button>
+              <button
+                onClick={() => setUsedBankExpandedView(false)}
+                className="p-2 hover:bg-slate-800 rounded-full text-white transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {/* Scrollable Grid */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {usedImages.map((img) => (
+                <div key={img.id} className="relative group">
+                  {/* Selection checkbox */}
+                  <button
+                    onClick={() => toggleUsedImageSelection(img.id)}
+                    className={`absolute top-2 right-2 z-10 w-6 h-6 rounded border-2 flex items-center justify-center transition ${
+                      selectedUsedImages.has(img.id)
+                        ? 'bg-brand-cyan border-brand-cyan'
+                        : 'bg-slate-800/80 border-slate-400 hover:border-brand-cyan'
+                    }`}
+                  >
+                    {selectedUsedImages.has(img.id) && (
+                      <svg className="w-4 h-4 text-slate-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                  {/* Used badge */}
+                  <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded text-xs text-white bg-purple-600">
+                    USED
+                  </div>
+                  {/* Full-size image */}
+                  <img
+                    src={img.url}
+                    alt={img.variation || 'Used image'}
+                    className={`w-full h-auto rounded-lg border-2 cursor-pointer ${
+                      selectedUsedImages.has(img.id) ? 'border-brand-cyan' : 'border-slate-700'
+                    }`}
+                    onClick={() => toggleUsedImageSelection(img.id)}
+                  />
+                  {/* Info overlay */}
+                  <div className="mt-2 text-center">
+                    {img.variation && <span className="text-sm text-purple-400 block">{img.variation}</span>}
+                    {img.avatarTag && <span className="text-xs text-slate-400">Tag: {img.avatarTag}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
