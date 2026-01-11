@@ -798,10 +798,14 @@ When creating prompts, be specific and technical. Include details about lighting
       console.log(`[Image Chat] Unknown model "${model}", falling back to ${actualModel}`);
     }
 
+    // GPT-5.2 uses max_completion_tokens instead of max_tokens
+    const isGPT5 = actualModel.includes('gpt-5');
+    const tokenParam = isGPT5 ? { max_completion_tokens: 2000 } : { max_tokens: 2000 };
+
     const response = await openai.chat.completions.create({
       model: actualModel,
       messages: finalMessages,
-      max_tokens: 2000
+      ...tokenParam
     });
 
     res.json({
