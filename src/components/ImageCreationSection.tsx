@@ -425,6 +425,7 @@ interface ImageCreationSettings {
   consultant_model: string;
   worker_chat_history: ChatMessage[];
   worker_model: string;
+  web_tools_enabled: boolean; // Enable web search/fetch for AI chat bots
   integration_mode: 'live' | 'bank';
   fallback_to_live: boolean;
   // When bank is empty and falls back to live, which prompt source to use
@@ -511,6 +512,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   consultant_model: 'gpt-4o', // Default to vision model for consultant
   worker_chat_history: [],
   worker_model: 'gpt-4o-mini', // Default to cheaper model for worker
+  web_tools_enabled: false, // Web search/fetch disabled by default (requires BRAVE_SEARCH_API_KEY)
   integration_mode: 'bank',
   fallback_to_live: true,
   fallback_prompt_mode: 'main_prompt', // Default: use Main Prompt when falling back to live
@@ -2683,7 +2685,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             images: m.images
           })),
           model: settings.consultant_model,
-          contextImages: isFirstMessage ? contextImages : undefined
+          contextImages: isFirstMessage ? contextImages : undefined,
+          enable_web_tools: settings.web_tools_enabled
         })
       });
 
@@ -2695,6 +2698,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           timestamp: new Date().toISOString()
         };
         updateSettings({ consultant_chat_history: [...newHistory, assistantMessage] });
+        // Log if web tools were used
+        if (data.tool_calls_made > 0) {
+          console.log(`[Consultant Chat] Used ${data.tool_calls_made} web tool call(s)`);
+        }
       } else {
         showNotification(data.error || 'Consultant chat failed', 'error');
       }
@@ -4186,7 +4193,8 @@ Start by introducing yourself and asking about their business in a friendly way.
             content: m.content,
             images: m.images
           })),
-          model: settings.worker_model
+          model: settings.worker_model,
+          enable_web_tools: settings.web_tools_enabled
         })
       });
 
@@ -4198,6 +4206,10 @@ Start by introducing yourself and asking about their business in a friendly way.
           timestamp: new Date().toISOString()
         };
         updateSettings({ worker_chat_history: [...newHistory, assistantMessage] });
+        // Log if web tools were used
+        if (data.tool_calls_made > 0) {
+          console.log(`[Worker Chat] Used ${data.tool_calls_made} web tool call(s)`);
+        }
       } else {
         showNotification(data.error || 'Worker chat failed', 'error');
       }
@@ -9131,6 +9143,16 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                       </svg>
                       Sync to Worker
+                    </button>
+                    <button
+                      onClick={() => updateSettings({ web_tools_enabled: !settings.web_tools_enabled })}
+                      className={`px-2 py-1 ${settings.web_tools_enabled ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-slate-600/50 hover:bg-slate-600'} rounded text-white text-xs transition flex items-center gap-1`}
+                      title={settings.web_tools_enabled ? 'Web search/fetch enabled - AI can browse the internet' : 'Enable web search/fetch for AI'}
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      {settings.web_tools_enabled ? 'Web ON' : 'Web OFF'}
                     </button>
                     <button
                       onClick={() => handleClearChatHistory('consultant')}

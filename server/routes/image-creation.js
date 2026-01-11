@@ -15,6 +15,16 @@ import { fileURLToPath } from 'url';
 import { generateImage } from '../services/image-generator.js';
 import { uploadMedia } from '../services/wordpress-publisher.js';
 import githubLogger from '../services/github-logger.js';
+import {
+  openaiWebTools,
+  claudeWebTools,
+  geminiWebTools,
+  executeWebTool,
+  formatToolResultForOpenAI,
+  formatToolResultForClaude,
+  webToolsSystemPrompt,
+  areWebToolsAvailable
+} from '../services/web-tools-integration.js';
 
 const router = express.Router();
 
@@ -571,12 +581,16 @@ router.post('/chat', async (req, res) => {
       messages = [], // Array of {role, content, images?}
       model = 'gpt-4o',
       contextImages = [], // Additional context images to include
-      openaiApiKey
+      openaiApiKey,
+      enable_web_tools = false // Enable web search and fetch capabilities
     } = req.body;
 
     if (!messages.length) {
       return res.status(400).json({ error: 'Messages required' });
     }
+
+    // Check if web tools can be enabled
+    const useWebTools = enable_web_tools && areWebToolsAvailable();
 
     // Determine provider based on model name
     const isAnthropicModel = model.includes('claude');
@@ -622,10 +636,20 @@ When analyzing images, focus on:
 
 When creating prompts, be specific and technical. Include details about lighting, camera angle, color grading, and mood.`;
 
+    // Append web tools info to system message if enabled
+    const systemContentWithTools = useWebTools
+      ? defaultSystemContent + webToolsSystemPrompt
+      : defaultSystemContent;
+
     // Check if first message is already a system message (custom context injection)
     const hasCustomSystemMessage = messages.length > 0 && messages[0].role === 'system';
 
-    console.log(`[Image Chat] Using provider: ${isAnthropicModel ? 'Anthropic' : isGeminiModel ? 'Google' : 'OpenAI'}, model: ${model}`);
+    // If custom system message exists and web tools enabled, append tools info
+    const getSystemContent = (customContent) => {
+      return useWebTools ? customContent + webToolsSystemPrompt : customContent;
+    };
+
+    console.log(`[Image Chat] Using provider: ${isAnthropicModel ? 'Anthropic' : isGeminiModel ? 'Google' : 'OpenAI'}, model: ${model}${useWebTools ? ' (web tools enabled)' : ''}`);
 
     // ========== ANTHROPIC CLAUDE ==========
     if (isAnthropicModel) {
@@ -633,7 +657,7 @@ When creating prompts, be specific and technical. Include details about lighting
 
       // Format messages for Claude
       // Claude uses 'system' as a top-level param, not in messages array
-      let systemPrompt = hasCustomSystemMessage ? messages[0].content : defaultSystemContent;
+      let systemPrompt = hasCustomSystemMessage ? getSystemContent(messages[0].content) : systemContentWithTools;
       let claudeMessages = hasCustomSystemMessage ? messages.slice(1) : messages;
 
       // Format for Claude API
@@ -664,20 +688,83 @@ When creating prompts, be specific and technical. Include details about lighting
         return { role: msg.role === 'assistant' ? 'assistant' : 'user', content: msg.content };
       });
 
-      const response = await anthropic.messages.create({
+      // Build API options
+      const claudeOptions = {
         model: model,
         max_tokens: 2000,
         system: systemPrompt,
         messages: formattedMessages
-      });
+      };
+
+      // Add tools if enabled
+      if (useWebTools) {
+        claudeOptions.tools = claudeWebTools;
+      }
+
+      let response = await anthropic.messages.create(claudeOptions);
+      let totalUsage = { input_tokens: response.usage?.input_tokens || 0, output_tokens: response.usage?.output_tokens || 0 };
+
+      // Handle tool use in a loop (max 5 iterations)
+      let iterations = 0;
+      const maxIterations = 5;
+      let currentMessages = [...formattedMessages];
+
+      while (response.stop_reason === 'tool_use' && iterations < maxIterations) {
+        iterations++;
+
+        // Find tool_use blocks in the response
+        const toolUseBlocks = response.content.filter(block => block.type === 'tool_use');
+        console.log(`[Image Chat] Claude requesting ${toolUseBlocks.length} tool(s), iteration ${iterations}`);
+
+        // Add assistant message with tool use
+        currentMessages.push({
+          role: 'assistant',
+          content: response.content
+        });
+
+        // Execute tools and build results
+        const toolResults = [];
+        for (const toolUse of toolUseBlocks) {
+          console.log(`[Image Chat] Executing tool: ${toolUse.name}`, toolUse.input);
+          const result = await executeWebTool(toolUse.name, toolUse.input);
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: JSON.stringify(result)
+          });
+        }
+
+        // Add tool results as user message
+        currentMessages.push({
+          role: 'user',
+          content: toolResults
+        });
+
+        // Make another API call
+        response = await anthropic.messages.create({
+          model: model,
+          max_tokens: 2000,
+          system: systemPrompt,
+          messages: currentMessages,
+          tools: claudeWebTools
+        });
+
+        // Accumulate usage
+        totalUsage.input_tokens += response.usage?.input_tokens || 0;
+        totalUsage.output_tokens += response.usage?.output_tokens || 0;
+      }
+
+      // Extract text content from final response
+      const textContent = response.content.find(block => block.type === 'text');
 
       return res.json({
         success: true,
         message: {
           role: 'assistant',
-          content: response.content[0].text
+          content: textContent?.text || ''
         },
-        usage: { input_tokens: response.usage?.input_tokens, output_tokens: response.usage?.output_tokens }
+        usage: totalUsage,
+        tool_calls_made: iterations
       });
     }
 
@@ -762,10 +849,14 @@ When creating prompts, be specific and technical. Include details about lighting
       return { role: msg.role, content: msg.content };
     });
 
-    const defaultSystemMessage = { role: 'system', content: defaultSystemContent };
+    // Use web-tools-enhanced system content when enabled
+    const systemContent = hasCustomSystemMessage
+      ? getSystemContent(messages[0].content)
+      : systemContentWithTools;
+    const defaultSystemMessage = { role: 'system', content: systemContent };
 
     let finalMessages = hasCustomSystemMessage
-      ? formattedMessages
+      ? [{ role: 'system', content: systemContent }, ...formattedMessages.slice(1)]
       : [defaultSystemMessage, ...formattedMessages];
 
     // Add context images to first user message if provided
@@ -802,19 +893,81 @@ When creating prompts, be specific and technical. Include details about lighting
     const isGPT5 = actualModel.includes('gpt-5');
     const tokenParam = isGPT5 ? { max_completion_tokens: 2000 } : { max_tokens: 2000 };
 
-    const response = await openai.chat.completions.create({
+    // Build API call options
+    const apiOptions = {
       model: actualModel,
       messages: finalMessages,
       ...tokenParam
-    });
+    };
+
+    // Add tools if web tools are enabled
+    if (useWebTools) {
+      apiOptions.tools = openaiWebTools;
+      apiOptions.tool_choice = 'auto';
+    }
+
+    // Make initial API call
+    let response = await openai.chat.completions.create(apiOptions);
+    let assistantMessage = response.choices[0].message;
+    let totalUsage = response.usage;
+
+    // Handle tool calls in a loop (max 5 iterations to prevent infinite loops)
+    let iterations = 0;
+    const maxIterations = 5;
+
+    while (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0 && iterations < maxIterations) {
+      iterations++;
+      console.log(`[Image Chat] Processing ${assistantMessage.tool_calls.length} tool call(s), iteration ${iterations}`);
+
+      // Add assistant's tool call message to conversation
+      finalMessages.push(assistantMessage);
+
+      // Execute each tool call and add results
+      for (const toolCall of assistantMessage.tool_calls) {
+        const toolName = toolCall.function.name;
+        const toolArgs = JSON.parse(toolCall.function.arguments);
+
+        console.log(`[Image Chat] Executing tool: ${toolName}`, toolArgs);
+
+        const toolResult = await executeWebTool(toolName, toolArgs);
+
+        // Add tool result to messages
+        finalMessages.push(formatToolResultForOpenAI(toolCall.id, toolResult));
+      }
+
+      // Make another API call with tool results
+      response = await openai.chat.completions.create({
+        model: actualModel,
+        messages: finalMessages,
+        ...tokenParam,
+        tools: openaiWebTools,
+        tool_choice: 'auto'
+      });
+
+      assistantMessage = response.choices[0].message;
+
+      // Accumulate usage
+      if (response.usage) {
+        totalUsage = {
+          prompt_tokens: (totalUsage?.prompt_tokens || 0) + (response.usage.prompt_tokens || 0),
+          completion_tokens: (totalUsage?.completion_tokens || 0) + (response.usage.completion_tokens || 0),
+          total_tokens: (totalUsage?.total_tokens || 0) + (response.usage.total_tokens || 0)
+        };
+      }
+    }
+
+    if (iterations >= maxIterations) {
+      console.log(`[Image Chat] Reached max tool iterations (${maxIterations})`);
+    }
 
     res.json({
       success: true,
       message: {
         role: 'assistant',
-        content: response.choices[0].message.content
+        content: assistantMessage.content || ''
       },
-      usage: response.usage
+      usage: totalUsage,
+      tool_calls_made: iterations
     });
 
   } catch (error) {
