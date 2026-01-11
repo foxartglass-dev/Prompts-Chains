@@ -379,6 +379,8 @@ interface ImageCreationSettings {
   worker_model: string;
   integration_mode: 'live' | 'bank';
   fallback_to_live: boolean;
+  // When bank is empty and falls back to live, which prompt source to use
+  fallback_prompt_mode: 'main_prompt' | 'guided_gpt' | 'smart_prompt';
   image_order: string[];
   variation_order_mode: 'sequential' | 'random' | 'manual';
   manual_variation_order: string[];
@@ -410,6 +412,9 @@ interface ImageCreationSettings {
     avoidList: string; // Things to avoid
     defaultSubject: string; // Default subject if no match
   } | null;
+  // Per-tag guardrails for Guided GPT (like conditional snippets)
+  // Key is the tag name (e.g., "H", "J", "C"), value is the description for that tag
+  guided_guardrails_by_tag: { [tagName: string]: string } | null;
   // Prompt Problem Areas - High priority prompting issues with solutions
   prompt_problem_areas: PromptProblemArea[];
 }
@@ -453,6 +458,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   worker_model: 'gpt-4o-mini', // Default to cheaper model for worker
   integration_mode: 'bank',
   fallback_to_live: true,
+  fallback_prompt_mode: 'main_prompt', // Default: use Main Prompt when falling back to live
   image_order: [],
   variation_order_mode: 'sequential',
   manual_variation_order: [],
@@ -474,6 +480,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   // Guided GPT mode settings
   guided_model: 'gpt-4o',
   guided_guardrails: null,
+  guided_guardrails_by_tag: null, // Per-tag descriptions for Guided GPT (like conditional snippets)
   // Prompt Problem Areas - High priority prompting issues
   prompt_problem_areas: []
 };
@@ -5298,6 +5305,46 @@ Start by introducing yourself and asking about their business in a friendly way.
                           />
                         </div>
 
+                        {/* Per-Tag Conditional Descriptions (like Conditional Snippets) */}
+                        {tags.length > 0 && (
+                          <div className="mt-4 border-t border-emerald-500/30 pt-4">
+                            <label className="text-[10px] text-emerald-400 mb-2 block font-medium flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                              </svg>
+                              Per-Tag Context (Conditional Descriptions):
+                              <span className="text-[9px] text-emerald-300/60 font-normal ml-1">
+                                Like conditional snippets - auto-selected based on article tag
+                              </span>
+                            </label>
+                            <div className={`grid grid-cols-1 gap-2 ${tags.length === 2 ? 'md:grid-cols-2' : tags.length >= 3 ? 'md:grid-cols-3' : ''}`}>
+                              {tags.map(tag => (
+                                <div key={tag.id} className="bg-slate-900/50 rounded-lg p-2 border border-emerald-500/20">
+                                  <label className="text-[10px] text-brand-gold font-semibold mb-1 block">
+                                    For Tag: {tag.name}
+                                  </label>
+                                  <textarea
+                                    value={settings.guided_guardrails_by_tag?.[tag.name] || ''}
+                                    onChange={(e) => updateSettings({
+                                      guided_guardrails_by_tag: {
+                                        ...settings.guided_guardrails_by_tag,
+                                        [tag.name]: e.target.value
+                                      }
+                                    })}
+                                    placeholder={`Description for ${tag.name} articles...`}
+                                    className="w-full p-2 text-xs bg-slate-800 border border-emerald-500/20 rounded text-white placeholder-slate-500 resize-none"
+                                    rows={3}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            <p className="text-[9px] text-emerald-300/50 mt-2">
+                              When generating images for an article with a specific tag (e.g., "H"), the GPT will receive the context description for that tag.
+                              This helps it understand the target audience and setting.
+                            </p>
+                          </div>
+                        )}
+
                         {/* AI Prompt Assistant Chat */}
                         <div className="mt-4 border-t border-emerald-500/30 pt-4">
                           <button
@@ -7138,6 +7185,56 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     </div>
 
+                    {/* Fallback Prompt Source - Only show when bank_first is selected */}
+                    {settings.smart_matching_mode === 'bank_first' && (
+                      <div className="bg-brand-cyan/10 rounded-lg p-3 border border-brand-cyan/30">
+                        <label className="text-xs text-brand-cyan mb-2 block font-medium">
+                          When bank is empty, generate using:
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateSettings({ fallback_prompt_mode: 'main_prompt' })}
+                            className={`p-2 rounded text-xs font-medium transition-all ${
+                              settings.fallback_prompt_mode === 'main_prompt'
+                                ? 'bg-brand-gold text-slate-900'
+                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            }`}
+                          >
+                            Main Prompt
+                            <span className="block text-[10px] opacity-70 mt-0.5">Avatar template</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateSettings({ fallback_prompt_mode: 'guided_gpt' })}
+                            className={`p-2 rounded text-xs font-medium transition-all ${
+                              settings.fallback_prompt_mode === 'guided_gpt'
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            }`}
+                          >
+                            Guided GPT
+                            <span className="block text-[10px] opacity-70 mt-0.5">GPT + guardrails</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateSettings({ fallback_prompt_mode: 'smart_prompt' })}
+                            className={`p-2 rounded text-xs font-medium transition-all ${
+                              settings.fallback_prompt_mode === 'smart_prompt'
+                                ? 'bg-purple-600 text-white'
+                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                            }`}
+                          >
+                            Smart Prompt
+                            <span className="block text-[10px] opacity-70 mt-0.5">Legacy</span>
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-brand-cyan/70 mt-2">
+                          If no matching images found in bank, the system will generate live images using this prompt source.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Category Matching Rules */}
                     {activeAvatar?.placeholderCategories && activeAvatar.placeholderCategories.length > 0 && (
                       <div className="bg-slate-800/50 rounded-lg p-3 border border-purple-500/20">
@@ -7219,9 +7316,9 @@ Start by introducing yourself and asking about their business in a friendly way.
 
               {/* ─────────────────────────────────────────────────────
                   SECTION 3: Matching Rules - CONDITIONAL based on Smart Matching toggle
-                  NOTE: Only shown when Image Source is "Pull from Bank"
+                  NOTE: Shown for both Bank mode AND Generate Live (Main Prompt/Guided GPT) modes
               ───────────────────────────────────────────────────── */}
-              {settings.integration_mode === 'bank' && (
+              {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode !== 'smart_prompt')) && (
               <div className={`rounded-lg p-4 border ${settings.smart_matching_enabled ? 'bg-slate-800/50 border-emerald-500/30' : 'bg-slate-800/30 border-cyan-500/30'}`}>
                 <div className="flex items-center gap-2 mb-4">
                   <svg className={`w-5 h-5 ${settings.smart_matching_enabled ? 'text-emerald-400' : 'text-cyan-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">

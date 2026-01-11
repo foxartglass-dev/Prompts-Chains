@@ -437,6 +437,8 @@ router.post('/publish', async (req, res) => {
 
           // Get prompt mode settings for Generate Live
           const livePromptMode = config.live_prompt_mode || 'smart_prompt';
+          // Fallback prompt mode - used when bank is empty and falls back to live
+          const fallbackPromptMode = config.fallback_prompt_mode || 'main_prompt';
           const smartPromptGuidance = config.smart_prompt_guidance || '';
           const avatars = config.audience_avatars || [];
 
@@ -447,10 +449,25 @@ router.post('/publish', async (req, res) => {
           // Find matching avatar for this article
           const targetAvatar = articleTag ? avatars.find(a => a.tag === articleTag) : avatars[0];
 
+          // Get per-tag guardrails if available (merge with base guardrails)
+          const baseGuardrails = config.guided_guardrails || {};
+          const perTagDescription = articleTag && config.guided_guardrails_by_tag?.[articleTag]
+            ? config.guided_guardrails_by_tag[articleTag]
+            : '';
+
+          // Merge per-tag context into guardrails instructions
+          const mergedGuardrails = perTagDescription ? {
+            ...baseGuardrails,
+            instructions: `${baseGuardrails.instructions || ''}\n\nContext for this audience (${articleTag}): ${perTagDescription}`.trim()
+          } : baseGuardrails;
+
           // Store these for use in Generate Live
           config._livePromptMode = livePromptMode;
+          config._fallbackPromptMode = fallbackPromptMode;
           config._smartPromptGuidance = smartPromptGuidance;
           config._targetAvatar = targetAvatar;
+          config._mergedGuardrails = mergedGuardrails;
+          config._articleTag = articleTag;
 
           console.log('[Elementor Publish] Integration mode:', integrationMode);
           console.log('[Elementor Publish] Smart matching mode:', smartMatchingMode);
@@ -1099,6 +1116,9 @@ router.post('/publish', async (req, res) => {
     let guidedGuardrails = null;
     let guidedModel = 'gpt-4o';
 
+    // Determine if this is a fallback from bank mode (bank was tried but had insufficient images)
+    const isFallbackFromBank = effectiveUseBank && imagesFromBank > 0 && imagesFromBank < dynamicMaxImages;
+
     if (workflowId && isDatabaseEnabled()) {
       try {
         const settingsResult = await sql`
@@ -1106,7 +1126,17 @@ router.post('/publish', async (req, res) => {
         `;
         if (settingsResult.length > 0) {
           const config = settingsResult[0];
-          livePromptMode = config.live_prompt_mode || 'smart_prompt';
+
+          // Use fallback_prompt_mode when falling back from bank, otherwise use live_prompt_mode
+          if (isFallbackFromBank || (effectiveUseBank && imagesFromBank === 0)) {
+            // Fallback scenario: bank was tried but empty or insufficient
+            livePromptMode = config.fallback_prompt_mode || config.live_prompt_mode || 'main_prompt';
+            console.log('[Elementor Publish] Using FALLBACK prompt mode:', livePromptMode);
+          } else {
+            // Direct Generate Live mode
+            livePromptMode = config.live_prompt_mode || 'smart_prompt';
+          }
+
           smartPromptGuidance = config.smart_prompt_guidance || '';
           matchPlurals = config.match_plurals !== false;
 
@@ -1116,19 +1146,37 @@ router.post('/publish', async (req, res) => {
           const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
           targetAvatar = articleTag ? avatars.find(a => a.tag === articleTag) : avatars[0];
 
-          // Get guided GPT settings if in guided mode
-          guidedGuardrails = targetAvatar?.guardrails || config.guided_guardrails || null;
+          // Get per-tag guardrails if available (merge with base guardrails)
+          const baseGuardrails = config.guided_guardrails || {};
+          const perTagDescription = articleTag && config.guided_guardrails_by_tag?.[articleTag]
+            ? config.guided_guardrails_by_tag[articleTag]
+            : '';
+
+          // Merge per-tag context into guardrails instructions
+          if (perTagDescription) {
+            guidedGuardrails = {
+              ...baseGuardrails,
+              instructions: `${baseGuardrails.instructions || ''}\n\nContext for this audience (${articleTag}): ${perTagDescription}`.trim()
+            };
+            console.log('[Elementor Publish] Using per-tag guardrails for tag:', articleTag);
+          } else {
+            guidedGuardrails = targetAvatar?.guardrails || baseGuardrails || null;
+          }
+
           guidedModel = config.guided_model || 'gpt-4o';
 
           console.log('[Elementor Publish] Generate Live settings:');
           console.log('  - Prompt mode:', livePromptMode);
+          console.log('  - Is fallback from bank:', isFallbackFromBank || (effectiveUseBank && imagesFromBank === 0));
           console.log('  - Target avatar:', targetAvatar?.name || 'None');
+          console.log('  - Article tag:', articleTag || 'None');
           if (livePromptMode === 'main_prompt' && targetAvatar?.mainPrompt) {
             console.log('  - Main prompt:', targetAvatar.mainPrompt.substring(0, 50) + '...');
           }
           if (livePromptMode === 'guided_gpt') {
             console.log('  - Guided model:', guidedModel);
             console.log('  - Has guardrails:', !!guidedGuardrails?.instructions);
+            console.log('  - Has per-tag context:', !!perTagDescription);
           }
         }
       } catch (err) {
