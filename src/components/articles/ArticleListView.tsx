@@ -111,6 +111,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [addingToDripFeed, setAddingToDripFeed] = useState(false);
+  const [showDripFeedModal, setShowDripFeedModal] = useState(false);
+  const [dripFeedStartDate, setDripFeedStartDate] = useState(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  });
 
   useEffect(() => {
     fetchArticles();
@@ -224,6 +231,44 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       setError('Failed to save meta selections');
     } finally {
       setSavingMeta(false);
+    }
+  };
+
+  // Auto-save meta when user clicks on an option (instant save)
+  const autoSaveMeta = async (titleIdx: number | null, descIdx: number | null) => {
+    if (!selectedArticle) return;
+
+    const metaTitle = titleIdx !== null && selectedArticle.meta_titles
+      ? selectedArticle.meta_titles[titleIdx]
+      : (selectedArticle.selected_meta_title || null);
+    const metaDesc = descIdx !== null && selectedArticle.meta_descriptions
+      ? selectedArticle.meta_descriptions[descIdx]
+      : (selectedArticle.selected_meta_description || null);
+
+    if (!metaTitle && !metaDesc) return;
+
+    try {
+      const res = await fetch(`/api/articles/${selectedArticle.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedMetaTitle: metaTitle,
+          selectedMetaDescription: metaDesc
+        })
+      });
+
+      if (res.ok) {
+        setMetaSaved(true);
+        setSelectedArticle({
+          ...selectedArticle,
+          selected_meta_title: metaTitle,
+          selected_meta_description: metaDesc
+        });
+        fetchArticles(); // Refresh list silently
+      }
+    } catch (err) {
+      // Silent fail for auto-save, user can manually save if needed
+      console.error('Auto-save meta failed:', err);
     }
   };
 
@@ -477,6 +522,37 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       setError('Failed to delete some articles');
     } finally {
       setBulkDeleting(false);
+    }
+  };
+
+  // Add selected articles to drip feed
+  const addToDripFeed = async () => {
+    if (selectedIds.size === 0 || !websiteId) return;
+
+    setAddingToDripFeed(true);
+    try {
+      const res = await fetch(`/api/drip-feed/schedule/${websiteId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleIds: Array.from(selectedIds),
+          startDate: dripFeedStartDate
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedIds(new Set());
+        setShowDripFeedModal(false);
+        alert(`Successfully scheduled ${data.scheduled} articles for drip feed!`);
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Failed to add to drip feed');
+      }
+    } catch (err) {
+      setError('Failed to add articles to drip feed');
+    } finally {
+      setAddingToDripFeed(false);
     }
   };
 
@@ -738,6 +814,17 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           <span className="text-sm text-gray-300">
             {selectedIds.size} article{selectedIds.size !== 1 ? 's' : ''} selected
           </span>
+          {websiteId && (
+            <button
+              onClick={() => setShowDripFeedModal(true)}
+              className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 text-sm font-medium transition flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Add to Drip Feed
+            </button>
+          )}
           <button
             onClick={bulkDeleteArticles}
             disabled={bulkDeleting}
@@ -751,6 +838,50 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           >
             Clear Selection
           </button>
+        </div>
+      )}
+
+      {/* Drip Feed Modal */}
+      {showDripFeedModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-slate-900 rounded-xl p-6 w-full max-w-md border border-brand-cyan/30">
+            <h3 className="text-xl font-bold text-brand-gold mb-4">Add to Drip Feed</h3>
+            <p className="text-gray-400 mb-4">
+              Schedule {selectedIds.size} article{selectedIds.size !== 1 ? 's' : ''} for automatic publishing.
+            </p>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={dripFeedStartDate}
+                onChange={(e) => setDripFeedStartDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Articles will be distributed starting from this date based on your Drip Feed settings.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowDripFeedModal(false)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-gray-300 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addToDripFeed}
+                disabled={addingToDripFeed}
+                className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded-lg text-slate-900 font-medium transition disabled:opacity-50"
+              >
+                {addingToDripFeed ? 'Scheduling...' : 'Schedule Articles'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1591,13 +1722,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                                     ? 'bg-brand-gold/20 border-brand-gold'
                                     : 'bg-slate-800 border-transparent hover:border-brand-gold/50'
                                 }`}
-                                onClick={() => { setSelectedTitleIndex(i); setUseCustomTitle(false); setMetaSaved(false); }}
+                                onClick={() => { setSelectedTitleIndex(i); setUseCustomTitle(false); autoSaveMeta(i, selectedDescIndex); }}
                               >
                                 <input
                                   type="radio"
                                   name="metaTitle"
                                   checked={selectedTitleIndex === i && !useCustomTitle}
-                                  onChange={() => { setSelectedTitleIndex(i); setUseCustomTitle(false); setMetaSaved(false); }}
+                                  onChange={() => { setSelectedTitleIndex(i); setUseCustomTitle(false); autoSaveMeta(i, selectedDescIndex); }}
                                   className="mt-1 accent-yellow-500"
                                 />
                                 <div className="flex-1">
@@ -1674,13 +1805,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                                     ? 'bg-brand-cyan/20 border-brand-cyan'
                                     : 'bg-slate-800 border-transparent hover:border-brand-cyan/50'
                                 }`}
-                                onClick={() => { setSelectedDescIndex(i); setUseCustomDesc(false); setMetaSaved(false); }}
+                                onClick={() => { setSelectedDescIndex(i); setUseCustomDesc(false); autoSaveMeta(selectedTitleIndex, i); }}
                               >
                                 <input
                                   type="radio"
                                   name="metaDesc"
                                   checked={selectedDescIndex === i && !useCustomDesc}
-                                  onChange={() => { setSelectedDescIndex(i); setUseCustomDesc(false); setMetaSaved(false); }}
+                                  onChange={() => { setSelectedDescIndex(i); setUseCustomDesc(false); autoSaveMeta(selectedTitleIndex, i); }}
                                   className="mt-1 accent-cyan-500"
                                 />
                                 <div className="flex-1">

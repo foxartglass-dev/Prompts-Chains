@@ -35,6 +35,8 @@ import localVikingRouter from './routes/local-viking.js';
 import globalSettingsRouter from './routes/global-settings.js';
 import promptAssistantRouter from './routes/prompt-assistant.js';
 import logsRouter from './routes/logs.js';
+import dripFeedRouter from './routes/drip-feed.js';
+import { initDripFeedScheduler } from './services/drip-feed-scheduler.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
 dotenv.config();
@@ -206,6 +208,7 @@ app.use('/api/local-viking', localVikingRouter);
 app.use('/api/global-settings', globalSettingsRouter);
 app.use('/api/prompt-assistant', promptAssistantRouter);
 app.use('/api/logs', logsRouter);
+app.use('/api/drip-feed', dripFeedRouter);
 
 // Database status endpoint
 app.get('/api/db/status', async (req, res) => {
@@ -367,6 +370,9 @@ const server = app.listen(PORT, () => {
   console.log(`PromptFlow API server running on http://localhost:${PORT}`);
   console.log(`Mode: ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
   console.log(`Available providers: anthropic (more coming soon)`);
+
+  // Initialize drip feed scheduler for auto-publishing
+  initDripFeedScheduler();
 });
 
 // Set server timeout for long-running AI requests

@@ -1422,213 +1422,621 @@ const KnownIssuesDiagram: React.FC = () => (
   </div>
 );
 
-// Drip Feed Diagram - Scheduled publishing feature
+// Drip Feed Diagram - Comprehensive documentation for auto-publishing system
 const DripFeedDiagram: React.FC = () => (
   <div className="space-y-6">
     <div className="text-center mb-8">
       <h2 className="text-2xl font-bold text-brand-cyan mb-2">Drip Feed System</h2>
-      <p className="text-gray-400">Scheduled publishing of articles over time</p>
+      <p className="text-gray-400">Automated article publishing with smart scheduling and push notifications</p>
     </div>
 
-    {/* Current Status */}
-    <div className="bg-yellow-900/20 rounded-xl p-6 border border-yellow-500">
-      <h3 className="text-lg font-bold text-yellow-400 mb-4 flex items-center gap-2">
+    {/* Status: Fully Implemented */}
+    <div className="bg-green-900/20 rounded-xl p-6 border border-green-500">
+      <h3 className="text-lg font-bold text-green-400 mb-4 flex items-center gap-2">
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
         </svg>
-        Current Status: Partially Implemented
+        Status: Fully Implemented (Jan 2026)
       </h3>
       <p className="text-sm text-gray-300 mb-4">
-        Database tables exist, but the full UI and automation are not yet complete.
+        Complete drip feed system with calendar view, smart scheduling, and Pushover push notifications.
+      </p>
+      <div className="grid md:grid-cols-3 gap-4">
+        <div className="bg-slate-800 rounded-lg p-3">
+          <div className="text-green-400 font-semibold mb-2">Scheduling</div>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>✓ Articles per day with variance</li>
+            <li>✓ Time window (e.g., 7am-7pm)</li>
+            <li>✓ Skip specific dates</li>
+            <li>✓ Skip weekly days</li>
+          </ul>
+        </div>
+        <div className="bg-slate-800 rounded-lg p-3">
+          <div className="text-green-400 font-semibold mb-2">Automation</div>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>✓ Cron job every 5 minutes</li>
+            <li>✓ Auto-publish due articles</li>
+            <li>✓ Retry on failure</li>
+            <li>✓ Startup catch-up</li>
+          </ul>
+        </div>
+        <div className="bg-slate-800 rounded-lg p-3">
+          <div className="text-green-400 font-semibold mb-2">Notifications</div>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>✓ Pushover push notifications</li>
+            <li>✓ Multi-user support</li>
+            <li>✓ Configurable alert types</li>
+            <li>✓ Test notification button</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    {/* Architecture Overview */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">System Architecture</h3>
+      <div className="bg-slate-900 rounded-lg p-4">
+        <pre className="text-xs text-gray-300 overflow-x-auto">{`
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           DRIP FEED FLOW                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐     │
+│   │  Articles    │───▶│  Add to      │───▶│  drip_feed_schedules │     │
+│   │  (selected)  │    │  Drip Feed   │    │  (database queue)    │     │
+│   └──────────────┘    └──────────────┘    └──────────────────────┘     │
+│                                                      │                  │
+│                                                      ▼                  │
+│   ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐     │
+│   │  Pushover    │◀───│  Scheduler   │◀───│  node-cron           │     │
+│   │  (notify)    │    │  (publishes) │    │  (every 5 min)       │     │
+│   └──────────────┘    └──────────────┘    └──────────────────────┘     │
+│          │                   │                                          │
+│          ▼                   ▼                                          │
+│   ┌──────────────┐    ┌──────────────┐                                 │
+│   │  Phone App   │    │  WordPress   │                                 │
+│   └──────────────┘    │  (Images →   │                                 │
+│                       │   Page →     │                                 │
+│                       │   Meta)      │                                 │
+│                       └──────────────┘                                 │
+└─────────────────────────────────────────────────────────────────────────┘
+`}</pre>
+      </div>
+    </div>
+
+    {/* File Locations */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-gold/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">Key File Locations</h3>
+      <div className="space-y-3">
+        <div className="bg-slate-900 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-brand-cyan font-mono text-sm">Frontend</span>
+          </div>
+          <ul className="text-xs text-gray-300 space-y-1 font-mono">
+            <li><code className="text-brand-gold">src/components/articles/DripFeedView.tsx</code> - Main UI component</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-brand-cyan font-mono text-sm">Backend</span>
+          </div>
+          <ul className="text-xs text-gray-300 space-y-1 font-mono">
+            <li><code className="text-brand-gold">server/routes/drip-feed.js</code> - API endpoints (17 routes)</li>
+            <li><code className="text-brand-gold">server/services/drip-feed-scheduler.js</code> - Cron scheduler</li>
+            <li><code className="text-brand-gold">server/services/pushover.js</code> - Push notification service</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-brand-cyan font-mono text-sm">Database</span>
+          </div>
+          <ul className="text-xs text-gray-300 space-y-1 font-mono">
+            <li><code className="text-brand-gold">server/db/migrations/015_drip_feed_system.sql</code> - Main schema</li>
+            <li><code className="text-brand-gold">server/db/migrations/016_add_pushover_columns.sql</code> - Pushover columns</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    {/* Database Tables */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Database Tables</h3>
+
+      <div className="space-y-4">
+        {/* drip_feed_settings */}
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-gold font-semibold mb-2">drip_feed_settings</h4>
+          <p className="text-xs text-gray-400 mb-2">Per-website scheduling configuration</p>
+          <pre className="text-xs text-gray-300 overflow-x-auto">{`articles_per_day INTEGER DEFAULT 7
+variance_enabled BOOLEAN DEFAULT true      -- Random between min/max
+variance_min INTEGER DEFAULT 6
+variance_max INTEGER DEFAULT 8
+publish_time_start TIME DEFAULT '07:00'   -- Earliest publish time
+publish_time_end TIME DEFAULT '19:00'     -- Latest publish time
+skip_weekdays JSONB DEFAULT '[]'          -- [0,6] for Sun, Sat
+skip_dates JSONB DEFAULT '[]'             -- ["2026-01-20"]
+is_enabled BOOLEAN DEFAULT false          -- Master toggle`}</pre>
+        </div>
+
+        {/* drip_feed_schedules */}
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-gold font-semibold mb-2">drip_feed_schedules</h4>
+          <p className="text-xs text-gray-400 mb-2">The hopper - individual article schedules</p>
+          <pre className="text-xs text-gray-300 overflow-x-auto">{`article_id INTEGER UNIQUE              -- One schedule per article
+scheduled_date DATE NOT NULL
+scheduled_time TIME NOT NULL
+status VARCHAR(20) DEFAULT 'pending'   -- pending, publishing, published, failed
+wp_post_id INTEGER                     -- WordPress post ID after publish
+wp_post_url TEXT                       -- WordPress URL after publish
+attempts INTEGER DEFAULT 0             -- Retry count
+is_manual_time BOOLEAN DEFAULT false   -- User manually set time`}</pre>
+        </div>
+
+        {/* notification_settings */}
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-gold font-semibold mb-2">notification_settings</h4>
+          <p className="text-xs text-gray-400 mb-2">Pushover push notification configuration</p>
+          <pre className="text-xs text-gray-300 overflow-x-auto">{`pushover_enabled BOOLEAN DEFAULT false
+pushover_user_keys JSONB DEFAULT '[]'  -- Array of { key, name, enabled }
+notify_on_publish BOOLEAN DEFAULT false     -- Notify on success
+notify_on_failure BOOLEAN DEFAULT true      -- Notify on failure
+notify_on_missing_meta BOOLEAN DEFAULT true -- Meta not selected
+notify_daily_summary BOOLEAN DEFAULT false  -- Daily stats
+notify_queue_empty BOOLEAN DEFAULT true     -- Queue empty warning`}</pre>
+        </div>
+      </div>
+    </div>
+
+    {/* API Endpoints */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-purple-500/30">
+      <h3 className="text-lg font-bold text-purple-400 mb-4">API Endpoints</h3>
+      <p className="text-xs text-gray-400 mb-4">All routes prefixed with <code className="bg-slate-900 px-1 rounded">/api/drip-feed</code></p>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Settings</h4>
+          <ul className="text-xs text-gray-300 space-y-1 font-mono">
+            <li><span className="text-green-400">GET</span> /settings/:websiteId</li>
+            <li><span className="text-yellow-400">PUT</span> /settings/:websiteId</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Schedule Management</h4>
+          <ul className="text-xs text-gray-300 space-y-1 font-mono">
+            <li><span className="text-green-400">GET</span> /schedule/:websiteId</li>
+            <li><span className="text-blue-400">POST</span> /schedule/:websiteId</li>
+            <li><span className="text-yellow-400">PUT</span> /schedule/:websiteId/:scheduleId</li>
+            <li><span className="text-red-400">DEL</span> /schedule/:websiteId/:scheduleId</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Calendar & Stats</h4>
+          <ul className="text-xs text-gray-300 space-y-1 font-mono">
+            <li><span className="text-green-400">GET</span> /calendar/:websiteId</li>
+            <li><span className="text-green-400">GET</span> /stats/:websiteId</li>
+            <li><span className="text-green-400">GET</span> /log/:websiteId</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Processing & Notifications</h4>
+          <ul className="text-xs text-gray-300 space-y-1 font-mono">
+            <li><span className="text-green-400">GET</span> /due</li>
+            <li><span className="text-blue-400">POST</span> /process</li>
+            <li><span className="text-green-400">GET</span> /notifications/settings</li>
+            <li><span className="text-yellow-400">PUT</span> /notifications/settings</li>
+            <li><span className="text-blue-400">POST</span> /notifications/test</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Test Mode</h4>
+          <ul className="text-xs text-gray-300 space-y-1 font-mono">
+            <li><span className="text-blue-400">POST</span> /test-schedule/:websiteId</li>
+            <li><span className="text-blue-400">POST</span> /process-now</li>
+            <li><span className="text-green-400">GET</span> /test-status</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    {/* Cron Scheduler */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Cron Scheduler Service</h3>
+      <p className="text-sm text-gray-300 mb-4">
+        The scheduler runs automatically when the server starts. It uses <code className="bg-slate-900 px-1 rounded">node-cron</code>
+        to check for due articles every 5 minutes.
       </p>
 
       <div className="grid md:grid-cols-2 gap-4">
-        <div className="bg-slate-800 rounded-lg p-4">
-          <div className="text-green-400 font-semibold mb-2">What Exists:</div>
-          <ul className="text-sm text-gray-300 space-y-1">
-            <li>✓ Database table: <code className="bg-slate-900 px-1 rounded text-xs">drip_feed_schedules</code></li>
-            <li>✓ Backend endpoint: <code className="bg-slate-900 px-1 rounded text-xs">/api/elementor/schedule-drip-feed</code></li>
-            <li>✓ WordPress scheduled posts support</li>
-          </ul>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-gold font-semibold mb-2">How It Works</h4>
+          <ol className="text-xs text-gray-300 space-y-2">
+            <li><span className="text-brand-cyan">1.</span> Server starts → <code>initDripFeedScheduler()</code></li>
+            <li><span className="text-brand-cyan">2.</span> Runs catch-up check (5 second delay)</li>
+            <li><span className="text-brand-cyan">3.</span> Cron job runs every 5 minutes: <code>*/5 * * * *</code></li>
+            <li><span className="text-brand-cyan">4.</span> Queries for pending articles where datetime ≤ now</li>
+            <li><span className="text-brand-cyan">5.</span> Publishes each article: Images → Page → Meta</li>
+            <li><span className="text-brand-cyan">6.</span> Updates status to 'published' or 'failed'</li>
+            <li><span className="text-brand-cyan">7.</span> Sends Pushover notification if enabled</li>
+          </ol>
         </div>
-        <div className="bg-slate-800 rounded-lg p-4">
-          <div className="text-red-400 font-semibold mb-2">What's Missing:</div>
-          <ul className="text-sm text-gray-300 space-y-1">
-            <li>✗ UI to configure drip feed schedule</li>
-            <li>✗ Batch scheduling from article list</li>
-            <li>✗ Schedule status dashboard</li>
-            <li>✗ Automatic processing of scheduled items</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-    {/* Database Schema */}
-    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
-      <h3 className="text-lg font-bold text-brand-cyan mb-4">Database Table: drip_feed_schedules</h3>
-
-      <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-x-auto">
-        <pre className="text-gray-300">{`CREATE TABLE drip_feed_schedules (
-  id SERIAL PRIMARY KEY,
-  workflow_id INTEGER REFERENCES workflows(id),
-  website_id INTEGER REFERENCES websites(id),
-  article_id INTEGER REFERENCES articles(id),
-  scheduled_date TIMESTAMP NOT NULL,
-  status VARCHAR(50) DEFAULT 'pending',  -- pending, published, failed
-  wp_post_id INTEGER,                     -- After publish
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);`}</pre>
-      </div>
-    </div>
-
-    {/* How It Should Work */}
-    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-gold/30">
-      <h3 className="text-lg font-bold text-brand-gold mb-4">Intended Flow (To Be Implemented)</h3>
-
-      <div className="space-y-4">
-        <div className="flex items-start gap-3">
-          <span className="bg-brand-gold text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">1</span>
-          <div className="text-sm text-gray-300">
-            <strong>User selects articles</strong> from the Articles page (checkbox selection)
-          </div>
-        </div>
-        <div className="flex items-start gap-3">
-          <span className="bg-brand-gold text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">2</span>
-          <div className="text-sm text-gray-300">
-            <strong>User clicks "Schedule Drip Feed"</strong> and sets parameters:
-            <ul className="mt-1 ml-4 text-xs text-gray-400">
-              <li>- Start date</li>
-              <li>- Interval (e.g., every 2 days)</li>
-              <li>- Time of day to publish</li>
-            </ul>
-          </div>
-        </div>
-        <div className="flex items-start gap-3">
-          <span className="bg-brand-gold text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">3</span>
-          <div className="text-sm text-gray-300">
-            <strong>System creates schedule entries</strong> in drip_feed_schedules table
-          </div>
-        </div>
-        <div className="flex items-start gap-3">
-          <span className="bg-brand-gold text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">4</span>
-          <div className="text-sm text-gray-300">
-            <strong>Cron job or manual trigger</strong> processes pending schedules:
-            <ul className="mt-1 ml-4 text-xs text-gray-400">
-              <li>- Checks for schedules where scheduled_date {"<="} now AND status = 'pending'</li>
-              <li>- Calls /api/elementor/publish with status: 'publish' (not draft)</li>
-              <li>- Updates schedule status to 'published' or 'failed'</li>
-            </ul>
-          </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-gold font-semibold mb-2">Railway Deployment</h4>
+          <p className="text-xs text-gray-400 mb-2">For 24/7 operation, deploy to Railway:</p>
+          <ol className="text-xs text-gray-300 space-y-1">
+            <li>1. Push code to GitHub</li>
+            <li>2. Connect Railway to your repo</li>
+            <li>3. Add environment variables:
+              <ul className="ml-3 mt-1 text-gray-400">
+                <li>• <code>DATABASE_URL</code> - Neon connection string</li>
+                <li>• <code>PUSHOVER_API_TOKEN</code> - From Pushover app</li>
+              </ul>
+            </li>
+            <li>4. Deploy - server runs 24/7</li>
+          </ol>
         </div>
       </div>
     </div>
 
-    {/* Backend Endpoint */}
-    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
-      <h3 className="text-lg font-bold text-brand-cyan mb-4">Existing Backend Endpoint</h3>
-
-      <div className="bg-slate-900 rounded-lg p-4">
-        <code className="text-brand-cyan">POST /api/elementor/schedule-drip-feed</code>
-        <div className="mt-3 text-sm text-gray-300">
-          <div className="font-semibold text-brand-gold mb-2">Request Body:</div>
-          <pre className="text-xs bg-slate-800 p-2 rounded">{`{
-  "articleIds": [1, 2, 3],
-  "startDate": "2026-01-15",
-  "intervalDays": 2,
-  "publishTime": "09:00",
-  "wpUrl": "https://site.com",
-  "wpUser": "admin",
-  "wpPassword": "app-password"
-}`}</pre>
-        </div>
-      </div>
-
-      <div className="mt-4 text-sm text-gray-400">
-        <strong className="text-brand-cyan">Key File:</strong>{' '}
-        <code className="text-gray-300">server/routes/elementor.js</code> - schedule-drip-feed endpoint
-      </div>
-    </div>
-
-    {/* WordPress Scheduled Posts */}
-    <div className="bg-slate-800/50 rounded-xl p-6 border border-purple-500/30">
-      <h3 className="text-lg font-bold text-purple-400 mb-4">WordPress Scheduled Posts</h3>
-
+    {/* Test Mode */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-orange-500/30">
+      <h3 className="text-lg font-bold text-orange-400 mb-4">Test Mode - Quick Scheduling</h3>
       <p className="text-sm text-gray-300 mb-4">
-        WordPress natively supports scheduled posts. When creating a page/post via REST API,
-        you can set a future date and status 'future':
+        Test Mode allows you to schedule articles 1-4 minutes in the future to test the cron job without waiting.
+        Click "Test Mode" button in the Drip Feed UI to access.
       </p>
 
-      <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs">
-        <pre className="text-gray-300">{`// In createElementorPage():
-const body = {
-  title: title,
-  status: 'future',           // Will be published at date_gmt
-  date_gmt: '2026-01-15T09:00:00',
-  content: '',
-  meta: elementorMeta
-};`}</pre>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">How to Use</h4>
+          <ol className="text-xs text-gray-300 space-y-1">
+            <li><span className="text-orange-400">1.</span> Click "Test Mode" button (top right)</li>
+            <li><span className="text-orange-400">2.</span> Select articles using checkboxes</li>
+            <li><span className="text-orange-400">3.</span> Click timing button: 1 min, 2 min, or Staggered</li>
+            <li><span className="text-orange-400">4.</span> Pending box shows scheduled articles</li>
+            <li><span className="text-orange-400">5.</span> Wait for cron OR click "Process Now"</li>
+            <li><span className="text-orange-400">6.</span> "Process Now" publishes one article at a time</li>
+          </ol>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Test Mode Panel</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li><span className="text-green-400">Current Status</span> - Shows server time, pending count</li>
+            <li><span className="text-yellow-400">Quick Schedule</span> - 1 min, 2 min, Staggered (1,2,3,4 min)</li>
+            <li><span className="text-blue-400">Process Now</span> - Manually trigger one publish</li>
+            <li><span className="text-cyan-400">Pending Box</span> - Horizontal list of scheduled articles</li>
+            <li><span className="text-gray-400">Refresh</span> - Auto-updates every 30 seconds</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-4 bg-slate-900 rounded-lg p-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">API Endpoints</h4>
+        <div className="grid md:grid-cols-3 gap-4 text-xs">
+          <div>
+            <code className="text-blue-400">POST</code> <code className="text-brand-gold">/test-schedule/:websiteId</code>
+            <p className="text-gray-400 mt-1">Schedule articles for testing</p>
+            <pre className="text-gray-500 mt-1">{`{ articleIds, minutesFromNow, clientTime }`}</pre>
+          </div>
+          <div>
+            <code className="text-blue-400">POST</code> <code className="text-brand-gold">/process-now</code>
+            <p className="text-gray-400 mt-1">Process ONE due article</p>
+            <pre className="text-gray-500 mt-1">{`{ clientTime }`}</pre>
+          </div>
+          <div>
+            <code className="text-green-400">GET</code> <code className="text-brand-gold">/test-status</code>
+            <p className="text-gray-400 mt-1">Get pending articles status</p>
+            <pre className="text-gray-500 mt-1">{`?clientTime=ISO`}</pre>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 bg-amber-900/20 rounded-lg p-4 border border-amber-500/30">
+        <h4 className="text-amber-400 font-semibold mb-2">Important Notes</h4>
+        <ul className="text-xs text-gray-300 space-y-1">
+          <li>• <strong>Timezone:</strong> Uses your browser's local time (sent as clientTime)</li>
+          <li>• <strong>Process Now:</strong> Only processes ONE article per click (controlled testing)</li>
+          <li>• <strong>Meta Required:</strong> Articles show "No Meta" if meta not saved</li>
+          <li>• <strong>Auto-Save Meta:</strong> Clicking on a meta option auto-saves (no Save button needed)</li>
+          <li>• <strong>Cron Still Runs:</strong> Regular cron every 5 min - Process Now is manual trigger</li>
+        </ul>
+      </div>
+    </div>
+
+    {/* Pushover Notifications */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-gold/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">Pushover Push Notifications</h3>
+      <p className="text-sm text-gray-300 mb-4">
+        Pushover ($5 one-time purchase per user) provides reliable push notifications to iOS/Android.
+      </p>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Setup Steps</h4>
+          <ol className="text-xs text-gray-300 space-y-1">
+            <li>1. Create account at <code>pushover.net</code></li>
+            <li>2. Note your User Key (on dashboard)</li>
+            <li>3. Create new application → get API Token</li>
+            <li>4. Add <code>PUSHOVER_API_TOKEN</code> to .env</li>
+            <li>5. Enable notifications in Drip Feed UI</li>
+            <li>6. Add your User Key as a recipient</li>
+            <li>7. Click "Test" to verify it works</li>
+          </ol>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Notification Types</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li><span className="text-green-400">published</span> - Article successfully published</li>
+            <li><span className="text-red-400">failed</span> - Publish failed (high priority)</li>
+            <li><span className="text-yellow-400">no_meta</span> - Missing meta title/description</li>
+            <li><span className="text-blue-400">daily_summary</span> - Daily stats summary</li>
+            <li><span className="text-orange-400">queue_empty</span> - No more articles queued</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-4 bg-slate-900 rounded-lg p-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Environment Variable</h4>
+        <pre className="text-xs text-gray-300">{`# .env or Railway environment variables
+PUSHOVER_API_TOKEN=your-app-api-token-here`}</pre>
+      </div>
+
+      <div className="mt-4 bg-slate-900 rounded-lg p-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Multi-User Support</h4>
+        <p className="text-xs text-gray-400 mb-2">
+          Each person who wants notifications needs their own Pushover account ($5 each).
+          Add their User Key to the recipients list. You can enable/disable individual recipients.
+        </p>
+        <pre className="text-xs text-gray-300">{`// pushover_user_keys JSONB format:
+[
+  { "key": "uabc123...", "name": "John", "enabled": true },
+  { "key": "uxyz789...", "name": "Jane", "enabled": true }
+]`}</pre>
+      </div>
+    </div>
+
+    {/* Pushover Service Code */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Pushover Service Code</h3>
+      <p className="text-xs text-gray-400 mb-2">server/services/pushover.js</p>
+      <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs overflow-x-auto">
+        <pre className="text-gray-300">{`// Priority levels
+export const Priority = {
+  LOWEST: -2,    // No notification, just in inbox
+  LOW: -1,       // Quiet notification
+  NORMAL: 0,     // Normal notification
+  HIGH: 1,       // High priority, bypasses quiet hours
+  EMERGENCY: 2   // Emergency, requires acknowledgment
+};
+
+// Send notification to one or more users
+export async function sendPushover(options) {
+  const { message, title, userKey, apiToken, priority, url } = options;
+  // Sends POST to https://api.pushover.net/1/messages.json
+  // Handles single user or array of users
+  // Returns { success, partial, results }
+}
+
+// Drip feed specific notifications
+export async function notifyDripFeed(type, data, userKeys) {
+  // Types: published, failed, no_meta, daily_summary, queue_empty
+  // Automatically formats message based on type
+}`}</pre>
+      </div>
+    </div>
+
+    {/* Email-to-SMS Notifications (FREE alternative) */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-gold/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">Email-to-SMS Notifications (FREE)</h3>
+      <p className="text-sm text-gray-300 mb-4">
+        As an alternative to Pushover, you can use carrier email gateways to send SMS for free.
+        Each carrier provides an email address that converts to SMS.
+      </p>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">How It Works</h4>
+          <ol className="text-xs text-gray-300 space-y-1">
+            <li>1. Configure SMTP credentials (Gmail, SendGrid)</li>
+            <li>2. Add phone number + carrier to recipients</li>
+            <li>3. System sends email to carrier gateway</li>
+            <li>4. Carrier delivers as SMS to your phone</li>
+          </ol>
+          <p className="text-xs text-gray-400 mt-2">Example: 5551234567@vtext.com (Verizon)</p>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Supported Carriers</h4>
+          <ul className="text-xs text-gray-300 space-y-1 grid grid-cols-2 gap-1">
+            <li>• Verizon (@vtext.com)</li>
+            <li>• AT&T (@txt.att.net)</li>
+            <li>• T-Mobile (@tmomail.net)</li>
+            <li>• Sprint (@messaging.sprintpcs.com)</li>
+            <li>• US Cellular (@email.uscc.net)</li>
+            <li>• Boost (@sms.myboostmobile.com)</li>
+            <li>• Cricket (@sms.cricketwireless.net)</li>
+            <li>• Metro (@mymetropcs.com)</li>
+            <li>• Google Fi (@msg.fi.google.com)</li>
+            <li>• Mint/Visible (use carrier network)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-4 bg-slate-900 rounded-lg p-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Environment Variables</h4>
+        <pre className="text-xs text-gray-300">{`# SMTP config for Email-to-SMS (e.g., Gmail)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+SMTP_FROM=your-email@gmail.com`}</pre>
+        <p className="text-xs text-gray-400 mt-2">
+          For Gmail, use an App Password (not your regular password).
+          Go to Google Account → Security → 2-Step Verification → App Passwords.
+        </p>
+      </div>
+
+      <div className="mt-4 bg-slate-900 rounded-lg p-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Database Schema</h4>
+        <pre className="text-xs text-gray-300">{`-- In notification_settings table:
+email_sms_enabled BOOLEAN DEFAULT false
+email_sms_recipients JSONB DEFAULT '[]'
+
+-- Recipients format:
+[
+  { "phone": "5551234567", "carrier": "verizon", "name": "John", "enabled": true },
+  { "phone": "5559876543", "carrier": "att", "name": "Jane", "enabled": true }
+]`}</pre>
       </div>
 
       <div className="mt-4 text-xs text-gray-400">
-        WordPress wp-cron will automatically publish the post at the scheduled time.
-        No server-side cron needed for the actual publishing.
+        <strong>Key Files:</strong>
+        <ul className="mt-1 ml-4">
+          <li>• <code className="text-brand-gold">server/services/email-sms.js</code> - Email-to-SMS service</li>
+          <li>• <code className="text-brand-gold">server/db/migrations/017_add_email_sms_columns.sql</code> - DB migration</li>
+        </ul>
       </div>
     </div>
 
-    {/* Next Steps */}
+    {/* UI Features */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-purple-500/30">
+      <h3 className="text-lg font-bold text-purple-400 mb-4">UI Features (DripFeedView.tsx)</h3>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Top Bar</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>• Enable/Disable toggle (master switch)</li>
+            <li>• Stats (Published/Scheduled/Queue)</li>
+            <li>• Notifications button (green when enabled)</li>
+            <li>• Collapsible Schedule Settings</li>
+            <li>• Collapsible Calendar View</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Schedule Settings</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>• Articles per day slider</li>
+            <li>• Variance toggle (randomize count)</li>
+            <li>• Publish time window (start/end)</li>
+            <li>• Skip weekdays checkboxes</li>
+            <li>• Skip specific dates calendar</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Calendar View</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>• Month navigation</li>
+            <li>• Articles shown per day</li>
+            <li>• Click day to see scheduled articles</li>
+            <li>• Status indicators (pending, published)</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Notifications Panel</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>• Enable Pushover toggle</li>
+            <li>• Add/remove recipients</li>
+            <li>• Enable/disable per recipient</li>
+            <li>• Notification type toggles</li>
+            <li>• Test notification button</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    {/* Troubleshooting */}
+    <div className="bg-red-900/20 rounded-xl p-6 border border-red-500/50">
+      <h3 className="text-lg font-bold text-red-400 mb-4">Troubleshooting Guide</h3>
+
+      <div className="space-y-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-yellow-400 font-semibold mb-2">Articles not publishing?</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>1. Check if drip feed is enabled (master toggle)</li>
+            <li>2. Check if scheduler is running (server logs)</li>
+            <li>3. Check if articles have scheduled_date/time ≤ now</li>
+            <li>4. Check drip_feed_log table for errors</li>
+            <li>5. Verify WordPress credentials in website settings</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-yellow-400 font-semibold mb-2">No push notifications?</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>1. Verify <code>PUSHOVER_API_TOKEN</code> is set in environment</li>
+            <li>2. Check if Pushover is enabled in notification settings</li>
+            <li>3. Verify at least one recipient is enabled</li>
+            <li>4. Test using the "Test" button in UI</li>
+            <li>5. Check server logs for Pushover errors</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-yellow-400 font-semibold mb-2">Useful SQL Queries</h4>
+          <pre className="text-xs text-gray-300 overflow-x-auto">{`-- Check pending schedules
+SELECT * FROM drip_feed_schedules WHERE status = 'pending';
+
+-- Check notification settings
+SELECT * FROM notification_settings WHERE id = 1;
+
+-- Check recent log entries
+SELECT * FROM drip_feed_log ORDER BY created_at DESC LIMIT 20;
+
+-- Check drip feed settings
+SELECT * FROM drip_feed_settings;`}</pre>
+        </div>
+      </div>
+    </div>
+
+    {/* Recovery Guide */}
     <div className="bg-brand-cyan/10 rounded-xl p-6 border border-brand-cyan">
-      <h3 className="text-lg font-bold text-brand-cyan mb-4">To Complete Drip Feed Feature</h3>
-      <p className="text-sm text-yellow-400 mb-4">Status: Planned (Jan 2026) - Implementation pending</p>
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Complete Rebuild Guide</h3>
+      <p className="text-xs text-gray-400 mb-4">If you need to rebuild the drip feed system from scratch:</p>
 
       <div className="space-y-3 text-sm">
         <div className="flex items-start gap-2">
           <span className="text-brand-cyan font-bold">1.</span>
           <div className="text-gray-300">
-            <strong>Database:</strong> Create <code className="bg-slate-900 px-1 rounded">drip_feed_schedules</code> and
-            <code className="bg-slate-900 px-1 rounded">drip_feed_settings</code> tables
+            <strong>Run migrations:</strong>
+            <pre className="text-xs bg-slate-900 p-2 rounded mt-1">{`-- In order:
+015_drip_feed_system.sql
+016_add_pushover_columns.sql`}</pre>
           </div>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-brand-cyan font-bold">2.</span>
           <div className="text-gray-300">
-            <strong>Article Selection:</strong> Add checkboxes to ArticleListView + "Add to Drip Feed" button
+            <strong>Server files needed:</strong>
+            <ul className="text-xs mt-1 ml-4 text-gray-400">
+              <li>• server/routes/drip-feed.js</li>
+              <li>• server/services/drip-feed-scheduler.js</li>
+              <li>• server/services/pushover.js</li>
+            </ul>
           </div>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-brand-cyan font-bold">3.</span>
           <div className="text-gray-300">
-            <strong>Settings Modal:</strong> Articles/day, variance range (e.g., 6-8), publish time window
+            <strong>Register routes in server/index.js:</strong>
+            <pre className="text-xs bg-slate-900 p-2 rounded mt-1">{`import dripFeedRoutes from './routes/drip-feed.js';
+app.use('/api/drip-feed', dripFeedRoutes);
+
+// Initialize scheduler
+import { initDripFeedScheduler } from './services/drip-feed-scheduler.js';
+initDripFeedScheduler();`}</pre>
           </div>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-brand-cyan font-bold">4.</span>
           <div className="text-gray-300">
-            <strong>Skip Days:</strong> Calendar to select dates to skip (holidays), option for weekly skips (every Sunday)
+            <strong>Environment variables:</strong>
+            <pre className="text-xs bg-slate-900 p-2 rounded mt-1">{`DATABASE_URL=postgres://...@neon.tech/...
+PUSHOVER_API_TOKEN=your-api-token`}</pre>
           </div>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-brand-cyan font-bold">5.</span>
           <div className="text-gray-300">
-            <strong>Queue View:</strong> Visual calendar showing scheduled articles by day
+            <strong>Frontend:</strong> src/components/articles/DripFeedView.tsx
           </div>
         </div>
-        <div className="flex items-start gap-2">
-          <span className="text-brand-cyan font-bold">6.</span>
-          <div className="text-gray-300">
-            <strong>Publishing:</strong> Either manual trigger or server cron to push articles to WordPress
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 p-3 bg-slate-800 rounded-lg">
-        <h4 className="font-semibold text-white mb-2">Planned Settings Features:</h4>
-        <ul className="text-sm text-gray-400 space-y-1">
-          <li>• <strong>Variance toggle:</strong> Instead of exactly 7/day, random between 6-8 (looks more natural to Google)</li>
-          <li>• <strong>Skip specific dates:</strong> Holidays, special events</li>
-          <li>• <strong>Skip weekly days:</strong> Skip every Sunday, or just specific Sundays</li>
-          <li>• <strong>Publish time window:</strong> Randomize publish times between 8am-6pm</li>
-        </ul>
       </div>
     </div>
   </div>

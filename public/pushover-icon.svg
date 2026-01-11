@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 32 32">
+  <!-- Dark slate background -->
+  <rect width="32" height="32" rx="4" fill="#0F172A"/>
+
+  <!-- Bar chart - 3 solid cyan bars -->
+  <rect x="5" y="18" width="6" height="10" rx="1" fill="#00B4D8"/>
+  <rect x="13" y="12" width="6" height="16" rx="1" fill="#00B4D8"/>
+  <rect x="21" y="6" width="6" height="22" rx="1" fill="#00B4D8"/>
+
+  <!-- Gold upward trend line - thick and bold -->
+  <path d="M6 24 L16 14 L26 4" stroke="#F5A623" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- Arrow head -->
+  <polygon points="26,4 22,8 26,10" fill="#F5A623"/>
+</svg>

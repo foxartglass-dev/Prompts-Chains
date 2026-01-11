@@ -717,6 +717,144 @@ async function setup() {
     }
 
     console.log('');
+
+    // ================================
+    // DRIP FEED SYSTEM
+    // ================================
+    console.log('📅 Creating Drip Feed tables...\n');
+
+    // Drip Feed Settings (per-website configuration)
+    await sql`
+      CREATE TABLE IF NOT EXISTS drip_feed_settings (
+        id SERIAL PRIMARY KEY,
+        website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE UNIQUE,
+        articles_per_day INTEGER DEFAULT 7,
+        variance_enabled BOOLEAN DEFAULT true,
+        variance_min INTEGER DEFAULT 6,
+        variance_max INTEGER DEFAULT 8,
+        publish_time_start TIME DEFAULT '07:00',
+        publish_time_end TIME DEFAULT '19:00',
+        skip_weekdays JSONB DEFAULT '[]',
+        skip_dates JSONB DEFAULT '[]',
+        notification_hours JSONB DEFAULT '[24, 12, 6]',
+        first_day_monitor BOOLEAN DEFAULT true,
+        is_enabled BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ drip_feed_settings');
+
+    // Drip Feed Schedules (the hopper)
+    await sql`
+      CREATE TABLE IF NOT EXISTS drip_feed_schedules (
+        id SERIAL PRIMARY KEY,
+        website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
+        article_id INTEGER REFERENCES articles(id) ON DELETE CASCADE UNIQUE,
+        scheduled_date DATE NOT NULL,
+        scheduled_time TIME NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        wp_post_id INTEGER,
+        wp_post_url TEXT,
+        attempts INTEGER DEFAULT 0,
+        last_attempt_at TIMESTAMP,
+        published_at TIMESTAMP,
+        error_message TEXT,
+        is_manual_time BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ drip_feed_schedules');
+
+    // Drip Feed Notifications
+    await sql`
+      CREATE TABLE IF NOT EXISTS drip_feed_notifications (
+        id SERIAL PRIMARY KEY,
+        website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
+        schedule_id INTEGER REFERENCES drip_feed_schedules(id) ON DELETE CASCADE,
+        article_id INTEGER REFERENCES articles(id) ON DELETE CASCADE,
+        type VARCHAR(50) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        message TEXT,
+        status VARCHAR(20) DEFAULT 'pending',
+        notify_at TIMESTAMP NOT NULL,
+        sent_at TIMESTAMP,
+        dismissed_at TIMESTAMP,
+        snooze_until TIMESTAMP,
+        channels_sent JSONB DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ drip_feed_notifications');
+
+    // Custom Watches
+    await sql`
+      CREATE TABLE IF NOT EXISTS drip_feed_watches (
+        id SERIAL PRIMARY KEY,
+        website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        schedule_ids JSONB DEFAULT '[]',
+        notify_offsets JSONB DEFAULT '[-30, 0, 15]',
+        channels JSONB DEFAULT '["toast"]',
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ drip_feed_watches');
+
+    // Notification Settings (global)
+    await sql`
+      CREATE TABLE IF NOT EXISTS notification_settings (
+        id SERIAL PRIMARY KEY,
+        toast_enabled BOOLEAN DEFAULT true,
+        browser_enabled BOOLEAN DEFAULT false,
+        sms_enabled BOOLEAN DEFAULT false,
+        sms_phone_number VARCHAR(20),
+        sms_verified BOOLEAN DEFAULT false,
+        twilio_account_sid TEXT,
+        twilio_auth_token TEXT,
+        twilio_phone_number VARCHAR(20),
+        error_repeat_interval INTEGER DEFAULT 5,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    // Ensure notification settings row exists
+    const hasNotifSettings = await sql`SELECT id FROM notification_settings WHERE id = 1`;
+    if (hasNotifSettings.length === 0) {
+      await sql`INSERT INTO notification_settings (id) VALUES (1)`;
+      console.log('  ✓ notification_settings (created initial row)');
+    } else {
+      console.log('  ✓ notification_settings');
+    }
+
+    // Drip Feed Log (audit trail)
+    await sql`
+      CREATE TABLE IF NOT EXISTS drip_feed_log (
+        id SERIAL PRIMARY KEY,
+        schedule_id INTEGER REFERENCES drip_feed_schedules(id) ON DELETE SET NULL,
+        website_id INTEGER REFERENCES websites(id) ON DELETE SET NULL,
+        article_id INTEGER REFERENCES articles(id) ON DELETE SET NULL,
+        action VARCHAR(50) NOT NULL,
+        details JSONB,
+        error_message TEXT,
+        wp_response JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    console.log('  ✓ drip_feed_log');
+
+    // Drip Feed indexes
+    await sql`CREATE INDEX IF NOT EXISTS idx_drip_schedules_due ON drip_feed_schedules(scheduled_date, scheduled_time, status) WHERE status = 'pending'`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_drip_schedules_website ON drip_feed_schedules(website_id, scheduled_date)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_drip_notifications_pending ON drip_feed_notifications(notify_at, status) WHERE status = 'pending'`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_drip_log_website ON drip_feed_log(website_id, created_at DESC)`;
+    console.log('  ✓ drip feed indexes');
+
+    console.log('');
     console.log('================================');
     console.log('✅ Database setup complete!');
     console.log('================================');
