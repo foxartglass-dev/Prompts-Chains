@@ -1627,6 +1627,14 @@ notify_queue_empty BOOLEAN DEFAULT true     -- Queue empty warning`}</pre>
             <li><span className="text-blue-400">POST</span> /notifications/test</li>
           </ul>
         </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Test Mode</h4>
+          <ul className="text-xs text-gray-300 space-y-1 font-mono">
+            <li><span className="text-blue-400">POST</span> /test-schedule/:websiteId</li>
+            <li><span className="text-blue-400">POST</span> /process-now</li>
+            <li><span className="text-green-400">GET</span> /test-status</li>
+          </ul>
+        </div>
       </div>
     </div>
 
@@ -1666,6 +1674,71 @@ notify_queue_empty BOOLEAN DEFAULT true     -- Queue empty warning`}</pre>
             <li>4. Deploy - server runs 24/7</li>
           </ol>
         </div>
+      </div>
+    </div>
+
+    {/* Test Mode */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-orange-500/30">
+      <h3 className="text-lg font-bold text-orange-400 mb-4">Test Mode - Quick Scheduling</h3>
+      <p className="text-sm text-gray-300 mb-4">
+        Test Mode allows you to schedule articles 1-4 minutes in the future to test the cron job without waiting.
+        Click "Test Mode" button in the Drip Feed UI to access.
+      </p>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">How to Use</h4>
+          <ol className="text-xs text-gray-300 space-y-1">
+            <li><span className="text-orange-400">1.</span> Click "Test Mode" button (top right)</li>
+            <li><span className="text-orange-400">2.</span> Select articles using checkboxes</li>
+            <li><span className="text-orange-400">3.</span> Click timing button: 1 min, 2 min, or Staggered</li>
+            <li><span className="text-orange-400">4.</span> Pending box shows scheduled articles</li>
+            <li><span className="text-orange-400">5.</span> Wait for cron OR click "Process Now"</li>
+            <li><span className="text-orange-400">6.</span> "Process Now" publishes one article at a time</li>
+          </ol>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Test Mode Panel</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li><span className="text-green-400">Current Status</span> - Shows server time, pending count</li>
+            <li><span className="text-yellow-400">Quick Schedule</span> - 1 min, 2 min, Staggered (1,2,3,4 min)</li>
+            <li><span className="text-blue-400">Process Now</span> - Manually trigger one publish</li>
+            <li><span className="text-cyan-400">Pending Box</span> - Horizontal list of scheduled articles</li>
+            <li><span className="text-gray-400">Refresh</span> - Auto-updates every 30 seconds</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-4 bg-slate-900 rounded-lg p-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">API Endpoints</h4>
+        <div className="grid md:grid-cols-3 gap-4 text-xs">
+          <div>
+            <code className="text-blue-400">POST</code> <code className="text-brand-gold">/test-schedule/:websiteId</code>
+            <p className="text-gray-400 mt-1">Schedule articles for testing</p>
+            <pre className="text-gray-500 mt-1">{`{ articleIds, minutesFromNow, clientTime }`}</pre>
+          </div>
+          <div>
+            <code className="text-blue-400">POST</code> <code className="text-brand-gold">/process-now</code>
+            <p className="text-gray-400 mt-1">Process ONE due article</p>
+            <pre className="text-gray-500 mt-1">{`{ clientTime }`}</pre>
+          </div>
+          <div>
+            <code className="text-green-400">GET</code> <code className="text-brand-gold">/test-status</code>
+            <p className="text-gray-400 mt-1">Get pending articles status</p>
+            <pre className="text-gray-500 mt-1">{`?clientTime=ISO`}</pre>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 bg-amber-900/20 rounded-lg p-4 border border-amber-500/30">
+        <h4 className="text-amber-400 font-semibold mb-2">Important Notes</h4>
+        <ul className="text-xs text-gray-300 space-y-1">
+          <li>• <strong>Timezone:</strong> Uses your browser's local time (sent as clientTime)</li>
+          <li>• <strong>Process Now:</strong> Only processes ONE article per click (controlled testing)</li>
+          <li>• <strong>Meta Required:</strong> Articles show "No Meta" if meta not saved</li>
+          <li>• <strong>Auto-Save Meta:</strong> Clicking on a meta option auto-saves (no Save button needed)</li>
+          <li>• <strong>Cron Still Runs:</strong> Regular cron every 5 min - Process Now is manual trigger</li>
+        </ul>
       </div>
     </div>
 
