@@ -746,6 +746,18 @@ async function setup() {
     `;
     console.log('  ✓ drip_feed_settings');
 
+    // Add timezone column if it doesn't exist (migration 018)
+    const hasTimezone = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'drip_feed_settings' AND column_name = 'timezone'
+    `;
+    if (hasTimezone.length === 0) {
+      await sql`ALTER TABLE drip_feed_settings ADD COLUMN timezone VARCHAR(50) DEFAULT 'America/Chicago'`;
+      console.log('  ✓ Added timezone column to drip_feed_settings');
+    } else {
+      console.log('  - timezone column already exists');
+    }
+
     // Drip Feed Schedules (the hopper)
     await sql`
       CREATE TABLE IF NOT EXISTS drip_feed_schedules (
