@@ -223,5 +223,7 @@ When the user asks about something that requires current information or external
  * Check if web tools are available
  */
 export function areWebToolsAvailable() {
-  return !!process.env.BRAVE_SEARCH_API_KEY;
+  const hasKey = !!process.env.BRAVE_SEARCH_API_KEY;
+  console.log(`[Web Tools] Available: ${hasKey}, Key length: ${process.env.BRAVE_SEARCH_API_KEY?.length || 0}`);
+  return hasKey;
 }
