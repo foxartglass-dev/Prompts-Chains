@@ -791,7 +791,7 @@ When creating prompts, be specific and technical. Include details about lighting
     }
 
     // Use gpt-4o as fallback for unknown OpenAI models
-    const validOpenAIModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'];
+    const validOpenAIModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo', 'gpt-5.2-2025-12-11'];
     const actualModel = validOpenAIModels.includes(model) ? model : 'gpt-4o';
 
     if (actualModel !== model) {
