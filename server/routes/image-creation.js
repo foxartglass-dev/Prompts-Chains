@@ -1426,7 +1426,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           return result[0].id;
         } catch (insertErr) {
           // If it failed due to missing column, try without live_prompt_mode columns
-          if (insertErr.message?.includes('live_prompt_mode') || insertErr.message?.includes('smart_prompt_guidance')) {
+          if (insertErr.message?.includes('live_prompt_mode') || insertErr.message?.includes('smart_prompt_guidance') || insertErr.message?.includes('guided_guardrails') || insertErr.message?.includes('prompt_problem_areas')) {
             console.log('[Image Creation API] Falling back to INSERT without live_prompt columns');
             // Use website_id or workflow_id based on saveToWebsite flag
             const result = saveToWebsite
