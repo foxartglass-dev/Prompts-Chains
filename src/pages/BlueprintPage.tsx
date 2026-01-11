@@ -96,6 +96,38 @@ const NewAgentStartHere: React.FC = () => (
       <p className="text-gray-400 text-lg">Welcome to PromptFlow - SEO Page Factory. Follow this warm-up sequence before doing any work.</p>
     </div>
 
+    {/* Important Notice - Documentation Expectation */}
+    <div className="bg-purple-900/30 rounded-xl p-6 border-2 border-purple-500">
+      <div className="flex items-start gap-4">
+        <div className="text-3xl">📝</div>
+        <div>
+          <h3 className="text-lg font-bold text-purple-400 mb-2">You Will Be Documenting Your Work</h3>
+          <p className="text-gray-300 mb-3">
+            As you work, pay close attention to mechanisms you build or discover.
+            <strong className="text-white"> When you complete a feature or fix</strong> (especially before shifting to something different),
+            you'll add it to this Blueprint.
+          </p>
+          <div className="bg-slate-900 rounded-lg p-3 text-sm space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="text-purple-400">→</span>
+              <span className="text-gray-300"><strong>Document when you COMPLETE a feature</strong>, not just at session end</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-purple-400">→</span>
+              <span className="text-gray-300">Details are fresh in your mind right after building something</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-purple-400">→</span>
+              <span className="text-gray-300">See the <strong>Agent Template</strong> tab for what to document</span>
+            </div>
+          </div>
+          <p className="text-xs text-purple-300 mt-3">
+            This Blueprint is how future agents (and the user) understand the system. Your documentation matters.
+          </p>
+        </div>
+      </div>
+    </div>
+
     {/* Step 1 */}
     <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-brand-cyan">
       <div className="flex items-center gap-4 mb-4">
@@ -273,12 +305,38 @@ const NewAgentStartHere: React.FC = () => (
       </div>
     </div>
 
+    {/* Documentation Timing */}
+    <div className="bg-purple-900/20 rounded-xl p-6 border border-purple-500">
+      <h3 className="text-lg font-bold text-purple-400 mb-3">When to Document in Blueprint</h3>
+      <div className="space-y-3 text-sm">
+        <div className="flex items-start gap-3">
+          <span className="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold">DO</span>
+          <span className="text-gray-300">Document immediately after completing a feature/fix, while details are fresh</span>
+        </div>
+        <div className="flex items-start gap-3">
+          <span className="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold">DO</span>
+          <span className="text-gray-300">Document before shifting to a completely different task area</span>
+        </div>
+        <div className="flex items-start gap-3">
+          <span className="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">DON'T</span>
+          <span className="text-gray-300">Wait until the very end of session when context is lost</span>
+        </div>
+        <div className="flex items-start gap-3">
+          <span className="bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">DON'T</span>
+          <span className="text-gray-300">Document mid-feature while still iterating (wait until it works)</span>
+        </div>
+      </div>
+    </div>
+
     {/* End of Session */}
     <div className="bg-brand-cyan/10 rounded-xl p-6 border border-brand-cyan">
       <h3 className="text-lg font-bold text-brand-cyan mb-3">End of Session</h3>
-      <p className="text-gray-300">
-        Run <code className="bg-slate-900 px-2 py-1 rounded">/debrief</code> command to document what you worked on for the next agent.
-        Also check the <strong>Agent Template</strong> tab for what to document.
+      <p className="text-gray-300 mb-3">
+        Run <code className="bg-slate-900 px-2 py-1 rounded">/debrief</code> command to document what you worked on.
+      </p>
+      <p className="text-sm text-gray-400">
+        If you already documented features as you completed them (as you should), the debrief is just a final check.
+        See the <strong>Agent Template</strong> tab for the full documentation template.
       </p>
     </div>
   </div>
