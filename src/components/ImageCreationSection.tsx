@@ -72,6 +72,7 @@ interface PlaceholderCategory {
   placeholder: string; // The placeholder text: "{Cleaning_Item}"
   options: PlaceholderOption[];
   isRandomized?: boolean; // If true, pick random option instead of keyword matching
+  enabled?: boolean; // If false, category is disabled but not deleted (for testing)
 }
 
 // An option within a category
@@ -8067,11 +8068,48 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </button>
                     </div>
 
+                    {/* Quick Category Toggles - Compact row showing all categories with on/off */}
+                    {(activeAvatar.placeholderCategories || []).length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 px-2 py-2 bg-slate-900/50 rounded-lg border border-purple-500/20">
+                        <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle:</span>
+                        {(activeAvatar.placeholderCategories || []).map(cat => (
+                          <button
+                            key={cat.id}
+                            onClick={() => handleUpdatePlaceholderCategory(cat.id, { enabled: cat.enabled === false ? true : false })}
+                            className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                              cat.enabled !== false
+                                ? 'bg-emerald-600/40 border border-emerald-500 text-emerald-300'
+                                : 'bg-slate-700/50 border border-slate-600 text-slate-500 line-through'
+                            }`}
+                            title={cat.enabled !== false ? `Click to disable "${cat.name}"` : `Click to enable "${cat.name}"`}
+                          >
+                            {cat.enabled !== false ? '✓' : '○'} {cat.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Category List */}
                     {!categoriesCollapsed && (<>
                     {(activeAvatar.placeholderCategories || []).map((category, catIndex) => (
-                      <div key={category.id} className="bg-slate-800/50 rounded-lg p-3 space-y-2">
+                      <div key={category.id} className={`rounded-lg p-3 space-y-2 transition-all ${
+                        category.enabled !== false
+                          ? 'bg-slate-800/50'
+                          : 'bg-slate-900/30 opacity-50 border border-dashed border-slate-600'
+                      }`}>
                         <div className="flex items-center gap-2">
+                          {/* On/Off Toggle */}
+                          <button
+                            onClick={() => handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false })}
+                            className={`w-5 h-5 rounded flex items-center justify-center text-xs transition ${
+                              category.enabled !== false
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-700 text-slate-500'
+                            }`}
+                            title={category.enabled !== false ? 'Click to disable' : 'Click to enable'}
+                          >
+                            {category.enabled !== false ? '✓' : '○'}
+                          </button>
                           <input
                             type="text"
                             value={category.name}
