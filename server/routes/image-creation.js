@@ -328,7 +328,7 @@ router.post('/batch-generate', async (req, res) => {
     let wpUser = explicitWpUser;
     let wpPassword = explicitWpPassword;
 
-    // First, try to get GLOBAL staging credentials from global_settings
+    // Get GLOBAL staging credentials from global_settings (ONLY source - no fallback)
     if (isDatabaseEnabled()) {
       console.log(`[Batch Generate] Checking for global staging credentials...`);
       try {
@@ -342,52 +342,24 @@ router.post('/batch-generate', async (req, res) => {
           wpPassword = stagingResult[0].staging_wp_password;
           console.log(`[Batch Generate] ✓ Using GLOBAL staging credentials: ${wpUrl}`);
         } else {
-          console.log(`[Batch Generate] No global staging credentials configured`);
+          console.log(`[Batch Generate] ❌ No global staging credentials configured`);
         }
       } catch (dbError) {
         console.error('[Batch Generate] Failed to lookup staging credentials:', dbError.message);
       }
     }
 
-    // Fallback: Look up WP credentials from workflow's associated website (legacy behavior)
-    if (!wpUrl && workflowId && isDatabaseEnabled()) {
-      console.log(`[Batch Generate] Falling back to workflow ${workflowId} website credentials...`);
-      try {
-        const workflowResult = await sql`
-          SELECT w.website_id, ws.wp_url, ws.wp_user, ws.wp_app_password
-          FROM workflows w
-          LEFT JOIN websites ws ON w.website_id = ws.id
-          WHERE w.id = ${workflowId}
-        `;
-        console.log(`[Batch Generate] Query result:`, {
-          found: workflowResult.length > 0,
-          website_id: workflowResult[0]?.website_id || 'NULL',
-          has_wp_url: !!workflowResult[0]?.wp_url,
-          has_wp_user: !!workflowResult[0]?.wp_user,
-          has_wp_password: !!workflowResult[0]?.wp_app_password
-        });
-        if (workflowResult.length > 0 && workflowResult[0].wp_url) {
-          wpUrl = workflowResult[0].wp_url;
-          wpUser = workflowResult[0].wp_user;
-          wpPassword = workflowResult[0].wp_app_password;
-          console.log(`[Batch Generate] ✓ Using workflow ${workflowId} website credentials: ${wpUrl}`);
-        } else {
-          console.log(`[Batch Generate] ⚠️ Workflow ${workflowId} has no linked website or website has no WP credentials`);
-        }
-      } catch (dbError) {
-        console.error('[Batch Generate] Failed to lookup WP credentials:', dbError.message);
-      }
-    } else if (!wpUrl) {
-      console.log(`[Batch Generate] Skipping workflow WP lookup: workflowId=${workflowId}, dbEnabled=${isDatabaseEnabled()}`);
-    }
-
-    // Check if we should upload to WordPress
+    // STRICT: Staging credentials are REQUIRED - no fallback to workflow website
+    // Images must upload to staging site (bypasses ModSecurity), not customer sites
     const shouldUploadToWp = wpUrl && wpUser && wpPassword;
-    if (shouldUploadToWp) {
-      console.log('[Batch Generate] ✓ WordPress credentials available - will upload images to WP Media Library');
-    } else {
-      console.log('[Batch Generate] ⚠️ No WP credentials - returning base64 (not recommended for production)');
+    if (!shouldUploadToWp) {
+      console.log('[Batch Generate] ❌ STAGING CREDENTIALS REQUIRED - Cannot proceed without them');
+      return res.status(400).json({
+        error: 'Staging WordPress credentials not configured. Go to WordPress Settings > Staging WordPress to configure.',
+        hint: 'Images must upload to the staging site to bypass ModSecurity restrictions on customer sites.'
+      });
     }
+    console.log('[Batch Generate] ✓ Staging credentials configured - will upload images to staging WP Media Library');
 
     // Select correct API key based on model
     const apiKey = model === 'gpt-image-1.5'
@@ -1019,18 +991,61 @@ router.post('/settings/migrate-to-website/:workflowId', requireDb, async (req, r
 /**
  * GET /api/image-creation/settings/:workflowId
  * Get image creation settings for a workflow
+ *
+ * PRIORITY: Website settings > Workflow settings
+ * If workflow has a linked website AND that website has settings, use website settings.
+ * Otherwise fall back to workflow-specific settings.
+ * This allows multiple workflows under one website to share image settings.
  */
 router.get('/settings/:workflowId', requireDb, async (req, res) => {
   try {
     const { workflowId } = req.params;
     console.log('[Image Creation API] GET settings for workflow:', workflowId);
 
-    const results = await sql`
-      SELECT * FROM image_creation_settings
-      WHERE workflow_id = ${workflowId}
-    `;
+    // Step 1: Look up the workflow's associated website_id
+    let websiteId = null;
+    try {
+      const workflowResult = await sql`
+        SELECT website_id FROM workflows WHERE id = ${workflowId}
+      `;
+      if (workflowResult.length > 0 && workflowResult[0].website_id) {
+        websiteId = workflowResult[0].website_id;
+        console.log('[Image Creation API] Workflow linked to website:', websiteId);
+      }
+    } catch (err) {
+      console.log('[Image Creation API] Could not lookup website:', err.message);
+    }
 
-    console.log('[Image Creation API] Found records:', results.length);
+    // Step 2: Check for website-level settings FIRST (preferred)
+    let results = [];
+    let usingWebsiteSettings = false;
+
+    if (websiteId) {
+      const websiteResults = await sql`
+        SELECT * FROM image_creation_settings
+        WHERE website_id = ${websiteId}
+      `;
+      if (websiteResults.length > 0) {
+        results = websiteResults;
+        usingWebsiteSettings = true;
+        console.log('[Image Creation API] ✓ Using WEBSITE-level settings (shared across workflows)');
+      } else {
+        console.log('[Image Creation API] No website-level settings, checking workflow...');
+      }
+    }
+
+    // Step 3: Fall back to workflow-specific settings
+    if (results.length === 0) {
+      results = await sql`
+        SELECT * FROM image_creation_settings
+        WHERE workflow_id = ${workflowId}
+      `;
+      if (results.length > 0) {
+        console.log('[Image Creation API] Using workflow-specific settings');
+      }
+    }
+
+    console.log('[Image Creation API] Found records:', results.length, usingWebsiteSettings ? '(website-level)' : '(workflow-level)');
 
     if (results.length === 0) {
       console.log('[Image Creation API] No settings found, returning defaults');
@@ -1166,12 +1181,30 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
 /**
  * PUT /api/image-creation/settings/:workflowId
  * Save/update image creation settings for a workflow
+ *
+ * PRIORITY: Website settings > Workflow settings
+ * If workflow has a linked website, save to website-level (shared across workflows).
+ * Otherwise save to workflow-level.
  */
 router.put('/settings/:workflowId', requireDb, async (req, res) => {
   try {
     const { workflowId } = req.params;
     console.log('[Image Creation API] PUT settings for workflow:', workflowId);
     console.log('[Image Creation API] Received avatars:', req.body.audience_avatars?.length || 0);
+
+    // Step 1: Look up the workflow's associated website_id
+    let websiteId = null;
+    try {
+      const workflowResult = await sql`
+        SELECT website_id FROM workflows WHERE id = ${workflowId}
+      `;
+      if (workflowResult.length > 0 && workflowResult[0].website_id) {
+        websiteId = workflowResult[0].website_id;
+        console.log('[Image Creation API] Workflow linked to website:', websiteId, '- will save to website-level');
+      }
+    } catch (err) {
+      console.log('[Image Creation API] Could not lookup website:', err.message);
+    }
     const {
       enabled,
       prompt_assistant_model,
@@ -1216,48 +1249,134 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       prompt_problem_areas
     } = req.body;
 
-    // Check if settings exist
-    const existing = await sql`
-      SELECT id FROM image_creation_settings WHERE workflow_id = ${workflowId}
-    `;
+    // Check if settings exist - prefer website-level, fall back to workflow-level
+    let existing = [];
+    let saveToWebsite = false;
 
-    console.log('[Image Creation API] Existing record:', existing.length > 0 ? existing[0].id : 'none');
+    if (websiteId) {
+      // Check for website-level settings first
+      existing = await sql`
+        SELECT id FROM image_creation_settings WHERE website_id = ${websiteId}
+      `;
+      if (existing.length > 0) {
+        saveToWebsite = true;
+        console.log('[Image Creation API] Found existing WEBSITE-level settings:', existing[0].id);
+      } else {
+        // No website settings exist - will create new website-level settings
+        saveToWebsite = true;
+        console.log('[Image Creation API] No website settings - will create website-level settings');
+      }
+    }
+
+    // If no website or no website preference, check workflow-level
+    if (!saveToWebsite) {
+      existing = await sql`
+        SELECT id FROM image_creation_settings WHERE workflow_id = ${workflowId}
+      `;
+      console.log('[Image Creation API] Checking workflow-level settings');
+    }
+
+    console.log('[Image Creation API] Existing record:', existing.length > 0 ? existing[0].id : 'none', saveToWebsite ? '(website-level)' : '(workflow-level)');
 
     // Helper function to save core settings
     // Uses fallback logic if newer columns (live_prompt_mode, etc.) don't exist in the database
+    // IMPORTANT: Uses website_id when saveToWebsite is true, workflow_id otherwise
     const saveCoreSettings = async (isInsert) => {
+      // Determine which ID column/value to use
+      const idColumn = saveToWebsite ? 'website_id' : 'workflow_id';
+      const idValue = saveToWebsite ? websiteId : workflowId;
+      console.log(`[Image Creation API] Saving to ${idColumn}:`, idValue);
+
       if (isInsert) {
         // Try INSERT with all columns first, fallback to basic columns if newer ones don't exist
         try {
-          const result = await sql`
-            INSERT INTO image_creation_settings (
-              workflow_id,
-              enabled,
-              prompt_assistant_model,
-              image_generation_model,
-              image_quality,
-              reference_images,
-              logo_images,
-              audience_avatars,
-              image_bank,
-              image_categories,
-              auto_tag_enabled,
-              chat_history,
-              consultant_chat_history,
-              consultant_model,
-              worker_chat_history,
-              worker_model,
-              integration_mode,
-              fallback_to_live,
-              image_order,
-              variation_order_mode,
-              manual_variation_order,
-              live_prompt_mode,
-              smart_prompt_guidance,
-              guided_guardrails,
-              prompt_problem_areas
-            ) VALUES (
-              ${workflowId},
+          // Dynamic INSERT based on website vs workflow
+          const result = saveToWebsite
+            ? await sql`
+              INSERT INTO image_creation_settings (
+                website_id,
+                enabled,
+                prompt_assistant_model,
+                image_generation_model,
+                image_quality,
+                reference_images,
+                logo_images,
+                audience_avatars,
+                image_bank,
+                image_categories,
+                auto_tag_enabled,
+                chat_history,
+                consultant_chat_history,
+                consultant_model,
+                worker_chat_history,
+                worker_model,
+                integration_mode,
+                fallback_to_live,
+                image_order,
+                variation_order_mode,
+                manual_variation_order,
+                live_prompt_mode,
+                smart_prompt_guidance,
+                guided_guardrails,
+                prompt_problem_areas
+              ) VALUES (
+                ${websiteId},
+                ${enabled ?? false},
+                ${prompt_assistant_model ?? 'gpt-4o'},
+                ${image_generation_model ?? 'flux-1.1-pro'},
+                ${image_quality ?? 'low'},
+                ${JSON.stringify(reference_images ?? [])},
+                ${JSON.stringify(logo_images ?? [])},
+                ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
+                ${JSON.stringify(image_bank ?? [])},
+                ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
+                ${auto_tag_enabled ?? true},
+                ${JSON.stringify(chat_history ?? [])},
+                ${JSON.stringify(consultant_chat_history ?? [])},
+                ${consultant_model ?? 'gpt-4o'},
+                ${JSON.stringify(worker_chat_history ?? [])},
+                ${worker_model ?? 'gpt-4o-mini'},
+                ${integration_mode ?? 'bank'},
+                ${fallback_to_live ?? true},
+                ${JSON.stringify(image_order ?? [])},
+                ${variation_order_mode ?? 'sequential'},
+                ${JSON.stringify(manual_variation_order ?? [])},
+                ${live_prompt_mode ?? 'smart_prompt'},
+                ${smart_prompt_guidance ?? ''},
+                ${JSON.stringify(guided_guardrails ?? {})},
+                ${JSON.stringify(prompt_problem_areas ?? [])}
+              )
+              RETURNING id
+            `
+            : await sql`
+              INSERT INTO image_creation_settings (
+                workflow_id,
+                enabled,
+                prompt_assistant_model,
+                image_generation_model,
+                image_quality,
+                reference_images,
+                logo_images,
+                audience_avatars,
+                image_bank,
+                image_categories,
+                auto_tag_enabled,
+                chat_history,
+                consultant_chat_history,
+                consultant_model,
+                worker_chat_history,
+                worker_model,
+                integration_mode,
+                fallback_to_live,
+                image_order,
+                variation_order_mode,
+                manual_variation_order,
+                live_prompt_mode,
+                smart_prompt_guidance,
+                guided_guardrails,
+                prompt_problem_areas
+              ) VALUES (
+                ${workflowId},
               ${enabled ?? false},
               ${prompt_assistant_model ?? 'gpt-4o'},
               ${image_generation_model ?? 'flux-1.1-pro'},
@@ -1290,31 +1409,81 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           // If it failed due to missing column, try without live_prompt_mode columns
           if (insertErr.message?.includes('live_prompt_mode') || insertErr.message?.includes('smart_prompt_guidance')) {
             console.log('[Image Creation API] Falling back to INSERT without live_prompt columns');
-            const result = await sql`
-              INSERT INTO image_creation_settings (
-                workflow_id,
-                enabled,
-                prompt_assistant_model,
-                image_generation_model,
-                image_quality,
-                reference_images,
-                logo_images,
-                audience_avatars,
-                image_bank,
-                image_categories,
-                auto_tag_enabled,
-                chat_history,
-                consultant_chat_history,
-                consultant_model,
-                worker_chat_history,
-                worker_model,
-                integration_mode,
-                fallback_to_live,
-                image_order,
-                variation_order_mode,
-                manual_variation_order
-              ) VALUES (
-                ${workflowId},
+            // Use website_id or workflow_id based on saveToWebsite flag
+            const result = saveToWebsite
+              ? await sql`
+                INSERT INTO image_creation_settings (
+                  website_id,
+                  enabled,
+                  prompt_assistant_model,
+                  image_generation_model,
+                  image_quality,
+                  reference_images,
+                  logo_images,
+                  audience_avatars,
+                  image_bank,
+                  image_categories,
+                  auto_tag_enabled,
+                  chat_history,
+                  consultant_chat_history,
+                  consultant_model,
+                  worker_chat_history,
+                  worker_model,
+                  integration_mode,
+                  fallback_to_live,
+                  image_order,
+                  variation_order_mode,
+                  manual_variation_order
+                ) VALUES (
+                  ${websiteId},
+                  ${enabled ?? false},
+                  ${prompt_assistant_model ?? 'gpt-4o'},
+                  ${image_generation_model ?? 'flux-1.1-pro'},
+                  ${image_quality ?? 'low'},
+                  ${JSON.stringify(reference_images ?? [])},
+                  ${JSON.stringify(logo_images ?? [])},
+                  ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
+                  ${JSON.stringify(image_bank ?? [])},
+                  ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
+                  ${auto_tag_enabled ?? true},
+                  ${JSON.stringify(chat_history ?? [])},
+                  ${JSON.stringify(consultant_chat_history ?? [])},
+                  ${consultant_model ?? 'gpt-4o'},
+                  ${JSON.stringify(worker_chat_history ?? [])},
+                  ${worker_model ?? 'gpt-4o-mini'},
+                  ${integration_mode ?? 'bank'},
+                  ${fallback_to_live ?? true},
+                  ${JSON.stringify(image_order ?? [])},
+                  ${variation_order_mode ?? 'sequential'},
+                  ${JSON.stringify(manual_variation_order ?? [])}
+                )
+                RETURNING id
+              `
+              : await sql`
+                INSERT INTO image_creation_settings (
+                  workflow_id,
+                  enabled,
+                  prompt_assistant_model,
+                  image_generation_model,
+                  image_quality,
+                  reference_images,
+                  logo_images,
+                  audience_avatars,
+                  image_bank,
+                  image_categories,
+                  auto_tag_enabled,
+                  chat_history,
+                  consultant_chat_history,
+                  consultant_model,
+                  worker_chat_history,
+                  worker_model,
+                  integration_mode,
+                  fallback_to_live,
+                  image_order,
+                  variation_order_mode,
+                  manual_variation_order
+                ) VALUES (
+                  ${workflowId},
                 ${enabled ?? false},
                 ${prompt_assistant_model ?? 'gpt-4o'},
                 ${image_generation_model ?? 'flux-1.1-pro'},
@@ -1373,7 +1542,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               guided_guardrails = COALESCE(${guided_guardrails ? JSON.stringify(guided_guardrails) : null}::jsonb, guided_guardrails),
               prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
               updated_at = CURRENT_TIMESTAMP
-            WHERE workflow_id = ${workflowId}
+            WHERE ${saveToWebsite ? sql`website_id = ${websiteId}` : sql`workflow_id = ${workflowId}`}
           `;
         } catch (updateErr) {
           // If it failed due to missing column, try without live_prompt_mode columns
@@ -1403,7 +1572,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
                 manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
                 updated_at = CURRENT_TIMESTAMP
-              WHERE workflow_id = ${workflowId}
+              WHERE ${saveToWebsite ? sql`website_id = ${websiteId}` : sql`workflow_id = ${workflowId}`}
             `;
           } else {
             throw updateErr;
@@ -1428,7 +1597,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
             matching_rule_2 = COALESCE(${matching_rule_2}, matching_rule_2),
             matching_rule_3 = COALESCE(${matching_rule_3}, matching_rule_3),
             matching_rule_4 = COALESCE(${matching_rule_4}, matching_rule_4)
-          WHERE workflow_id = ${workflowId}
+          WHERE ${saveToWebsite ? sql`website_id = ${websiteId}` : sql`workflow_id = ${workflowId}`}
         `;
         return true;
       } catch (err) {

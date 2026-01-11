@@ -311,8 +311,9 @@ router.post('/publish', async (req, res) => {
       // Hierarchy support (optional)
       parentPageId,    // WordPress page ID of parent page
       menuOrder,       // Sort order within parent (0, 1, 2...)
-      // Image options
-      useImageBank = true, // NEW: Pull from Image Bank by tag
+      // Image options - defaults to OFF to prevent accidental image bank lookups
+      // Manual pushes from ArticleListView don't pass workflowId, so useImageBank must default to false
+      useImageBank = false, // Must be explicitly enabled with workflowId
       generateImages = false, // Fallback to live generation
       imageDraftMode = false, // If true: match images, save to article DB, but DON'T embed in WP page
       skipWpPageCreation = false, // If true: process images but don't create WordPress page
@@ -385,6 +386,18 @@ router.post('/publish', async (req, res) => {
 
     // Body images start on OPPOSITE side of hero
     const bodyStartSide = heroImageSide === 'right' ? 'left' : 'right';
+
+    // VALIDATION: If images are requested but workflowId is missing, fail early
+    // This prevents the "Unknown error" when useImageBank=true but no workflowId
+    if (!articleOnly && useImageBank && !workflowId) {
+      console.log('[Elementor Publish] ❌ ERROR: useImageBank=true but no workflowId provided');
+      sessionLogger.logError('PUBLISH', 'Image Bank requested but workflowId missing');
+      sessionLogger.endSession();
+      return res.status(400).json({
+        error: 'workflowId required when useImageBank is enabled. Workflow may not be fully loaded.',
+        hint: 'If this is a manual push, ensure the workflow is loaded first or use articleOnly mode.'
+      });
+    }
 
     // Step 2: Get image creation settings and determine mode
     let effectiveUseBank = useImageBank;
