@@ -320,14 +320,38 @@ router.post('/batch-generate', async (req, res) => {
 
     console.log(`[Batch Generate] Starting batch for workflow ${workflowId || 'NOT PROVIDED'}`);
 
-    // Try to get WordPress credentials - first from workflow's website, then explicit params
+    // Try to get WordPress credentials - PRIORITY ORDER:
+    // 1. Global staging credentials (from WordPress Settings > Staging WordPress)
+    // 2. Explicit params passed in request
+    // 3. Workflow's associated website (legacy fallback)
     let wpUrl = explicitWpUrl;
     let wpUser = explicitWpUser;
     let wpPassword = explicitWpPassword;
 
-    // Look up WP credentials from workflow's associated website
-    if (workflowId && isDatabaseEnabled()) {
-      console.log(`[Batch Generate] Looking up WP credentials for workflow ${workflowId}...`);
+    // First, try to get GLOBAL staging credentials from global_settings
+    if (isDatabaseEnabled()) {
+      console.log(`[Batch Generate] Checking for global staging credentials...`);
+      try {
+        const stagingResult = await sql`
+          SELECT staging_wp_url, staging_wp_user, staging_wp_password
+          FROM global_settings WHERE id = 1
+        `;
+        if (stagingResult.length > 0 && stagingResult[0].staging_wp_url) {
+          wpUrl = stagingResult[0].staging_wp_url;
+          wpUser = stagingResult[0].staging_wp_user;
+          wpPassword = stagingResult[0].staging_wp_password;
+          console.log(`[Batch Generate] ✓ Using GLOBAL staging credentials: ${wpUrl}`);
+        } else {
+          console.log(`[Batch Generate] No global staging credentials configured`);
+        }
+      } catch (dbError) {
+        console.error('[Batch Generate] Failed to lookup staging credentials:', dbError.message);
+      }
+    }
+
+    // Fallback: Look up WP credentials from workflow's associated website (legacy behavior)
+    if (!wpUrl && workflowId && isDatabaseEnabled()) {
+      console.log(`[Batch Generate] Falling back to workflow ${workflowId} website credentials...`);
       try {
         const workflowResult = await sql`
           SELECT w.website_id, ws.wp_url, ws.wp_user, ws.wp_app_password
@@ -346,15 +370,15 @@ router.post('/batch-generate', async (req, res) => {
           wpUrl = workflowResult[0].wp_url;
           wpUser = workflowResult[0].wp_user;
           wpPassword = workflowResult[0].wp_app_password;
-          console.log(`[Batch Generate] ✓ Found WP credentials from workflow ${workflowId} website: ${wpUrl}`);
+          console.log(`[Batch Generate] ✓ Using workflow ${workflowId} website credentials: ${wpUrl}`);
         } else {
           console.log(`[Batch Generate] ⚠️ Workflow ${workflowId} has no linked website or website has no WP credentials`);
         }
       } catch (dbError) {
         console.error('[Batch Generate] Failed to lookup WP credentials:', dbError.message);
       }
-    } else {
-      console.log(`[Batch Generate] Skipping WP lookup: workflowId=${workflowId}, dbEnabled=${isDatabaseEnabled()}`);
+    } else if (!wpUrl) {
+      console.log(`[Batch Generate] Skipping workflow WP lookup: workflowId=${workflowId}, dbEnabled=${isDatabaseEnabled()}`);
     }
 
     // Check if we should upload to WordPress

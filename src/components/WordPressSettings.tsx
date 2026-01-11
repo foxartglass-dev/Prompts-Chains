@@ -69,10 +69,9 @@ const WordPressSettings: React.FC<WordPressSettingsProps> = ({ isOpen, onClose }
 
   const loadSettings = async () => {
     try {
-      // Load from localStorage for now (can be moved to database later)
+      // Load SEO plugins and prompt from localStorage
       const savedPlugins = localStorage.getItem('promptflow_seo_plugins');
       const savedPrompt = localStorage.getItem('promptflow_default_elementor_prompt');
-      const savedStagingCreds = localStorage.getItem('promptflow_staging_credentials');
 
       if (savedPlugins) {
         setSeoPlugins(JSON.parse(savedPlugins));
@@ -84,8 +83,21 @@ const WordPressSettings: React.FC<WordPressSettingsProps> = ({ isOpen, onClose }
         setDefaultElementorPrompt(savedPrompt);
       }
 
-      if (savedStagingCreds) {
-        setStagingCredentials(JSON.parse(savedStagingCreds));
+      // Load staging credentials from database (global_settings table)
+      try {
+        const res = await fetch('/api/global-settings');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.settings) {
+            setStagingCredentials({
+              wpUrl: data.settings.staging_wp_url || '',
+              wpUser: data.settings.staging_wp_user || '',
+              wpPassword: data.settings.staging_wp_password || ''
+            });
+          }
+        }
+      } catch (apiErr) {
+        console.error('Failed to load staging credentials from API:', apiErr);
       }
     } catch (err) {
       console.error('Failed to load WordPress settings:', err);
@@ -96,9 +108,26 @@ const WordPressSettings: React.FC<WordPressSettingsProps> = ({ isOpen, onClose }
   const saveSettings = async () => {
     setSaving(true);
     try {
+      // Save SEO plugins and prompt to localStorage
       localStorage.setItem('promptflow_seo_plugins', JSON.stringify(seoPlugins));
       localStorage.setItem('promptflow_default_elementor_prompt', defaultElementorPrompt);
-      localStorage.setItem('promptflow_staging_credentials', JSON.stringify(stagingCredentials));
+
+      // Save staging credentials to database (global_settings table)
+      const res = await fetch('/api/global-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staging_wp_url: stagingCredentials.wpUrl,
+          staging_wp_user: stagingCredentials.wpUser,
+          staging_wp_password: stagingCredentials.wpPassword
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to save staging credentials');
+      }
+
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
