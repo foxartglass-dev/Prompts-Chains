@@ -555,13 +555,12 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
     const now = new Date();
     return now.toLocaleString('en-US', {
       timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
       minute: '2-digit',
-      hour12: false
-    }).replace(',', '');
+      hour12: true
+    });
   };
 
   // Format a datetime for display (used in test status)
