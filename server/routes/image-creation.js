@@ -903,9 +903,13 @@ When creating prompts, be specific and technical. Include details about lighting
     if (useWebTools) {
       apiOptions.tools = openaiWebTools;
       apiOptions.tool_choice = 'auto';
+      console.log(`[Image Chat] TOOLS ADDED: ${openaiWebTools.length} tools, tool_choice=auto`);
+    } else {
+      console.log(`[Image Chat] NO TOOLS - useWebTools is false`);
     }
 
     // Make initial API call
+    console.log(`[Image Chat] Making API call with ${apiOptions.tools ? 'tools' : 'NO tools'}`);
     let response = await openai.chat.completions.create(apiOptions);
     let assistantMessage = response.choices[0].message;
     let totalUsage = response.usage;
