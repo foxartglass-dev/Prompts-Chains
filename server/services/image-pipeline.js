@@ -71,24 +71,33 @@ function extractLocalContent(fullContent, position, wordRange = 75) {
  * @param {number} positionIndex - Which image position (0=hero, 1=first inline, etc)
  * @returns {object} { replacements, matchedPrimaries: [] }
  */
-function smartMatchForPosition(localContent, avatar, usedPrimaries, matchPlurals = true, positionIndex = 0) {
+function smartMatchForPosition(localContent, avatar, usedPrimaries, matchPlurals = true, positionIndex = 0, usedOptionTexts = null) {
   if (!avatar?.placeholderCategories?.length) {
     console.log(`[Smart Match #${positionIndex}] No placeholder categories found in avatar`);
-    return { replacements: {}, matchedPrimaries: [] };
+    return { replacements: {}, matchedPrimaries: [], usedTexts: [] };
   }
 
   const contentLower = localContent.toLowerCase();
   const replacements = {};
   const newlyMatchedPrimaries = [];
+  const newlyUsedTexts = []; // Track option texts used at this position
 
   // Process each placeholder category
   for (const category of avatar.placeholderCategories) {
-    // Skip randomized categories - pick randomly
+    // Skip randomized categories - pick randomly (but avoid recently used texts)
     if (category.isRandomized) {
-      const randomOption = category.options?.[Math.floor(Math.random() * (category.options?.length || 1))];
+      const availableOptions = category.options?.filter(opt =>
+        !usedOptionTexts?.has(`${category.placeholder}:${opt.text}`)
+      ) || [];
+
+      // If all options used, reset and use all options
+      const optionsPool = availableOptions.length > 0 ? availableOptions : (category.options || []);
+      const randomOption = optionsPool[Math.floor(Math.random() * optionsPool.length)];
+
       if (randomOption) {
         replacements[category.placeholder] = randomOption.text;
-        console.log(`[Smart Match #${positionIndex}] ${category.name}: Random → "${randomOption.text}"`);
+        newlyUsedTexts.push(`${category.placeholder}:${randomOption.text}`);
+        console.log(`[Smart Match #${positionIndex}] ${category.name}: Random → "${randomOption.text}" (${availableOptions.length} unused options)`);
       }
       continue;
     }
@@ -108,7 +117,10 @@ function smartMatchForPosition(localContent, avatar, usedPrimaries, matchPlurals
         if (!kwLower) continue;
 
         // Check if already used by previous image (Rule 3: no duplicate primaries across page)
-        if (usedPrimaries.has(kwLower)) continue;
+        if (usedPrimaries.has(kwLower)) {
+          console.log(`[Smart Match #${positionIndex}] ${category.name}: Skipping "${kwLower}" - already used`);
+          continue;
+        }
 
         // Check keyword and its plural forms
         const forms = getPluralForms(kwLower, matchPlurals);
@@ -153,20 +165,42 @@ function smartMatchForPosition(localContent, avatar, usedPrimaries, matchPlurals
       }
     }
 
-    // Use best match or fall back to first option
+    // Use best match or fall back to UNUSED option (fixes duplicate "oven" bug)
     if (bestMatch) {
       replacements[category.placeholder] = bestMatch.option.text;
       // Track primaries matched at this position
       newlyMatchedPrimaries.push(...bestMatch.matchedPrimary);
+      newlyUsedTexts.push(`${category.placeholder}:${bestMatch.option.text}`);
       console.log(`[Smart Match #${positionIndex}] ${category.name}: "${bestMatch.option.text}" (score: ${bestMatch.score}, primary: ${bestMatch.matchedPrimary.join(', ')}, secondary: ${bestMatch.matchedSecondary.join(', ')})`);
     } else if (category.options?.length > 0) {
-      // Fallback to first option
-      replacements[category.placeholder] = category.options[0].text;
-      console.log(`[Smart Match #${positionIndex}] ${category.name}: Fallback → "${category.options[0].text}"`);
+      // FALLBACK: Pick an option that hasn't been used yet (Rule 3 for fallback)
+      const unusedOptions = category.options.filter(opt =>
+        !usedOptionTexts?.has(`${category.placeholder}:${opt.text}`)
+      );
+
+      let fallbackOption;
+      if (unusedOptions.length > 0) {
+        // Pick random from unused options to add variety
+        fallbackOption = unusedOptions[Math.floor(Math.random() * unusedOptions.length)];
+        console.log(`[Smart Match #${positionIndex}] ${category.name}: Fallback (unused) → "${fallbackOption.text}" (${unusedOptions.length} options remaining)`);
+      } else {
+        // All options used - rotate through (pick based on position)
+        fallbackOption = category.options[positionIndex % category.options.length];
+        console.log(`[Smart Match #${positionIndex}] ${category.name}: Fallback (rotation) → "${fallbackOption.text}" (all ${category.options.length} options exhausted)`);
+      }
+
+      replacements[category.placeholder] = fallbackOption.text;
+      newlyUsedTexts.push(`${category.placeholder}:${fallbackOption.text}`);
+
+      // Also add the fallback's primary keywords to usedPrimaries to prevent matching later
+      (fallbackOption.primaryKeywords || []).forEach(kw => {
+        const kwLower = kw.toLowerCase().trim();
+        if (kwLower) newlyMatchedPrimaries.push(kwLower);
+      });
     }
   }
 
-  return { replacements, matchedPrimaries: newlyMatchedPrimaries };
+  return { replacements, matchedPrimaries: newlyMatchedPrimaries, usedTexts: newlyUsedTexts };
 }
 
 /**
@@ -294,6 +328,7 @@ export async function processArticleWithImages(content, options = {}) {
 
       // Shared state across all image positions
       const usedPrimaries = new Set(); // Rule 3: No duplicate primaries across page
+      const usedOptionTexts = new Set(); // Track which option texts have been used (for fallback deduplication)
       const allReplacements = []; // Track replacements for each position
       let imageCount = 0;
       let cumulativeWordPosition = 0; // Track position in article
@@ -308,16 +343,19 @@ export async function processArticleWithImages(content, options = {}) {
 
         console.log(`\n[Hero Image] Position ${heroWordPosition} words, local content: ${heroLocalContent.substring(0, 80)}...`);
 
-        const { replacements, matchedPrimaries } = smartMatchForPosition(
+        const { replacements, matchedPrimaries, usedTexts } = smartMatchForPosition(
           heroLocalContent,
           targetAvatar,
           usedPrimaries,
           matchPlurals,
-          0 // Position index 0 = hero
+          0, // Position index 0 = hero
+          usedOptionTexts
         );
 
         // Mark primaries as used for next images
         matchedPrimaries.forEach(kw => usedPrimaries.add(kw));
+        // Mark option texts as used (prevents fallback from picking same option)
+        usedTexts?.forEach(txt => usedOptionTexts.add(txt));
 
         const heroPrompt = buildPromptWithReplacements(targetAvatar.mainPrompt, replacements);
         allReplacements.push({ position: 'hero', replacements, prompt: heroPrompt });
@@ -362,16 +400,19 @@ export async function processArticleWithImages(content, options = {}) {
           console.log(`\n[Image #${imageCount}] Section "${chunk.heading || 'Untitled'}" at word ${chunkMiddle}`);
           console.log(`[Image #${imageCount}] Local: ${localContent.substring(0, 80)}...`);
 
-          const { replacements, matchedPrimaries } = smartMatchForPosition(
+          const { replacements, matchedPrimaries, usedTexts } = smartMatchForPosition(
             localContent,
             targetAvatar,
             usedPrimaries,
             matchPlurals,
-            imageCount // Position index
+            imageCount, // Position index
+            usedOptionTexts
           );
 
           // Mark primaries as used for next images
           matchedPrimaries.forEach(kw => usedPrimaries.add(kw));
+          // Mark option texts as used (prevents fallback from picking same option)
+          usedTexts?.forEach(txt => usedOptionTexts.add(txt));
 
           const imagePrompt = buildPromptWithReplacements(targetAvatar.mainPrompt, replacements);
           allReplacements.push({ position: `inline-${i}`, heading: chunk.heading, replacements, prompt: imagePrompt });
@@ -396,8 +437,15 @@ export async function processArticleWithImages(content, options = {}) {
         cumulativeWordPosition += chunk.wordCount || 0;
       }
 
-      // Summary log
-      console.log(`[Smart Match] Total: ${imageCount} images | Primaries used: ${Array.from(usedPrimaries).slice(0, 5).join(', ')}`);
+      // Summary log - detailed for debugging duplicate issues
+      console.log(`\n[Smart Match Summary]`);
+      console.log(`  Total images: ${imageCount}`);
+      console.log(`  Primaries used: ${Array.from(usedPrimaries).join(', ') || 'none'}`);
+      console.log(`  Options used: ${Array.from(usedOptionTexts).map(t => t.split(':')[1]).join(', ') || 'none'}`);
+      allReplacements.forEach((r, idx) => {
+        const values = Object.values(r.replacements).join(' + ');
+        console.log(`  Image ${idx}: ${r.position} → ${values}`);
+      });
 
       const promptCount = countPromptsInChunks(chunks);
       progress('prompts_generated', {

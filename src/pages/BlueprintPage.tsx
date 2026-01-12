@@ -1377,6 +1377,109 @@ const KnownIssuesDiagram: React.FC = () => (
     </div>
 
     {/* How to Debug */}
+    {/* Image System Connection Status - Documents what's actually connected */}
+    <div className="bg-purple-900/20 rounded-xl p-6 border border-purple-500">
+      <h3 className="text-lg font-bold text-purple-400 mb-4 flex items-center gap-2">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+        Image System Connection Status (Jan 2026)
+      </h3>
+      <p className="text-gray-400 text-sm mb-4">What settings are actually connected to the image generation logic:</p>
+
+      <div className="space-y-4">
+        {/* Connected Items */}
+        <div className="bg-green-900/20 rounded-lg p-4">
+          <div className="font-semibold text-green-400 mb-3">✅ CONNECTED - These settings control the system</div>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-start gap-2">
+              <span className="text-green-400">✓</span>
+              <div className="text-gray-300">
+                <strong>Category Matching (Match Keywords vs Randomize)</strong> - Each category's toggle IS wired up.
+                <span className="text-gray-500"> → placeholderCategories[].isRandomized</span>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-green-400">✓</span>
+              <div className="text-gray-300">
+                <strong>Primary/Secondary Keywords</strong> - Keywords defined on each option ARE used for matching.
+                <span className="text-gray-500"> → option.primaryKeywords, option.secondaryKeywords</span>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-green-400">✓</span>
+              <div className="text-gray-300">
+                <strong>smart_matching_mode</strong> - Controls bank_first/bank_only/generate_first/generate_only.
+                <span className="text-gray-500"> → image_creation_settings.smart_matching_mode</span>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-green-400">✓</span>
+              <div className="text-gray-300">
+                <strong>Match Plurals</strong> - Auto-matches "counter" to "counters", etc.
+                <span className="text-gray-500"> → image_creation_settings.match_plurals</span>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-green-400">✓</span>
+              <div className="text-gray-300">
+                <strong>No Duplicate Protection</strong> - Fixed Jan 2026. Now tracks usedPrimaries AND usedOptionTexts.
+                <span className="text-gray-500"> → image-pipeline.js smartMatchForPosition()</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Display Only Items */}
+        <div className="bg-amber-900/20 rounded-lg p-4">
+          <div className="font-semibold text-amber-400 mb-3">⚠️ DISPLAY ONLY - These are documentation, NOT parsed</div>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-start gap-2">
+              <span className="text-amber-400">!</span>
+              <div className="text-gray-300">
+                <strong>Smart Matching Rules (4 text boxes)</strong> - matching_rule_1/2/3/4 are editable text stored
+                in DB but NEVER parsed. The actual rules are hardcoded in image-pipeline.js.
+                <span className="text-red-400"> → UI text only, logic is hardcoded</span>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-amber-400">!</span>
+              <div className="text-gray-300">
+                <strong>Placement Rule text</strong> - The placement_rule text field is display-only.
+                Actual placement logic is hardcoded (50 words min, alternating sides).
+                <span className="text-red-400"> → UI text only</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Image Bank vs Generate Live */}
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="font-semibold text-brand-cyan mb-3">Image Bank vs Generate Live - Different Code Paths</div>
+          <div className="grid md:grid-cols-2 gap-4 text-sm">
+            <div className="bg-slate-900 p-3 rounded">
+              <div className="text-brand-gold font-semibold mb-2">Pull from Bank</div>
+              <div className="text-gray-400 text-xs space-y-1">
+                <div>• Code: server/routes/elementor.js</div>
+                <div>• Scores images by keyword match</div>
+                <div>• Filters duplicates via usedPrimaries Set</div>
+                <div>• Prefers vertical for hero</div>
+              </div>
+            </div>
+            <div className="bg-slate-900 p-3 rounded">
+              <div className="text-brand-cyan font-semibold mb-2">Generate Live</div>
+              <div className="text-gray-400 text-xs space-y-1">
+                <div>• Code: server/services/image-pipeline.js</div>
+                <div>• smartMatchForPosition() per image</div>
+                <div>• Tracks usedPrimaries + usedOptionTexts</div>
+                <div>• Falls back to unused options (fixed Jan 2026)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
       <h3 className="text-lg font-bold text-brand-cyan mb-4">How to Debug Issues</h3>
 
