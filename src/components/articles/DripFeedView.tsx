@@ -181,6 +181,12 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
   const [schedulingTest, setSchedulingTest] = useState(false);
   const [selectedTestArticles, setSelectedTestArticles] = useState<number[]>([]);
 
+  // Schedule unscheduled article modal state
+  const [schedulingArticle, setSchedulingArticle] = useState<ScheduledArticle | null>(null);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('');
+  const [savingSchedule, setSavingSchedule] = useState(false);
+
   // Toast message state (auto-dismissing)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -625,6 +631,50 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
       setError('Failed to process');
     } finally {
       setProcessingTest(false);
+    }
+  };
+
+  // Open schedule modal for unscheduled article
+  const openScheduleModal = (article: ScheduledArticle) => {
+    // Default to tomorrow at 9 AM
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const defaultDate = tomorrow.toISOString().split('T')[0];
+    const defaultTime = '09:00';
+
+    setScheduleDate(defaultDate);
+    setScheduleTime(defaultTime);
+    setSchedulingArticle(article);
+  };
+
+  // Save schedule for unscheduled article
+  const saveArticleSchedule = async () => {
+    if (!websiteId || !schedulingArticle || !scheduleDate || !scheduleTime) return;
+
+    setSavingSchedule(true);
+    try {
+      const res = await fetch(`/api/drip-feed/schedule/${websiteId}/${schedulingArticle.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheduled_date: scheduleDate,
+          scheduled_time: scheduleTime,
+          status: 'pending'
+        })
+      });
+
+      if (res.ok) {
+        showToast(`Scheduled "${schedulingArticle.keyword}" for ${formatDate(scheduleDate)} at ${formatTime(scheduleTime)}`, 'success');
+        setSchedulingArticle(null);
+        fetchData();
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Failed to schedule article');
+      }
+    } catch (err) {
+      setError('Failed to schedule article');
+    } finally {
+      setSavingSchedule(false);
     }
   };
 
@@ -1726,17 +1776,42 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
                                 </button>
                               )}
 
-                              {/* Status badge */}
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                article.status === 'published' ? 'bg-green-600/30 text-green-400' :
-                                article.status === 'failed' ? 'bg-red-600/30 text-red-400' :
-                                article.status === 'publishing' ? 'bg-purple-600/30 text-purple-400 animate-pulse' :
-                                'bg-blue-600/30 text-blue-400'
-                              }`}>
-                                {article.status === 'publishing' ? '⏳ Publishing...' : article.status}
-                              </span>
+                              {/* Status badge - clickable for unscheduled */}
+                              {article.status === 'unscheduled' ? (
+                                <button
+                                  onClick={() => openScheduleModal(article)}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-600/30 text-orange-400 hover:bg-orange-600/50 border border-orange-500/50 cursor-pointer transition flex items-center gap-1"
+                                  title="Click to schedule this article"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  unscheduled
+                                </button>
+                              ) : (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                  article.status === 'published' ? 'bg-green-600/30 text-green-400' :
+                                  article.status === 'failed' ? 'bg-red-600/30 text-red-400' :
+                                  article.status === 'publishing' ? 'bg-purple-600/30 text-purple-400 animate-pulse' :
+                                  'bg-blue-600/30 text-blue-400'
+                                }`}>
+                                  {article.status === 'publishing' ? '⏳ Publishing...' : article.status}
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-1.5">
+                              {/* Schedule button for unscheduled articles */}
+                              {article.status === 'unscheduled' && (
+                                <button
+                                  onClick={() => openScheduleModal(article)}
+                                  className="px-2 py-0.5 bg-brand-cyan/30 hover:bg-brand-cyan/50 rounded text-brand-cyan text-xs flex items-center gap-1"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Schedule
+                                </button>
+                              )}
                               {article.wp_post_url && (
                                 <a
                                   href={article.wp_post_url}
@@ -1747,7 +1822,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
                                   View ↗
                                 </a>
                               )}
-                              {article.status === 'pending' && (
+                              {(article.status === 'pending' || article.status === 'unscheduled') && (
                                 <button
                                   onClick={() => removeFromSchedule(article.id)}
                                   className="px-2 py-0.5 bg-red-600/30 hover:bg-red-600/50 rounded text-red-400 text-xs"
@@ -1774,6 +1849,108 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
           </div>
         )}
       </div>
+
+      {/* Schedule Modal for Unscheduled Articles */}
+      {schedulingArticle && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg border border-slate-600 shadow-xl max-w-md w-full mx-4">
+            {/* Modal Header */}
+            <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Schedule Article
+              </h3>
+              <button
+                onClick={() => setSchedulingArticle(null)}
+                className="text-gray-400 hover:text-white transition"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 space-y-4">
+              {/* Article Title */}
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">Article</div>
+                <div className="text-white font-medium">{schedulingArticle.keyword}</div>
+              </div>
+
+              {/* Date and Time Inputs */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1.5">Date</label>
+                  <input
+                    type="date"
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1.5">Time</label>
+                  <input
+                    type="time"
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Preview */}
+              {scheduleDate && scheduleTime && (
+                <div className="bg-brand-cyan/10 border border-brand-cyan/30 rounded-lg p-3 text-center">
+                  <div className="text-xs text-brand-cyan mb-1">Will publish on</div>
+                  <div className="text-white font-medium">
+                    {formatDate(scheduleDate)} at {formatTime(scheduleTime)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    ({TIMEZONES.find(t => t.id === timezone)?.label || timezone})
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 py-3 border-t border-slate-700 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setSchedulingArticle(null)}
+                className="px-4 py-2 text-gray-400 hover:text-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveArticleSchedule}
+                disabled={savingSchedule || !scheduleDate || !scheduleTime}
+                className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded-lg transition disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingSchedule ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Scheduling...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Schedule
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

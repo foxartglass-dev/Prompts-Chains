@@ -347,6 +347,56 @@ router.delete('/schedule/:websiteId/:scheduleId', requireDb, async (req, res) =>
   }
 });
 
+// PATCH update schedule (for scheduling unscheduled articles)
+router.patch('/schedule/:websiteId/:scheduleId', requireDb, async (req, res) => {
+  try {
+    const { websiteId, scheduleId } = req.params;
+    const { scheduled_date, scheduled_time, status } = req.body;
+
+    // Validate required fields
+    if (!scheduled_date || !scheduled_time) {
+      return res.status(400).json({ error: 'scheduled_date and scheduled_time are required' });
+    }
+
+    const updated = await sql`
+      UPDATE drip_feed_schedules
+      SET
+        scheduled_date = ${scheduled_date},
+        scheduled_time = ${scheduled_time},
+        status = COALESCE(${status}, 'pending'),
+        is_manual_time = true,
+        updated_at = NOW()
+      WHERE id = ${scheduleId} AND website_id = ${websiteId}
+      RETURNING *
+    `;
+
+    if (updated.length === 0) {
+      return res.status(404).json({ error: 'Schedule not found' });
+    }
+
+    // Log the scheduling
+    await sql`
+      INSERT INTO drip_feed_log (website_id, article_id, schedule_id, action, details)
+      VALUES (
+        ${websiteId},
+        ${updated[0].article_id},
+        ${scheduleId},
+        'scheduled',
+        ${JSON.stringify({
+          scheduled_date,
+          scheduled_time,
+          was_unscheduled: true
+        })}
+      )
+    `;
+
+    res.json({ success: true, schedule: updated[0] });
+  } catch (error) {
+    console.error('Error updating schedule:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // PUT update a single schedule (manual time override)
 router.put('/schedule/:websiteId/:scheduleId', requireDb, async (req, res) => {
   try {
