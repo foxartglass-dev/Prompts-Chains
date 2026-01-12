@@ -121,7 +121,7 @@ router.put('/settings/:websiteId', requireDb, async (req, res) => {
         ${JSON.stringify(skip_dates ?? [])},
         ${JSON.stringify(notification_hours ?? [24, 12, 6])},
         ${first_day_monitor ?? true},
-        ${is_enabled ?? false},
+        ${is_enabled ?? true},
         ${timezone ?? 'America/Chicago'},
         NOW()
       )

@@ -114,7 +114,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
   const [skipWeekdays, setSkipWeekdays] = useState<number[]>([]);
   const [skipDates, setSkipDates] = useState<string[]>([]);
   const [firstDayMonitor, setFirstDayMonitor] = useState(true);
-  const [isEnabled, setIsEnabled] = useState(false);
+  const [isEnabled, setIsEnabled] = useState(true);
   const [timezone, setTimezone] = useState('America/Chicago');
 
   // UI state
@@ -633,11 +633,11 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
             <div
               onClick={() => setIsEnabled(!isEnabled)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition ${
-                isEnabled ? 'bg-green-600/20 border border-green-500/50' : 'bg-slate-700 border border-slate-600'
+                isEnabled ? 'bg-green-600/20 border border-green-500/50' : 'bg-orange-600/20 border border-orange-500/50'
               }`}
             >
-              <div className={`w-3 h-3 rounded-full ${isEnabled ? 'bg-green-400' : 'bg-gray-500'}`} />
-              <span className={`text-sm font-medium ${isEnabled ? 'text-green-400' : 'text-gray-400'}`}>
+              <div className={`w-3 h-3 rounded-full ${isEnabled ? 'bg-green-400' : 'bg-orange-400'}`} />
+              <span className={`text-sm font-medium ${isEnabled ? 'text-green-400' : 'text-orange-400'}`}>
                 {isEnabled ? 'Active' : 'Paused'}
               </span>
             </div>
