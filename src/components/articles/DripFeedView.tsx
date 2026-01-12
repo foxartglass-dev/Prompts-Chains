@@ -91,6 +91,18 @@ const SMS_CARRIERS = [
   { id: 'visible', name: 'Visible' }
 ];
 
+interface LogEntry {
+  id: number;
+  schedule_id: number | null;
+  website_id: number;
+  article_id: number | null;
+  action: string;
+  details: any;
+  error_message: string | null;
+  keyword: string | null;
+  created_at: string;
+}
+
 interface DripFeedViewProps {
   websiteId?: number;
   onOpenArticle?: (articleId: number) => void;
@@ -125,6 +137,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
   const [showNotifications, setShowNotifications] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [togglingEnabled, setTogglingEnabled] = useState(false);
 
   // Notification settings state
   const [notifSettings, setNotifSettings] = useState<NotificationSettings>({
@@ -148,6 +161,14 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
   const [newSmsName, setNewSmsName] = useState('');
   const [testingSms, setTestingSms] = useState(false);
 
+  // Processing Log state
+  const [showProcessingLog, setShowProcessingLog] = useState(false);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
+  // Real-time clock state (updates every second)
+  const [currentTime, setCurrentTime] = useState(new Date());
+
   // Test mode state
   const [showTestMode, setShowTestMode] = useState(false);
   const [testStatus, setTestStatus] = useState<{
@@ -159,6 +180,12 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
   const [processingTest, setProcessingTest] = useState(false);
   const [schedulingTest, setSchedulingTest] = useState(false);
   const [selectedTestArticles, setSelectedTestArticles] = useState<number[]>([]);
+
+  // Schedule unscheduled article modal state
+  const [schedulingArticle, setSchedulingArticle] = useState<ScheduledArticle | null>(null);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('');
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   // Toast message state (auto-dismissing)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -195,7 +222,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         setSkipWeekdays(data.settings.skip_weekdays || []);
         setSkipDates(data.settings.skip_dates || []);
         setFirstDayMonitor(data.settings.first_day_monitor ?? true);
-        setIsEnabled(data.settings.is_enabled ?? false);
+        setIsEnabled(data.settings.is_enabled ?? true);
         setTimezone(data.settings.timezone || 'America/Chicago');
       }
 
@@ -275,6 +302,87 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
       setSaving(false);
     }
   };
+
+  // Toggle enabled/disabled and auto-save to database immediately
+  const toggleEnabled = async () => {
+    if (!websiteId || togglingEnabled) return;
+
+    const newValue = !isEnabled;
+    setIsEnabled(newValue); // Optimistic update
+    setTogglingEnabled(true);
+
+    try {
+      const res = await fetch(`/api/drip-feed/settings/${websiteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          is_enabled: newValue
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setSettings(data.settings);
+        showToast(newValue ? 'Drip Feed activated - scheduler will process due articles' : 'Drip Feed paused', newValue ? 'success' : 'info');
+      } else {
+        // Revert on failure
+        setIsEnabled(!newValue);
+        const data = await res.json();
+        setError(data.error || 'Failed to toggle drip feed');
+      }
+    } catch (err) {
+      // Revert on failure
+      setIsEnabled(!newValue);
+      setError('Failed to toggle drip feed');
+    } finally {
+      setTogglingEnabled(false);
+    }
+  };
+
+  // Fetch processing logs
+  const fetchLogs = useCallback(async () => {
+    if (!websiteId) return;
+
+    setLoadingLogs(true);
+    try {
+      const res = await fetch(`/api/drip-feed/log/${websiteId}?limit=100`);
+      if (res.ok) {
+        const data = await res.json();
+        setLogEntries(data.logs || []);
+      }
+    } catch (err) {
+      console.error('Error fetching logs:', err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  }, [websiteId]);
+
+  // Copy logs to clipboard
+  const copyLogsToClipboard = () => {
+    const logText = logEntries.map(log => {
+      const time = new Date(log.created_at).toLocaleString();
+      const action = log.action.toUpperCase();
+      const keyword = log.keyword || 'Unknown';
+      const error = log.error_message ? ` - ERROR: ${log.error_message}` : '';
+      const details = log.details ? ` - ${JSON.stringify(log.details)}` : '';
+      return `[${time}] ${action}: ${keyword}${error}${details}`;
+    }).join('\n');
+
+    navigator.clipboard.writeText(logText).then(() => {
+      showToast('Logs copied to clipboard', 'success');
+    }).catch(() => {
+      setError('Failed to copy logs');
+    });
+  };
+
+  // Fetch logs when panel is opened
+  useEffect(() => {
+    if (showProcessingLog) {
+      fetchLogs();
+      const interval = setInterval(fetchLogs, 15000); // Refresh every 15 seconds
+      return () => clearInterval(interval);
+    }
+  }, [showProcessingLog, fetchLogs]);
 
   const removeFromSchedule = async (scheduleId: number) => {
     if (!websiteId) return;
@@ -526,11 +634,86 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
     }
   };
 
+  // Open schedule modal for unscheduled article
+  const openScheduleModal = (article: ScheduledArticle) => {
+    // Default to tomorrow at 9 AM
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const defaultDate = tomorrow.toISOString().split('T')[0];
+    const defaultTime = '09:00';
+
+    setScheduleDate(defaultDate);
+    setScheduleTime(defaultTime);
+    setSchedulingArticle(article);
+  };
+
+  // Save schedule for unscheduled article
+  const saveArticleSchedule = async () => {
+    if (!websiteId || !schedulingArticle || !scheduleDate || !scheduleTime) return;
+
+    setSavingSchedule(true);
+    try {
+      const res = await fetch(`/api/drip-feed/schedule/${websiteId}/${schedulingArticle.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scheduled_date: scheduleDate,
+          scheduled_time: scheduleTime,
+          status: 'pending'
+        })
+      });
+
+      if (res.ok) {
+        showToast(`Scheduled "${schedulingArticle.keyword}" for ${formatDate(scheduleDate)} at ${formatTime(scheduleTime)}`, 'success');
+        setSchedulingArticle(null);
+        fetchData();
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Failed to schedule article');
+      }
+    } catch (err) {
+      setError('Failed to schedule article');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  // Real-time clock - updates every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Auto-refresh schedule data every 5 seconds for real-time updates
+  useEffect(() => {
+    if (!websiteId) return;
+
+    const refreshInterval = setInterval(() => {
+      // Silently refresh data without showing loading state
+      Promise.all([
+        fetch(`/api/drip-feed/schedule/${websiteId}`).then(r => r.ok ? r.json() : null),
+        fetch(`/api/drip-feed/stats/${websiteId}`).then(r => r.ok ? r.json() : null)
+      ]).then(([scheduleData, statsData]) => {
+        if (scheduleData) {
+          setSchedules(scheduleData.schedules || []);
+          setGroupedSchedules(scheduleData.groupedByDate || {});
+        }
+        if (statsData) {
+          setStats(statsData);
+        }
+      }).catch(err => console.error('Auto-refresh error:', err));
+    }, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(refreshInterval);
+  }, [websiteId]);
+
   // Fetch test status when test mode is opened
   useEffect(() => {
     if (showTestMode) {
       fetchTestStatus();
-      const interval = setInterval(fetchTestStatus, 10000); // Refresh every 10 seconds
+      const interval = setInterval(fetchTestStatus, 3000); // Refresh every 3 seconds in test mode
       return () => clearInterval(interval);
     }
   }, [showTestMode]);
@@ -550,6 +733,76 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
     return `${hour12}:${minutes} ${ampm}`;
+  };
+
+  // Get current time with seconds in user's timezone
+  const getCurrentTimeWithSeconds = () => {
+    return currentTime.toLocaleString('en-US', {
+      timeZone: timezone,
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
+
+  // Calculate seconds until scheduled time (negative = overdue)
+  const getSecondsUntilScheduled = (scheduledDate: string, scheduledTime: string) => {
+    // Parse the scheduled date and time
+    const [year, month, day] = scheduledDate.split('-').map(Number);
+    const [hours, minutes] = scheduledTime.split(':').map(Number);
+
+    // Create date in user's timezone
+    const scheduledDateTime = new Date(year, month - 1, day, hours, minutes, 0);
+
+    // Get current time in user's timezone
+    const now = currentTime;
+    const nowInTimezone = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+
+    // Calculate difference in seconds
+    return Math.floor((scheduledDateTime.getTime() - nowInTimezone.getTime()) / 1000);
+  };
+
+  // Format countdown display (MM:SS or -MM:SS if overdue)
+  const formatCountdown = (secondsUntil: number) => {
+    const isOverdue = secondsUntil < 0;
+    const absSeconds = Math.abs(secondsUntil);
+    const mins = Math.floor(absSeconds / 60);
+    const secs = absSeconds % 60;
+
+    if (mins >= 60) {
+      const hrs = Math.floor(mins / 60);
+      const remainMins = mins % 60;
+      return `${isOverdue ? '-' : ''}${hrs}h ${remainMins}m`;
+    }
+
+    return `${isOverdue ? '-' : ''}${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Get status styling based on countdown
+  const getCountdownStyle = (secondsUntil: number, status: string) => {
+    if (status === 'published') {
+      return 'bg-green-500/30 text-green-400 border-green-500';
+    }
+    if (status === 'failed') {
+      return 'bg-red-500/30 text-red-400 border-red-500';
+    }
+    if (secondsUntil <= 0) {
+      // Overdue - pulsing red/orange
+      return 'bg-red-600/30 text-red-400 border-red-500 animate-pulse';
+    }
+    if (secondsUntil <= 60) {
+      // Final minute - pulsing yellow
+      return 'bg-yellow-500/30 text-yellow-400 border-yellow-500 animate-pulse';
+    }
+    if (secondsUntil <= 300) {
+      // Final 5 minutes - amber
+      return 'bg-amber-600/20 text-amber-400 border-amber-500';
+    }
+    // Normal pending
+    return 'bg-blue-600/20 text-blue-400 border-blue-500/50';
   };
 
   // Get current time in the user's configured timezone
@@ -631,16 +884,18 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         <div className="flex items-center justify-between gap-4">
           {/* Left: Toggle + Stats */}
           <div className="flex items-center gap-4">
-            {/* Enable Toggle */}
+            {/* Enable Toggle - Auto-saves to database */}
             <div
-              onClick={() => setIsEnabled(!isEnabled)}
+              onClick={toggleEnabled}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition ${
+                togglingEnabled ? 'opacity-50 cursor-wait' : ''
+              } ${
                 isEnabled ? 'bg-green-600/20 border border-green-500/50' : 'bg-orange-600/20 border border-orange-500/50'
               }`}
             >
-              <div className={`w-3 h-3 rounded-full ${isEnabled ? 'bg-green-400' : 'bg-orange-400'}`} />
+              <div className={`w-3 h-3 rounded-full ${isEnabled ? 'bg-green-400 animate-pulse' : 'bg-orange-400'}`} />
               <span className={`text-sm font-medium ${isEnabled ? 'text-green-400' : 'text-orange-400'}`}>
-                {isEnabled ? 'Active' : 'Paused'}
+                {togglingEnabled ? 'Saving...' : isEnabled ? 'Active' : 'Paused'}
               </span>
             </div>
 
@@ -673,12 +928,10 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
 
           {/* Right: Time Display + Settings Dropdown + Actions */}
           <div className="flex items-center gap-2">
-            {/* Current Time Display */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 rounded-lg text-sm">
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-white font-mono">{getCurrentTimeInTimezone()}</span>
+            {/* Current Time Display - Live with seconds */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 rounded-lg text-sm border border-slate-600">
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-white font-mono text-xs">{getCurrentTimeWithSeconds()}</span>
               <span className="text-gray-500 text-xs">({TIMEZONES.find(t => t.id === timezone)?.label?.split(' ')[0] || 'CT'})</span>
             </div>
 
@@ -728,6 +981,21 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
               Notifications
+            </button>
+
+            {/* Processing Log Button */}
+            <button
+              onClick={() => setShowProcessingLog(!showProcessingLog)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                showProcessingLog
+                  ? 'bg-brand-cyan text-slate-900'
+                  : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+              </svg>
+              Log
             </button>
 
             {/* Test Mode Button */}
@@ -1192,6 +1460,87 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         </div>
       )}
 
+      {/* Processing Log Panel */}
+      {showProcessingLog && (
+        <div className="flex-shrink-0 bg-slate-800/50 border-b border-brand-cyan/30 px-4 py-3 max-h-64 overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-brand-cyan">Processing Log</span>
+              <span className="text-xs text-gray-500">({logEntries.length} entries)</span>
+              {loadingLogs && <span className="text-xs text-gray-400 animate-pulse">Refreshing...</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchLogs}
+                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-gray-300"
+              >
+                Refresh
+              </button>
+              <button
+                onClick={copyLogsToClipboard}
+                disabled={logEntries.length === 0}
+                className="px-2 py-1 bg-brand-cyan/20 hover:bg-brand-cyan/30 rounded text-xs text-brand-cyan disabled:opacity-50"
+              >
+                Copy All
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto bg-slate-900/50 rounded border border-slate-700/50">
+            {logEntries.length === 0 ? (
+              <div className="p-4 text-center text-gray-500 text-sm">
+                No log entries yet. Activity will appear here when articles are processed.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-800">
+                {logEntries.map((log) => {
+                  const time = new Date(log.created_at);
+                  const timeStr = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                  const dateStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                  const actionColors: Record<string, string> = {
+                    published: 'text-green-400 bg-green-600/20',
+                    failed: 'text-red-400 bg-red-600/20',
+                    scheduled: 'text-blue-400 bg-blue-600/20',
+                    cancelled: 'text-gray-400 bg-gray-600/20',
+                    retried: 'text-amber-400 bg-amber-600/20',
+                    added_to_queue: 'text-purple-400 bg-purple-600/20'
+                  };
+
+                  return (
+                    <div key={log.id} className="flex items-center gap-3 px-3 py-1.5 text-xs hover:bg-slate-800/50">
+                      <span className="text-gray-500 font-mono w-24 flex-shrink-0">
+                        {dateStr} {timeStr}
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded font-medium uppercase ${actionColors[log.action] || 'text-gray-400 bg-gray-600/20'}`}>
+                        {log.action}
+                      </span>
+                      <span className="text-white truncate flex-1">
+                        {log.keyword || `Article #${log.article_id}`}
+                      </span>
+                      {log.error_message && (
+                        <span className="text-red-400 truncate max-w-[200px]" title={log.error_message}>
+                          {log.error_message}
+                        </span>
+                      )}
+                      {log.details?.wp_post_url && (
+                        <a
+                          href={log.details.wp_post_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          View
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Test Mode Panel */}
       {showTestMode && (
         <div className="flex-shrink-0 bg-orange-900/20 border-b border-orange-500/30 px-4 py-3">
@@ -1361,77 +1710,130 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
                       <span className="text-xs text-gray-400">{articles.length} article{articles.length !== 1 ? 's' : ''}</span>
                     </div>
                     <div className="divide-y divide-slate-700/50">
-                      {articles.map((article) => (
-                        <div
-                          key={article.id}
-                          className="px-3 py-2 flex items-center justify-between hover:bg-slate-700/30"
-                        >
-                          <div className="flex items-center gap-3">
-                            {/* Test Mode Checkbox */}
-                            {showTestMode && article.status === 'pending' && (
-                              <input
-                                type="checkbox"
-                                checked={selectedTestArticles.includes(article.article_id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedTestArticles([...selectedTestArticles, article.article_id]);
-                                  } else {
-                                    setSelectedTestArticles(selectedTestArticles.filter(id => id !== article.article_id));
-                                  }
-                                }}
-                                className="w-4 h-4 rounded border-orange-500 bg-slate-700 text-orange-500"
-                              />
-                            )}
-                            <span className="text-xs text-gray-500 w-16">
-                              {formatTime(article.scheduled_time)}
-                            </span>
-                            <button
-                              onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
-                              className="text-sm text-white hover:text-brand-cyan hover:underline transition text-left"
-                              title="Click to edit article"
-                            >
-                              {article.keyword}
-                            </button>
-                            {!article.selected_meta_title && (
+                      {articles.map((article) => {
+                        // Calculate countdown for this article
+                        const scheduledDateStr = typeof article.scheduled_date === 'string'
+                          ? article.scheduled_date.split('T')[0]
+                          : new Date(article.scheduled_date).toISOString().split('T')[0];
+                        const secondsUntil = getSecondsUntilScheduled(scheduledDateStr, article.scheduled_time);
+                        const countdownStyle = getCountdownStyle(secondsUntil, article.status);
+                        const isInFinalMinute = secondsUntil <= 60 && secondsUntil > 0 && article.status === 'pending';
+                        const isOverdue = secondsUntil <= 0 && article.status === 'pending';
+
+                        return (
+                          <div
+                            key={article.id}
+                            className={`px-3 py-2 flex items-center justify-between transition-all duration-300 ${
+                              isInFinalMinute ? 'bg-yellow-900/20' :
+                              isOverdue ? 'bg-red-900/20' :
+                              article.status === 'published' ? 'bg-green-900/10' :
+                              'hover:bg-slate-700/30'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              {/* Test Mode Checkbox */}
+                              {showTestMode && article.status === 'pending' && (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedTestArticles.includes(article.article_id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedTestArticles([...selectedTestArticles, article.article_id]);
+                                    } else {
+                                      setSelectedTestArticles(selectedTestArticles.filter(id => id !== article.article_id));
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded border-orange-500 bg-slate-700 text-orange-500"
+                                />
+                              )}
+
+                              {/* Time with countdown */}
+                              <div className="flex items-center gap-2 min-w-[140px]">
+                                <span className="text-xs text-gray-400 w-16">
+                                  {formatTime(article.scheduled_time)}
+                                </span>
+                                {article.status === 'pending' && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${countdownStyle}`}>
+                                    {isOverdue ? 'DUE' : formatCountdown(secondsUntil)}
+                                  </span>
+                                )}
+                              </div>
+
                               <button
                                 onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
-                                className="px-1.5 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-400 rounded text-[10px] cursor-pointer transition"
-                                title="Click to add meta"
+                                className="text-sm text-white hover:text-brand-cyan hover:underline transition text-left"
+                                title="Click to edit article"
                               >
-                                No Meta
+                                {article.keyword}
                               </button>
-                            )}
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                              article.status === 'pending' ? 'bg-blue-600/30 text-blue-400' :
-                              article.status === 'published' ? 'bg-green-600/30 text-green-400' :
-                              article.status === 'failed' ? 'bg-red-600/30 text-red-400' :
-                              'bg-gray-600/30 text-gray-400'
-                            }`}>
-                              {article.status}
-                            </span>
+                              {!article.selected_meta_title && (
+                                <button
+                                  onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
+                                  className="px-1.5 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-400 rounded text-[10px] cursor-pointer transition"
+                                  title="Click to add meta"
+                                >
+                                  No Meta
+                                </button>
+                              )}
+
+                              {/* Status badge - clickable for unscheduled */}
+                              {article.status === 'unscheduled' ? (
+                                <button
+                                  onClick={() => openScheduleModal(article)}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-600/30 text-orange-400 hover:bg-orange-600/50 border border-orange-500/50 cursor-pointer transition flex items-center gap-1"
+                                  title="Click to schedule this article"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  unscheduled
+                                </button>
+                              ) : (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                  article.status === 'published' ? 'bg-green-600/30 text-green-400' :
+                                  article.status === 'failed' ? 'bg-red-600/30 text-red-400' :
+                                  article.status === 'publishing' ? 'bg-purple-600/30 text-purple-400 animate-pulse' :
+                                  'bg-blue-600/30 text-blue-400'
+                                }`}>
+                                  {article.status === 'publishing' ? '⏳ Publishing...' : article.status}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {/* Schedule button for unscheduled articles */}
+                              {article.status === 'unscheduled' && (
+                                <button
+                                  onClick={() => openScheduleModal(article)}
+                                  className="px-2 py-0.5 bg-brand-cyan/30 hover:bg-brand-cyan/50 rounded text-brand-cyan text-xs flex items-center gap-1"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Schedule
+                                </button>
+                              )}
+                              {article.wp_post_url && (
+                                <a
+                                  href={article.wp_post_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-0.5 bg-green-600/30 hover:bg-green-600/50 rounded text-green-400 text-xs"
+                                >
+                                  View ↗
+                                </a>
+                              )}
+                              {(article.status === 'pending' || article.status === 'unscheduled') && (
+                                <button
+                                  onClick={() => removeFromSchedule(article.id)}
+                                  className="px-2 py-0.5 bg-red-600/30 hover:bg-red-600/50 rounded text-red-400 text-xs"
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            {article.wp_post_url && (
-                              <a
-                                href={article.wp_post_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2 py-0.5 bg-blue-600/30 hover:bg-blue-600/50 rounded text-blue-400 text-xs"
-                              >
-                                View
-                              </a>
-                            )}
-                            {article.status === 'pending' && (
-                              <button
-                                onClick={() => removeFromSchedule(article.id)}
-                                className="px-2 py-0.5 bg-red-600/30 hover:bg-red-600/50 rounded text-red-400 text-xs"
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -1447,6 +1849,108 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
           </div>
         )}
       </div>
+
+      {/* Schedule Modal for Unscheduled Articles */}
+      {schedulingArticle && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-lg border border-slate-600 shadow-xl max-w-md w-full mx-4">
+            {/* Modal Header */}
+            <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Schedule Article
+              </h3>
+              <button
+                onClick={() => setSchedulingArticle(null)}
+                className="text-gray-400 hover:text-white transition"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 space-y-4">
+              {/* Article Title */}
+              <div className="bg-slate-900/50 rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">Article</div>
+                <div className="text-white font-medium">{schedulingArticle.keyword}</div>
+              </div>
+
+              {/* Date and Time Inputs */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1.5">Date</label>
+                  <input
+                    type="date"
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1.5">Time</label>
+                  <input
+                    type="time"
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Preview */}
+              {scheduleDate && scheduleTime && (
+                <div className="bg-brand-cyan/10 border border-brand-cyan/30 rounded-lg p-3 text-center">
+                  <div className="text-xs text-brand-cyan mb-1">Will publish on</div>
+                  <div className="text-white font-medium">
+                    {formatDate(scheduleDate)} at {formatTime(scheduleTime)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    ({TIMEZONES.find(t => t.id === timezone)?.label || timezone})
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 py-3 border-t border-slate-700 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setSchedulingArticle(null)}
+                className="px-4 py-2 text-gray-400 hover:text-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveArticleSchedule}
+                disabled={savingSchedule || !scheduleDate || !scheduleTime}
+                className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded-lg transition disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingSchedule ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Scheduling...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Schedule
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
