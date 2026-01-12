@@ -202,10 +202,50 @@ router.get('/schedule/:websiteId', requireDb, async (req, res) => {
 router.post('/schedule/:websiteId', requireDb, async (req, res) => {
   try {
     const { websiteId } = req.params;
-    const { articleIds, startDate } = req.body;
+    const { articleIds, startDate, scheduleLater } = req.body;
 
     if (!articleIds || !Array.isArray(articleIds) || articleIds.length === 0) {
       return res.status(400).json({ error: 'articleIds array is required' });
+    }
+
+    // If scheduleLater is true, add articles without scheduling (status = 'unscheduled')
+    if (scheduleLater) {
+      const inserted = [];
+      for (const articleId of articleIds) {
+        try {
+          // Use a far-future placeholder date since fields are NOT NULL
+          const result = await sql`
+            INSERT INTO drip_feed_schedules (
+              website_id, article_id, scheduled_date, scheduled_time, status
+            ) VALUES (
+              ${websiteId}, ${articleId}, '9999-12-31', '00:00', 'unscheduled'
+            )
+            ON CONFLICT (article_id) DO UPDATE SET
+              status = 'unscheduled',
+              updated_at = NOW()
+            RETURNING *
+          `;
+          inserted.push(result[0]);
+
+          // Log the action
+          await sql`
+            INSERT INTO drip_feed_log (schedule_id, website_id, article_id, action, details)
+            VALUES (${result[0].id}, ${websiteId}, ${articleId}, 'added_to_queue', ${JSON.stringify({
+              note: 'Added to queue without scheduling'
+            })})
+          `;
+        } catch (err) {
+          console.error(`Error adding article ${articleId} to queue:`, err);
+        }
+      }
+
+      return res.json({
+        success: true,
+        scheduled: 0,
+        queued: inserted.length,
+        schedules: inserted,
+        message: `Added ${inserted.length} article(s) to queue. Schedule them later from Drip Feed settings.`
+      });
     }
 
     // Get settings for this website
