@@ -166,6 +166,9 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
+  // Real-time clock state (updates every second)
+  const [currentTime, setCurrentTime] = useState(new Date());
+
   // Test mode state
   const [showTestMode, setShowTestMode] = useState(false);
   const [testStatus, setTestStatus] = useState<{
@@ -625,11 +628,42 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
     }
   };
 
+  // Real-time clock - updates every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Auto-refresh schedule data every 5 seconds for real-time updates
+  useEffect(() => {
+    if (!websiteId) return;
+
+    const refreshInterval = setInterval(() => {
+      // Silently refresh data without showing loading state
+      Promise.all([
+        fetch(`/api/drip-feed/schedule/${websiteId}`).then(r => r.ok ? r.json() : null),
+        fetch(`/api/drip-feed/stats/${websiteId}`).then(r => r.ok ? r.json() : null)
+      ]).then(([scheduleData, statsData]) => {
+        if (scheduleData) {
+          setSchedules(scheduleData.schedules || []);
+          setGroupedSchedules(scheduleData.groupedByDate || {});
+        }
+        if (statsData) {
+          setStats(statsData);
+        }
+      }).catch(err => console.error('Auto-refresh error:', err));
+    }, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(refreshInterval);
+  }, [websiteId]);
+
   // Fetch test status when test mode is opened
   useEffect(() => {
     if (showTestMode) {
       fetchTestStatus();
-      const interval = setInterval(fetchTestStatus, 10000); // Refresh every 10 seconds
+      const interval = setInterval(fetchTestStatus, 3000); // Refresh every 3 seconds in test mode
       return () => clearInterval(interval);
     }
   }, [showTestMode]);
@@ -649,6 +683,76 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
     return `${hour12}:${minutes} ${ampm}`;
+  };
+
+  // Get current time with seconds in user's timezone
+  const getCurrentTimeWithSeconds = () => {
+    return currentTime.toLocaleString('en-US', {
+      timeZone: timezone,
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
+
+  // Calculate seconds until scheduled time (negative = overdue)
+  const getSecondsUntilScheduled = (scheduledDate: string, scheduledTime: string) => {
+    // Parse the scheduled date and time
+    const [year, month, day] = scheduledDate.split('-').map(Number);
+    const [hours, minutes] = scheduledTime.split(':').map(Number);
+
+    // Create date in user's timezone
+    const scheduledDateTime = new Date(year, month - 1, day, hours, minutes, 0);
+
+    // Get current time in user's timezone
+    const now = currentTime;
+    const nowInTimezone = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+
+    // Calculate difference in seconds
+    return Math.floor((scheduledDateTime.getTime() - nowInTimezone.getTime()) / 1000);
+  };
+
+  // Format countdown display (MM:SS or -MM:SS if overdue)
+  const formatCountdown = (secondsUntil: number) => {
+    const isOverdue = secondsUntil < 0;
+    const absSeconds = Math.abs(secondsUntil);
+    const mins = Math.floor(absSeconds / 60);
+    const secs = absSeconds % 60;
+
+    if (mins >= 60) {
+      const hrs = Math.floor(mins / 60);
+      const remainMins = mins % 60;
+      return `${isOverdue ? '-' : ''}${hrs}h ${remainMins}m`;
+    }
+
+    return `${isOverdue ? '-' : ''}${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Get status styling based on countdown
+  const getCountdownStyle = (secondsUntil: number, status: string) => {
+    if (status === 'published') {
+      return 'bg-green-500/30 text-green-400 border-green-500';
+    }
+    if (status === 'failed') {
+      return 'bg-red-500/30 text-red-400 border-red-500';
+    }
+    if (secondsUntil <= 0) {
+      // Overdue - pulsing red/orange
+      return 'bg-red-600/30 text-red-400 border-red-500 animate-pulse';
+    }
+    if (secondsUntil <= 60) {
+      // Final minute - pulsing yellow
+      return 'bg-yellow-500/30 text-yellow-400 border-yellow-500 animate-pulse';
+    }
+    if (secondsUntil <= 300) {
+      // Final 5 minutes - amber
+      return 'bg-amber-600/20 text-amber-400 border-amber-500';
+    }
+    // Normal pending
+    return 'bg-blue-600/20 text-blue-400 border-blue-500/50';
   };
 
   // Get current time in the user's configured timezone
@@ -774,12 +878,10 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
 
           {/* Right: Time Display + Settings Dropdown + Actions */}
           <div className="flex items-center gap-2">
-            {/* Current Time Display */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 rounded-lg text-sm">
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-white font-mono">{getCurrentTimeInTimezone()}</span>
+            {/* Current Time Display - Live with seconds */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 rounded-lg text-sm border border-slate-600">
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-white font-mono text-xs">{getCurrentTimeWithSeconds()}</span>
               <span className="text-gray-500 text-xs">({TIMEZONES.find(t => t.id === timezone)?.label?.split(' ')[0] || 'CT'})</span>
             </div>
 
@@ -1558,77 +1660,105 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
                       <span className="text-xs text-gray-400">{articles.length} article{articles.length !== 1 ? 's' : ''}</span>
                     </div>
                     <div className="divide-y divide-slate-700/50">
-                      {articles.map((article) => (
-                        <div
-                          key={article.id}
-                          className="px-3 py-2 flex items-center justify-between hover:bg-slate-700/30"
-                        >
-                          <div className="flex items-center gap-3">
-                            {/* Test Mode Checkbox */}
-                            {showTestMode && article.status === 'pending' && (
-                              <input
-                                type="checkbox"
-                                checked={selectedTestArticles.includes(article.article_id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedTestArticles([...selectedTestArticles, article.article_id]);
-                                  } else {
-                                    setSelectedTestArticles(selectedTestArticles.filter(id => id !== article.article_id));
-                                  }
-                                }}
-                                className="w-4 h-4 rounded border-orange-500 bg-slate-700 text-orange-500"
-                              />
-                            )}
-                            <span className="text-xs text-gray-500 w-16">
-                              {formatTime(article.scheduled_time)}
-                            </span>
-                            <button
-                              onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
-                              className="text-sm text-white hover:text-brand-cyan hover:underline transition text-left"
-                              title="Click to edit article"
-                            >
-                              {article.keyword}
-                            </button>
-                            {!article.selected_meta_title && (
+                      {articles.map((article) => {
+                        // Calculate countdown for this article
+                        const scheduledDateStr = typeof article.scheduled_date === 'string'
+                          ? article.scheduled_date.split('T')[0]
+                          : new Date(article.scheduled_date).toISOString().split('T')[0];
+                        const secondsUntil = getSecondsUntilScheduled(scheduledDateStr, article.scheduled_time);
+                        const countdownStyle = getCountdownStyle(secondsUntil, article.status);
+                        const isInFinalMinute = secondsUntil <= 60 && secondsUntil > 0 && article.status === 'pending';
+                        const isOverdue = secondsUntil <= 0 && article.status === 'pending';
+
+                        return (
+                          <div
+                            key={article.id}
+                            className={`px-3 py-2 flex items-center justify-between transition-all duration-300 ${
+                              isInFinalMinute ? 'bg-yellow-900/20' :
+                              isOverdue ? 'bg-red-900/20' :
+                              article.status === 'published' ? 'bg-green-900/10' :
+                              'hover:bg-slate-700/30'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              {/* Test Mode Checkbox */}
+                              {showTestMode && article.status === 'pending' && (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedTestArticles.includes(article.article_id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedTestArticles([...selectedTestArticles, article.article_id]);
+                                    } else {
+                                      setSelectedTestArticles(selectedTestArticles.filter(id => id !== article.article_id));
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded border-orange-500 bg-slate-700 text-orange-500"
+                                />
+                              )}
+
+                              {/* Time with countdown */}
+                              <div className="flex items-center gap-2 min-w-[140px]">
+                                <span className="text-xs text-gray-400 w-16">
+                                  {formatTime(article.scheduled_time)}
+                                </span>
+                                {article.status === 'pending' && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${countdownStyle}`}>
+                                    {isOverdue ? 'DUE' : formatCountdown(secondsUntil)}
+                                  </span>
+                                )}
+                              </div>
+
                               <button
                                 onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
-                                className="px-1.5 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-400 rounded text-[10px] cursor-pointer transition"
-                                title="Click to add meta"
+                                className="text-sm text-white hover:text-brand-cyan hover:underline transition text-left"
+                                title="Click to edit article"
                               >
-                                No Meta
+                                {article.keyword}
                               </button>
-                            )}
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                              article.status === 'pending' ? 'bg-blue-600/30 text-blue-400' :
-                              article.status === 'published' ? 'bg-green-600/30 text-green-400' :
-                              article.status === 'failed' ? 'bg-red-600/30 text-red-400' :
-                              'bg-gray-600/30 text-gray-400'
-                            }`}>
-                              {article.status}
-                            </span>
+                              {!article.selected_meta_title && (
+                                <button
+                                  onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
+                                  className="px-1.5 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-400 rounded text-[10px] cursor-pointer transition"
+                                  title="Click to add meta"
+                                >
+                                  No Meta
+                                </button>
+                              )}
+
+                              {/* Status badge */}
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                article.status === 'published' ? 'bg-green-600/30 text-green-400' :
+                                article.status === 'failed' ? 'bg-red-600/30 text-red-400' :
+                                article.status === 'publishing' ? 'bg-purple-600/30 text-purple-400 animate-pulse' :
+                                'bg-blue-600/30 text-blue-400'
+                              }`}>
+                                {article.status === 'publishing' ? '⏳ Publishing...' : article.status}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {article.wp_post_url && (
+                                <a
+                                  href={article.wp_post_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-0.5 bg-green-600/30 hover:bg-green-600/50 rounded text-green-400 text-xs"
+                                >
+                                  View ↗
+                                </a>
+                              )}
+                              {article.status === 'pending' && (
+                                <button
+                                  onClick={() => removeFromSchedule(article.id)}
+                                  className="px-2 py-0.5 bg-red-600/30 hover:bg-red-600/50 rounded text-red-400 text-xs"
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            {article.wp_post_url && (
-                              <a
-                                href={article.wp_post_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2 py-0.5 bg-blue-600/30 hover:bg-blue-600/50 rounded text-blue-400 text-xs"
-                              >
-                                View
-                              </a>
-                            )}
-                            {article.status === 'pending' && (
-                              <button
-                                onClick={() => removeFromSchedule(article.id)}
-                                className="px-2 py-0.5 bg-red-600/30 hover:bg-red-600/50 rounded text-red-400 text-xs"
-                              >
-                                Remove
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );
