@@ -93,9 +93,10 @@ const SMS_CARRIERS = [
 
 interface DripFeedViewProps {
   websiteId?: number;
+  onOpenArticle?: (articleId: number) => void;
 }
 
-const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
+const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle }) => {
   const [settings, setSettings] = useState<DripFeedSettings | null>(null);
   const [schedules, setSchedules] = useState<ScheduledArticle[]>([]);
   const [groupedSchedules, setGroupedSchedules] = useState<Record<string, ScheduledArticle[]>>({});
@@ -1315,7 +1316,13 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
                           className="w-3 h-3"
                         />
                         <span className={`font-mono ${p.isDueNow ? 'text-green-400' : 'text-amber-400'}`}>{displayTime}</span>
-                        <span className="max-w-[150px] truncate text-white">{p.keyword || 'No keyword'}</span>
+                        <button
+                          onClick={() => onOpenArticle && onOpenArticle(p.articleId)}
+                          className="max-w-[150px] truncate text-white hover:text-brand-cyan hover:underline transition"
+                          title="Click to edit article"
+                        >
+                          {p.keyword || 'No keyword'}
+                        </button>
                         {p.isDueNow && <span className="bg-green-500 text-white px-1 rounded text-[10px] font-bold">DUE</span>}
                       </div>
                     );
@@ -1377,11 +1384,21 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
                             <span className="text-xs text-gray-500 w-16">
                               {formatTime(article.scheduled_time)}
                             </span>
-                            <span className="text-sm text-white">{article.keyword}</span>
+                            <button
+                              onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
+                              className="text-sm text-white hover:text-brand-cyan hover:underline transition text-left"
+                              title="Click to edit article"
+                            >
+                              {article.keyword}
+                            </button>
                             {!article.selected_meta_title && (
-                              <span className="px-1.5 py-0.5 bg-amber-600/30 text-amber-400 rounded text-[10px]">
+                              <button
+                                onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
+                                className="px-1.5 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-400 rounded text-[10px] cursor-pointer transition"
+                                title="Click to add meta"
+                              >
                                 No Meta
-                              </span>
+                              </button>
                             )}
                             <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                               article.status === 'pending' ? 'bg-blue-600/30 text-blue-400' :

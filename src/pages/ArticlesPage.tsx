@@ -44,11 +44,19 @@ interface ArticlesPageProps {
   workflowId?: number;
 }
 
+// Ref type for ArticleListView imperative handle
+export interface ArticleListViewRef {
+  openArticle: (articleId: number) => void;
+}
+
 const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose, defaultWebsiteId, workflowId }) => {
   const [websites, setWebsites] = useState<Website[]>([]);
   const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('list');
   const [loading, setLoading] = useState(true);
+
+  // Article to open from DripFeed (overlay modal)
+  const [openArticleId, setOpenArticleId] = useState<number | null>(null);
 
   // Visual editor state
   const [visualEditorArticle, setVisualEditorArticle] = useState<Article | null>(null);
@@ -284,14 +292,21 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose, defaultWeb
 
       {/* Content */}
       <main className="flex-1 overflow-hidden">
-        {activeTab === 'list' && (
+        {/* ArticleListView is always mounted so modal can show from any tab */}
+        {/* When openArticleId is set, show the view so the modal can render (modal overlay blocks interaction with background anyway) */}
+        <div className={`h-full ${activeTab === 'list' || openArticleId ? '' : 'hidden'}`}>
           <ArticleListView
             websiteId={selectedWebsite?.id}
             onEditVisual={handleEditVisual}
+            openArticleId={openArticleId}
+            onArticleModalClose={() => setOpenArticleId(null)}
           />
-        )}
+        </div>
         {activeTab === 'drip-feed' && (
-          <DripFeedView websiteId={selectedWebsite?.id} />
+          <DripFeedView
+            websiteId={selectedWebsite?.id}
+            onOpenArticle={(articleId) => setOpenArticleId(articleId)}
+          />
         )}
         {activeTab === 'browser' && selectedWebsite && (
           <SiteBrowserView website={selectedWebsite} />

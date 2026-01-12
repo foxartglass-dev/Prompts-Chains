@@ -68,9 +68,11 @@ interface Article {
 interface ArticleListViewProps {
   websiteId?: number;
   onEditVisual?: (article: Article) => void;
+  openArticleId?: number | null;
+  onArticleModalClose?: () => void;
 }
 
-const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisual }) => {
+const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisual, openArticleId, onArticleModalClose }) => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -122,6 +124,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   useEffect(() => {
     fetchArticles();
   }, [websiteId, statusFilter]);
+
+  // Open article from external source (e.g., DripFeedView)
+  useEffect(() => {
+    if (openArticleId) {
+      fetchArticleDetails(openArticleId);
+    }
+  }, [openArticleId]);
 
   const fetchArticles = async () => {
     setLoading(true);
@@ -582,6 +591,10 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     setSelectedArticle(null);
     setIsEditing(false);
     setError(null);
+    // Notify parent if opened from another view (e.g., DripFeed)
+    if (onArticleModalClose) {
+      onArticleModalClose();
+    }
     setShowImages(false);
     setShowImageReport(false);
   };
