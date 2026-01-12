@@ -2039,6 +2039,184 @@ PUSHOVER_API_TOKEN=your-api-token`}</pre>
         </div>
       </div>
     </div>
+
+    {/* Jan 2026 Features - Clickable Keywords, Schedule Later, Auto-Refresh */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-green-500/30">
+      <h3 className="text-lg font-bold text-green-400 mb-4">Jan 2026 Enhancements</h3>
+      <p className="text-sm text-gray-300 mb-4">
+        New features added to improve the Drip Feed workflow for managing articles that need meta.
+      </p>
+
+      {/* Clickable Keywords */}
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Clickable Keywords - Article Editor Overlay</h4>
+        <p className="text-xs text-gray-400 mb-3">
+          Click any keyword in the Drip Feed to open the article editor as an overlay. Edit meta, close, you're right back on Drip Feed.
+        </p>
+        <div className="bg-slate-800 rounded p-3 text-xs">
+          <div className="text-brand-gold mb-2">Architecture Flow:</div>
+          <pre className="text-gray-300 overflow-x-auto">{`DripFeedView                ArticlesPage               ArticleListView
+     │                            │                            │
+     │  onOpenArticle(articleId)  │                            │
+     │ ─────────────────────────► │                            │
+     │                            │  setOpenArticleId(id)      │
+     │                            │ ──────────────────────────►│
+     │                            │                            │  fetchArticleDetails(id)
+     │                            │                            │  → Opens modal overlay
+     │                            │                            │
+     │                            │  onArticleModalClose()     │
+     │                            │ ◄──────────────────────────│
+     │                            │  setDripFeedRefreshKey++   │
+     │  refreshKey changed        │                            │
+     │ ◄──────────────────────────│                            │
+     │  fetchData() → UI updates  │                            │`}</pre>
+        </div>
+        <div className="mt-3 text-xs">
+          <span className="text-brand-gold">Key Files:</span>
+          <ul className="mt-1 ml-4 text-gray-400">
+            <li>• <code>src/pages/ArticlesPage.tsx</code> - Manages openArticleId + refreshKey state</li>
+            <li>• <code>src/components/articles/DripFeedView.tsx</code> - Has onOpenArticle prop, refreshKey triggers re-fetch</li>
+            <li>• <code>src/components/articles/ArticleListView.tsx</code> - Has openArticleId prop, onArticleModalClose callback</li>
+          </ul>
+        </div>
+        <div className="mt-3 bg-amber-900/20 rounded p-2 text-xs border border-amber-500/30">
+          <span className="text-amber-400">Why this approach:</span>
+          <span className="text-gray-300 ml-2">ArticleListView contains the article modal. We keep it mounted (hidden when not on list tab) but show it when openArticleId is set. Modal overlay blocks background anyway.</span>
+        </div>
+      </div>
+
+      {/* Schedule Later */}
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Schedule Later Option</h4>
+        <p className="text-xs text-gray-400 mb-3">
+          When adding articles to Drip Feed, users can choose "Schedule Later" to add to queue without scheduling dates.
+        </p>
+        <div className="grid md:grid-cols-2 gap-4 text-xs">
+          <div>
+            <span className="text-brand-gold">Frontend (ArticleListView.tsx):</span>
+            <pre className="mt-1 text-gray-300 bg-slate-800 p-2 rounded overflow-x-auto">{`// Two buttons in modal:
+"Schedule Later" → addToDripFeed(true)
+"Schedule Now"   → addToDripFeed(false)
+
+// Sends to API:
+{ articleIds, startDate, scheduleLater: true/false }`}</pre>
+          </div>
+          <div>
+            <span className="text-brand-gold">Backend (drip-feed.js):</span>
+            <pre className="mt-1 text-gray-300 bg-slate-800 p-2 rounded overflow-x-auto">{`if (scheduleLater) {
+  // Insert with placeholder date
+  scheduled_date: '9999-12-31'
+  scheduled_time: '00:00'
+  status: 'unscheduled'
+  // Scheduler ignores 'unscheduled' status
+}`}</pre>
+          </div>
+        </div>
+      </div>
+
+      {/* Auto-Refresh */}
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Auto-Refresh After Meta Save</h4>
+        <p className="text-xs text-gray-400 mb-3">
+          When you close the article editor after saving meta, Drip Feed automatically refreshes to show updated status.
+        </p>
+        <pre className="text-xs text-gray-300 bg-slate-800 p-2 rounded overflow-x-auto">{`// ArticlesPage.tsx
+const [dripFeedRefreshKey, setDripFeedRefreshKey] = useState(0);
+
+// When modal closes:
+onArticleModalClose={() => {
+  setOpenArticleId(null);
+  setDripFeedRefreshKey(k => k + 1);  // Increment key
+}}
+
+// Pass to DripFeedView:
+<DripFeedView refreshKey={dripFeedRefreshKey} />
+
+// DripFeedView.tsx - Re-fetch when key changes:
+useEffect(() => {
+  fetchData();
+}, [fetchData, refreshKey]);`}</pre>
+      </div>
+
+      {/* Timezone */}
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Timezone Handling</h4>
+        <p className="text-xs text-gray-400 mb-3">
+          User selects their timezone in Settings. All time displays and scheduling use this timezone.
+        </p>
+        <div className="grid md:grid-cols-2 gap-4 text-xs">
+          <div>
+            <span className="text-brand-gold">Database:</span>
+            <pre className="mt-1 text-gray-300 bg-slate-800 p-2 rounded">{`-- drip_feed_settings
+timezone VARCHAR(50) DEFAULT 'America/Chicago'
+
+-- Uses IANA timezone strings:
+'America/New_York', 'America/Chicago',
+'America/Denver', 'America/Los_Angeles', etc.`}</pre>
+          </div>
+          <div>
+            <span className="text-brand-gold">Time Formatting:</span>
+            <pre className="mt-1 text-gray-300 bg-slate-800 p-2 rounded">{`// getCurrentTimeInTimezone(timezone)
+const now = new Date();
+return now.toLocaleString('en-US', {
+  timeZone: timezone,
+  month: 'short', day: 'numeric',
+  hour: 'numeric', minute: '2-digit',
+  hour12: true  // Shows "5:01 PM"
+});`}</pre>
+          </div>
+        </div>
+        <div className="mt-3 bg-amber-900/20 rounded p-2 text-xs border border-amber-500/30">
+          <span className="text-amber-400">PostgreSQL Fix:</span>
+          <span className="text-gray-300 ml-2">Use TO_CHAR(scheduled_date, 'YYYY-MM-DD') in SQL for consistent string comparison. Native Date objects don't compare correctly with strings.</span>
+        </div>
+      </div>
+
+      {/* Active/Paused Toggle */}
+      <div className="bg-slate-900 rounded-lg p-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Active/Paused Toggle Styling</h4>
+        <p className="text-xs text-gray-400 mb-3">
+          Toggle is always visible - green for Active, orange for Paused (never gray). Defaults to Active.
+        </p>
+        <div className="flex gap-4 items-center">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-600/20 border border-green-500/50">
+            <div className="w-3 h-3 rounded-full bg-green-400"></div>
+            <span className="text-sm font-medium text-green-400">Active</span>
+          </div>
+          <span className="text-gray-500">vs</span>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-600/20 border border-orange-500/50">
+            <div className="w-3 h-3 rounded-full bg-orange-400"></div>
+            <span className="text-sm font-medium text-orange-400">Paused</span>
+          </div>
+        </div>
+        <pre className="mt-3 text-xs text-gray-300 bg-slate-800 p-2 rounded overflow-x-auto">{`// DripFeedView.tsx - Toggle styling
+className={\`... \${
+  isEnabled
+    ? 'bg-green-600/20 border border-green-500/50'
+    : 'bg-orange-600/20 border border-orange-500/50'
+}\`}
+
+// Database default changed:
+is_enabled BOOLEAN DEFAULT true  // Active by default`}</pre>
+      </div>
+    </div>
+
+    {/* No Alerts Policy */}
+    <div className="bg-red-900/20 rounded-xl p-6 border border-red-500/30">
+      <h3 className="text-lg font-bold text-red-400 mb-4">No Confirmation Alerts Policy</h3>
+      <p className="text-sm text-gray-300 mb-4">
+        <strong>User pushed the button - they know what they did.</strong> Don't show confirmation alerts.
+      </p>
+      <div className="bg-slate-900 rounded-lg p-4 text-xs">
+        <div className="text-red-400 mb-2">❌ DON'T do this:</div>
+        <pre className="text-gray-500 line-through">{`alert(\`Added \${count} articles to queue!\`);
+alert(\`Successfully scheduled \${count} articles!\`);`}</pre>
+        <div className="text-green-400 mt-3 mb-2">✓ DO this instead:</div>
+        <pre className="text-gray-300">{`// Just close the modal and let the UI update
+setShowDripFeedModal(false);
+// User sees the change in the list - no alert needed`}</pre>
+      </div>
+    </div>
   </div>
 );
 

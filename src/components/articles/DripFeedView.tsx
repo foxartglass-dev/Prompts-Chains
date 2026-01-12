@@ -14,7 +14,19 @@ interface DripFeedSettings {
   notification_hours: number[];
   first_day_monitor: boolean;
   is_enabled: boolean;
+  timezone: string;
 }
+
+// Common US timezones for the dropdown
+const TIMEZONES = [
+  { id: 'America/New_York', label: 'Eastern (ET)', offset: 'UTC-5/UTC-4' },
+  { id: 'America/Chicago', label: 'Central (CT)', offset: 'UTC-6/UTC-5' },
+  { id: 'America/Denver', label: 'Mountain (MT)', offset: 'UTC-7/UTC-6' },
+  { id: 'America/Los_Angeles', label: 'Pacific (PT)', offset: 'UTC-8/UTC-7' },
+  { id: 'America/Anchorage', label: 'Alaska (AKT)', offset: 'UTC-9/UTC-8' },
+  { id: 'Pacific/Honolulu', label: 'Hawaii (HST)', offset: 'UTC-10' },
+  { id: 'UTC', label: 'UTC', offset: 'UTC' },
+];
 
 interface ScheduledArticle {
   id: number;
@@ -81,9 +93,11 @@ const SMS_CARRIERS = [
 
 interface DripFeedViewProps {
   websiteId?: number;
+  onOpenArticle?: (articleId: number) => void;
+  refreshKey?: number;
 }
 
-const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
+const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, refreshKey }) => {
   const [settings, setSettings] = useState<DripFeedSettings | null>(null);
   const [schedules, setSchedules] = useState<ScheduledArticle[]>([]);
   const [groupedSchedules, setGroupedSchedules] = useState<Record<string, ScheduledArticle[]>>({});
@@ -102,7 +116,8 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
   const [skipWeekdays, setSkipWeekdays] = useState<number[]>([]);
   const [skipDates, setSkipDates] = useState<string[]>([]);
   const [firstDayMonitor, setFirstDayMonitor] = useState(true);
-  const [isEnabled, setIsEnabled] = useState(false);
+  const [isEnabled, setIsEnabled] = useState(true);
+  const [timezone, setTimezone] = useState('America/Chicago');
 
   // UI state
   const [showSettings, setShowSettings] = useState(false);
@@ -181,6 +196,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
         setSkipDates(data.settings.skip_dates || []);
         setFirstDayMonitor(data.settings.first_day_monitor ?? true);
         setIsEnabled(data.settings.is_enabled ?? false);
+        setTimezone(data.settings.timezone || 'America/Chicago');
       }
 
       if (schedulesRes.ok) {
@@ -218,7 +234,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, refreshKey]);
 
   const saveSettings = async () => {
     if (!websiteId) return;
@@ -240,7 +256,8 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
           skip_weekdays: skipWeekdays,
           skip_dates: skipDates,
           first_day_monitor: firstDayMonitor,
-          is_enabled: isEnabled
+          is_enabled: isEnabled,
+          timezone: timezone
         })
       });
 
@@ -535,6 +552,33 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
     return `${hour12}:${minutes} ${ampm}`;
   };
 
+  // Get current time in the user's configured timezone
+  const getCurrentTimeInTimezone = () => {
+    const now = new Date();
+    return now.toLocaleString('en-US', {
+      timeZone: timezone,
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  // Format a datetime for display (used in test status)
+  const formatDateTimeInTimezone = (dateStr: string, timeStr: string) => {
+    // Create date in UTC, then format in user's timezone
+    const dateTime = new Date(`${dateStr}T${timeStr}:00Z`);
+    return dateTime.toLocaleString('en-US', {
+      timeZone: timezone,
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
   const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   const getDaysInMonth = (date: Date) => {
@@ -591,11 +635,11 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
             <div
               onClick={() => setIsEnabled(!isEnabled)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition ${
-                isEnabled ? 'bg-green-600/20 border border-green-500/50' : 'bg-slate-700 border border-slate-600'
+                isEnabled ? 'bg-green-600/20 border border-green-500/50' : 'bg-orange-600/20 border border-orange-500/50'
               }`}
             >
-              <div className={`w-3 h-3 rounded-full ${isEnabled ? 'bg-green-400' : 'bg-gray-500'}`} />
-              <span className={`text-sm font-medium ${isEnabled ? 'text-green-400' : 'text-gray-400'}`}>
+              <div className={`w-3 h-3 rounded-full ${isEnabled ? 'bg-green-400' : 'bg-orange-400'}`} />
+              <span className={`text-sm font-medium ${isEnabled ? 'text-green-400' : 'text-orange-400'}`}>
                 {isEnabled ? 'Active' : 'Paused'}
               </span>
             </div>
@@ -627,8 +671,17 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
             )}
           </div>
 
-          {/* Right: Settings Dropdown + Actions */}
+          {/* Right: Time Display + Settings Dropdown + Actions */}
           <div className="flex items-center gap-2">
+            {/* Current Time Display */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 rounded-lg text-sm">
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-white font-mono">{getCurrentTimeInTimezone()}</span>
+              <span className="text-gray-500 text-xs">({TIMEZONES.find(t => t.id === timezone)?.label?.split(' ')[0] || 'CT'})</span>
+            </div>
+
             <button
               onClick={() => setShowSettings(!showSettings)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
@@ -844,6 +897,22 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
               />
               <span className="text-xs text-gray-400">First Day Monitor</span>
             </label>
+
+            {/* Timezone */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400">Timezone:</span>
+              <select
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="bg-slate-700 border border-slate-600 rounded px-1.5 py-0.5 text-white text-xs"
+              >
+                {TIMEZONES.map((tz) => (
+                  <option key={tz.id} value={tz.id}>
+                    {tz.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Save Button */}
             <button
@@ -1133,7 +1202,8 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
               {testStatus ? (
                 <div className="space-y-1 text-xs">
                   <div className="text-gray-300">
-                    Time: <span className="text-white font-mono">{testStatus.currentTime}</span>
+                    Time: <span className="text-white font-mono">{getCurrentTimeInTimezone()}</span>
+                    <span className="text-gray-500 ml-1">({TIMEZONES.find(t => t.id === timezone)?.label || timezone})</span>
                   </div>
                   <div className="text-gray-300">
                     Pending: <span className="text-yellow-400">{testStatus.pendingCount}</span>
@@ -1222,30 +1292,42 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
               <div className="bg-slate-900/50 rounded-lg p-2 flex-1">
                 <div className="text-xs text-orange-400 font-semibold mb-1">Pending ({testStatus.pendingCount})</div>
                 <div className="flex gap-2 overflow-x-auto pb-1">
-                  {testStatus.pending.map((p) => (
-                    <div
-                      key={p.id}
-                      className={`flex-shrink-0 flex items-center gap-1.5 text-xs px-2 py-1 rounded ${
-                        p.isDueNow ? 'bg-green-600/20 text-green-400 border border-green-500/50' : 'bg-slate-800 text-gray-300'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedTestArticles.includes(p.articleId)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedTestArticles([...selectedTestArticles, p.articleId]);
-                          } else {
-                            setSelectedTestArticles(selectedTestArticles.filter(id => id !== p.articleId));
-                          }
-                        }}
-                        className="w-3 h-3"
-                      />
-                      <span className="font-mono text-gray-500">{p.scheduledFor.split(' ')[1]}</span>
-                      <span className="max-w-[120px] truncate">{p.keyword}</span>
-                      {p.isDueNow && <span className="text-green-400 font-bold">DUE</span>}
-                    </div>
-                  ))}
+                  {testStatus.pending.map((p) => {
+                    // Extract time from scheduledFor (handles various formats)
+                    const timeMatch = p.scheduledFor?.match(/(\d{1,2}:\d{2})/);
+                    const displayTime = timeMatch ? formatTime(timeMatch[1]) : p.scheduledFor;
+
+                    return (
+                      <div
+                        key={p.id}
+                        className={`flex-shrink-0 flex items-center gap-2 text-xs px-2 py-1.5 rounded ${
+                          p.isDueNow ? 'bg-green-600/20 text-green-400 border border-green-500/50' : 'bg-slate-800 text-gray-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedTestArticles.includes(p.articleId)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedTestArticles([...selectedTestArticles, p.articleId]);
+                            } else {
+                              setSelectedTestArticles(selectedTestArticles.filter(id => id !== p.articleId));
+                            }
+                          }}
+                          className="w-3 h-3"
+                        />
+                        <span className={`font-mono ${p.isDueNow ? 'text-green-400' : 'text-amber-400'}`}>{displayTime}</span>
+                        <button
+                          onClick={() => onOpenArticle && onOpenArticle(p.articleId)}
+                          className="max-w-[150px] truncate text-white hover:text-brand-cyan hover:underline transition"
+                          title="Click to edit article"
+                        >
+                          {p.keyword || 'No keyword'}
+                        </button>
+                        {p.isDueNow && <span className="bg-green-500 text-white px-1 rounded text-[10px] font-bold">DUE</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1303,11 +1385,21 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId }) => {
                             <span className="text-xs text-gray-500 w-16">
                               {formatTime(article.scheduled_time)}
                             </span>
-                            <span className="text-sm text-white">{article.keyword}</span>
+                            <button
+                              onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
+                              className="text-sm text-white hover:text-brand-cyan hover:underline transition text-left"
+                              title="Click to edit article"
+                            >
+                              {article.keyword}
+                            </button>
                             {!article.selected_meta_title && (
-                              <span className="px-1.5 py-0.5 bg-amber-600/30 text-amber-400 rounded text-[10px]">
+                              <button
+                                onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
+                                className="px-1.5 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-400 rounded text-[10px] cursor-pointer transition"
+                                title="Click to add meta"
+                              >
                                 No Meta
-                              </span>
+                              </button>
                             )}
                             <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                               article.status === 'pending' ? 'bg-blue-600/30 text-blue-400' :

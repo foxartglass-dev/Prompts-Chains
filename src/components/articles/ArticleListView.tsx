@@ -68,9 +68,11 @@ interface Article {
 interface ArticleListViewProps {
   websiteId?: number;
   onEditVisual?: (article: Article) => void;
+  openArticleId?: number | null;
+  onArticleModalClose?: () => void;
 }
 
-const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisual }) => {
+const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisual, openArticleId, onArticleModalClose }) => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -122,6 +124,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   useEffect(() => {
     fetchArticles();
   }, [websiteId, statusFilter]);
+
+  // Open article from external source (e.g., DripFeedView)
+  useEffect(() => {
+    if (openArticleId) {
+      fetchArticleDetails(openArticleId);
+    }
+  }, [openArticleId]);
 
   const fetchArticles = async () => {
     setLoading(true);
@@ -526,7 +535,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   };
 
   // Add selected articles to drip feed
-  const addToDripFeed = async () => {
+  const addToDripFeed = async (scheduleLater: boolean = false) => {
     if (selectedIds.size === 0 || !websiteId) return;
 
     setAddingToDripFeed(true);
@@ -536,15 +545,14 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           articleIds: Array.from(selectedIds),
-          startDate: dripFeedStartDate
+          startDate: dripFeedStartDate,
+          scheduleLater
         })
       });
 
       if (res.ok) {
-        const data = await res.json();
         setSelectedIds(new Set());
         setShowDripFeedModal(false);
-        alert(`Successfully scheduled ${data.scheduled} articles for drip feed!`);
       } else {
         const data = await res.json();
         setError(data.error || 'Failed to add to drip feed');
@@ -582,6 +590,10 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     setSelectedArticle(null);
     setIsEditing(false);
     setError(null);
+    // Notify parent if opened from another view (e.g., DripFeed)
+    if (onArticleModalClose) {
+      onArticleModalClose();
+    }
     setShowImages(false);
     setShowImageReport(false);
   };
@@ -866,20 +878,30 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
               </p>
             </div>
 
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-between gap-3">
               <button
-                onClick={() => setShowDripFeedModal(false)}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-gray-300 transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={addToDripFeed}
+                onClick={() => addToDripFeed(true)}
                 disabled={addingToDripFeed}
-                className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded-lg text-slate-900 font-medium transition disabled:opacity-50"
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-white font-medium transition disabled:opacity-50"
+                title="Add to queue without scheduling dates"
               >
-                {addingToDripFeed ? 'Scheduling...' : 'Schedule Articles'}
+                {addingToDripFeed ? 'Adding...' : 'Schedule Later'}
               </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDripFeedModal(false)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-gray-300 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => addToDripFeed(false)}
+                  disabled={addingToDripFeed}
+                  className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded-lg text-slate-900 font-medium transition disabled:opacity-50"
+                >
+                  {addingToDripFeed ? 'Scheduling...' : 'Schedule Now'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

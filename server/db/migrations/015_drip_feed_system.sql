@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS drip_feed_settings (
   first_day_monitor BOOLEAN DEFAULT true,
 
   -- Master toggle
-  is_enabled BOOLEAN DEFAULT false,
+  is_enabled BOOLEAN DEFAULT true,
 
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()

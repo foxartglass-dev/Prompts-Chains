@@ -738,12 +738,25 @@ async function setup() {
         skip_dates JSONB DEFAULT '[]',
         notification_hours JSONB DEFAULT '[24, 12, 6]',
         first_day_monitor BOOLEAN DEFAULT true,
-        is_enabled BOOLEAN DEFAULT false,
+        is_enabled BOOLEAN DEFAULT true,
+        timezone VARCHAR(50) DEFAULT 'America/Chicago',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
     console.log('  ✓ drip_feed_settings');
+
+    // Add timezone column if it doesn't exist (migration 018)
+    const hasTimezone = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'drip_feed_settings' AND column_name = 'timezone'
+    `;
+    if (hasTimezone.length === 0) {
+      await sql`ALTER TABLE drip_feed_settings ADD COLUMN timezone VARCHAR(50) DEFAULT 'America/Chicago'`;
+      console.log('  ✓ Added timezone column to drip_feed_settings');
+    } else {
+      console.log('  - timezone column already exists');
+    }
 
     // Drip Feed Schedules (the hopper)
     await sql`
