@@ -8,6 +8,16 @@ import { sql, isDatabaseEnabled } from '../db/index.js';
 
 const router = express.Router();
 
+/**
+ * Strip tag identifier from keyword
+ * Removes patterns like "(H)", "(J)", "(C)" from end of keyword
+ * Example: "Standard Cleaning(H)" -> "Standard Cleaning"
+ */
+function stripTagFromKeyword(keyword) {
+  if (!keyword) return keyword;
+  return keyword.replace(/\s*\([A-Za-z0-9]+\)\s*$/, '').trim();
+}
+
 const requireDb = (req, res, next) => {
   if (!isDatabaseEnabled()) {
     return res.status(503).json({ error: 'Database not configured' });
@@ -1131,7 +1141,7 @@ async function publishArticle(article) {
         wpUrl: article.wp_url,
         wpUser: article.wp_user,
         wpPassword: article.wp_app_password,
-        title: article.keyword,
+        title: stripTagFromKeyword(article.keyword),
         content: article.final_content,
         status: 'publish', // Publish immediately (not draft)
         articleId: articleId

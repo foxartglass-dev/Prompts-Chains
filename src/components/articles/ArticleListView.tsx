@@ -120,6 +120,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     tomorrow.setDate(tomorrow.getDate() + 1);
     return tomorrow.toISOString().split('T')[0];
   });
+  const [dripFeedScheduleLater, setDripFeedScheduleLater] = useState(false);
 
   useEffect(() => {
     fetchArticles();
@@ -862,46 +863,81 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
               Schedule {selectedIds.size} article{selectedIds.size !== 1 ? 's' : ''} for automatic publishing.
             </p>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Start Date
+            {/* Schedule Option Selection - Radio Buttons */}
+            <div className="mb-4 space-y-2">
+              <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border transition ${
+                !dripFeedScheduleLater
+                  ? 'bg-brand-cyan/10 border-brand-cyan/50'
+                  : 'bg-slate-800/50 border-transparent hover:border-brand-cyan/30'
+              }`}>
+                <input
+                  type="radio"
+                  name="scheduleOption"
+                  checked={!dripFeedScheduleLater}
+                  onChange={() => setDripFeedScheduleLater(false)}
+                  className="w-4 h-4 text-brand-cyan bg-slate-700 border-slate-600"
+                />
+                <div>
+                  <span className="text-white font-medium">Schedule Now</span>
+                  <p className="text-xs text-gray-500">Assign dates based on Drip Feed settings</p>
+                </div>
               </label>
-              <input
-                type="date"
-                value={dripFeedStartDate}
-                onChange={(e) => setDripFeedStartDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Articles will be distributed starting from this date based on your Drip Feed settings.
-              </p>
+              <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border transition ${
+                dripFeedScheduleLater
+                  ? 'bg-amber-600/10 border-amber-500/50'
+                  : 'bg-slate-800/50 border-transparent hover:border-amber-500/30'
+              }`}>
+                <input
+                  type="radio"
+                  name="scheduleOption"
+                  checked={dripFeedScheduleLater}
+                  onChange={() => setDripFeedScheduleLater(true)}
+                  className="w-4 h-4 text-amber-500 bg-slate-700 border-slate-600"
+                />
+                <div>
+                  <span className="text-amber-400 font-medium">Schedule Later</span>
+                  <p className="text-xs text-gray-500">Add to queue without assigning dates</p>
+                </div>
+              </label>
             </div>
 
-            <div className="flex justify-between gap-3">
-              <button
-                onClick={() => addToDripFeed(true)}
-                disabled={addingToDripFeed}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-white font-medium transition disabled:opacity-50"
-                title="Add to queue without scheduling dates"
-              >
-                {addingToDripFeed ? 'Adding...' : 'Schedule Later'}
-              </button>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowDripFeedModal(false)}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-gray-300 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => addToDripFeed(false)}
-                  disabled={addingToDripFeed}
-                  className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded-lg text-slate-900 font-medium transition disabled:opacity-50"
-                >
-                  {addingToDripFeed ? 'Scheduling...' : 'Schedule Now'}
-                </button>
+            {/* Start Date - only show when Schedule Now is selected */}
+            {!dripFeedScheduleLater && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={dripFeedStartDate}
+                  onChange={(e) => setDripFeedStartDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Articles will be distributed starting from this date.
+                </p>
               </div>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowDripFeedModal(false)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-gray-300 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => addToDripFeed(dripFeedScheduleLater)}
+                disabled={addingToDripFeed}
+                className={`px-4 py-2 rounded-lg font-medium transition disabled:opacity-50 ${
+                  dripFeedScheduleLater
+                    ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                    : 'bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900'
+                }`}
+              >
+                {addingToDripFeed ? 'Adding...' : dripFeedScheduleLater ? 'Add to Queue' : 'Schedule'}
+              </button>
             </div>
           </div>
         </div>
