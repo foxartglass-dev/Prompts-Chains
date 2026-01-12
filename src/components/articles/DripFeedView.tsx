@@ -94,9 +94,10 @@ const SMS_CARRIERS = [
 interface DripFeedViewProps {
   websiteId?: number;
   onOpenArticle?: (articleId: number) => void;
+  refreshKey?: number;
 }
 
-const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle }) => {
+const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, refreshKey }) => {
   const [settings, setSettings] = useState<DripFeedSettings | null>(null);
   const [schedules, setSchedules] = useState<ScheduledArticle[]>([]);
   const [groupedSchedules, setGroupedSchedules] = useState<Record<string, ScheduledArticle[]>>({});
@@ -233,7 +234,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle })
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, refreshKey]);
 
   const saveSettings = async () => {
     if (!websiteId) return;

@@ -58,6 +58,9 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose, defaultWeb
   // Article to open from DripFeed (overlay modal)
   const [openArticleId, setOpenArticleId] = useState<number | null>(null);
 
+  // Refresh key to trigger DripFeedView refresh after closing article modal
+  const [dripFeedRefreshKey, setDripFeedRefreshKey] = useState(0);
+
   // Visual editor state
   const [visualEditorArticle, setVisualEditorArticle] = useState<Article | null>(null);
   const [imageEditWidget, setImageEditWidget] = useState<{ widgetId: string; element: ElementPosition } | null>(null);
@@ -299,13 +302,18 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose, defaultWeb
             websiteId={selectedWebsite?.id}
             onEditVisual={handleEditVisual}
             openArticleId={openArticleId}
-            onArticleModalClose={() => setOpenArticleId(null)}
+            onArticleModalClose={() => {
+              setOpenArticleId(null);
+              // Trigger DripFeedView refresh to show updated meta status
+              setDripFeedRefreshKey(k => k + 1);
+            }}
           />
         </div>
         {activeTab === 'drip-feed' && (
           <DripFeedView
             websiteId={selectedWebsite?.id}
             onOpenArticle={(articleId) => setOpenArticleId(articleId)}
+            refreshKey={dripFeedRefreshKey}
           />
         )}
         {activeTab === 'browser' && selectedWebsite && (

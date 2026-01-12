@@ -551,14 +551,8 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       });
 
       if (res.ok) {
-        const data = await res.json();
         setSelectedIds(new Set());
         setShowDripFeedModal(false);
-        if (scheduleLater) {
-          alert(`Added ${data.queued} article(s) to queue. Schedule them from the Drip Feed tab.`);
-        } else {
-          alert(`Successfully scheduled ${data.scheduled} articles for drip feed!`);
-        }
       } else {
         const data = await res.json();
         setError(data.error || 'Failed to add to drip feed');
