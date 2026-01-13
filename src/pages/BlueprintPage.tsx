@@ -1067,6 +1067,43 @@ const GoldenRules: React.FC = () => (
           </div>
         </div>
       </div>
+
+      {/* Rule 7 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-pink-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-pink-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">7</div>
+          <div>
+            <h3 className="text-lg font-bold text-pink-400">ALL popup/modal windows MUST use React Portals</h3>
+            <p className="text-gray-300 mt-2 text-sm">
+              Never render modals inside the component tree with just <code className="bg-slate-900 px-1 rounded">position: fixed</code>.
+              This causes flickering when the popup is inside a two-column layout or container with positioning.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-red-400 font-medium mb-2">❌ DON'T (causes flickering):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`{showPopup && (
+  <div className="fixed inset-0 bg-black/80 z-50">
+    ...modal content...
+  </div>
+)}`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-green-400 font-medium mb-2">✓ DO (correct way):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`import { createPortal } from 'react-dom';
+
+{showPopup && createPortal(
+  <div className="fixed inset-0 bg-black/80 z-[9999]">
+    ...modal content...
+  </div>,
+  document.body
+)}`}</pre>
+            </div>
+            <p className="text-gray-400 mt-3 text-xs">
+              <strong>Why:</strong> Portals render content outside the React component tree directly to document.body,
+              bypassing any parent containers that could affect positioning. Use <code className="bg-slate-900 px-1 rounded">z-[9999]</code> for highest priority.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
 
     {/* File Reference */}

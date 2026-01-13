@@ -10317,9 +10317,9 @@ Start by introducing yourself and asking about their business in a friendly way.
         </div>
       )}
 
-      {/* Quick Image Preview Modal (for Draft Bank and Used/Archive) */}
-      {quickPreview && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setQuickPreview(null)}>
+      {/* Quick Image Preview Modal (for Draft Bank and Used/Archive) - Portal */}
+      {quickPreview && createPortal(
+        <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4" onClick={() => setQuickPreview(null)}>
           <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => setQuickPreview(null)}
@@ -10338,12 +10338,13 @@ Start by introducing yourself and asking about their business in a friendly way.
               <div className="mt-2 text-center text-white text-lg">{quickPreview.title}</div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Draft Bank Expanded View - Full-size scrollable grid */}
-      {draftBankExpandedView && (
-        <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
+      {/* Draft Bank Expanded View - Full-size scrollable grid (Portal) */}
+      {draftBankExpandedView && createPortal(
+        <div className="fixed inset-0 bg-slate-950 z-[9999] flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-amber-500/30 bg-slate-900">
             <h2 className="text-xl font-bold text-amber-400 flex items-center gap-2">
@@ -10424,12 +10425,13 @@ Start by introducing yourself and asking about their business in a friendly way.
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Used/Archive Expanded View - Full-size scrollable grid */}
-      {usedBankExpandedView && (
-        <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
+      {/* Used/Archive Expanded View - Full-size scrollable grid (Portal) */}
+      {usedBankExpandedView && createPortal(
+        <div className="fixed inset-0 bg-slate-950 z-[9999] flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-purple-500/30 bg-slate-900">
             <h2 className="text-xl font-bold text-purple-400 flex items-center gap-2">
@@ -10504,12 +10506,13 @@ Start by introducing yourself and asking about their business in a friendly way.
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Fullscreen Image Bank Modal */}
-      {bankFullscreen && (
-        <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
+      {/* Fullscreen Image Bank Modal (Portal) */}
+      {bankFullscreen && createPortal(
+        <div className="fixed inset-0 bg-slate-950 z-[9999] flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex flex-col border-b border-brand-cyan/30 bg-slate-900">
             {/* Top row - Title and Close */}
@@ -10735,13 +10738,14 @@ Start by introducing yourself and asking about their business in a friendly way.
               <button onClick={selectAllForDownload} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm transition">Select All</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Image Preview Modal */}
-      {previewImage && (
+      {/* Image Preview Modal (Portal) */}
+      {previewImage && createPortal(
         <div
-          className="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4"
+          className="fixed inset-0 bg-black/95 z-[9999] flex flex-col items-center justify-center p-4"
           onClick={() => setPreviewImage(null)}
         >
           {/* Fixed container to prevent flickering */}
@@ -10842,7 +10846,8 @@ Start by introducing yourself and asking about their business in a friendly way.
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Floating Review Button - Shows when there are pending feedback requests */}
