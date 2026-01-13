@@ -120,7 +120,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     tomorrow.setDate(tomorrow.getDate() + 1);
     return tomorrow.toISOString().split('T')[0];
   });
-  const [dripFeedScheduleLater, setDripFeedScheduleLater] = useState(false);
+  const [dripFeedMode, setDripFeedMode] = useState<'schedule_now' | 'queue_behind' | 'schedule_later'>('schedule_now');
 
   useEffect(() => {
     fetchArticles();
@@ -536,7 +536,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   };
 
   // Add selected articles to drip feed
-  const addToDripFeed = async (scheduleLater: boolean = false) => {
+  const addToDripFeed = async () => {
     if (selectedIds.size === 0 || !websiteId) return;
 
     setAddingToDripFeed(true);
@@ -547,13 +547,15 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         body: JSON.stringify({
           articleIds: Array.from(selectedIds),
           startDate: dripFeedStartDate,
-          scheduleLater
+          scheduleLater: dripFeedMode === 'schedule_later',
+          queueBehindLast: dripFeedMode === 'queue_behind'
         })
       });
 
       if (res.ok) {
         setSelectedIds(new Set());
         setShowDripFeedModal(false);
+        setDripFeedMode('schedule_now'); // Reset for next time
       } else {
         const data = await res.json();
         setError(data.error || 'Failed to add to drip feed');
@@ -866,15 +868,15 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             {/* Schedule Option Selection - Radio Buttons */}
             <div className="mb-4 space-y-2">
               <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border transition ${
-                !dripFeedScheduleLater
+                dripFeedMode === 'schedule_now'
                   ? 'bg-brand-cyan/10 border-brand-cyan/50'
                   : 'bg-slate-800/50 border-transparent hover:border-brand-cyan/30'
               }`}>
                 <input
                   type="radio"
                   name="scheduleOption"
-                  checked={!dripFeedScheduleLater}
-                  onChange={() => setDripFeedScheduleLater(false)}
+                  checked={dripFeedMode === 'schedule_now'}
+                  onChange={() => setDripFeedMode('schedule_now')}
                   className="w-4 h-4 text-brand-cyan bg-slate-700 border-slate-600"
                 />
                 <div>
@@ -883,15 +885,32 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                 </div>
               </label>
               <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border transition ${
-                dripFeedScheduleLater
+                dripFeedMode === 'queue_behind'
+                  ? 'bg-green-600/10 border-green-500/50'
+                  : 'bg-slate-800/50 border-transparent hover:border-green-500/30'
+              }`}>
+                <input
+                  type="radio"
+                  name="scheduleOption"
+                  checked={dripFeedMode === 'queue_behind'}
+                  onChange={() => setDripFeedMode('queue_behind')}
+                  className="w-4 h-4 text-green-500 bg-slate-700 border-slate-600"
+                />
+                <div>
+                  <span className="text-green-400 font-medium">Queue Behind Last</span>
+                  <p className="text-xs text-gray-500">Add after the last scheduled article</p>
+                </div>
+              </label>
+              <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border transition ${
+                dripFeedMode === 'schedule_later'
                   ? 'bg-amber-600/10 border-amber-500/50'
                   : 'bg-slate-800/50 border-transparent hover:border-amber-500/30'
               }`}>
                 <input
                   type="radio"
                   name="scheduleOption"
-                  checked={dripFeedScheduleLater}
-                  onChange={() => setDripFeedScheduleLater(true)}
+                  checked={dripFeedMode === 'schedule_later'}
+                  onChange={() => setDripFeedMode('schedule_later')}
                   className="w-4 h-4 text-amber-500 bg-slate-700 border-slate-600"
                 />
                 <div>
@@ -902,7 +921,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             </div>
 
             {/* Start Date - only show when Schedule Now is selected */}
-            {!dripFeedScheduleLater && (
+            {dripFeedMode === 'schedule_now' && (
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Start Date
@@ -928,15 +947,20 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                 Cancel
               </button>
               <button
-                onClick={() => addToDripFeed(dripFeedScheduleLater)}
+                onClick={() => addToDripFeed()}
                 disabled={addingToDripFeed}
                 className={`px-4 py-2 rounded-lg font-medium transition disabled:opacity-50 ${
-                  dripFeedScheduleLater
+                  dripFeedMode === 'schedule_later'
                     ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                    : dripFeedMode === 'queue_behind'
+                    ? 'bg-green-600 hover:bg-green-500 text-white'
                     : 'bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900'
                 }`}
               >
-                {addingToDripFeed ? 'Adding...' : dripFeedScheduleLater ? 'Add to Queue' : 'Schedule'}
+                {addingToDripFeed ? 'Adding...' :
+                  dripFeedMode === 'schedule_later' ? 'Add to Queue' :
+                  dripFeedMode === 'queue_behind' ? 'Queue Behind Last' :
+                  'Schedule'}
               </button>
             </div>
           </div>

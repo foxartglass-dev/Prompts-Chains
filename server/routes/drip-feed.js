@@ -212,7 +212,7 @@ router.get('/schedule/:websiteId', requireDb, async (req, res) => {
 router.post('/schedule/:websiteId', requireDb, async (req, res) => {
   try {
     const { websiteId } = req.params;
-    const { articleIds, startDate, scheduleLater } = req.body;
+    const { articleIds, startDate, scheduleLater, queueBehindLast } = req.body;
 
     if (!articleIds || !Array.isArray(articleIds) || articleIds.length === 0) {
       return res.status(400).json({ error: 'articleIds array is required' });
@@ -273,8 +273,51 @@ router.post('/schedule/:websiteId', requireDb, async (req, res) => {
       skip_dates: []
     };
 
+    // Determine start date for scheduling
+    let scheduleStartDate = startDate ? new Date(startDate) : new Date();
+
+    // If queueBehindLast is true, find the last scheduled article and start from there
+    if (queueBehindLast) {
+      const lastScheduled = await sql`
+        SELECT scheduled_date, scheduled_time
+        FROM drip_feed_schedules
+        WHERE website_id = ${websiteId}
+          AND status IN ('pending', 'published')
+          AND scheduled_date != '9999-12-31'
+        ORDER BY scheduled_date DESC, scheduled_time DESC
+        LIMIT 1
+      `;
+
+      if (lastScheduled.length > 0) {
+        // Get count of articles on the last scheduled date
+        const lastDate = lastScheduled[0].scheduled_date;
+        const countOnLastDate = await sql`
+          SELECT COUNT(*) as count
+          FROM drip_feed_schedules
+          WHERE website_id = ${websiteId}
+            AND scheduled_date = ${lastDate}
+            AND status IN ('pending', 'published')
+        `;
+
+        const articlesOnLastDate = parseInt(countOnLastDate[0]?.count || 0);
+        const maxPerDay = settings.variance_enabled
+          ? settings.variance_max
+          : settings.articles_per_day;
+
+        // If the last date has room for more articles, start from that date
+        // Otherwise, start from the next day
+        if (articlesOnLastDate < maxPerDay) {
+          scheduleStartDate = new Date(lastDate);
+        } else {
+          scheduleStartDate = new Date(lastDate);
+          scheduleStartDate.setDate(scheduleStartDate.getDate() + 1);
+        }
+      }
+      // If no scheduled articles exist, use today as start date (already set)
+    }
+
     // Generate schedule using the scheduling algorithm
-    const schedules = generateSchedule(articleIds, settings, startDate ? new Date(startDate) : new Date());
+    const schedules = generateSchedule(articleIds, settings, scheduleStartDate);
 
     // Insert all schedules
     const inserted = [];

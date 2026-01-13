@@ -678,6 +678,42 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
     }
   };
 
+  // Queue article behind the last scheduled one (one-click)
+  const [queuingArticleId, setQueuingArticleId] = useState<number | null>(null);
+  const queueArticleBehindLast = async (article: ScheduleWithArticle) => {
+    if (!websiteId) return;
+
+    setQueuingArticleId(article.id);
+    try {
+      const res = await fetch(`/api/drip-feed/schedule/${websiteId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleIds: [article.article_id],
+          queueBehindLast: true
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const scheduled = data.schedules?.[0];
+        if (scheduled) {
+          showToast(`Queued "${article.keyword}" for ${formatDate(scheduled.scheduled_date)} at ${formatTime(scheduled.scheduled_time)}`, 'success');
+        } else {
+          showToast(`Queued "${article.keyword}" successfully`, 'success');
+        }
+        fetchData();
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Failed to queue article');
+      }
+    } catch (err) {
+      setError('Failed to queue article');
+    } finally {
+      setQueuingArticleId(null);
+    }
+  };
+
   // Real-time clock - updates every second
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1800,17 +1836,30 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
                               )}
                             </div>
                             <div className="flex items-center gap-1.5">
-                              {/* Schedule button for unscheduled articles */}
+                              {/* Queue and Schedule buttons for unscheduled articles */}
                               {article.status === 'unscheduled' && (
-                                <button
-                                  onClick={() => openScheduleModal(article)}
-                                  className="px-2 py-0.5 bg-brand-cyan/30 hover:bg-brand-cyan/50 rounded text-brand-cyan text-xs flex items-center gap-1"
-                                >
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  Schedule
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => queueArticleBehindLast(article)}
+                                    disabled={queuingArticleId === article.id}
+                                    className="px-2 py-0.5 bg-green-600/30 hover:bg-green-600/50 disabled:opacity-50 rounded text-green-400 text-xs flex items-center gap-1"
+                                    title="Queue behind the last scheduled article"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                                    </svg>
+                                    {queuingArticleId === article.id ? 'Queueing...' : 'Queue'}
+                                  </button>
+                                  <button
+                                    onClick={() => openScheduleModal(article)}
+                                    className="px-2 py-0.5 bg-brand-cyan/30 hover:bg-brand-cyan/50 rounded text-brand-cyan text-xs flex items-center gap-1"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Schedule
+                                  </button>
+                                </>
                               )}
                               {article.wp_post_url && (
                                 <a
