@@ -942,48 +942,32 @@ const SitePlanningSection: React.FC<Props> = ({
             </span>
           )}
 
-          {/* Push to WordPress button */}
-          <div className="relative group">
-            <button
-              onClick={() => pushToWordPress('draft')}
-              disabled={pushing || flatNodes.filter(n => !n.wp_page_id).length === 0}
-              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white text-sm transition disabled:opacity-50 flex items-center gap-1"
-            >
-              {pushing ? (
-                <>
-                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Pushing...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  Push to WP
-                </>
-              )}
-            </button>
-            {/* Dropdown for publish option */}
-            <div className="absolute right-0 mt-1 w-40 bg-slate-800 border border-slate-600 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-              <button
-                onClick={() => pushToWordPress('draft')}
-                disabled={pushing}
-                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-700 rounded-t-lg"
-              >
-                Push as Drafts
-              </button>
-              <button
-                onClick={() => pushToWordPress('publish')}
-                disabled={pushing}
-                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-700 rounded-b-lg border-t border-slate-700"
-              >
-                Push & Publish
-              </button>
-            </div>
-          </div>
+          {/* Start Workflow button - follows toggle settings */}
+          <button
+            onClick={() => pushToWordPress(articlePublishMode === 'wordpress' ? 'publish' : 'draft')}
+            disabled={pushing || flatNodes.filter(n => !n.wp_page_id).length === 0}
+            className={`px-3 py-1.5 rounded text-white text-sm transition disabled:opacity-50 flex items-center gap-1 ${
+              articlePublishMode === 'wordpress' ? 'bg-green-600 hover:bg-green-700' : 'bg-brand-cyan hover:bg-brand-cyan/80'
+            }`}
+          >
+            {pushing ? (
+              <>
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Working...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Start {articlePublishMode === 'wordpress' ? '(WP)' : '(Draft)'}
+              </>
+            )}
+          </button>
 
           {/* Generation Mode Controls */}
           <div className="flex items-center gap-2 border-r border-slate-600 pr-4 mr-2">
@@ -1042,77 +1026,70 @@ const SitePlanningSection: React.FC<Props> = ({
             )}
           </div>
 
-          {/* Check sync button */}
-          <button
-            onClick={checkSync}
-            disabled={syncing}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm transition disabled:opacity-50"
-          >
-            {syncing ? 'Checking...' : 'Check WP Sync'}
-          </button>
+          {/* Import/Export Group - Stacked compact */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowTabImportModal(true)}
+              className="px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded-l text-white text-xs transition"
+              title="Import tab-indented list"
+            >
+              Import
+            </button>
+            <div className="flex flex-col gap-0.5">
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="px-1.5 py-0.5 bg-slate-600 hover:bg-slate-500 rounded-tr text-white text-[10px] transition"
+                title="Import CSV"
+              >
+                CSV
+              </button>
+              <button
+                onClick={exportSitePlan}
+                disabled={flatNodes.length === 0}
+                className="px-1.5 py-0.5 bg-teal-600 hover:bg-teal-500 disabled:bg-slate-700 disabled:opacity-50 rounded-br text-white text-[10px] transition"
+                title="Export JSON"
+              >
+                Export
+              </button>
+            </div>
+          </div>
 
-          {/* Tab Import button */}
-          <button
-            onClick={() => setShowTabImportModal(true)}
-            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition flex items-center gap-1"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Import List
-          </button>
+          {/* Location & Analysis Group */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowLocationModal(true)}
+              className="px-2 py-1 bg-amber-600 hover:bg-amber-700 rounded text-white text-xs transition"
+              title="Add location"
+            >
+              +Loc
+            </button>
+            <button
+              onClick={() => { setShowGapModal(true); analyzeGaps(); }}
+              className="px-2 py-1 bg-pink-600 hover:bg-pink-700 rounded text-white text-xs transition"
+              title="Neighborhoods gap analysis"
+            >
+              Gaps
+            </button>
+          </div>
 
-          {/* Multi-location button */}
-          <button
-            onClick={() => setShowLocationModal(true)}
-            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 rounded text-white text-sm transition flex items-center gap-1"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            + Location
-          </button>
-
-          {/* Gap Analysis button */}
-          <button
-            onClick={() => { setShowGapModal(true); analyzeGaps(); }}
-            className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 rounded text-white text-sm transition flex items-center gap-1"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-            </svg>
-            Neighborhoods
-          </button>
-
-          {/* Import CSV button */}
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 rounded text-white text-sm transition"
-          >
-            CSV
-          </button>
-
-          {/* Export Site Plan button */}
-          <button
-            onClick={exportSitePlan}
-            disabled={flatNodes.length === 0}
-            className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:bg-slate-600 disabled:opacity-50 rounded text-white text-sm transition flex items-center gap-1"
-            title="Export site plan as JSON"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Export
-          </button>
-
-          {/* Add root page */}
-          <button
-            onClick={() => setAddingToParent(0)}
-            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white text-sm transition"
-          >
-            + Add Page
-          </button>
+          {/* Sync & Add Page */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={checkSync}
+              disabled={syncing}
+              className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs transition disabled:opacity-50"
+              title="Check WordPress sync"
+            >
+              {syncing ? '...' : 'Sync'}
+            </button>
+            <button
+              onClick={() => setAddingToParent(0)}
+              className="px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-white text-xs transition"
+              title="Add root page"
+            >
+              +Page
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1131,44 +1108,7 @@ const SitePlanningSection: React.FC<Props> = ({
 
         {/* Right: Publish Mode Toggles */}
         <div className="flex items-center gap-4">
-          {/* Image Mode */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Image:</span>
-            <div className="flex rounded-lg overflow-hidden border border-slate-600">
-              <button
-                onClick={() => onImagePublishModeChange?.('off')}
-                className={`px-2.5 py-1 text-xs font-medium transition ${
-                  imagePublishMode === 'off'
-                    ? 'bg-slate-500 text-white'
-                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
-                }`}
-              >
-                Off
-              </button>
-              <button
-                onClick={() => onImagePublishModeChange?.('draft')}
-                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
-                  imagePublishMode === 'draft'
-                    ? 'bg-brand-gold text-slate-900'
-                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
-                }`}
-              >
-                Draft
-              </button>
-              <button
-                onClick={() => onImagePublishModeChange?.('wordpress')}
-                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
-                  imagePublishMode === 'wordpress'
-                    ? 'bg-brand-gold text-slate-900'
-                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
-                }`}
-              >
-                WPress
-              </button>
-            </div>
-          </div>
-
-          {/* Article Mode */}
+          {/* Article Mode - Must be WP before Meta/Image can be WP */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">Article:</span>
             <div className="flex rounded-lg overflow-hidden border border-slate-600">
@@ -1186,7 +1126,7 @@ const SitePlanningSection: React.FC<Props> = ({
                 onClick={() => onArticlePublishModeChange?.('wordpress')}
                 className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
                   articlePublishMode === 'wordpress'
-                    ? 'bg-brand-gold text-slate-900'
+                    ? 'bg-green-600 text-white'
                     : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
                 }`}
               >
@@ -1195,7 +1135,7 @@ const SitePlanningSection: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Meta Mode */}
+          {/* Meta Mode - Disabled when Article is Draft */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">Meta:</span>
             <div className="flex rounded-lg overflow-hidden border border-slate-600">
@@ -1210,11 +1150,54 @@ const SitePlanningSection: React.FC<Props> = ({
                 Draft
               </button>
               <button
-                onClick={() => onMetaPublishModeChange?.('wordpress')}
+                onClick={() => articlePublishMode === 'wordpress' && onMetaPublishModeChange?.('wordpress')}
+                disabled={articlePublishMode === 'draft'}
                 className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
                   metaPublishMode === 'wordpress'
+                    ? 'bg-green-600 text-white'
+                    : articlePublishMode === 'draft'
+                      ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                      : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                WPress
+              </button>
+            </div>
+          </div>
+
+          {/* Image Mode - WP option disabled when Article is Draft */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Image:</span>
+            <div className="flex rounded-lg overflow-hidden border border-slate-600">
+              <button
+                onClick={() => onImagePublishModeChange?.('off')}
+                className={`px-2.5 py-1 text-xs font-medium transition ${
+                  imagePublishMode === 'off'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                Off
+              </button>
+              <button
+                onClick={() => onImagePublishModeChange?.('draft')}
+                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
+                  imagePublishMode === 'draft'
                     ? 'bg-brand-gold text-slate-900'
                     : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                Draft
+              </button>
+              <button
+                onClick={() => articlePublishMode === 'wordpress' && onImagePublishModeChange?.('wordpress')}
+                disabled={articlePublishMode === 'draft'}
+                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
+                  imagePublishMode === 'wordpress'
+                    ? 'bg-green-600 text-white'
+                    : articlePublishMode === 'draft'
+                      ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                      : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
                 }`}
               >
                 WPress

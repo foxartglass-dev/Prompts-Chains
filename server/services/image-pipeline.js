@@ -67,11 +67,15 @@ function extractLocalContent(fullContent, position, wordRange = 75) {
  * @param {string} localContent - Content around the image position
  * @param {object} avatar - Audience avatar with placeholderCategories
  * @param {Set} usedPrimaries - Set of already-used primary keywords (shared across positions)
+ * @param {Set} usedOptionTexts - Set of already-used option texts (prevents duplicate fallback images)
  * @param {boolean} matchPlurals - Whether to match plural forms
  * @param {number} positionIndex - Which image position (0=hero, 1=first inline, etc)
+ * @param {object} config - Smart matching config { wordRange, primaryWeight, secondaryWeight }
  * @returns {object} { replacements, matchedPrimaries: [] }
  */
-function smartMatchForPosition(localContent, avatar, usedPrimaries, matchPlurals = true, positionIndex = 0) {
+function smartMatchForPosition(localContent, avatar, usedPrimaries, usedOptionTexts, matchPlurals = true, positionIndex = 0, config = {}) {
+  const { primaryWeight = 10, secondaryWeight = 1 } = config;
+
   if (!avatar?.placeholderCategories?.length) {
     console.log(`[Smart Match #${positionIndex}] No placeholder categories found in avatar`);
     return { replacements: {}, matchedPrimaries: [] };
@@ -114,7 +118,7 @@ function smartMatchForPosition(localContent, avatar, usedPrimaries, matchPlurals
         const forms = getPluralForms(kwLower, matchPlurals);
         for (const form of forms) {
           if (contentLower.includes(form)) {
-            score += 10;
+            score += primaryWeight; // Use configurable weight
             matchedPrimary.push(kwLower);
             break;
           }
@@ -134,7 +138,7 @@ function smartMatchForPosition(localContent, avatar, usedPrimaries, matchPlurals
           const forms = getPluralForms(kwLower, matchPlurals);
           for (const form of forms) {
             if (contentLower.includes(form)) {
-              score += 1; // Secondary matches worth less
+              score += secondaryWeight; // Use configurable weight
               matchedSecondary.push(kwLower);
               break;
             }
@@ -153,16 +157,25 @@ function smartMatchForPosition(localContent, avatar, usedPrimaries, matchPlurals
       }
     }
 
-    // Use best match or fall back to first option
+    // Use best match or fall back to UNUSED option (not always options[0])
     if (bestMatch) {
       replacements[category.placeholder] = bestMatch.option.text;
       // Track primaries matched at this position
       newlyMatchedPrimaries.push(...bestMatch.matchedPrimary);
+      // Track this option text as used for fallback prevention
+      if (usedOptionTexts) usedOptionTexts.add(bestMatch.option.text);
       console.log(`[Smart Match #${positionIndex}] ${category.name}: "${bestMatch.option.text}" (score: ${bestMatch.score}, primary: ${bestMatch.matchedPrimary.join(', ')}, secondary: ${bestMatch.matchedSecondary.join(', ')})`);
     } else if (category.options?.length > 0) {
-      // Fallback to first option
-      replacements[category.placeholder] = category.options[0].text;
-      console.log(`[Smart Match #${positionIndex}] ${category.name}: Fallback → "${category.options[0].text}"`);
+      // FIX: Fallback to UNUSED option instead of always options[0]
+      // This prevents duplicate images when no keyword matches
+      const unusedOptions = category.options.filter(opt => !usedOptionTexts?.has(opt.text));
+      const fallbackOption = unusedOptions.length > 0
+        ? unusedOptions[0]  // Pick first unused
+        : category.options[0];  // All used, cycle back to first
+
+      replacements[category.placeholder] = fallbackOption.text;
+      if (usedOptionTexts) usedOptionTexts.add(fallbackOption.text);
+      console.log(`[Smart Match #${positionIndex}] ${category.name}: Fallback → "${fallbackOption.text}" (${unusedOptions.length} unused options remaining)`);
     }
   }
 
@@ -175,7 +188,8 @@ function smartMatchForPosition(localContent, avatar, usedPrimaries, matchPlurals
  */
 function smartMatchPlaceholders(content, avatar, wordRange = 75, matchPlurals = true) {
   const usedPrimaries = new Set();
-  const { replacements } = smartMatchForPosition(content, avatar, usedPrimaries, matchPlurals, 0);
+  const usedOptionTexts = new Set();
+  const { replacements } = smartMatchForPosition(content, avatar, usedPrimaries, usedOptionTexts, matchPlurals, 0);
   return replacements;
 }
 
@@ -235,6 +249,9 @@ export async function processArticleWithImages(content, options = {}) {
     matchPlurals = true, // Whether to match plural forms in smart matching
     heroImageSide = 'right', // Hero image side - inline images will alternate starting from opposite
 
+    // Smart Matching Config (editable from UI)
+    smartMatchingConfig: rawSmartMatchingConfig = {},
+
     // Guided GPT Mode Options
     guidedGuardrails = null, // { instructions, uniformDescription, stylePreferences, avoidList, defaultSubject }
     guidedModel = 'gpt-4o', // GPT model for guided mode: gpt-4o, gpt-4o-mini, gpt-4-turbo
@@ -242,6 +259,13 @@ export async function processArticleWithImages(content, options = {}) {
     // Callbacks
     onProgress = null
   } = options;
+
+  // Apply defaults to smart matching config
+  const smartMatchingConfig = {
+    wordRange: rawSmartMatchingConfig.wordRange || 75,           // Words to search before/after image position
+    primaryWeight: rawSmartMatchingConfig.primaryWeight || 10,   // Points for primary keyword match
+    secondaryWeight: rawSmartMatchingConfig.secondaryWeight || 1 // Points for secondary keyword match
+  };
 
   const progress = (step, data = {}) => {
     if (onProgress) onProgress({ step, ...data });
@@ -294,6 +318,7 @@ export async function processArticleWithImages(content, options = {}) {
 
       // Shared state across all image positions
       const usedPrimaries = new Set(); // Rule 3: No duplicate primaries across page
+      const usedOptionTexts = new Set(); // Track used option texts to prevent duplicate fallbacks
       const allReplacements = []; // Track replacements for each position
       let imageCount = 0;
       let cumulativeWordPosition = 0; // Track position in article
@@ -304,7 +329,7 @@ export async function processArticleWithImages(content, options = {}) {
       // HERO IMAGE - Match against intro content
       if (chunks.intro && imageCount < maxImages) {
         const heroWordPosition = Math.floor((chunks.intro.wordCount || 100) / 2);
-        const heroLocalContent = extractLocalContent(content, heroWordPosition, 75);
+        const heroLocalContent = extractLocalContent(content, heroWordPosition, smartMatchingConfig.wordRange);
 
         console.log(`\n[Hero Image] Position ${heroWordPosition} words, local content: ${heroLocalContent.substring(0, 80)}...`);
 
@@ -312,8 +337,10 @@ export async function processArticleWithImages(content, options = {}) {
           heroLocalContent,
           targetAvatar,
           usedPrimaries,
+          usedOptionTexts,
           matchPlurals,
-          0 // Position index 0 = hero
+          0, // Position index 0 = hero
+          smartMatchingConfig
         );
 
         // Mark primaries as used for next images
@@ -357,7 +384,7 @@ export async function processArticleWithImages(content, options = {}) {
         if (shouldAddImage) {
           // Calculate word position for this chunk (middle of chunk)
           const chunkMiddle = cumulativeWordPosition + Math.floor((chunk.wordCount || 100) / 2);
-          const localContent = extractLocalContent(content, chunkMiddle, 75);
+          const localContent = extractLocalContent(content, chunkMiddle, smartMatchingConfig.wordRange);
 
           console.log(`\n[Image #${imageCount}] Section "${chunk.heading || 'Untitled'}" at word ${chunkMiddle}`);
           console.log(`[Image #${imageCount}] Local: ${localContent.substring(0, 80)}...`);
@@ -366,8 +393,10 @@ export async function processArticleWithImages(content, options = {}) {
             localContent,
             targetAvatar,
             usedPrimaries,
+            usedOptionTexts,
             matchPlurals,
-            imageCount // Position index
+            imageCount, // Position index
+            smartMatchingConfig
           );
 
           // Mark primaries as used for next images

@@ -1164,6 +1164,7 @@ router.post('/publish', async (req, res) => {
     let targetAvatar = null;
     let smartPromptGuidance = '';
     let matchPlurals = true;
+    let smartMatchingConfig = { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 };
     let guidedGuardrails = null;
     let guidedModel = 'gpt-4o';
 
@@ -1190,6 +1191,7 @@ router.post('/publish', async (req, res) => {
 
           smartPromptGuidance = config.smart_prompt_guidance || '';
           matchPlurals = config.match_plurals !== false;
+          smartMatchingConfig = config.smart_matching_config || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 };
 
           // Find the target avatar for this article (using multi-prompt per tag system)
           const avatars = config.audience_avatars || [];
@@ -1261,6 +1263,8 @@ router.post('/publish', async (req, res) => {
         smartPromptGuidance,
         matchPlurals,
         heroImageSide, // Pass hero side for proper alternation
+        // Smart Matching Config (configurable parameters)
+        smartMatchingConfig,
         // Guided GPT mode options
         guidedGuardrails,
         guidedModel

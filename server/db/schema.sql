@@ -291,6 +291,8 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   matching_rule_2 TEXT DEFAULT 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.',
   matching_rule_3 TEXT DEFAULT 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).',
   matching_rule_4 TEXT DEFAULT 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
+  -- Smart Matching Config (configurable parameters that code ACTUALLY reads)
+  smart_matching_config JSONB DEFAULT '{"wordRange": 75, "primaryWeight": 10, "secondaryWeight": 1}',
   -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -323,6 +325,10 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'matching_rule_4') THEN
     ALTER TABLE image_creation_settings ADD COLUMN matching_rule_4 TEXT DEFAULT 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).';
+  END IF;
+  -- Smart Matching Config (configurable parameters that code ACTUALLY reads)
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'smart_matching_config') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN smart_matching_config JSONB DEFAULT '{"wordRange": 75, "primaryWeight": 10, "secondaryWeight": 1}';
   END IF;
 END $$;
 
