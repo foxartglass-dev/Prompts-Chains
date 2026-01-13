@@ -186,6 +186,10 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [addingToQueue, setAddingToQueue] = useState(false);
+
+  // Bulk selection for unscheduled articles
+  const [selectedUnscheduled, setSelectedUnscheduled] = useState<Set<number>>(new Set());
 
   // Toast message state (auto-dismissing)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -676,6 +680,178 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
     } finally {
       setSavingSchedule(false);
     }
+  };
+
+  // Calculate next available queue slot based on existing schedules
+  const getNextQueueSlot = () => {
+    // Get all pending schedules (excluding published/failed)
+    const pendingSchedules = schedules.filter(s => s.status === 'pending' && s.scheduled_date);
+
+    if (pendingSchedules.length === 0) {
+      // No pending schedules, start from tomorrow
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return {
+        date: tomorrow.toISOString().split('T')[0],
+        time: settings?.publish_time_start || '09:00',
+        position: 1
+      };
+    }
+
+    // Sort by date and time to find the last scheduled item
+    const sortedSchedules = [...pendingSchedules].sort((a, b) => {
+      const dateA = `${a.scheduled_date}T${a.scheduled_time || '00:00'}`;
+      const dateB = `${b.scheduled_date}T${b.scheduled_time || '00:00'}`;
+      return dateB.localeCompare(dateA); // Descending - latest first
+    });
+
+    const lastScheduled = sortedSchedules[0];
+    const lastDateStr = typeof lastScheduled.scheduled_date === 'string'
+      ? lastScheduled.scheduled_date.split('T')[0]
+      : new Date(lastScheduled.scheduled_date).toISOString().split('T')[0];
+    const lastTime = lastScheduled.scheduled_time || '09:00';
+
+    // Count how many articles are on the last date
+    const articlesOnLastDate = pendingSchedules.filter(s => {
+      const dateStr = typeof s.scheduled_date === 'string'
+        ? s.scheduled_date.split('T')[0]
+        : new Date(s.scheduled_date).toISOString().split('T')[0];
+      return dateStr === lastDateStr;
+    }).length;
+
+    // Get articles per day setting
+    const perDay = settings?.articles_per_day || 7;
+
+    // If last date is full, move to next day
+    if (articlesOnLastDate >= perDay) {
+      const nextDate = new Date(lastDateStr + 'T12:00:00');
+      nextDate.setDate(nextDate.getDate() + 1);
+
+      // Skip weekdays if configured
+      while (skipWeekdays.includes(nextDate.getDay()) || skipDates.includes(nextDate.toISOString().split('T')[0])) {
+        nextDate.setDate(nextDate.getDate() + 1);
+      }
+
+      return {
+        date: nextDate.toISOString().split('T')[0],
+        time: settings?.publish_time_start || '09:00',
+        position: 1
+      };
+    }
+
+    // Add to same day with incremented time
+    // Calculate time slot based on position in day
+    const startTime = settings?.publish_time_start || '07:00';
+    const endTime = settings?.publish_time_end || '19:00';
+    const [startH, startM] = startTime.split(':').map(Number);
+    const [endH, endM] = endTime.split(':').map(Number);
+
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+    const slotMinutes = Math.floor((endMinutes - startMinutes) / perDay);
+
+    const nextSlotMinutes = startMinutes + (articlesOnLastDate * slotMinutes);
+    const nextHour = Math.floor(nextSlotMinutes / 60);
+    const nextMin = nextSlotMinutes % 60;
+    const nextTime = `${String(nextHour).padStart(2, '0')}:${String(nextMin).padStart(2, '0')}`;
+
+    return {
+      date: lastDateStr,
+      time: nextTime,
+      position: articlesOnLastDate + 1
+    };
+  };
+
+  // Add article to the end of the drip feed queue
+  const addToQueue = async (articleOrArticles?: ScheduledArticle | ScheduledArticle[]) => {
+    if (!websiteId) return;
+
+    const articlesToAdd = articleOrArticles
+      ? (Array.isArray(articleOrArticles) ? articleOrArticles : [articleOrArticles])
+      : (schedulingArticle ? [schedulingArticle] : []);
+
+    if (articlesToAdd.length === 0) return;
+
+    setAddingToQueue(true);
+    try {
+      let successCount = 0;
+      let currentSlot = getNextQueueSlot();
+
+      for (const article of articlesToAdd) {
+        const res = await fetch(`/api/drip-feed/schedule/${websiteId}/${article.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scheduled_date: currentSlot.date,
+            scheduled_time: currentSlot.time,
+            status: 'pending'
+          })
+        });
+
+        if (res.ok) {
+          successCount++;
+          // Recalculate for next article (simulate adding to schedules)
+          schedules.push({
+            ...article,
+            scheduled_date: currentSlot.date,
+            scheduled_time: currentSlot.time,
+            status: 'pending'
+          });
+          currentSlot = getNextQueueSlot();
+        }
+      }
+
+      if (successCount > 0) {
+        if (successCount === 1 && articlesToAdd.length === 1) {
+          showToast(`Added "${articlesToAdd[0].keyword}" to queue`, 'success');
+        } else {
+          showToast(`Added ${successCount} article${successCount !== 1 ? 's' : ''} to queue`, 'success');
+        }
+        setSchedulingArticle(null);
+        fetchData();
+      } else {
+        setError('Failed to add to queue');
+      }
+    } catch (err) {
+      setError('Failed to add to queue');
+    } finally {
+      setAddingToQueue(false);
+    }
+  };
+
+  // Get unscheduled articles for bulk operations
+  const unscheduledArticles = schedules.filter(s => s.status === 'unscheduled');
+
+  // Toggle selection for an unscheduled article
+  const toggleUnscheduledSelection = (articleId: number) => {
+    setSelectedUnscheduled(prev => {
+      const next = new Set(prev);
+      if (next.has(articleId)) {
+        next.delete(articleId);
+      } else {
+        next.add(articleId);
+      }
+      return next;
+    });
+  };
+
+  // Select all unscheduled articles
+  const selectAllUnscheduled = () => {
+    setSelectedUnscheduled(new Set(unscheduledArticles.map(a => a.id)));
+  };
+
+  // Clear unscheduled selection
+  const clearUnscheduledSelection = () => {
+    setSelectedUnscheduled(new Set());
+  };
+
+  // Bulk add selected unscheduled articles to queue
+  const bulkAddToQueue = async () => {
+    const articlesToAdd = schedules.filter(s => selectedUnscheduled.has(s.id));
+    if (articlesToAdd.length === 0) return;
+
+    await addToQueue(articlesToAdd);
+    clearUnscheduledSelection();
   };
 
   // Real-time clock - updates every second
@@ -1688,6 +1864,51 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         </div>
       )}
 
+      {/* Bulk Action Bar for Unscheduled Articles */}
+      {selectedUnscheduled.size > 0 && (
+        <div className="mx-4 mb-2 p-3 bg-amber-900/30 border border-amber-600/50 rounded-lg flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-amber-400 font-medium">
+              {selectedUnscheduled.size} unscheduled article{selectedUnscheduled.size !== 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={selectAllUnscheduled}
+              className="text-xs text-amber-300 hover:text-amber-200 underline"
+            >
+              Select All ({unscheduledArticles.length})
+            </button>
+            <button
+              onClick={clearUnscheduledSelection}
+              className="text-xs text-gray-400 hover:text-white"
+            >
+              Clear
+            </button>
+          </div>
+          <button
+            onClick={bulkAddToQueue}
+            disabled={addingToQueue}
+            className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+          >
+            {addingToQueue ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Adding to Queue...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Add All to Queue
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Main Content: Schedule Queue */}
       <div className="flex-1 overflow-auto p-4">
         {Object.keys(groupedSchedules).length > 0 ? (
@@ -1731,6 +1952,16 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
                             }`}
                           >
                             <div className="flex items-center gap-3">
+                              {/* Unscheduled Selection Checkbox */}
+                              {article.status === 'unscheduled' && (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedUnscheduled.has(article.id)}
+                                  onChange={() => toggleUnscheduledSelection(article.id)}
+                                  className="w-4 h-4 rounded border-amber-500 bg-slate-700 text-amber-500 cursor-pointer"
+                                />
+                              )}
+
                               {/* Test Mode Checkbox */}
                               {showTestMode && article.status === 'pending' && (
                                 <input
@@ -1800,17 +2031,30 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
                               )}
                             </div>
                             <div className="flex items-center gap-1.5">
-                              {/* Schedule button for unscheduled articles */}
+                              {/* Schedule/Queue buttons for unscheduled articles */}
                               {article.status === 'unscheduled' && (
-                                <button
-                                  onClick={() => openScheduleModal(article)}
-                                  className="px-2 py-0.5 bg-brand-cyan/30 hover:bg-brand-cyan/50 rounded text-brand-cyan text-xs flex items-center gap-1"
-                                >
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                  Schedule
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => addToQueue(article)}
+                                    disabled={addingToQueue}
+                                    className="px-2 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 rounded text-amber-400 text-xs flex items-center gap-1 disabled:opacity-50"
+                                    title="Add to end of drip feed queue"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                    Queue
+                                  </button>
+                                  <button
+                                    onClick={() => openScheduleModal(article)}
+                                    className="px-2 py-0.5 bg-brand-cyan/30 hover:bg-brand-cyan/50 rounded text-brand-cyan text-xs flex items-center gap-1"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Schedule
+                                  </button>
+                                </>
                               )}
                               {article.wp_post_url && (
                                 <a
@@ -1918,35 +2162,62 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
             </div>
 
             {/* Modal Footer */}
-            <div className="px-4 py-3 border-t border-slate-700 flex items-center justify-end gap-3">
+            <div className="px-4 py-3 border-t border-slate-700 flex items-center justify-between">
+              {/* Left: Add to Queue */}
               <button
-                onClick={() => setSchedulingArticle(null)}
-                className="px-4 py-2 text-gray-400 hover:text-white transition"
+                onClick={() => addToQueue()}
+                disabled={addingToQueue || savingSchedule}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg transition disabled:opacity-50 flex items-center gap-2"
               >
-                Cancel
-              </button>
-              <button
-                onClick={saveArticleSchedule}
-                disabled={savingSchedule || !scheduleDate || !scheduleTime}
-                className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded-lg transition disabled:opacity-50 flex items-center gap-2"
-              >
-                {savingSchedule ? (
+                {addingToQueue ? (
                   <>
                     <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Scheduling...
+                    Adding...
                   </>
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    Schedule
+                    Add to Queue
                   </>
                 )}
               </button>
+
+              {/* Right: Cancel + Schedule */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setSchedulingArticle(null)}
+                  className="px-4 py-2 text-gray-400 hover:text-white transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveArticleSchedule}
+                  disabled={savingSchedule || !scheduleDate || !scheduleTime}
+                  className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 text-slate-900 font-medium rounded-lg transition disabled:opacity-50 flex items-center gap-2"
+                >
+                  {savingSchedule ? (
+                    <>
+                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Scheduling...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Schedule
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
