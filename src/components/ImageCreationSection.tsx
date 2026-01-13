@@ -712,6 +712,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [fetchingContext, setFetchingContext] = useState(false);
   const [avatarsCollapsed, setAvatarsCollapsed] = useState(true);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
+  const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Set<string>>(new Set()); // Track which individual categories are collapsed
 
   // Prompt Problem Areas state
   const [problemAreasCollapsed, setProblemAreasCollapsed] = useState(true);
@@ -8403,8 +8404,13 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
           </div>
 
-          {/* Audience Avatars */}
-          <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50">
+          {/* Audience Avatars - Full-Width Section Pattern (expands to span both columns when open) */}
+          <div className={`bg-slate-900 rounded-lg border border-brand-gold/50 transition-all duration-300 ${
+            !avatarsCollapsed
+              ? 'relative -ml-4 -mr-4 xl:-ml-[calc(50vw-50%+1rem)] xl:-mr-[calc(50vw-50%+1rem)] xl:w-[calc(100vw-2rem)] p-4 xl:px-8'
+              : 'p-4'
+          }`}>
+            {/* Header - Always visible */}
             <div
               className="flex items-center justify-between cursor-pointer"
               onClick={() => setAvatarsCollapsed(!avatarsCollapsed)}
@@ -8412,6 +8418,7 @@ Start by introducing yourself and asking about their business in a friendly way.
               <div className="flex items-center gap-3">
                 <span className={`text-brand-gold transition-transform ${avatarsCollapsed ? '' : 'rotate-90'}`}>▶</span>
                 <h3 className="text-brand-gold font-semibold">Audience Avatars</h3>
+                {!avatarsCollapsed && <span className="text-xs text-emerald-400 bg-emerald-900/30 px-2 py-0.5 rounded">Full-Width Mode</span>}
                 {tags.length > 0 && (
                   <span className="text-xs text-brand-cyan/70 bg-brand-cyan/10 px-2 py-0.5 rounded">
                     Synced with Tag Manager: {tags.map(t => t.name).join(', ')}
@@ -8532,8 +8539,10 @@ Start by introducing yourself and asking about their business in a friendly way.
             </div>
 
             {activeAvatar && (
-              <div className="space-y-3">
-                <div className="flex gap-3 items-end">
+              <div className={`${activeAvatar.placeholderMode === 'advanced' ? 'xl:grid xl:grid-cols-2 xl:gap-6' : ''}`}>
+                {/* ===== LEFT COLUMN: Prompt Editing Area ===== */}
+                <div className="space-y-3">
+                <div className="flex gap-3 items-end flex-wrap">
                   <div className="w-48">
                     <label className="block text-xs text-brand-gold/70 mb-1">Avatar Name</label>
                     <input
@@ -8679,18 +8688,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </div>
                   )}
                 </div>
+                </div>
+                {/* End LEFT COLUMN */}
 
-                {/* ========== ADVANCED MODE: Placeholder Categories ========== */}
+                {/* ===== RIGHT COLUMN: Placeholder Categories (Advanced Mode) ===== */}
                 {activeAvatar.placeholderMode === 'advanced' && (
-                  <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 space-y-3">
-                    <div
-                      className="flex items-center justify-between cursor-pointer"
-                      onClick={() => setCategoriesCollapsed(!categoriesCollapsed)}
-                    >
+                  <div className="space-y-3 mt-3 xl:mt-0">
+                  <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 space-y-3 h-fit xl:sticky xl:top-4">
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className={`text-purple-400 transition-transform ${categoriesCollapsed ? '' : 'rotate-90'}`}>▶</span>
-                        <label className="text-sm text-purple-300 font-medium cursor-pointer">Placeholder Categories</label>
-                        {categoriesCollapsed && (activeAvatar.placeholderCategories || []).length > 0 && (
+                        <label className="text-sm text-purple-300 font-medium">Placeholder Categories</label>
+                        {(activeAvatar.placeholderCategories || []).length > 0 && (
                           <span className="text-xs text-purple-400/70 bg-slate-800 px-2 py-0.5 rounded">
                             {(activeAvatar.placeholderCategories || []).length} categories
                           </span>
@@ -8734,18 +8742,36 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     )}
 
-                    {/* Category List */}
-                    {!categoriesCollapsed && (<>
-                    {(activeAvatar.placeholderCategories || []).map((category, catIndex) => (
-                      <div key={category.id} className={`rounded-lg p-3 space-y-2 transition-all ${
+                    {/* Category List - Each category individually collapsible */}
+                    {(activeAvatar.placeholderCategories || []).map((category, catIndex) => {
+                      const isCategoryCollapsed = collapsedCategoryIds.has(category.id);
+                      const toggleCategoryCollapse = () => {
+                        setCollapsedCategoryIds(prev => {
+                          const next = new Set(prev);
+                          if (next.has(category.id)) {
+                            next.delete(category.id);
+                          } else {
+                            next.add(category.id);
+                          }
+                          return next;
+                        });
+                      };
+                      return (
+                      <div key={category.id} className={`rounded-lg overflow-hidden transition-all ${
                         category.enabled !== false
                           ? 'bg-slate-800/50'
                           : 'bg-slate-900/30 opacity-50 border border-dashed border-slate-600'
                       }`}>
-                        <div className="flex items-center gap-2">
+                        {/* Category Header - Clickable to collapse/expand */}
+                        <div
+                          className="flex items-center gap-2 p-3 cursor-pointer hover:bg-slate-700/30 transition"
+                          onClick={toggleCategoryCollapse}
+                        >
+                          {/* Collapse Toggle */}
+                          <span className={`text-purple-400 transition-transform text-xs ${isCategoryCollapsed ? '' : 'rotate-90'}`}>▶</span>
                           {/* On/Off Toggle */}
                           <button
-                            onClick={() => handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false })}
+                            onClick={(e) => { e.stopPropagation(); handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false }); }}
                             className={`w-5 h-5 rounded flex items-center justify-center text-xs transition ${
                               category.enabled !== false
                                 ? 'bg-emerald-600 text-white'
@@ -8758,13 +8784,18 @@ Start by introducing yourself and asking about their business in a friendly way.
                           <input
                             type="text"
                             value={category.name}
+                            onClick={(e) => e.stopPropagation()}
                             onChange={(e) => handleUpdatePlaceholderCategory(category.id, { name: e.target.value, placeholder: `{${e.target.value.replace(/\s+/g, '_')}}` })}
                             className="flex-1 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
                             placeholder="Category name (e.g., Cleaning_Item)"
                           />
                           <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
+                          {isCategoryCollapsed && (
+                            <span className="text-xs text-slate-500">{category.options.length} options</span>
+                          )}
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               const companyCategory = prompt('Enter company/type category (e.g., Cleaning, Construction):');
                               if (companyCategory) {
                                 handleSavePlaceholderCategoryTemplate(category, companyCategory);
@@ -8776,7 +8807,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                             Save Template
                           </button>
                           <button
-                            onClick={() => handleRemovePlaceholderCategory(category.id)}
+                            onClick={(e) => { e.stopPropagation(); handleRemovePlaceholderCategory(category.id); }}
                             className="p-1 bg-red-600/50 hover:bg-red-600 rounded text-white transition"
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -8784,6 +8815,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                             </svg>
                           </button>
                         </div>
+
+                        {/* Category Content - Options (collapsible) */}
+                        {!isCategoryCollapsed && (
+                        <div className="p-3 pt-0 space-y-2">
 
                         {/* Options for this category - Stacked Layout */}
                         <div className="pl-2 space-y-3">
@@ -8905,8 +8940,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                             + Add Option
                           </button>
                         </div>
+                        </div>
+                        )}{/* End collapsible content */}
                       </div>
-                    ))}
+                    )})}
 
                     {(activeAvatar.placeholderCategories || []).length === 0 && (
                       <p className="text-xs text-purple-400/50 text-center py-2">No categories yet. Add one to get started.</p>
@@ -9019,11 +9056,11 @@ Start by introducing yourself and asking about their business in a friendly way.
                         </div>
                       </div>
                     )}
-                    </>)}
+                  </div>
                   </div>
                 )}
 
-                {/* ========== SIMPLE MODE: Variations ========== */}
+                {/* ========== SIMPLE MODE: Variations (stays in normal flow, not two-column) ========== */}
                 {(activeAvatar.placeholderMode || 'simple') === 'simple' && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
