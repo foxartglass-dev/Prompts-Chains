@@ -448,6 +448,12 @@ interface ImageCreationSettings {
   matching_rule_2: string; // Secondary keywords fallback rule
   matching_rule_3: string; // No duplicate primaries rule
   matching_rule_4: string; // Different primaries for secondary matches rule
+  // Smart Matching Config (configurable parameters that code ACTUALLY reads)
+  smart_matching_config: {
+    wordRange: number;      // Words to search before/after image position (default 75)
+    primaryWeight: number;  // Points for primary keyword match (default 10)
+    secondaryWeight: number; // Points for secondary keyword match (default 1)
+  };
   // Generate Live prompt mode
   live_prompt_mode: 'main_prompt' | 'guided_gpt' | 'smart_prompt'; // main_prompt = avatar template, guided_gpt = GPT-4o with guardrails, smart_prompt = legacy
   smart_prompt_guidance: string; // Guidance/guardrails for GPT-4o when using smart_prompt mode
@@ -529,6 +535,8 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   matching_rule_2: 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.',
   matching_rule_3: 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).',
   matching_rule_4: 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
+  // Smart Matching Config - configurable parameters that code ACTUALLY reads
+  smart_matching_config: { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 },
   // Generate Live prompt mode - default to smart_prompt for backwards compatibility
   live_prompt_mode: 'smart_prompt',
   smart_prompt_guidance: '', // Empty by default - user can add guardrails
@@ -7790,6 +7798,74 @@ Start by introducing yourself and asking about their business in a friendly way.
                         />
                         <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                       </label>
+                    </div>
+
+                    {/* ═══ SMART MATCHING CONFIG - These parameters are ACTUALLY used by the code ═══ */}
+                    <div className="mt-4 bg-gradient-to-r from-purple-900/30 to-indigo-900/30 p-4 rounded-lg border border-purple-500/50">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-lg">⚙️</span>
+                        <span className="text-sm font-semibold text-purple-300">Smart Matching Config</span>
+                        <span className="text-[10px] px-2 py-0.5 bg-purple-600/30 text-purple-200 rounded">ACTIVE</span>
+                      </div>
+                      <p className="text-[10px] text-purple-300/70 mb-3">
+                        These values are <strong className="text-purple-200">actually read by the code</strong>. The text rules above are for documentation.
+                      </p>
+                      <div className="grid grid-cols-3 gap-3">
+                        {/* Word Range */}
+                        <div>
+                          <label className="text-[10px] text-purple-400 font-semibold block mb-1">Word Range</label>
+                          <input
+                            type="number"
+                            min={25}
+                            max={200}
+                            value={settings.smart_matching_config?.wordRange || 75}
+                            onChange={(e) => updateSettings({
+                              smart_matching_config: {
+                                ...settings.smart_matching_config,
+                                wordRange: parseInt(e.target.value) || 75
+                              }
+                            })}
+                            className="w-full bg-slate-800 border border-purple-500/30 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-purple-500"
+                          />
+                          <p className="text-[9px] text-purple-400/60 mt-0.5">Words before/after position</p>
+                        </div>
+                        {/* Primary Weight */}
+                        <div>
+                          <label className="text-[10px] text-purple-400 font-semibold block mb-1">Primary Weight</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={settings.smart_matching_config?.primaryWeight || 10}
+                            onChange={(e) => updateSettings({
+                              smart_matching_config: {
+                                ...settings.smart_matching_config,
+                                primaryWeight: parseInt(e.target.value) || 10
+                              }
+                            })}
+                            className="w-full bg-slate-800 border border-purple-500/30 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-purple-500"
+                          />
+                          <p className="text-[9px] text-purple-400/60 mt-0.5">Points for primary match</p>
+                        </div>
+                        {/* Secondary Weight */}
+                        <div>
+                          <label className="text-[10px] text-purple-400 font-semibold block mb-1">Secondary Weight</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={settings.smart_matching_config?.secondaryWeight || 1}
+                            onChange={(e) => updateSettings({
+                              smart_matching_config: {
+                                ...settings.smart_matching_config,
+                                secondaryWeight: parseInt(e.target.value) || 1
+                              }
+                            })}
+                            className="w-full bg-slate-800 border border-purple-500/30 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-purple-500"
+                          />
+                          <p className="text-[9px] text-purple-400/60 mt-0.5">Points for secondary match</p>
+                        </div>
+                      </div>
                     </div>
                   </>
                 ) : (
