@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import FeedbackPopup from './FeedbackPopup';
 
 // Types for Feedback System
@@ -10901,7 +10902,7 @@ Start by introducing yourself and asking about their business in a friendly way.
 
       {/* ========== PROMPT TEMPLATE SYSTEM POPUPS ========== */}
 
-      {/* Save Template Popup - Full Screen Centered */}
+      {/* Save Template Popup - Full Screen Centered (Portal) */}
       {showPromptTemplatePopup === 'save' && (() => {
         const sections = activeAvatar ? parsePromptIntoSections(activeAvatar.mainPrompt || '') : [];
         // Initialize selections if empty (all selected by default)
@@ -10912,8 +10913,8 @@ Start by introducing yourself and asking about their business in a friendly way.
         }
         const sourceTag = activeAvatar?.tag || 'Global';
 
-        return (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+        return createPortal(
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
             <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[1200px] h-[90vh] flex flex-col border border-emerald-500/30">
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-emerald-500/30 shrink-0">
@@ -11102,13 +11103,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         );
       })()}
 
-      {/* Apply/Browse Templates Popup - Full Screen Centered */}
-      {showPromptTemplatePopup === 'apply' && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      {/* Apply/Browse Templates Popup - Full Screen Centered (Portal) */}
+      {showPromptTemplatePopup === 'apply' && createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
           <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[1200px] h-[90vh] flex flex-col border border-purple-500/30">
             <div className="flex items-center justify-between p-4 border-b border-purple-500/30 shrink-0">
               <div>
@@ -11179,12 +11181,13 @@ Start by introducing yourself and asking about their business in a friendly way.
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Apply Template with Section Selection - Full Screen Centered */}
-      {editingTemplate && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      {/* Apply Template with Section Selection - Full Screen Centered (Portal) */}
+      {editingTemplate && createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
           <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[1200px] h-[90vh] flex flex-col border border-purple-500/30">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-purple-500/30 shrink-0">
@@ -11323,12 +11326,13 @@ Start by introducing yourself and asking about their business in a friendly way.
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Text Snippet Bank Popup - Full Screen Centered */}
-      {showTextSnippetBank && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      {/* Text Snippet Bank Popup - Full Screen Centered (Portal) */}
+      {showTextSnippetBank && createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
           <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[1200px] h-[90vh] flex flex-col border border-blue-500/30">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-blue-500/30 shrink-0">
@@ -11471,12 +11475,13 @@ Start by introducing yourself and asking about their business in a friendly way.
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Placeholder Category Templates Popup */}
-      {showPlaceholderTemplates && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      {/* Placeholder Category Templates Popup (Portal) */}
+      {showPlaceholderTemplates && createPortal(
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
           <div className="bg-slate-900 rounded-xl w-[650px] max-h-[85vh] flex flex-col border border-orange-500/30">
             <div className="flex items-center justify-between p-4 border-b border-orange-500/30">
               <h2 className="text-lg font-semibold text-orange-400">Placeholder Category Templates</h2>
@@ -11547,7 +11552,8 @@ Start by introducing yourself and asking about their business in a friendly way.
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
