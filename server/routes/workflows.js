@@ -481,10 +481,19 @@ router.post('/generate-for-node', requireDb, async (req, res) => {
     }
 
     const workflow = workflows[0];
-    const workflowState = JSON.parse(workflow.state || '{}');
+    console.log(`[Generate for Node] Workflow ${workflowId} found, parsing state...`);
+
+    let workflowState;
+    try {
+      workflowState = JSON.parse(workflow.state || '{}');
+    } catch (parseErr) {
+      console.error('[Generate for Node] Failed to parse workflow state:', parseErr.message);
+      return res.status(500).json({ error: 'Invalid workflow state JSON' });
+    }
 
     // 2. Get the prompt chain configuration
     const promptTemplates = workflowState.promptTemplates || [];
+    console.log(`[Generate for Node] Found ${promptTemplates.length} prompt templates`);
 
     if (promptTemplates.length === 0) {
       return res.status(400).json({ error: 'Workflow has no prompt templates configured' });
@@ -550,6 +559,7 @@ router.post('/generate-for-node', requireDb, async (req, res) => {
 
       // Call LLM
       try {
+        console.log(`[Generate for Node] Calling LLM with model: ${defaultModel}, prompt length: ${filledPrompt.length}`);
         const llmResponse = await fetch(`http://localhost:${process.env.PORT || 3001}/api/llm/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -560,7 +570,14 @@ router.post('/generate-for-node', requireDb, async (req, res) => {
           }),
         });
 
-        const llmResult = await llmResponse.json();
+        const responseText = await llmResponse.text();
+        let llmResult;
+        try {
+          llmResult = JSON.parse(responseText);
+        } catch (jsonErr) {
+          console.error('[Generate for Node] Failed to parse LLM response as JSON:', responseText.substring(0, 500));
+          continue;
+        }
 
         if (llmResult.success && llmResult.content) {
           chainOutputs[outputKey] = llmResult.content;
@@ -651,8 +668,9 @@ router.post('/generate-for-node', requireDb, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Generate for Node] Error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('[Generate for Node] Error:', error?.message || error?.toString() || JSON.stringify(error));
+    console.error('[Generate for Node] Stack:', error?.stack);
+    res.status(500).json({ error: error?.message || 'Unknown error occurred' });
   }
 });
 
