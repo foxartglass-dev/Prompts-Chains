@@ -620,23 +620,32 @@ const SitePlanningSection: React.FC<Props> = ({
     setPushing(false);
   };
 
-  // Generate content for nodes (single, selected, or all)
-  const generateContent = async (nodesToGenerate: SitePlanNode[]) => {
-    if (!workflowId || nodesToGenerate.length === 0) {
-      showNotification('No nodes selected for generation', 'info');
+  // Unified Start button - generates content and optionally pushes to WP based on toggle
+  const startProcessing = async (nodesToProcess: SitePlanNode[]) => {
+    if (!workflowId || nodesToProcess.length === 0) {
+      showNotification('No nodes selected for processing', 'info');
       return;
     }
 
+    const shouldPushToWP = articlePublishMode === 'wordpress';
+    const totalSteps = shouldPushToWP ? nodesToProcess.length * 2 : nodesToProcess.length;
+
     setGenerating(true);
-    setGenerationProgress({ current: 0, total: nodesToGenerate.length, currentTitle: '' });
+    setGenerationProgress({ current: 0, total: totalSteps, currentTitle: 'Starting...' });
 
     try {
-      for (let i = 0; i < nodesToGenerate.length; i++) {
-        const node = nodesToGenerate[i];
-        setGenerationProgress({ current: i + 1, total: nodesToGenerate.length, currentTitle: node.title });
+      const generatedArticleIds: number[] = [];
+
+      // Step 1: Generate all articles through prompt chain
+      for (let i = 0; i < nodesToProcess.length; i++) {
+        const node = nodesToProcess[i];
+        setGenerationProgress({
+          current: i + 1,
+          total: totalSteps,
+          currentTitle: `Generating: ${node.title}`
+        });
 
         // Call the workflow generation endpoint for this node
-        // This uses the existing workflow/prompt chain system
         const res = await fetch('/api/workflows/generate-for-node', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -652,6 +661,8 @@ const SitePlanningSection: React.FC<Props> = ({
         const data = await res.json();
 
         if (data.success && data.articleId) {
+          generatedArticleIds.push(data.articleId);
+
           // Link the article to the node
           await fetch(`/api/site-planning/link-article/${node.id}`, {
             method: 'POST',
@@ -666,17 +677,48 @@ const SitePlanningSection: React.FC<Props> = ({
         }
       }
 
-      showNotification(`Generation complete! ${nodesToGenerate.length} pages processed.`, 'success');
+      // Step 2: If WordPress mode, push the generated articles to WP
+      if (shouldPushToWP && generatedArticleIds.length > 0) {
+        setGenerationProgress({
+          current: nodesToProcess.length + 1,
+          total: totalSteps,
+          currentTitle: 'Pushing to WordPress...'
+        });
+
+        // Push hierarchy to WordPress (this pushes the pages with their content)
+        if (plan) {
+          const pushRes = await fetch(`/api/site-planning/push-hierarchy/${plan.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'draft' }),
+          });
+
+          const pushData = await pushRes.json();
+          if (pushData.success) {
+            showNotification(`Pushed ${pushData.pushed?.length || 0} pages to WordPress!`, 'success');
+          } else {
+            showNotification(`WordPress push failed: ${pushData.error}`, 'error');
+          }
+        }
+      }
+
+      const modeText = shouldPushToWP ? 'generated and pushed to WordPress' : 'generated (Draft mode)';
+      showNotification(`Complete! ${generatedArticleIds.length} articles ${modeText}.`, 'success');
       loadPlan(); // Refresh to show updated status
     } catch (error: any) {
-      console.error('Generation error:', error);
-      showNotification('Generation failed: ' + error.message, 'error');
+      console.error('Processing error:', error);
+      showNotification('Processing failed: ' + error.message, 'error');
     }
 
     setGenerating(false);
     setGenerationProgress(null);
     setSelectionMode(false);
     setSelectedNodes(new Set());
+  };
+
+  // Legacy function for single node generation (used by per-node button)
+  const generateContent = async (nodesToGenerate: SitePlanNode[]) => {
+    startProcessing(nodesToGenerate);
   };
 
   // Generate all pages
@@ -942,50 +984,7 @@ const SitePlanningSection: React.FC<Props> = ({
             </span>
           )}
 
-          {/* Push to WordPress button */}
-          <div className="relative group">
-            <button
-              onClick={() => pushToWordPress('draft')}
-              disabled={pushing || flatNodes.filter(n => !n.wp_page_id).length === 0}
-              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white text-sm transition disabled:opacity-50 flex items-center gap-1"
-            >
-              {pushing ? (
-                <>
-                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Pushing...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  Push to WP
-                </>
-              )}
-            </button>
-            {/* Dropdown for publish option */}
-            <div className="absolute right-0 mt-1 w-40 bg-slate-800 border border-slate-600 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-              <button
-                onClick={() => pushToWordPress('draft')}
-                disabled={pushing}
-                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-700 rounded-t-lg"
-              >
-                Push as Drafts
-              </button>
-              <button
-                onClick={() => pushToWordPress('publish')}
-                disabled={pushing}
-                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-700 rounded-b-lg border-t border-slate-700"
-              >
-                Push & Publish
-              </button>
-            </div>
-          </div>
-
-          {/* Generation Mode Controls */}
+          {/* UNIFIED START BUTTON - Respects toggle settings */}
           <div className="flex items-center gap-2 border-r border-slate-600 pr-4 mr-2">
             {/* Toggle Selection Mode */}
             <button
@@ -1013,31 +1012,53 @@ const SitePlanningSection: React.FC<Props> = ({
               </button>
             )}
 
-            {/* Generate Selected (when in selection mode) */}
+            {/* Start Selected (when in selection mode with items selected) */}
             {selectionMode && selectedNodes.size > 0 && (
               <button
                 onClick={generateSelected}
                 disabled={generating}
-                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition flex items-center gap-1"
+                className={`px-4 py-1.5 rounded text-white text-sm font-semibold transition flex items-center gap-2 ${
+                  articlePublishMode === 'wordpress'
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-purple-600 hover:bg-purple-700'
+                }`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Generate {selectedNodes.size} Selected
+                Start {selectedNodes.size} → {articlePublishMode === 'wordpress' ? 'WP' : 'Draft'}
               </button>
             )}
 
-            {/* Generate All (when not in selection mode) */}
+            {/* Main START Button (when not in selection mode) */}
             {!selectionMode && (
               <button
                 onClick={generateAll}
                 disabled={generating || flatNodes.length === 0}
-                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600 rounded text-white text-sm transition flex items-center gap-1"
+                className={`px-5 py-2 rounded text-white font-bold transition flex items-center gap-2 shadow-lg ${
+                  articlePublishMode === 'wordpress'
+                    ? 'bg-green-600 hover:bg-green-700 disabled:bg-slate-600'
+                    : 'bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600'
+                }`}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Generate All ({flatNodes.length})
+                {generating ? (
+                  <>
+                    <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    START ({flatNodes.length}) → {articlePublishMode === 'wordpress' ? 'WordPress' : 'Draft'}
+                  </>
+                )}
               </button>
             )}
           </div>
@@ -1848,24 +1869,26 @@ const SitePlanningSection: React.FC<Props> = ({
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9998]">
           <div className="bg-slate-900 rounded-xl border border-slate-700 p-8 max-w-md w-full mx-4">
             <div className="flex items-center justify-center mb-6">
-              <svg className="animate-spin h-12 w-12 text-purple-500" viewBox="0 0 24 24">
+              <svg className={`animate-spin h-12 w-12 ${articlePublishMode === 'wordpress' ? 'text-green-500' : 'text-purple-500'}`} viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
             </div>
-            <h3 className="text-xl font-semibold text-white text-center mb-2">Generating Content</h3>
+            <h3 className="text-xl font-semibold text-white text-center mb-2">
+              {articlePublishMode === 'wordpress' ? 'Processing → WordPress' : 'Processing → Draft'}
+            </h3>
             <p className="text-gray-400 text-center mb-4">
-              {generationProgress.current} of {generationProgress.total} pages
+              Step {generationProgress.current} of {generationProgress.total}
             </p>
             <div className="bg-slate-700 rounded-full h-3 mb-4 overflow-hidden">
               <div
-                className="bg-purple-500 h-full transition-all duration-300"
+                className={`h-full transition-all duration-300 ${articlePublishMode === 'wordpress' ? 'bg-green-500' : 'bg-purple-500'}`}
                 style={{ width: `${(generationProgress.current / generationProgress.total) * 100}%` }}
               />
             </div>
             {generationProgress.currentTitle && (
               <p className="text-sm text-gray-500 text-center truncate">
-                Current: {generationProgress.currentTitle}
+                {generationProgress.currentTitle}
               </p>
             )}
           </div>
