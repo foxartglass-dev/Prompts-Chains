@@ -110,6 +110,10 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const [pushingArticle, setPushingArticle] = useState(false);
   const [regeneratingImage, setRegeneratingImage] = useState<string | null>(null);
 
+  // Prompt viewer modal state
+  const [viewingPromptImage, setViewingPromptImage] = useState<ArticleImage | null>(null);
+  const [editablePrompt, setEditablePrompt] = useState('');
+
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -749,12 +753,16 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     }
   };
 
-  // Regenerate a single image
-  const regenerateImage = async (imageId: string) => {
+  // Regenerate a single image (optionally with custom prompt)
+  const regenerateImage = async (imageId: string, customPrompt?: string) => {
     if (!selectedArticle) return;
 
     const image = selectedArticle.images?.find(i => i.id === imageId);
     if (!image) return;
+
+    const promptToUse = customPrompt || image.prompt;
+    console.log('[Regenerate] Using prompt:', promptToUse?.substring(0, 100) + '...');
+    console.log('[Regenerate] WorkflowId:', selectedArticle.workflow_id);
 
     setRegeneratingImage(imageId);
     try {
@@ -763,13 +771,15 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageId,
-          prompt: image.prompt
+          prompt: promptToUse,
+          workflowId: selectedArticle.workflow_id // Pass workflow_id for correct model settings
         })
       });
 
       const data = await res.json();
       if (data.success) {
         fetchArticleDetails(selectedArticle.id);
+        setViewingPromptImage(null); // Close modal on success
       } else {
         setError(data.error || 'Failed to regenerate image');
       }
@@ -778,6 +788,12 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     } finally {
       setRegeneratingImage(null);
     }
+  };
+
+  // Open prompt viewer modal
+  const openPromptViewer = (image: ArticleImage) => {
+    setViewingPromptImage(image);
+    setEditablePrompt(image.prompt || '');
   };
 
   if (loading) {
@@ -1707,6 +1723,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                               )}
                               {regeneratingImage === image.id ? 'Regenerating...' : 'Regenerate'}
                             </button>
+                            <button
+                              onClick={() => openPromptViewer(image)}
+                              className="px-2 py-1.5 bg-purple-600 hover:bg-purple-500 rounded text-white text-xs"
+                              title="View/edit prompt"
+                            >
+                              Prompt
+                            </button>
                             <a
                               href={image.url}
                               target="_blank"
@@ -1951,6 +1974,114 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Prompt Viewer Modal */}
+      {viewingPromptImage && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+          <div className="bg-slate-900 rounded-xl border border-brand-cyan/30 w-full max-w-3xl max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-semibold text-white">Image Prompt</h3>
+                <span className="px-2 py-0.5 bg-slate-700 rounded text-xs text-gray-400">
+                  {viewingPromptImage.placement || 'Unknown placement'}
+                </span>
+              </div>
+              <button
+                onClick={() => setViewingPromptImage(null)}
+                className="text-gray-400 hover:text-white transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Image Preview */}
+              <div className="flex gap-4">
+                <div className="w-32 h-32 flex-shrink-0 bg-slate-800 rounded-lg overflow-hidden">
+                  <img
+                    src={viewingPromptImage.url}
+                    alt="Current"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs text-gray-500 mb-1">Current image will be replaced when you regenerate</p>
+                  <p className="text-xs text-gray-400">
+                    Created: {new Date(viewingPromptImage.createdAt).toLocaleString()}
+                  </p>
+                  {viewingPromptImage.pushedToWp && (
+                    <p className="text-xs text-green-400 mt-1">Already pushed to WordPress</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Prompt Editor */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">
+                  Prompt {!viewingPromptImage.prompt && <span className="text-orange-400">(No prompt stored!)</span>}
+                </label>
+                <textarea
+                  value={editablePrompt}
+                  onChange={(e) => setEditablePrompt(e.target.value)}
+                  className="w-full h-48 bg-slate-800 border border-slate-600 rounded-lg p-3 text-white text-sm font-mono resize-none focus:border-brand-cyan focus:outline-none"
+                  placeholder="No prompt stored for this image..."
+                />
+              </div>
+
+              {/* Warning if no prompt */}
+              {!viewingPromptImage.prompt && (
+                <div className="p-3 bg-orange-500/20 border border-orange-500/50 rounded-lg text-orange-400 text-sm">
+                  <strong>Warning:</strong> This image has no stored prompt. You can enter a new prompt above to regenerate.
+                </div>
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between p-4 border-t border-slate-700">
+              <button
+                onClick={() => setEditablePrompt(viewingPromptImage.prompt || '')}
+                className="px-3 py-2 text-gray-400 hover:text-white text-sm transition"
+              >
+                Reset to Original
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setViewingPromptImage(null)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => regenerateImage(viewingPromptImage.id, editablePrompt)}
+                  disabled={regeneratingImage === viewingPromptImage.id || !editablePrompt.trim()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm font-medium transition disabled:opacity-50 flex items-center gap-2"
+                >
+                  {regeneratingImage === viewingPromptImage.id ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Regenerating...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Regenerate with this Prompt
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
