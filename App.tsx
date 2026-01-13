@@ -463,10 +463,42 @@ const App: React.FC = () => {
                 }
               }
 
-              if (Object.keys(workflowState).length > 0) {
-                setCurrentProjectState(() => workflowState);
-                setHasUnsavedChanges(false);
-              }
+              // Create or update the project with workflow state
+              // Use setCurrentProject directly to ensure state is set even if currentProject was null
+              const projectId = currentProject?.id || `workflow-${data.workflow.id}`;
+              setCurrentProject({
+                id: projectId,
+                name: data.workflow.name,
+                state: Object.keys(workflowState).length > 0 ? workflowState : (currentProject?.state || {
+                  apiKeys: { zeroGpt: '', anthropic: '', openai: '', gemini: '', grok: '', openRouter: '', xai: '' },
+                  useOpenRouter: false,
+                  autoSaveEnabled: false,
+                  autoSaveSeconds: 60,
+                  provider: 'anthropic',
+                  model: 'claude-sonnet-4-5-20250929',
+                  model2: 'not-in-use',
+                  model3: 'not-in-use',
+                  fileNameTemplate: '{tag}-{item_name}-output',
+                  wpCredentials: { url: '', user: '', password: '' },
+                  wpContentType: 'pages',
+                  wpTitleTemplate: '{item_name}',
+                  tags: [],
+                  placeholders: [],
+                  taggedSnippets: [],
+                  promptTemplates: [],
+                  optionVariables: [],
+                  projectNotes: '',
+                  workflowNotes: '',
+                  metaTitleCount: 3,
+                  metaDescriptionCount: 3,
+                  metaTitlePrompt: '',
+                  metaDescriptionPrompt: '',
+                  wpPublishMode: 'draft',
+                  articlePublishMode: 'draft',
+                  metaPublishMode: 'draft',
+                })
+              });
+              setHasUnsavedChanges(false);
 
               showNotification(`Loaded default workflow: ${data.workflow.name}`, 'info');
             }
@@ -2171,13 +2203,45 @@ const App: React.FC = () => {
                                 }
                             }
 
+                            // Create or update the project with workflow state
+                            // Use setCurrentProject directly to ensure state is set even if currentProject was null
+                            const projectId = currentProject?.id || `workflow-${workflow.id}`;
+                            setCurrentProject({
+                                id: projectId,
+                                name: workflow.name,
+                                state: Object.keys(workflowState).length > 0 ? workflowState : (currentProject?.state || {
+                                    apiKeys: { zeroGpt: '', anthropic: '', openai: '', gemini: '', grok: '', openRouter: '', xai: '' },
+                                    useOpenRouter: false,
+                                    autoSaveEnabled: false,
+                                    autoSaveSeconds: 60,
+                                    provider: 'anthropic',
+                                    model: 'claude-sonnet-4-5-20250929',
+                                    model2: 'not-in-use',
+                                    model3: 'not-in-use',
+                                    fileNameTemplate: '{tag}-{item_name}-output',
+                                    wpCredentials: { url: '', user: '', password: '' },
+                                    wpContentType: 'pages',
+                                    wpTitleTemplate: '{item_name}',
+                                    tags: [],
+                                    placeholders: [],
+                                    taggedSnippets: [],
+                                    promptTemplates: [],
+                                    optionVariables: [],
+                                    projectNotes: '',
+                                    workflowNotes: '',
+                                    metaTitleCount: 3,
+                                    metaDescriptionCount: 3,
+                                    metaTitlePrompt: '',
+                                    metaDescriptionPrompt: '',
+                                    wpPublishMode: 'draft',
+                                    articlePublishMode: 'draft',
+                                    metaPublishMode: 'draft',
+                                })
+                            });
+                            setHasUnsavedChanges(false);
                             if (Object.keys(workflowState).length > 0) {
-                                // Load the saved state (with synced seoPlugin)
-                                setCurrentProjectState(() => workflowState);
-                                setHasUnsavedChanges(false);
                                 showNotification(`Loaded workflow: ${workflow.name}`, 'success');
                             } else {
-                                // No saved state, start fresh
                                 showNotification(`Loaded workflow: ${workflow.name} (new)`, 'info');
                             }
                         }
