@@ -464,6 +464,9 @@ CREATE TABLE IF NOT EXISTS image_bank_items (
   reuse_count INTEGER DEFAULT 0, -- How many times this image has been used
   -- Matched keywords tracking (Gap 4 fix)
   matched_keywords JSONB DEFAULT NULL, -- {primary: "stove", secondary: ["kitchen", "appliance"], score: 15}
+  -- Cross-article duplicate prevention (Gap 3 fix)
+  allow_reuse BOOLEAN DEFAULT false, -- If true, image can be used on multiple articles
+  max_reuse_count INTEGER DEFAULT 1, -- Maximum times this image can be reused (0 = unlimited)
   -- Archival
   archived BOOLEAN DEFAULT false,
   -- Flexible tagging and metadata
@@ -472,6 +475,30 @@ CREATE TABLE IF NOT EXISTS image_bank_items (
   -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
+-- IMAGE USAGE HISTORY (Full audit trail for image usage - Gap 5 fix)
+-- ============================================
+
+-- Image Usage History table - logs every time an image is selected/used
+CREATE TABLE IF NOT EXISTS image_usage_history (
+  id SERIAL PRIMARY KEY,
+  image_bank_item_id INTEGER REFERENCES image_bank_items(id) ON DELETE CASCADE,
+  workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE,
+  article_id INTEGER REFERENCES articles(id) ON DELETE SET NULL,
+  -- What happened
+  action VARCHAR(50) NOT NULL, -- 'selected', 'replaced', 'removed', 'reused'
+  -- Context at time of selection
+  article_keyword VARCHAR(500), -- The article keyword when selected
+  placement VARCHAR(50), -- hero, body-1, body-2, etc.
+  matched_keywords JSONB DEFAULT NULL, -- Keywords that matched at selection time
+  match_score INTEGER, -- The score at time of selection
+  -- Selection details
+  selection_mode VARCHAR(50), -- 'smart_match', 'fallback', 'manual', 'random'
+  position_index INTEGER, -- Which position in the article (0, 1, 2, etc.)
+  -- Timestamps
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================
@@ -523,6 +550,12 @@ CREATE INDEX IF NOT EXISTS idx_articles_generated_images_gin ON articles USING G
 -- GIN index for querying which articles an image is used on (for duplicate prevention)
 CREATE INDEX IF NOT EXISTS idx_image_bank_used_on_gin ON image_bank_items USING GIN (used_on_articles);
 
+-- Image usage history indexes
+CREATE INDEX IF NOT EXISTS idx_image_usage_history_image ON image_usage_history(image_bank_item_id);
+CREATE INDEX IF NOT EXISTS idx_image_usage_history_workflow ON image_usage_history(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_image_usage_history_article ON image_usage_history(article_id);
+CREATE INDEX IF NOT EXISTS idx_image_usage_history_action ON image_usage_history(action);
+
 
 -- ============================================
 -- MIGRATIONS: Add columns if they don't exist
@@ -559,6 +592,13 @@ BEGIN
     -- Matched keywords tracking
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='image_bank_items' AND column_name='matched_keywords') THEN
         ALTER TABLE image_bank_items ADD COLUMN matched_keywords JSONB DEFAULT NULL;
+    END IF;
+    -- Cross-article duplicate prevention
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='image_bank_items' AND column_name='allow_reuse') THEN
+        ALTER TABLE image_bank_items ADD COLUMN allow_reuse BOOLEAN DEFAULT false;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='image_bank_items' AND column_name='max_reuse_count') THEN
+        ALTER TABLE image_bank_items ADD COLUMN max_reuse_count INTEGER DEFAULT 1;
     END IF;
 END
 $$;
