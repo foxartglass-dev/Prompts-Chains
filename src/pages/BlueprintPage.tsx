@@ -2217,6 +2217,162 @@ setShowDripFeedModal(false);
 // User sees the change in the list - no alert needed`}</pre>
       </div>
     </div>
+
+    {/* Queue Behind Last Feature */}
+    <div className="bg-green-900/20 rounded-xl p-6 border border-green-500/30">
+      <h3 className="text-lg font-bold text-green-400 mb-4">Queue Behind Last Feature (Jan 2026)</h3>
+      <p className="text-sm text-gray-300 mb-4">
+        Allows adding articles directly behind the last scheduled article, following existing schedule settings.
+        One-click queueing without needing to pick dates.
+      </p>
+
+      {/* Where the buttons appear */}
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Two Locations</h4>
+        <div className="grid md:grid-cols-2 gap-4 text-xs">
+          <div className="bg-slate-800 rounded p-3">
+            <span className="text-brand-gold font-semibold">1. Add to Drip Feed Modal</span>
+            <p className="text-gray-400 mt-1 mb-2">ArticleListView.tsx - Three radio options:</p>
+            <div className="space-y-1 text-gray-300">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-brand-cyan"></div>
+                <span>Schedule Now - Pick a start date</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                <span><strong>Queue Behind Last</strong> - Auto-calculate date</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-amber-400"></div>
+                <span>Schedule Later - No date assigned</span>
+              </div>
+            </div>
+          </div>
+          <div className="bg-slate-800 rounded p-3">
+            <span className="text-brand-gold font-semibold">2. Unscheduled Articles Row</span>
+            <p className="text-gray-400 mt-1 mb-2">DripFeedView.tsx - Button next to Schedule:</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="px-2 py-0.5 bg-green-600/30 text-green-400 text-xs rounded">Queue</span>
+              <span className="px-2 py-0.5 bg-brand-cyan/30 text-brand-cyan text-xs rounded">Schedule</span>
+              <span className="px-2 py-0.5 bg-red-600/30 text-red-400 text-xs rounded">Remove</span>
+            </div>
+            <p className="text-gray-500 mt-2 text-[10px]">Queue = one-click, Schedule = opens date/time picker</p>
+          </div>
+        </div>
+      </div>
+
+      {/* How it works */}
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">How Queue Behind Last Works</h4>
+        <ol className="text-xs text-gray-300 space-y-2">
+          <li className="flex items-start gap-2">
+            <span className="text-green-400 font-bold">1.</span>
+            <span>Finds the last scheduled article (highest date/time where status is 'pending' or 'published')</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-green-400 font-bold">2.</span>
+            <span>Counts how many articles are already on that day</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-green-400 font-bold">3.</span>
+            <span>If under daily limit (variance_max), starts scheduling on same day</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-green-400 font-bold">4.</span>
+            <span>If at limit, starts scheduling on the next valid day (respecting skip_weekdays, skip_dates)</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-green-400 font-bold">5.</span>
+            <span>Uses generateSchedule() to assign times within publish_time_start/end window</span>
+          </li>
+        </ol>
+      </div>
+
+      {/* Code implementation */}
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Implementation Details</h4>
+        <div className="space-y-4 text-xs">
+          <div>
+            <span className="text-brand-gold">Frontend - Modal (ArticleListView.tsx):</span>
+            <pre className="mt-1 text-gray-300 bg-slate-800 p-2 rounded overflow-x-auto">{`// State: 'schedule_now' | 'queue_behind' | 'schedule_later'
+const [dripFeedMode, setDripFeedMode] = useState('schedule_now');
+
+// API call:
+body: JSON.stringify({
+  articleIds: Array.from(selectedIds),
+  startDate: dripFeedStartDate,
+  scheduleLater: dripFeedMode === 'schedule_later',
+  queueBehindLast: dripFeedMode === 'queue_behind'  // ← New flag
+})`}</pre>
+          </div>
+          <div>
+            <span className="text-brand-gold">Frontend - Queue Button (DripFeedView.tsx):</span>
+            <pre className="mt-1 text-gray-300 bg-slate-800 p-2 rounded overflow-x-auto">{`// State for loading indicator
+const [queuingArticleId, setQueuingArticleId] = useState(null);
+
+// One-click queue function
+const queueArticleBehindLast = async (article) => {
+  setQueuingArticleId(article.id);
+  await fetch(\`/api/drip-feed/schedule/\${websiteId}\`, {
+    method: 'POST',
+    body: JSON.stringify({
+      articleIds: [article.article_id],
+      queueBehindLast: true
+    })
+  });
+  // Shows toast with assigned date/time
+  fetchData();
+};`}</pre>
+          </div>
+          <div>
+            <span className="text-brand-gold">Backend (drip-feed.js POST /schedule/:websiteId):</span>
+            <pre className="mt-1 text-gray-300 bg-slate-800 p-2 rounded overflow-x-auto">{`// Extract new flag
+const { articleIds, startDate, scheduleLater, queueBehindLast } = req.body;
+
+// If queueBehindLast, find last scheduled and calculate start date
+if (queueBehindLast) {
+  const lastScheduled = await sql\`
+    SELECT scheduled_date, scheduled_time
+    FROM drip_feed_schedules
+    WHERE website_id = \${websiteId}
+      AND status IN ('pending', 'published')
+      AND scheduled_date != '9999-12-31'
+    ORDER BY scheduled_date DESC, scheduled_time DESC
+    LIMIT 1
+  \`;
+
+  if (lastScheduled.length > 0) {
+    const lastDate = lastScheduled[0].scheduled_date;
+    const countOnLastDate = await sql\`SELECT COUNT(*) ...\`;
+    const maxPerDay = settings.variance_enabled
+      ? settings.variance_max
+      : settings.articles_per_day;
+
+    // If room on last day, use it; otherwise next day
+    if (articlesOnLastDate < maxPerDay) {
+      scheduleStartDate = new Date(lastDate);
+    } else {
+      scheduleStartDate = new Date(lastDate);
+      scheduleStartDate.setDate(scheduleStartDate.getDate() + 1);
+    }
+  }
+}
+
+// Then call generateSchedule(articleIds, settings, scheduleStartDate)`}</pre>
+          </div>
+        </div>
+      </div>
+
+      {/* Key files */}
+      <div className="bg-slate-800 rounded-lg p-4">
+        <h4 className="text-brand-gold font-semibold mb-2">Key Files Modified</h4>
+        <ul className="text-xs text-gray-300 space-y-1 font-mono">
+          <li>• <code className="text-brand-cyan">src/components/articles/ArticleListView.tsx</code> - Modal with 3 radio options</li>
+          <li>• <code className="text-brand-cyan">src/components/articles/DripFeedView.tsx</code> - Queue button + queueArticleBehindLast()</li>
+          <li>• <code className="text-brand-cyan">server/routes/drip-feed.js</code> - queueBehindLast flag handling (~lines 279-317)</li>
+        </ul>
+      </div>
+    </div>
   </div>
 );
 
