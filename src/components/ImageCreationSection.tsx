@@ -612,6 +612,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [showPlaceholderTemplates, setShowPlaceholderTemplates] = useState(false);
   // For apply template - track which sections/text to include
   const [templateSectionSelections, setTemplateSectionSelections] = useState<{ [sectionId: string]: { title: boolean; text: boolean } }>({});
+  // Save Template popup form state
+  const [saveTemplateName, setSaveTemplateName] = useState('');
+  const [saveTemplateDesc, setSaveTemplateDesc] = useState('');
+  const [saveTemplateCategory, setSaveTemplateCategory] = useState('');
+  // Text Bank popup form state
+  const [newSnippetName, setNewSnippetName] = useState('');
+  const [newSnippetText, setNewSnippetText] = useState('');
+  const [newSnippetCategory, setNewSnippetCategory] = useState('');
+  const [showSnippetAddForm, setShowSnippetAddForm] = useState(false);
 
   // Legacy Chat (keeping for backwards compatibility)
   const [chatInput, setChatInput] = useState('');
@@ -10871,80 +10880,69 @@ Start by introducing yourself and asking about their business in a friendly way.
           <div className="bg-slate-900 rounded-xl w-[600px] max-h-[80vh] flex flex-col border border-emerald-500/30">
             <div className="flex items-center justify-between p-4 border-b border-emerald-500/30">
               <h2 className="text-lg font-semibold text-emerald-400">Save Prompt as Template</h2>
-              <button onClick={() => setShowPromptTemplatePopup(null)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+              <button onClick={() => { setShowPromptTemplatePopup(null); setSaveTemplateName(''); setSaveTemplateDesc(''); setSaveTemplateCategory(''); }} className="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
             <div className="flex-1 overflow-auto p-4 space-y-4">
-              {(() => {
-                const [templateName, setTemplateName] = React.useState('');
-                const [templateDesc, setTemplateDesc] = React.useState('');
-                const [templateCategory, setTemplateCategory] = React.useState('');
-                const sections = activeAvatar ? parsePromptIntoSections(activeAvatar.mainPrompt) : [];
-
-                return (
-                  <>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Template Name *</label>
-                      <input
-                        type="text"
-                        value={templateName}
-                        onChange={(e) => setTemplateName(e.target.value)}
-                        placeholder="e.g., Cleaning Company Prompt"
-                        className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white"
-                      />
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Template Name *</label>
+                <input
+                  type="text"
+                  value={saveTemplateName}
+                  onChange={(e) => setSaveTemplateName(e.target.value)}
+                  placeholder="e.g., Cleaning Company Prompt"
+                  className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <textarea
+                  value={saveTemplateDesc}
+                  onChange={(e) => setSaveTemplateDesc(e.target.value)}
+                  placeholder="What this template is for..."
+                  rows={2}
+                  className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Category</label>
+                <input
+                  type="text"
+                  value={saveTemplateCategory}
+                  onChange={(e) => setSaveTemplateCategory(e.target.value)}
+                  placeholder="e.g., Cleaning, Construction, Universal"
+                  className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white"
+                  list="template-categories"
+                />
+                <datalist id="template-categories">
+                  {(templateCategories || []).map(cat => <option key={cat} value={cat} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Detected Sections ({(activeAvatar ? parsePromptIntoSections(activeAvatar.mainPrompt || '') : []).length})</label>
+                <div className="space-y-2 max-h-48 overflow-auto">
+                  {(activeAvatar ? parsePromptIntoSections(activeAvatar.mainPrompt || '') : []).map(section => (
+                    <div key={section.id} className="bg-slate-800 rounded p-2 border border-slate-700">
+                      <div className="text-emerald-300 text-sm font-medium">{section.title}</div>
+                      {section.text && (
+                        <div className="text-gray-400 text-xs mt-1 line-clamp-2">{section.text}</div>
+                      )}
                     </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Description</label>
-                      <textarea
-                        value={templateDesc}
-                        onChange={(e) => setTemplateDesc(e.target.value)}
-                        placeholder="What this template is for..."
-                        rows={2}
-                        className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white resize-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Category</label>
-                      <input
-                        type="text"
-                        value={templateCategory}
-                        onChange={(e) => setTemplateCategory(e.target.value)}
-                        placeholder="e.g., Cleaning, Construction, Universal"
-                        className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white"
-                        list="template-categories"
-                      />
-                      <datalist id="template-categories">
-                        {templateCategories.map(cat => <option key={cat} value={cat} />)}
-                      </datalist>
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-2">Detected Sections ({sections.length})</label>
-                      <div className="space-y-2 max-h-48 overflow-auto">
-                        {sections.map(section => (
-                          <div key={section.id} className="bg-slate-800 rounded p-2 border border-slate-700">
-                            <div className="text-emerald-300 text-sm font-medium">{section.title}</div>
-                            {section.text && (
-                              <div className="text-gray-400 text-xs mt-1 line-clamp-2">{section.text}</div>
-                            )}
-                          </div>
-                        ))}
-                        {sections.length === 0 && (
-                          <p className="text-gray-500 text-sm">No sections detected. Add section titles ending with ":" (e.g., "Pose / camera angle (CRITICAL):")</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-3 pt-2">
-                      <button onClick={() => setShowPromptTemplatePopup(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm">Cancel</button>
-                      <button
-                        onClick={() => handleSavePromptTemplate(templateName, templateDesc, templateCategory)}
-                        disabled={!templateName.trim()}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-white font-medium text-sm disabled:opacity-50"
-                      >
-                        Save Template
-                      </button>
-                    </div>
-                  </>
-                );
-              })()}
+                  ))}
+                  {(activeAvatar ? parsePromptIntoSections(activeAvatar.mainPrompt || '') : []).length === 0 && (
+                    <p className="text-gray-500 text-sm">No sections detected. Add section titles ending with ":" (e.g., "Pose / camera angle (CRITICAL):")</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={() => { setShowPromptTemplatePopup(null); setSaveTemplateName(''); setSaveTemplateDesc(''); setSaveTemplateCategory(''); }} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm">Cancel</button>
+                <button
+                  onClick={() => { handleSavePromptTemplate(saveTemplateName, saveTemplateDesc, saveTemplateCategory); setSaveTemplateName(''); setSaveTemplateDesc(''); setSaveTemplateCategory(''); }}
+                  disabled={!saveTemplateName.trim()}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-white font-medium text-sm disabled:opacity-50"
+                >
+                  Save Template
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -10959,7 +10957,7 @@ Start by introducing yourself and asking about their business in a friendly way.
               <button onClick={() => setShowPromptTemplatePopup(null)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
             <div className="flex-1 overflow-auto p-4">
-              {settings.prompt_templates.length === 0 ? (
+              {(settings.prompt_templates || []).length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <p className="mb-2">No templates saved yet</p>
                   <button
@@ -10971,7 +10969,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {settings.prompt_templates.map(template => (
+                  {(settings.prompt_templates || []).map(template => (
                     <div key={template.id} className="bg-slate-800 rounded-lg border border-purple-500/30 overflow-hidden">
                       <div className="p-3 border-b border-slate-700 flex items-center justify-between">
                         <div>
@@ -11136,138 +11134,127 @@ Start by introducing yourself and asking about their business in a friendly way.
           <div className="bg-slate-900 rounded-xl w-[700px] max-h-[85vh] flex flex-col border border-blue-500/30">
             <div className="flex items-center justify-between p-4 border-b border-blue-500/30">
               <h2 className="text-lg font-semibold text-blue-400">Text Snippet Bank</h2>
-              <button onClick={() => setShowTextSnippetBank(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+              <button onClick={() => { setShowTextSnippetBank(false); setShowSnippetAddForm(false); setNewSnippetName(''); setNewSnippetText(''); setNewSnippetCategory(''); }} className="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
             <div className="flex-1 overflow-auto p-4">
               {/* Add New Snippet Form */}
-              {(() => {
-                const [newSnippetName, setNewSnippetName] = React.useState('');
-                const [newSnippetText, setNewSnippetText] = React.useState('');
-                const [newSnippetCategory, setNewSnippetCategory] = React.useState('');
-                const [showAddForm, setShowAddForm] = React.useState(false);
-
-                return (
-                  <>
-                    {!showAddForm ? (
+              {!showSnippetAddForm ? (
+                <button
+                  onClick={() => setShowSnippetAddForm(true)}
+                  className="mb-4 px-3 py-2 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-sm w-full"
+                >
+                  + Add New Snippet
+                </button>
+              ) : (
+                <div className="mb-4 bg-slate-800 rounded-lg p-3 border border-blue-500/30">
+                  <div className="space-y-3">
+                    <div className="flex gap-3">
+                      <input
+                        type="text"
+                        value={newSnippetName}
+                        onChange={(e) => setNewSnippetName(e.target.value)}
+                        placeholder="Snippet name"
+                        className="flex-1 bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm"
+                      />
+                      <input
+                        type="text"
+                        value={newSnippetCategory}
+                        onChange={(e) => setNewSnippetCategory(e.target.value)}
+                        placeholder="Category"
+                        list="snippet-categories"
+                        className="w-40 bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm"
+                      />
+                      <datalist id="snippet-categories">
+                        {(snippetCategories || []).map(cat => <option key={cat} value={cat} />)}
+                      </datalist>
+                    </div>
+                    <textarea
+                      value={newSnippetText}
+                      onChange={(e) => setNewSnippetText(e.target.value)}
+                      placeholder="Snippet text..."
+                      rows={3}
+                      className="w-full bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm resize-none"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setShowSnippetAddForm(false)} className="px-3 py-1 bg-slate-600 hover:bg-slate-500 rounded text-white text-xs">Cancel</button>
                       <button
-                        onClick={() => setShowAddForm(true)}
-                        className="mb-4 px-3 py-2 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-sm w-full"
+                        onClick={() => {
+                          if (newSnippetName.trim() && newSnippetText.trim() && newSnippetCategory.trim()) {
+                            handleSaveTextSnippet(newSnippetName, newSnippetText, newSnippetCategory);
+                            setNewSnippetName('');
+                            setNewSnippetText('');
+                            setNewSnippetCategory('');
+                            setShowSnippetAddForm(false);
+                          }
+                        }}
+                        disabled={!newSnippetName.trim() || !newSnippetText.trim() || !newSnippetCategory.trim()}
+                        className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs disabled:opacity-50"
                       >
-                        + Add New Snippet
+                        Save Snippet
                       </button>
-                    ) : (
-                      <div className="mb-4 bg-slate-800 rounded-lg p-3 border border-blue-500/30">
-                        <div className="space-y-3">
-                          <div className="flex gap-3">
-                            <input
-                              type="text"
-                              value={newSnippetName}
-                              onChange={(e) => setNewSnippetName(e.target.value)}
-                              placeholder="Snippet name"
-                              className="flex-1 bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm"
-                            />
-                            <input
-                              type="text"
-                              value={newSnippetCategory}
-                              onChange={(e) => setNewSnippetCategory(e.target.value)}
-                              placeholder="Category"
-                              list="snippet-categories"
-                              className="w-40 bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm"
-                            />
-                            <datalist id="snippet-categories">
-                              {snippetCategories.map(cat => <option key={cat} value={cat} />)}
-                            </datalist>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Category Filter */}
+              {(snippetCategories || []).length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setSnippetCategoryFilter('all')}
+                    className={`px-3 py-1 rounded text-xs font-medium transition ${snippetCategoryFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
+                  >
+                    All
+                  </button>
+                  {(snippetCategories || []).map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSnippetCategoryFilter(cat)}
+                      className={`px-3 py-1 rounded text-xs font-medium transition ${snippetCategoryFilter === cat ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Snippets List */}
+              {(settings.text_snippets || []).length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <p>No snippets saved yet</p>
+                  <p className="text-sm mt-1">Add reusable text blocks for quick insertion</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(settings.text_snippets || [])
+                    .filter(s => snippetCategoryFilter === 'all' || s.category === snippetCategoryFilter)
+                    .map(snippet => (
+                      <div key={snippet.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700 hover:border-blue-500/50 transition group">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-blue-300 font-medium text-sm">{snippet.name}</span>
+                            <span className="text-xs text-blue-400/60 bg-blue-900/30 px-2 py-0.5 rounded">{snippet.category}</span>
                           </div>
-                          <textarea
-                            value={newSnippetText}
-                            onChange={(e) => setNewSnippetText(e.target.value)}
-                            placeholder="Snippet text..."
-                            rows={3}
-                            className="w-full bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm resize-none"
-                          />
-                          <div className="flex justify-end gap-2">
-                            <button onClick={() => setShowAddForm(false)} className="px-3 py-1 bg-slate-600 hover:bg-slate-500 rounded text-white text-xs">Cancel</button>
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
                             <button
-                              onClick={() => {
-                                if (newSnippetName.trim() && newSnippetText.trim() && newSnippetCategory.trim()) {
-                                  handleSaveTextSnippet(newSnippetName, newSnippetText, newSnippetCategory);
-                                  setNewSnippetName('');
-                                  setNewSnippetText('');
-                                  setNewSnippetCategory('');
-                                  setShowAddForm(false);
-                                }
-                              }}
-                              disabled={!newSnippetName.trim() || !newSnippetText.trim() || !newSnippetCategory.trim()}
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs disabled:opacity-50"
+                              onClick={() => handleInsertSnippet(snippet)}
+                              className="px-2 py-1 bg-blue-600/50 hover:bg-blue-600 rounded text-white text-xs"
                             >
-                              Save Snippet
+                              Insert
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSnippet(snippet.id)}
+                              className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 rounded text-red-300 text-xs"
+                            >
+                              Delete
                             </button>
                           </div>
                         </div>
+                        <p className="text-gray-400 text-xs line-clamp-2">{snippet.text}</p>
                       </div>
-                    )}
-
-                    {/* Category Filter */}
-                    {snippetCategories.length > 0 && (
-                      <div className="mb-4 flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setSnippetCategoryFilter('all')}
-                          className={`px-3 py-1 rounded text-xs font-medium transition ${snippetCategoryFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
-                        >
-                          All
-                        </button>
-                        {snippetCategories.map(cat => (
-                          <button
-                            key={cat}
-                            onClick={() => setSnippetCategoryFilter(cat)}
-                            className={`px-3 py-1 rounded text-xs font-medium transition ${snippetCategoryFilter === cat ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
-                          >
-                            {cat}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Snippets List */}
-                    {settings.text_snippets.length === 0 ? (
-                      <div className="text-center py-8 text-gray-400">
-                        <p>No snippets saved yet</p>
-                        <p className="text-sm mt-1">Add reusable text blocks for quick insertion</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {settings.text_snippets
-                          .filter(s => snippetCategoryFilter === 'all' || s.category === snippetCategoryFilter)
-                          .map(snippet => (
-                            <div key={snippet.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700 hover:border-blue-500/50 transition group">
-                              <div className="flex items-center justify-between mb-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-blue-300 font-medium text-sm">{snippet.name}</span>
-                                  <span className="text-xs text-blue-400/60 bg-blue-900/30 px-2 py-0.5 rounded">{snippet.category}</span>
-                                </div>
-                                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
-                                  <button
-                                    onClick={() => handleInsertSnippet(snippet)}
-                                    className="px-2 py-1 bg-blue-600/50 hover:bg-blue-600 rounded text-white text-xs"
-                                  >
-                                    Insert
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteSnippet(snippet.id)}
-                                    className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 rounded text-red-300 text-xs"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </div>
-                              <p className="text-gray-400 text-xs line-clamp-2">{snippet.text}</p>
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
+                    ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -11282,7 +11269,7 @@ Start by introducing yourself and asking about their business in a friendly way.
               <button onClick={() => setShowPlaceholderTemplates(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
             <div className="flex-1 overflow-auto p-4">
-              {settings.placeholder_category_templates.length === 0 ? (
+              {(settings.placeholder_category_templates || []).length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <p className="mb-2">No placeholder templates saved yet</p>
                   <p className="text-sm">Save a placeholder category from any avatar to create a template</p>
@@ -11291,7 +11278,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                 <div className="space-y-3">
                   {/* Group by category */}
                   {(() => {
-                    const grouped = settings.placeholder_category_templates.reduce((acc, t) => {
+                    const grouped = (settings.placeholder_category_templates || []).reduce((acc, t) => {
                       const cat = t.category || 'Uncategorized';
                       if (!acc[cat]) acc[cat] = [];
                       acc[cat].push(t);
@@ -11322,7 +11309,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   <button
                                     onClick={() => {
                                       updateSettings({
-                                        placeholder_category_templates: settings.placeholder_category_templates.filter(t => t.id !== template.id)
+                                        placeholder_category_templates: (settings.placeholder_category_templates || []).filter(t => t.id !== template.id)
                                       });
                                       showNotification('Template deleted', 'success');
                                     }}
