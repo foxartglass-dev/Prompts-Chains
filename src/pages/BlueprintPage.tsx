@@ -5,7 +5,7 @@ interface BlueprintPageProps {
   onClose: () => void;
 }
 
-type BlueprintTab = 'start-here' | 'image-flow' | 'image-recycle' | 'push-all' | 'individual-buttons' | 'data-sources' | 'golden-rules' | 'known-issues' | 'drip-feed' | 'changelog' | 'notes' | 'agent-template';
+type BlueprintTab = 'start-here' | 'image-flow' | 'image-recycle' | 'push-all' | 'individual-buttons' | 'data-sources' | 'site-planning' | 'golden-rules' | 'known-issues' | 'drip-feed' | 'changelog' | 'notes' | 'agent-template';
 
 const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<BlueprintTab>('start-here');
@@ -19,6 +19,7 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
     { id: 'push-all', label: 'Push All to WP' },
     { id: 'individual-buttons', label: 'Individual Buttons' },
     { id: 'data-sources', label: 'Data Sources' },
+    { id: 'site-planning', label: 'Site Planning' },
     { id: 'golden-rules', label: 'Golden Rules' },
     { id: 'known-issues', label: 'Known Issues' },
     { id: 'drip-feed', label: 'Drip Feed' },
@@ -80,6 +81,7 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
           {activeTab === 'push-all' && <PushAllDiagram />}
           {activeTab === 'individual-buttons' && <IndividualButtonsDiagram />}
           {activeTab === 'data-sources' && <DataSourcesDiagram />}
+          {activeTab === 'site-planning' && <SitePlanningDiagram />}
           {activeTab === 'golden-rules' && <GoldenRules />}
           {activeTab === 'known-issues' && <KnownIssuesDiagram />}
           {activeTab === 'drip-feed' && <DripFeedDiagram />}
@@ -3312,6 +3314,194 @@ const ChangelogDiagram: React.FC = () => (
       <div className="flex items-center gap-2">
         <span className="text-yellow-400 font-bold">PERF</span>
         <span className="text-gray-400">Performance</span>
+      </div>
+    </div>
+  </div>
+);
+
+// Site Planning Section - How Site Planning START connects to main workflow
+const SitePlanningDiagram: React.FC = () => (
+  <div className="space-y-6">
+    <div className="text-center mb-8">
+      <h2 className="text-2xl font-bold text-brand-cyan mb-2">Site Planning START Button</h2>
+      <p className="text-gray-400">How Site Planning feeds items into the main workflow pipeline</p>
+    </div>
+
+    {/* Overview */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Overview</h3>
+      <p className="text-gray-300 mb-4">
+        The Site Planning START button processes selected nodes through the <strong className="text-white">exact same workflow pipeline</strong> as
+        manually adding items via "Add Items from Text" in the Processing Log. This ensures consistent behavior for prompts,
+        image generation, and all settings.
+      </p>
+      <div className="bg-slate-900 rounded-lg p-4 text-sm">
+        <div className="text-brand-gold font-semibold mb-2">Key Point:</div>
+        <p className="text-gray-300">Site Planning START is NOT a separate endpoint - it feeds directly into <code className="text-pink-400">processWorkflow()</code></p>
+      </div>
+    </div>
+
+    {/* Data Flow Diagram */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-gold/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">Data Flow</h3>
+      <div className="flex flex-col items-center gap-4">
+        <div className="bg-purple-900/50 rounded-lg p-4 border border-purple-500 w-full max-w-md text-center">
+          <div className="text-purple-400 font-semibold">1. Site Planning Section</div>
+          <div className="text-sm text-gray-400 mt-1">User selects nodes and clicks START</div>
+          <code className="text-xs text-gray-500 block mt-2">SitePlanningSection.tsx → startProcessing()</code>
+        </div>
+
+        <svg className="w-6 h-8 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>
+
+        <div className="bg-blue-900/50 rounded-lg p-4 border border-blue-500 w-full max-w-md text-center">
+          <div className="text-blue-400 font-semibold">2. Convert Nodes to Workflow Items</div>
+          <div className="text-sm text-gray-400 mt-1">Extract name and tag from node titles</div>
+          <code className="text-xs text-gray-500 block mt-2">{"{ id, name, tag } - tag from (H), (S), etc."}</code>
+        </div>
+
+        <svg className="w-6 h-8 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>
+
+        <div className="bg-green-900/50 rounded-lg p-4 border border-green-500 w-full max-w-md text-center">
+          <div className="text-green-400 font-semibold">3. Call onStartWorkflow Callback</div>
+          <div className="text-sm text-gray-400 mt-1">Passed from App.tsx to SitePlanningSection</div>
+          <code className="text-xs text-gray-500 block mt-2">onStartWorkflow(workflowItems)</code>
+        </div>
+
+        <svg className="w-6 h-8 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>
+
+        <div className="bg-pink-900/50 rounded-lg p-4 border border-pink-500 w-full max-w-md text-center">
+          <div className="text-pink-400 font-semibold">4. App.tsx Handler</div>
+          <div className="text-sm text-gray-400 mt-1">loadItems() for UI + processWorkflow() with items</div>
+          <code className="text-xs text-gray-500 block mt-2">loadItems(items); processWorkflow(items);</code>
+        </div>
+
+        <svg className="w-6 h-8 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>
+
+        <div className="bg-cyan-900/50 rounded-lg p-4 border border-cyan-500 w-full max-w-md text-center">
+          <div className="text-cyan-400 font-semibold">5. Standard Workflow Processing</div>
+          <div className="text-sm text-gray-400 mt-1">Same as manual "Add Items from Text"</div>
+          <code className="text-xs text-gray-500 block mt-2">Prompts → LLM → Images → Results</code>
+        </div>
+      </div>
+    </div>
+
+    {/* Key Files */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-purple-500/30">
+      <h3 className="text-lg font-bold text-purple-400 mb-4">Key Files & Functions</h3>
+      <div className="space-y-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <code className="text-brand-cyan text-sm">App.tsx</code>
+            <div className="text-sm text-gray-300">
+              <div className="mb-2">Lines ~3500-3511: <code className="text-pink-400">onStartWorkflow</code> callback</div>
+              <div className="mb-2">Lines ~1138-1167: <code className="text-pink-400">processWorkflow(immediateItems?)</code></div>
+              <div className="text-gray-500 text-xs mt-2">
+                processWorkflow accepts optional immediateItems parameter to bypass React state timing issues
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <code className="text-brand-cyan text-sm">SitePlanningSection.tsx</code>
+            <div className="text-sm text-gray-300">
+              <div className="mb-2"><code className="text-pink-400">startProcessing(nodesToProcess)</code> - converts nodes to items</div>
+              <div className="mb-2"><code className="text-pink-400">onStartWorkflow</code> prop - callback to App.tsx</div>
+              <div className="text-gray-500 text-xs mt-2">
+                Extracts tag from node title using regex: /\(([^)]+)\)$/
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Tag Format */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-yellow-500/30">
+      <h3 className="text-lg font-bold text-yellow-400 mb-4">Tag Format Requirements</h3>
+      <p className="text-gray-300 mb-4">
+        Node titles must include a tag in parentheses at the end. The tag determines which prompts are used.
+      </p>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="text-green-400 font-semibold mb-2">Correct Format</div>
+          <code className="text-sm text-gray-300 block">Standard Cleaning (H)</code>
+          <code className="text-sm text-gray-300 block">Deep Cleaning Services (S)</code>
+          <code className="text-sm text-gray-300 block">Move-Out Cleaning (H)</code>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="text-red-400 font-semibold mb-2">Extracted As</div>
+          <code className="text-sm text-gray-300 block">tag: "H"</code>
+          <code className="text-sm text-gray-300 block">tag: "S"</code>
+          <code className="text-sm text-gray-300 block">tag: "H"</code>
+        </div>
+      </div>
+    </div>
+
+    {/* Timing Fix Note */}
+    <div className="bg-red-900/30 rounded-xl p-6 border border-red-500/50">
+      <h3 className="text-lg font-bold text-red-400 mb-4">Important: React State Timing Fix</h3>
+      <p className="text-gray-300 mb-4">
+        <code className="text-pink-400">processWorkflow()</code> accepts an optional <code className="text-pink-400">immediateItems</code> parameter.
+        This exists to bypass React's async state update timing.
+      </p>
+      <div className="bg-slate-900 rounded-lg p-4 text-sm">
+        <div className="text-red-400 font-semibold mb-2">The Problem (Fixed):</div>
+        <p className="text-gray-400 mb-3">
+          Originally used <code className="text-gray-300">setTimeout(() =&gt; processWorkflow(), 100)</code> which wasn't enough time
+          for React's <code className="text-gray-300">setItems()</code> to complete. First click would fail, second click would work.
+        </p>
+        <div className="text-green-400 font-semibold mb-2">The Solution:</div>
+        <p className="text-gray-400">
+          Pass items directly: <code className="text-gray-300">processWorkflow(workflowItems)</code> - bypasses state entirely.
+        </p>
+      </div>
+    </div>
+
+    {/* Settings Used */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Settings Applied (Same as Manual Entry)</h3>
+      <p className="text-gray-300 mb-4">
+        Because Site Planning uses the same <code className="text-pink-400">processWorkflow()</code>, all these settings apply:
+      </p>
+      <div className="grid md:grid-cols-2 gap-4 text-sm">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-green-400">✓</span>
+            <span className="text-gray-300">Prompt Templates (by tag)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-green-400">✓</span>
+            <span className="text-gray-300">LLM Provider & Model</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-green-400">✓</span>
+            <span className="text-gray-300">Multi-model support</span>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-green-400">✓</span>
+            <span className="text-gray-300">Image Integration Settings (Section 7)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-green-400">✓</span>
+            <span className="text-gray-300">Smart Content Matching</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-green-400">✓</span>
+            <span className="text-gray-300">Bank First / Bank Only / Generate Live</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
