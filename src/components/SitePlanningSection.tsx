@@ -53,6 +53,8 @@ interface Props {
   onImagePublishModeChange?: (mode: 'off' | 'draft' | 'wordpress') => void;
   onArticlePublishModeChange?: (mode: 'draft' | 'wordpress') => void;
   onMetaPublishModeChange?: (mode: 'draft' | 'wordpress') => void;
+  // New: Connect to main workflow pipeline
+  onStartWorkflow?: (items: Array<{ name: string; tag: string | null }>) => void;
 }
 
 const PAGE_TYPES = [
@@ -82,7 +84,8 @@ const SitePlanningSection: React.FC<Props> = ({
   metaPublishMode = 'draft',
   onImagePublishModeChange,
   onArticlePublishModeChange,
-  onMetaPublishModeChange
+  onMetaPublishModeChange,
+  onStartWorkflow
 }) => {
   const [plan, setPlan] = useState<SitePlan | null>(null);
   const [nodes, setNodes] = useState<SitePlanNode[]>([]);
@@ -620,98 +623,38 @@ const SitePlanningSection: React.FC<Props> = ({
     setPushing(false);
   };
 
-  // Unified Start button - generates content and optionally pushes to WP based on toggle
-  const startProcessing = async (nodesToProcess: SitePlanNode[]) => {
-    if (!workflowId || nodesToProcess.length === 0) {
+  // Unified Start button - sends items through the main workflow pipeline
+  const startProcessing = (nodesToProcess: SitePlanNode[]) => {
+    if (nodesToProcess.length === 0) {
       showNotification('No nodes selected for processing', 'info');
       return;
     }
 
-    const shouldPushToWP = articlePublishMode === 'wordpress';
-    const totalSteps = shouldPushToWP ? nodesToProcess.length * 2 : nodesToProcess.length;
-
-    setGenerating(true);
-    setGenerationProgress({ current: 0, total: totalSteps, currentTitle: 'Starting...' });
-
-    try {
-      const generatedArticleIds: number[] = [];
-
-      // Step 1: Generate all articles through prompt chain
-      for (let i = 0; i < nodesToProcess.length; i++) {
-        const node = nodesToProcess[i];
-        setGenerationProgress({
-          current: i + 1,
-          total: totalSteps,
-          currentTitle: `Generating: ${node.title}`
-        });
-
-        // Call the workflow generation endpoint for this node
-        const res = await fetch('/api/workflows/generate-for-node', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            workflowId,
-            nodeId: node.id,
-            nodeTitle: node.title,
-            targetKeyword: node.target_keyword || node.title,
-            pageType: node.page_type,
-          }),
-        });
-
-        const data = await res.json();
-
-        if (data.success && data.articleId) {
-          generatedArticleIds.push(data.articleId);
-
-          // Link the article to the node
-          await fetch(`/api/site-planning/link-article/${node.id}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ articleId: data.articleId }),
-          });
-
-          showNotification(`Generated: ${node.title}`, 'success');
-        } else if (data.error) {
-          console.error(`Failed to generate ${node.title}:`, data.error);
-          showNotification(`Failed: ${node.title} - ${data.error}`, 'error');
-        }
-      }
-
-      // Step 2: If WordPress mode, push the generated articles to WP
-      if (shouldPushToWP && generatedArticleIds.length > 0) {
-        setGenerationProgress({
-          current: nodesToProcess.length + 1,
-          total: totalSteps,
-          currentTitle: 'Pushing to WordPress...'
-        });
-
-        // Push hierarchy to WordPress (this pushes the pages with their content)
-        if (plan) {
-          const pushRes = await fetch(`/api/site-planning/push-hierarchy/${plan.id}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'draft' }),
-          });
-
-          const pushData = await pushRes.json();
-          if (pushData.success) {
-            showNotification(`Pushed ${pushData.pushed?.length || 0} pages to WordPress!`, 'success');
-          } else {
-            showNotification(`WordPress push failed: ${pushData.error}`, 'error');
-          }
-        }
-      }
-
-      const modeText = shouldPushToWP ? 'generated and pushed to WordPress' : 'generated (Draft mode)';
-      showNotification(`Complete! ${generatedArticleIds.length} articles ${modeText}.`, 'success');
-      loadPlan(); // Refresh to show updated status
-    } catch (error: any) {
-      console.error('Processing error:', error);
-      showNotification('Processing failed: ' + error.message, 'error');
+    if (!onStartWorkflow) {
+      showNotification('Workflow connection not available', 'error');
+      return;
     }
 
-    setGenerating(false);
-    setGenerationProgress(null);
+    // Convert site plan nodes to workflow items
+    // Each node title should already include the tag like "Deep Cleaning(H)"
+    // The main workflow will parse the tag from the name
+    const workflowItems = nodesToProcess.map(node => {
+      // Extract tag from title if present (e.g., "Deep Cleaning(H)" -> tag: "H")
+      const tagMatch = node.title.match(/\(([^)]+)\)$/);
+      const tag = tagMatch ? tagMatch[1] : null;
+
+      return {
+        name: node.title, // Keep full name including tag for proper display
+        tag
+      };
+    });
+
+    showNotification(`Adding ${workflowItems.length} items to workflow...`, 'info');
+
+    // Send to main workflow - this will load items and start processing
+    onStartWorkflow(workflowItems);
+
+    // Reset selection
     setSelectionMode(false);
     setSelectedNodes(new Set());
   };
@@ -1016,7 +959,7 @@ const SitePlanningSection: React.FC<Props> = ({
             {selectionMode && selectedNodes.size > 0 && (
               <button
                 onClick={generateSelected}
-                disabled={generating}
+                disabled={!onStartWorkflow}
                 className={`px-4 py-1.5 rounded text-white text-sm font-semibold transition flex items-center gap-2 ${
                   articlePublishMode === 'wordpress'
                     ? 'bg-green-600 hover:bg-green-700'
@@ -1027,7 +970,7 @@ const SitePlanningSection: React.FC<Props> = ({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Start {selectedNodes.size} → {articlePublishMode === 'wordpress' ? 'WP' : 'Draft'}
+                Start {selectedNodes.size}
               </button>
             )}
 
@@ -1035,30 +978,19 @@ const SitePlanningSection: React.FC<Props> = ({
             {!selectionMode && (
               <button
                 onClick={generateAll}
-                disabled={generating || flatNodes.length === 0}
+                disabled={flatNodes.length === 0 || !onStartWorkflow}
                 className={`px-5 py-2 rounded text-white font-bold transition flex items-center gap-2 shadow-lg ${
                   articlePublishMode === 'wordpress'
                     ? 'bg-green-600 hover:bg-green-700 disabled:bg-slate-600'
                     : 'bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600'
                 }`}
+                title="Adds items to workflow and starts processing through the Processing Log"
               >
-                {generating ? (
-                  <>
-                    <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    START ({flatNodes.length}) → {articlePublishMode === 'wordpress' ? 'WordPress' : 'Draft'}
-                  </>
-                )}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                START ({flatNodes.length})
               </button>
             )}
           </div>

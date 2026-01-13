@@ -3430,6 +3430,17 @@ const App: React.FC = () => {
                             onImagePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, imagePublishMode: mode }))}
                             onArticlePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, articlePublishMode: mode }))}
                             onMetaPublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, metaPublishMode: mode }))}
+                            onStartWorkflow={(sitePlanItems) => {
+                                // Convert site plan items to workflow items and start processing
+                                const workflowItems = sitePlanItems.map((item, index) => ({
+                                    id: index,
+                                    name: item.name,
+                                    tag: item.tag
+                                }));
+                                loadItems(workflowItems);
+                                // Small delay to ensure items are loaded before processing
+                                setTimeout(() => processWorkflow(), 100);
+                            }}
                         />
                     )}
 
