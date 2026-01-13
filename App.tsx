@@ -1135,8 +1135,11 @@ const App: React.FC = () => {
         return { finalOutput: text.trim(), metaTitles: [] as string[], metaDescriptions: [] as string[] };
     };
 
-    const processWorkflow = async () => {
-        if (!currentProject || !items.length || !currentProject.state.promptTemplates.length) {
+    const processWorkflow = async (immediateItems?: WorkflowItem[]) => {
+        // Use immediateItems if provided (bypasses React state timing issues), otherwise use state
+        const itemsToProcess = immediateItems || items;
+
+        if (!currentProject || !itemsToProcess.length || !currentProject.state.promptTemplates.length) {
             addLog('Prerequisites not met: Add items and define at least one prompt.', LogStatus.ERROR);
             return;
         }
@@ -1158,10 +1161,10 @@ const App: React.FC = () => {
         setBatchImageCounts({ fromBank: 0, fromLive: 0 }); // Reset image counts for new batch
 
         const modelNames = activeModels.map(m => m.model.split('-').slice(0, 2).join('-')).join(', ');
-        addLog(`Starting batch processing for ${items.length} items using ${activeModels.length} model(s): ${modelNames}...`, LogStatus.INFO);
+        addLog(`Starting batch processing for ${itemsToProcess.length} items using ${activeModels.length} model(s): ${modelNames}...`, LogStatus.INFO);
         const startTime = Date.now();
 
-        for (const item of items) {
+        for (const item of itemsToProcess) {
             // Run workflow for each active model
             for (const { model: activeModel, label: modelLabel } of activeModels) {
                 const promptOutputs: Record<string, string> = {};
@@ -3501,13 +3504,10 @@ const App: React.FC = () => {
                                     name: item.name,
                                     tag: item.tag
                                 }));
+                                // Load items to display in UI
                                 loadItems(workflowItems);
-                                // Debug: log what we have
-                                console.log('[Site Planning START] currentProject:', currentProject?.id);
-                                console.log('[Site Planning START] promptTemplates count:', currentProject?.state?.promptTemplates?.length);
-                                console.log('[Site Planning START] promptTemplates:', currentProject?.state?.promptTemplates);
-                                // Small delay to ensure items are loaded before processing
-                                setTimeout(() => processWorkflow(), 100);
+                                // Pass items directly to processWorkflow to bypass React state timing issues
+                                processWorkflow(workflowItems);
                             }}
                         />
                     )}
