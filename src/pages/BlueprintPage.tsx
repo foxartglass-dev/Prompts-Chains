@@ -1943,6 +1943,70 @@ email_sms_recipients JSONB DEFAULT '[]'
       </div>
     </div>
 
+    {/* Add to Queue Feature (Jan 2026) */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-green-500/30">
+      <h3 className="text-lg font-bold text-green-400 mb-4">Add to Queue Feature (Jan 2026)</h3>
+      <p className="text-sm text-gray-300 mb-4">
+        One-click add articles to the end of the drip feed queue without manually selecting dates.
+        The system automatically calculates the next available slot based on your schedule settings.
+      </p>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Single Article</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>• "Queue" button on each unscheduled article row</li>
+            <li>• "Add to Queue" button in Schedule modal (left side)</li>
+            <li>• Automatically calculates next slot based on:</li>
+            <li className="ml-3">- Last scheduled article time</li>
+            <li className="ml-3">- Articles per day setting</li>
+            <li className="ml-3">- Skip dates (holidays, etc.)</li>
+            <li className="ml-3">- Skip weekdays setting</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Bulk Selection</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>• Checkboxes on each unscheduled article</li>
+            <li>• "Select All" checkbox in header</li>
+            <li>• Floating bulk action bar when items selected</li>
+            <li>• "Add All to Queue" button</li>
+            <li>• Queues sequentially: Article 1 → next slot, Article 2 → slot after that, etc.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-4 bg-slate-900 rounded-lg p-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">How getNextQueueSlot() Works</h4>
+        <pre className="text-xs text-gray-300 overflow-x-auto">{`const getNextQueueSlot = () => {
+  // 1. Find all pending schedules
+  const pendingSchedules = schedules.filter(s => s.status === 'pending');
+
+  // 2. Find the last scheduled item
+  const lastScheduled = pendingSchedules[pendingSchedules.length - 1];
+
+  // 3. Calculate next slot based on:
+  //    - Last item's date/time
+  //    - Articles per day setting
+  //    - Skip dates array
+  //    - Skip weekdays array
+
+  // 4. Return { date, time, position }
+}`}</pre>
+      </div>
+
+      <div className="mt-4 bg-slate-900 rounded-lg p-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Key Functions in DripFeedView.tsx</h4>
+        <ul className="text-xs text-gray-300 space-y-1 font-mono">
+          <li><code className="text-brand-gold">getNextQueueSlot()</code> - Calculate next available slot</li>
+          <li><code className="text-brand-gold">addToQueue(article?)</code> - Add single or bulk to queue</li>
+          <li><code className="text-brand-gold">toggleUnscheduledSelection(id)</code> - Toggle checkbox</li>
+          <li><code className="text-brand-gold">selectAllUnscheduled()</code> - Toggle select all</li>
+          <li><code className="text-brand-gold">bulkAddToQueue()</code> - Add all selected to queue</li>
+        </ul>
+      </div>
+    </div>
+
     {/* Troubleshooting */}
     <div className="bg-red-900/20 rounded-xl p-6 border border-red-500/50">
       <h3 className="text-lg font-bold text-red-400 mb-4">Troubleshooting Guide</h3>
@@ -2939,6 +3003,105 @@ useEffect(() => {
       </div>
     </div>
 
+    {/* Image Prompt Viewer (Jan 2026) */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-purple-500/30">
+      <h3 className="text-lg font-bold text-purple-400 mb-4">Image Prompt Viewer (Jan 2026)</h3>
+      <p className="text-sm text-gray-300 mb-4">
+        View and edit the stored prompt for any generated image. Useful for debugging prompt issues
+        and regenerating images with modified prompts.
+      </p>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">UI Location</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>• Article Images modal (click article to see images)</li>
+            <li>• Purple "Prompt" button next to View/Regenerate buttons</li>
+            <li>• Opens modal with stored prompt text</li>
+          </ul>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <h4 className="text-brand-cyan font-semibold mb-2">Features</h4>
+          <ul className="text-xs text-gray-300 space-y-1">
+            <li>• Full prompt displayed in scrollable textarea</li>
+            <li>• Editable - modify prompt before regenerating</li>
+            <li>• "Regenerate with this Prompt" button</li>
+            <li>• Uses workflow's model settings (workflowId fix)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-4 bg-slate-900 rounded-lg p-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Key Code in ArticleListView.tsx</h4>
+        <pre className="text-xs text-gray-300 overflow-x-auto">{`// State for prompt viewer
+const [viewingPromptImage, setViewingPromptImage] = useState<GeneratedImage | null>(null);
+const [editablePrompt, setEditablePrompt] = useState('');
+
+// Regenerate with custom or original prompt
+const regenerateImage = async (imageId: string, customPrompt?: string) => {
+  const promptToUse = customPrompt || image.prompt;
+  // Pass workflowId to use correct model settings
+  body: JSON.stringify({
+    prompt: promptToUse,
+    workflowId: selectedArticle.workflow_id
+  })
+};`}</pre>
+      </div>
+    </div>
+
+    {/* Image Tracking Schema Enhancements (Jan 2026) */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-green-500/30">
+      <h3 className="text-lg font-bold text-green-400 mb-4">Image Tracking Schema (Jan 2026)</h3>
+      <p className="text-sm text-gray-300 mb-4">
+        Enhanced image_bank_items table with multi-article tracking, keyword matching, and usage history.
+        These fields support smart matching and prevent duplicate image usage across articles.
+      </p>
+
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">New Columns in image_bank_items</h4>
+        <pre className="text-xs text-gray-300 overflow-x-auto">{`-- Multi-article usage tracking
+used_on_articles JSONB DEFAULT '[]',
+-- Format: [{ article_id: 123, url: "...", keyword: "stove", used_at: "..." }]
+
+-- Keyword matching info
+matched_keywords JSONB DEFAULT NULL,
+-- Format: { primary: "stove", secondary: ["kitchen", "appliance"], score: 15 }
+
+-- Reuse control
+reuse_count INTEGER DEFAULT 0,
+allow_reuse BOOLEAN DEFAULT false,
+max_reuse_count INTEGER DEFAULT 1`}</pre>
+      </div>
+
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">image_usage_history Table (Audit Trail)</h4>
+        <pre className="text-xs text-gray-300 overflow-x-auto">{`CREATE TABLE IF NOT EXISTS image_usage_history (
+  id SERIAL PRIMARY KEY,
+  image_bank_id INTEGER REFERENCES image_bank_items(id),
+  article_id INTEGER REFERENCES articles(id),
+  action VARCHAR(50) NOT NULL,  -- 'assigned', 'removed', 'replaced'
+  old_value JSONB,
+  new_value JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);`}</pre>
+      </div>
+
+      <div className="bg-slate-900 rounded-lg p-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">GIN Indexes for Fast Lookups</h4>
+        <pre className="text-xs text-gray-300 overflow-x-auto">{`-- Fast reverse lookup: "Which articles use image X?"
+CREATE INDEX idx_image_bank_used_on_gin
+ON image_bank_items USING GIN (used_on_articles);
+
+-- Fast lookup: "What images does article Y have?"
+CREATE INDEX idx_articles_generated_images_gin
+ON articles USING GIN (generated_images);`}</pre>
+      </div>
+
+      <div className="mt-4 text-xs text-gray-400">
+        <strong>Schema file:</strong> <code className="text-brand-gold">server/db/schema.sql</code>
+      </div>
+    </div>
+
     {/* Critical SQL Fix */}
     <div className="bg-red-900/20 rounded-xl p-6 border border-red-500">
       <h3 className="text-lg font-bold text-red-400 mb-4">Critical Fix: sql.unsafe() Pattern</h3>
@@ -2987,6 +3150,55 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">January 2026</h3>
 
       <div className="space-y-4">
+        {/* Jan 12-13 */}
+        <div className="border-l-4 border-green-500 pl-4">
+          <div className="text-sm text-green-400 font-semibold">Jan 12-13, 2026</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Add to Queue (Drip Feed)</strong>
+                <div className="text-xs text-gray-500">One-click add articles to end of drip feed queue • Bulk selection for unscheduled articles • Queue button on each row • Add All to Queue action</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Image Prompt Viewer</strong>
+                <div className="text-xs text-gray-500">View stored prompt for any image • Editable textarea • "Regenerate with this Prompt" button • Purple "Prompt" button next to each image</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Image Tracking Schema Enhancements (6 gaps)</strong>
+                <div className="text-xs text-gray-500">image_bank_items table in schema.sql • used_on_articles JSONB array • matched_keywords JSONB • reuse_count/allow_reuse/max_reuse_count • image_usage_history audit table • GIN indexes</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Regenerate using wrong model settings</strong>
+                <div className="text-xs text-gray-500">workflowId wasn't being passed to regenerate API → Now passes workflowId for correct model selection</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Site Planning toggle button sync</strong>
+                <div className="text-xs text-gray-500">Toggle buttons in Site Planning now sync with Publishing to WordPress section</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Smart matching config & duplicate image fallback</strong>
+                <div className="text-xs text-gray-500">Added smart_matching_mode config • Fixed fallback when duplicate images found</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
         {/* Jan 11 */}
         <div className="border-l-4 border-brand-cyan pl-4">
           <div className="text-sm text-brand-cyan font-semibold">Jan 11, 2026</div>
