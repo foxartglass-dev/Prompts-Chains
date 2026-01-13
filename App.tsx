@@ -3424,11 +3424,23 @@ const App: React.FC = () => {
                             websiteId={currentProject?.website_id || undefined}
                             showNotification={showNotification}
                             onOpenArticles={() => setIsArticlesPageOpen(true)}
-                            imagePublishMode={currentProject?.state?.imagePublishMode || 'draft'}
+                            imagePublishMode={currentProject?.state?.wpPublishMode || 'off'}
                             articlePublishMode={currentProject?.state?.articlePublishMode || 'draft'}
                             metaPublishMode={currentProject?.state?.metaPublishMode || 'draft'}
-                            onImagePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, imagePublishMode: mode }))}
-                            onArticlePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, articlePublishMode: mode }))}
+                            onImagePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, wpPublishMode: mode }))}
+                            onArticlePublishModeChange={(mode) => {
+                                // When Article goes to Draft, force Meta and Image to Draft too (same logic as Publishing to WP)
+                                if (mode === 'draft') {
+                                    setCurrentProjectState(prev => ({
+                                        ...prev,
+                                        articlePublishMode: 'draft',
+                                        metaPublishMode: 'draft',
+                                        wpPublishMode: prev.wpPublishMode === 'wordpress' ? 'draft' : prev.wpPublishMode
+                                    }));
+                                } else {
+                                    setCurrentProjectState(prev => ({ ...prev, articlePublishMode: mode }));
+                                }
+                            }}
                             onMetaPublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, metaPublishMode: mode }))}
                         />
                     )}

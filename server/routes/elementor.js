@@ -38,6 +38,21 @@ import { getImageBank } from '../services/image-bank.js';
 const router = express.Router();
 
 /**
+ * Strip tag identifier from keyword
+ * Removes patterns like "(H)", "(J)", "(C)" from end of keyword
+ * Example: "Standard Cleaning(H)" -> "Standard Cleaning"
+ * Example: "Topic Name (B)" -> "Topic Name"
+ * @param {string} keyword - The keyword potentially containing a tag
+ * @returns {string} The keyword with tag stripped
+ */
+function stripTagFromKeyword(keyword) {
+  if (!keyword) return keyword;
+  // Remove tag patterns like (H), (J), (C) etc. from end of string
+  // Also handles space before parenthesis: "Topic (H)" or "Topic(H)"
+  return keyword.replace(/\s*\([A-Za-z0-9]+\)\s*$/, '').trim();
+}
+
+/**
  * Select a random avatar from all avatars that match a given tag
  * Considers:
  * - Tag-specific avatars (avatar.tag === targetTag)
@@ -285,7 +300,8 @@ router.post('/preview', async (req, res) => {
     const chunked = chunkContent(content, { maxWords });
 
     // Extract title from content if not provided
-    const pageTitle = title || extractTitle(content) || 'Untitled Page';
+    // Strip any tag identifier like (H), (J) from the title
+    const pageTitle = stripTagFromKeyword(title) || extractTitle(content) || 'Untitled Page';
 
     // Build Elementor structure
     const elementorData = buildElementorPage(chunked, {
@@ -1148,6 +1164,7 @@ router.post('/publish', async (req, res) => {
     let targetAvatar = null;
     let smartPromptGuidance = '';
     let matchPlurals = true;
+    let smartMatchingConfig = { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 };
     let guidedGuardrails = null;
     let guidedModel = 'gpt-4o';
 
@@ -1174,6 +1191,7 @@ router.post('/publish', async (req, res) => {
 
           smartPromptGuidance = config.smart_prompt_guidance || '';
           matchPlurals = config.match_plurals !== false;
+          smartMatchingConfig = config.smart_matching_config || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 };
 
           // Find the target avatar for this article (using multi-prompt per tag system)
           const avatars = config.audience_avatars || [];
@@ -1245,6 +1263,8 @@ router.post('/publish', async (req, res) => {
         smartPromptGuidance,
         matchPlurals,
         heroImageSide, // Pass hero side for proper alternation
+        // Smart Matching Config (configurable parameters)
+        smartMatchingConfig,
         // Guided GPT mode options
         guidedGuardrails,
         guidedModel
@@ -1390,8 +1410,9 @@ router.post('/publish', async (req, res) => {
       });
     }
 
-    // Step 4: Extract or use provided title
-    const pageTitle = title || extractTitle(cleanedContent) || 'Untitled Page';
+    /// Step 4: Extract or use provided title
+    // Strip any tag identifier like (H), (J) from the title
+    const pageTitle = stripTagFromKeyword(title) || extractTitle(cleanedContent) || 'Untitled Page';
 
     // Step 5: Build Elementor structure
     const elementorData = buildElementorPage(chunked, {
@@ -1860,7 +1881,8 @@ router.post('/publish-article/:id', requireDb, async (req, res) => {
     const chunked = chunkContent(content, { maxWords });
 
     // Use keyword as title, or first meta title
-    const pageTitle = article.keyword ||
+    // Strip any tag identifier like (H), (J) from the keyword
+    const pageTitle = stripTagFromKeyword(article.keyword) ||
       (article.meta_titles && article.meta_titles[0]) ||
       'Untitled Page';
 
@@ -2084,7 +2106,8 @@ router.post('/batch-publish', requireDb, async (req, res) => {
 
         // Chunk and build
         const chunked = chunkContent(content, { maxWords });
-        const pageTitle = article.keyword || 'Untitled';
+        // Strip any tag identifier like (H), (J) from the keyword
+        const pageTitle = stripTagFromKeyword(article.keyword) || 'Untitled';
         const elementorData = buildElementorPage(chunked, {
           title: pageTitle,
           ctaText,

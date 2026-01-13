@@ -1232,6 +1232,8 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           matching_rule_2: 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.',
           matching_rule_3: 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).',
           matching_rule_4: 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
+          // Smart Matching Config (configurable parameters that code ACTUALLY reads)
+          smart_matching_config: { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 },
           // Image quality default
           image_quality: 'low',
           // Generate Live prompt mode
@@ -1307,6 +1309,8 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         matching_rule_2: results[0].matching_rule_2 || 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.',
         matching_rule_3: results[0].matching_rule_3 || 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).',
         matching_rule_4: results[0].matching_rule_4 || 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
+        // Smart Matching Config (configurable parameters that code ACTUALLY reads)
+        smart_matching_config: results[0].smart_matching_config || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 },
         // Image quality
         image_quality: results[0].image_quality || 'low',
         // Generate Live prompt mode
@@ -1386,6 +1390,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       matching_rule_2,
       matching_rule_3,
       matching_rule_4,
+      // Smart Matching Config (configurable parameters that code ACTUALLY reads)
+      smart_matching_config,
       // Generate Live prompt mode
       live_prompt_mode,
       smart_prompt_guidance,
@@ -1827,7 +1833,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               matching_rule_1 = COALESCE(${matching_rule_1}, matching_rule_1),
               matching_rule_2 = COALESCE(${matching_rule_2}, matching_rule_2),
               matching_rule_3 = COALESCE(${matching_rule_3}, matching_rule_3),
-              matching_rule_4 = COALESCE(${matching_rule_4}, matching_rule_4)
+              matching_rule_4 = COALESCE(${matching_rule_4}, matching_rule_4),
+              smart_matching_config = COALESCE(${smart_matching_config ? JSON.stringify(smart_matching_config) : null}::jsonb, smart_matching_config)
             WHERE website_id = ${websiteId}
           `;
         } else {
@@ -1842,7 +1849,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               matching_rule_1 = COALESCE(${matching_rule_1}, matching_rule_1),
               matching_rule_2 = COALESCE(${matching_rule_2}, matching_rule_2),
               matching_rule_3 = COALESCE(${matching_rule_3}, matching_rule_3),
-              matching_rule_4 = COALESCE(${matching_rule_4}, matching_rule_4)
+              matching_rule_4 = COALESCE(${matching_rule_4}, matching_rule_4),
+              smart_matching_config = COALESCE(${smart_matching_config ? JSON.stringify(smart_matching_config) : null}::jsonb, smart_matching_config)
             WHERE workflow_id = ${workflowId}
           `;
         }

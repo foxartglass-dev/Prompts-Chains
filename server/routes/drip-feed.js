@@ -8,6 +8,16 @@ import { sql, isDatabaseEnabled } from '../db/index.js';
 
 const router = express.Router();
 
+/**
+ * Strip tag identifier from keyword
+ * Removes patterns like "(H)", "(J)", "(C)" from end of keyword
+ * Example: "Standard Cleaning(H)" -> "Standard Cleaning"
+ */
+function stripTagFromKeyword(keyword) {
+  if (!keyword) return keyword;
+  return keyword.replace(/\s*\([A-Za-z0-9]+\)\s*$/, '').trim();
+}
+
 const requireDb = (req, res, next) => {
   if (!isDatabaseEnabled()) {
     return res.status(503).json({ error: 'Database not configured' });
@@ -333,6 +343,56 @@ router.delete('/schedule/:websiteId/:scheduleId', requireDb, async (req, res) =>
     res.json({ success: true, deleted: deleted[0] });
   } catch (error) {
     console.error('Error deleting schedule:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH update schedule (for scheduling unscheduled articles)
+router.patch('/schedule/:websiteId/:scheduleId', requireDb, async (req, res) => {
+  try {
+    const { websiteId, scheduleId } = req.params;
+    const { scheduled_date, scheduled_time, status } = req.body;
+
+    // Validate required fields
+    if (!scheduled_date || !scheduled_time) {
+      return res.status(400).json({ error: 'scheduled_date and scheduled_time are required' });
+    }
+
+    const updated = await sql`
+      UPDATE drip_feed_schedules
+      SET
+        scheduled_date = ${scheduled_date},
+        scheduled_time = ${scheduled_time},
+        status = COALESCE(${status}, 'pending'),
+        is_manual_time = true,
+        updated_at = NOW()
+      WHERE id = ${scheduleId} AND website_id = ${websiteId}
+      RETURNING *
+    `;
+
+    if (updated.length === 0) {
+      return res.status(404).json({ error: 'Schedule not found' });
+    }
+
+    // Log the scheduling
+    await sql`
+      INSERT INTO drip_feed_log (website_id, article_id, schedule_id, action, details)
+      VALUES (
+        ${websiteId},
+        ${updated[0].article_id},
+        ${scheduleId},
+        'scheduled',
+        ${JSON.stringify({
+          scheduled_date,
+          scheduled_time,
+          was_unscheduled: true
+        })}
+      )
+    `;
+
+    res.json({ success: true, schedule: updated[0] });
+  } catch (error) {
+    console.error('Error updating schedule:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1131,7 +1191,7 @@ async function publishArticle(article) {
         wpUrl: article.wp_url,
         wpUser: article.wp_user,
         wpPassword: article.wp_app_password,
-        title: article.keyword,
+        title: stripTagFromKeyword(article.keyword),
         content: article.final_content,
         status: 'publish', // Publish immediately (not draft)
         articleId: articleId
