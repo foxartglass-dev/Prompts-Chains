@@ -448,4 +448,211 @@ router.delete('/:id', requireDb, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/workflows/generate-for-node
+ * Generate article content for a site plan node using the workflow's prompt chain
+ * Used by Site Planning "Generate All" button
+ */
+router.post('/generate-for-node', requireDb, async (req, res) => {
+  try {
+    const { workflowId, nodeId, nodeTitle, targetKeyword, pageType } = req.body;
+
+    if (!workflowId) {
+      return res.status(400).json({ error: 'workflowId is required' });
+    }
+    if (!nodeId) {
+      return res.status(400).json({ error: 'nodeId is required' });
+    }
+
+    console.log(`[Generate for Node] Starting generation for node ${nodeId}: "${nodeTitle}"`);
+
+    // 1. Get the workflow with website info
+    const workflows = await sql`
+      SELECT w.*, ws.id as website_id, ws.name as website_name,
+             c.id as client_id, c.name as client_name
+      FROM workflows w
+      LEFT JOIN websites ws ON w.website_id = ws.id
+      LEFT JOIN clients c ON w.client_id = c.id
+      WHERE w.id = ${workflowId}
+    `;
+
+    if (workflows.length === 0) {
+      return res.status(404).json({ error: 'Workflow not found' });
+    }
+
+    const workflow = workflows[0];
+    const workflowState = JSON.parse(workflow.state || '{}');
+
+    // 2. Get the prompt chain configuration
+    const promptTemplates = workflowState.promptTemplates || [];
+
+    if (promptTemplates.length === 0) {
+      return res.status(400).json({ error: 'Workflow has no prompt templates configured' });
+    }
+
+    // 3. Build placeholders/config for this node
+    const placeholders = workflowState.placeholders || [];
+    const taggedSnippets = workflowState.taggedSnippets || [];
+
+    // Create item context for prompt filling
+    const item = {
+      name: targetKeyword || nodeTitle,
+      tag: null, // Site plan nodes don't have tags currently
+    };
+
+    const config = {
+      placeholders,
+      taggedSnippets,
+    };
+
+    // 4. Execute prompt chain
+    const chainOutputs = {};
+    let finalContent = '';
+    let metaTitles = [];
+    let metaDescriptions = [];
+
+    // Get default model from workflow state or use fallback
+    const defaultModel = workflowState.defaultModel || 'claude-sonnet-4-5-20250929';
+
+    for (const promptConfig of promptTemplates) {
+      const { key, systemPrompt, userPrompt, model, maxTokens } = promptConfig;
+
+      if (!userPrompt) continue;
+
+      // Fill the prompt template with placeholders and previous outputs
+      let filledPrompt = userPrompt;
+
+      // Replace {item_name} or {keyword} with the target keyword
+      filledPrompt = filledPrompt.replace(/{item_name}/g, targetKeyword || nodeTitle);
+      filledPrompt = filledPrompt.replace(/{keyword}/g, targetKeyword || nodeTitle);
+      filledPrompt = filledPrompt.replace(/{page_type}/g, pageType || 'service');
+
+      // Replace [output_key] with previous outputs
+      filledPrompt = filledPrompt.replace(/\[([^\]]+)\]/g, (match, outputKey) => {
+        return chainOutputs[outputKey.trim()] || match;
+      });
+
+      // Replace global placeholders {key}
+      placeholders.forEach(p => {
+        if (!p.tag) {
+          const regex = new RegExp(`\\{${p.key}\\}`, 'g');
+          filledPrompt = filledPrompt.replace(regex, p.value || '');
+        }
+      });
+
+      // Build full prompt with system context
+      const fullPrompt = systemPrompt
+        ? `${systemPrompt}\n\n${filledPrompt}`
+        : filledPrompt;
+
+      console.log(`[Generate for Node] Running prompt "${key}" for "${nodeTitle}"`);
+
+      // Call LLM
+      try {
+        const llmResponse = await fetch(`http://localhost:${process.env.PORT || 3001}/api/llm/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: model || defaultModel,
+            prompt: fullPrompt,
+            maxTokens: maxTokens || 4096,
+          }),
+        });
+
+        const llmResult = await llmResponse.json();
+
+        if (llmResult.success && llmResult.content) {
+          chainOutputs[key] = llmResult.content;
+
+          // Check if this is the final output (usually the last prompt)
+          if (key === 'final' || key === 'article' || key === 'content' ||
+              promptConfig === promptTemplates[promptTemplates.length - 1]) {
+            finalContent = llmResult.content;
+
+            // Try to parse meta titles and descriptions
+            const metaTitleMatch = finalContent.match(/---META TITLES---\s*([\s\S]*?)(?:---META DESCRIPTIONS---|$)/i);
+            const metaDescMatch = finalContent.match(/---META DESCRIPTIONS---\s*([\s\S]*?)$/i);
+
+            if (metaTitleMatch) {
+              metaTitles = metaTitleMatch[1]
+                .split('\n')
+                .map(line => line.replace(/^\d+\.\s*/, '').trim())
+                .filter(Boolean);
+              // Remove meta section from content
+              finalContent = finalContent.split('---META TITLES---')[0].trim();
+            }
+
+            if (metaDescMatch) {
+              metaDescriptions = metaDescMatch[1]
+                .split('\n')
+                .map(line => line.replace(/^\d+\.\s*/, '').trim())
+                .filter(Boolean);
+            }
+          }
+        } else {
+          console.error(`[Generate for Node] LLM error for prompt "${key}":`, llmResult.error);
+        }
+      } catch (llmError) {
+        console.error(`[Generate for Node] LLM call failed for "${key}":`, llmError.message);
+      }
+    }
+
+    if (!finalContent) {
+      return res.status(500).json({ error: 'Failed to generate content - no output from prompt chain' });
+    }
+
+    // 5. Calculate word count
+    const wordCount = finalContent.split(/\s+/).filter(Boolean).length;
+
+    // 6. Create the article
+    const articleResult = await sql`
+      INSERT INTO articles (
+        workflow_id, website_id, client_id,
+        keyword, tag,
+        final_content, meta_titles, meta_descriptions,
+        chain_outputs,
+        word_count, status
+      )
+      VALUES (
+        ${workflowId},
+        ${workflow.website_id || null},
+        ${workflow.client_id || null},
+        ${targetKeyword || nodeTitle},
+        ${null},
+        ${finalContent},
+        ${JSON.stringify(metaTitles)},
+        ${JSON.stringify(metaDescriptions)},
+        ${JSON.stringify(chainOutputs)},
+        ${wordCount},
+        'generated'
+      )
+      RETURNING *
+    `;
+
+    const newArticle = articleResult[0];
+    console.log(`[Generate for Node] Created article ${newArticle.id} for "${nodeTitle}"`);
+
+    // 7. Link article to the site plan node
+    await sql`
+      UPDATE site_plan_nodes
+      SET assigned_article_id = ${newArticle.id}
+      WHERE id = ${nodeId}
+    `;
+
+    console.log(`[Generate for Node] Linked article ${newArticle.id} to node ${nodeId}`);
+
+    res.json({
+      success: true,
+      articleId: newArticle.id,
+      wordCount,
+      metaTitles: metaTitles.length,
+      metaDescriptions: metaDescriptions.length,
+    });
+
+  } catch (error) {
+    console.error('[Generate for Node] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

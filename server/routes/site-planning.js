@@ -136,12 +136,12 @@ router.post('/plans', requireDb, async (req, res) => {
 
 /**
  * PUT /api/site-planning/plans/:planId
- * Update a site plan
+ * Update a site plan (including linking to a website)
  */
 router.put('/plans/:planId', requireDb, async (req, res) => {
   try {
     const { planId } = req.params;
-    const { name, description, autoSyncCheck } = req.body;
+    const { name, description, autoSyncCheck, websiteId } = req.body;
 
     const result = await sql`
       UPDATE site_plans
@@ -149,6 +149,7 @@ router.put('/plans/:planId', requireDb, async (req, res) => {
         name = COALESCE(${name}, name),
         description = COALESCE(${description}, description),
         auto_sync_check = COALESCE(${autoSyncCheck}, auto_sync_check),
+        website_id = COALESCE(${websiteId}, website_id),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${planId}
       RETURNING *
@@ -729,22 +730,47 @@ router.post('/push-hierarchy/:planId', requireDb, async (req, res) => {
 
     console.log(`[Site Planning] Starting hierarchical push for plan ${planId}`);
 
-    // Get plan with website credentials
-    const plans = await sql`
-      SELECT sp.*, w.wp_url, w.wp_user, w.wp_app_password, w.name as website_name
+    // Get plan - first try direct website link, then try via workflow
+    let plans = await sql`
+      SELECT sp.*, w.wp_url, w.wp_user, w.wp_app_password, w.name as website_name, w.id as resolved_website_id
       FROM site_plans sp
-      JOIN websites w ON sp.website_id = w.id
+      LEFT JOIN websites w ON sp.website_id = w.id
       WHERE sp.id = ${planId}
     `;
 
     if (plans.length === 0) {
-      return res.status(404).json({ error: 'Site plan not found or no website linked' });
+      return res.status(404).json({ error: 'Site plan not found' });
     }
 
-    const plan = plans[0];
+    let plan = plans[0];
+
+    // If no direct website link, try to get website from workflow
+    if (!plan.wp_url && plan.workflow_id) {
+      console.log(`[Site Planning] No direct website link, trying workflow ${plan.workflow_id}`);
+      const workflowWebsite = await sql`
+        SELECT w.wp_url, w.wp_user, w.wp_app_password, w.name as website_name, w.id as website_id
+        FROM workflows wf
+        JOIN websites w ON wf.website_id = w.id
+        WHERE wf.id = ${plan.workflow_id}
+      `;
+      if (workflowWebsite.length > 0) {
+        plan.wp_url = workflowWebsite[0].wp_url;
+        plan.wp_user = workflowWebsite[0].wp_user;
+        plan.wp_app_password = workflowWebsite[0].wp_app_password;
+        plan.website_name = workflowWebsite[0].website_name;
+        plan.resolved_website_id = workflowWebsite[0].website_id;
+
+        // Also update the site plan to link directly for future calls
+        await sql`UPDATE site_plans SET website_id = ${workflowWebsite[0].website_id} WHERE id = ${planId}`;
+        console.log(`[Site Planning] Linked plan ${planId} to website ${workflowWebsite[0].website_id} via workflow`);
+      }
+    }
 
     if (!plan.wp_url || !plan.wp_user || !plan.wp_app_password) {
-      return res.status(400).json({ error: 'WordPress credentials not configured for this website' });
+      return res.status(400).json({
+        error: 'No website linked to this site plan. Please link a website first.',
+        hint: 'Go to Site Planning settings or update the site plan with a website_id'
+      });
     }
 
     // Import WordPress publisher
