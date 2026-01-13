@@ -438,6 +438,38 @@ CREATE TABLE IF NOT EXISTS draft_image_bank_stats (
 );
 
 -- ============================================
+-- IMAGE BANK ITEMS (Persistent image bank - the canonical store)
+-- ============================================
+
+-- Image Bank Items table - stores all bank images with usage tracking
+CREATE TABLE IF NOT EXISTS image_bank_items (
+  id SERIAL PRIMARY KEY,
+  workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE,
+  external_id VARCHAR(100), -- Client-side ID like 'img-1234567890'
+  url TEXT NOT NULL,
+  title VARCHAR(500),
+  category VARCHAR(100),
+  variation_name VARCHAR(255),
+  variation_id VARCHAR(100),
+  avatar_tag VARCHAR(50),
+  orientation VARCHAR(20) DEFAULT 'vertical',
+  prompt TEXT,
+  model VARCHAR(100),
+  -- Usage tracking
+  used BOOLEAN DEFAULT false,
+  used_on TEXT, -- URL where image was used (legacy - single value)
+  used_at TIMESTAMP,
+  -- Archival
+  archived BOOLEAN DEFAULT false,
+  -- Flexible tagging and metadata
+  tags JSONB DEFAULT '[]',
+  metadata JSONB DEFAULT '{}',
+  -- Timestamps
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================
 -- INDEXES
 -- ============================================
 
@@ -472,6 +504,16 @@ CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
 CREATE INDEX IF NOT EXISTS idx_gbp_oauth_location ON gbp_oauth_tokens(location_id);
 CREATE INDEX IF NOT EXISTS idx_wp_hierarchy_website ON wp_page_hierarchy(website_id);
 CREATE INDEX IF NOT EXISTS idx_wp_hierarchy_parent ON wp_page_hierarchy(wp_parent_id);
+
+-- Image bank items indexes
+CREATE INDEX IF NOT EXISTS idx_image_bank_workflow ON image_bank_items(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_image_bank_used ON image_bank_items(workflow_id, used);
+CREATE INDEX IF NOT EXISTS idx_image_bank_avatar ON image_bank_items(workflow_id, avatar_tag);
+CREATE INDEX IF NOT EXISTS idx_image_bank_category ON image_bank_items(category);
+CREATE INDEX IF NOT EXISTS idx_image_bank_variation ON image_bank_items(variation_id);
+
+-- GIN index for reverse lookups on articles.generated_images (find which articles use a specific image)
+CREATE INDEX IF NOT EXISTS idx_articles_generated_images_gin ON articles USING GIN (generated_images);
 
 
 -- ============================================
