@@ -252,7 +252,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         }
       }
     } catch (err) {
-      console.error('Error fetching drip feed data:', err);
+      console.error('Error fetching drip feed data:', err instanceof Error ? err.message : err);
       setError('Failed to load drip feed data');
     } finally {
       setLoading(false);
@@ -351,7 +351,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         setLogEntries(data.logs || []);
       }
     } catch (err) {
-      console.error('Error fetching logs:', err);
+      console.error('Error fetching logs:', err instanceof Error ? err.message : err);
     } finally {
       setLoadingLogs(false);
     }
@@ -567,7 +567,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         setTestStatus(data);
       }
     } catch (err) {
-      console.error('Failed to fetch test status:', err);
+      console.error('Failed to fetch test status:', err instanceof Error ? err.message : err);
     }
   };
 
@@ -703,7 +703,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         if (statsData) {
           setStats(statsData);
         }
-      }).catch(err => console.error('Auto-refresh error:', err));
+      }).catch(err => console.error('Auto-refresh error:', err instanceof Error ? err.message : err));
     }, 5000); // Refresh every 5 seconds
 
     return () => clearInterval(refreshInterval);

@@ -37,7 +37,7 @@ const PendingMetaNotification: React.FC<PendingMetaNotificationProps> = ({ onOpe
         setPendingArticles(data.articles || []);
       }
     } catch (err) {
-      console.error('Failed to fetch pending meta articles:', err);
+      console.error('Failed to fetch pending meta articles:', err instanceof Error ? err.message : err);
     }
   };
 
