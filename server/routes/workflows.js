@@ -514,13 +514,19 @@ router.post('/generate-for-node', requireDb, async (req, res) => {
     // Get default model from workflow state or use fallback
     const defaultModel = workflowState.defaultModel || 'claude-sonnet-4-5-20250929';
 
-    for (const promptConfig of promptTemplates) {
-      const { key, systemPrompt, userPrompt, model, maxTokens } = promptConfig;
+    console.log(`[Generate for Node] Found ${promptTemplates.length} prompt templates`);
 
-      if (!userPrompt) continue;
+    for (const promptConfig of promptTemplates) {
+      // PromptTemplate structure: { id, name, template, outputKey, outputAction }
+      const { name: promptName, template, outputKey, outputAction } = promptConfig;
+
+      if (!template) {
+        console.log(`[Generate for Node] Skipping prompt "${promptName}" - no template`);
+        continue;
+      }
 
       // Fill the prompt template with placeholders and previous outputs
-      let filledPrompt = userPrompt;
+      let filledPrompt = template;
 
       // Replace {item_name} or {keyword} with the target keyword
       filledPrompt = filledPrompt.replace(/{item_name}/g, targetKeyword || nodeTitle);
@@ -528,8 +534,8 @@ router.post('/generate-for-node', requireDb, async (req, res) => {
       filledPrompt = filledPrompt.replace(/{page_type}/g, pageType || 'service');
 
       // Replace [output_key] with previous outputs
-      filledPrompt = filledPrompt.replace(/\[([^\]]+)\]/g, (match, outputKey) => {
-        return chainOutputs[outputKey.trim()] || match;
+      filledPrompt = filledPrompt.replace(/\[([^\]]+)\]/g, (match, prevOutputKey) => {
+        return chainOutputs[prevOutputKey.trim()] || match;
       });
 
       // Replace global placeholders {key}
@@ -540,12 +546,7 @@ router.post('/generate-for-node', requireDb, async (req, res) => {
         }
       });
 
-      // Build full prompt with system context
-      const fullPrompt = systemPrompt
-        ? `${systemPrompt}\n\n${filledPrompt}`
-        : filledPrompt;
-
-      console.log(`[Generate for Node] Running prompt "${key}" for "${nodeTitle}"`);
+      console.log(`[Generate for Node] Running prompt "${promptName}" (outputKey: ${outputKey}) for "${nodeTitle}"`);
 
       // Call LLM
       try {
@@ -553,21 +554,21 @@ router.post('/generate-for-node', requireDb, async (req, res) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: model || defaultModel,
-            prompt: fullPrompt,
-            maxTokens: maxTokens || 4096,
+            model: defaultModel,
+            prompt: filledPrompt,
+            maxTokens: 4096,
           }),
         });
 
         const llmResult = await llmResponse.json();
 
         if (llmResult.success && llmResult.content) {
-          chainOutputs[key] = llmResult.content;
+          chainOutputs[outputKey] = llmResult.content;
+          console.log(`[Generate for Node] ✓ Got output for "${outputKey}" (${llmResult.content.length} chars)`);
 
-          // Check if this is the final output (usually the last prompt)
-          if (key === 'final' || key === 'article' || key === 'content' ||
-              promptConfig === promptTemplates[promptTemplates.length - 1]) {
-            finalContent = llmResult.content;
+          // Check if this should be added to final content
+          if (outputAction === 'addToFinal' || promptConfig === promptTemplates[promptTemplates.length - 1]) {
+            finalContent += (finalContent ? '\n\n' : '') + llmResult.content;
 
             // Try to parse meta titles and descriptions
             const metaTitleMatch = finalContent.match(/---META TITLES---\s*([\s\S]*?)(?:---META DESCRIPTIONS---|$)/i);
@@ -590,10 +591,10 @@ router.post('/generate-for-node', requireDb, async (req, res) => {
             }
           }
         } else {
-          console.error(`[Generate for Node] LLM error for prompt "${key}":`, llmResult.error);
+          console.error(`[Generate for Node] LLM error for prompt "${promptName}":`, llmResult.error || 'Unknown error');
         }
       } catch (llmError) {
-        console.error(`[Generate for Node] LLM call failed for "${key}":`, llmError.message);
+        console.error(`[Generate for Node] LLM call failed for "${promptName}":`, llmError.message || llmError);
       }
     }
 
