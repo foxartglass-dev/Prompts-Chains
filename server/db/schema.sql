@@ -459,6 +459,11 @@ CREATE TABLE IF NOT EXISTS image_bank_items (
   used BOOLEAN DEFAULT false,
   used_on TEXT, -- URL where image was used (legacy - single value)
   used_at TIMESTAMP,
+  -- Multi-article usage tracking (Gap 2 fix)
+  used_on_articles JSONB DEFAULT '[]', -- Array of {article_id, url, keyword, used_at}
+  reuse_count INTEGER DEFAULT 0, -- How many times this image has been used
+  -- Matched keywords tracking (Gap 4 fix)
+  matched_keywords JSONB DEFAULT NULL, -- {primary: "stove", secondary: ["kitchen", "appliance"], score: 15}
   -- Archival
   archived BOOLEAN DEFAULT false,
   -- Flexible tagging and metadata
@@ -515,6 +520,9 @@ CREATE INDEX IF NOT EXISTS idx_image_bank_variation ON image_bank_items(variatio
 -- GIN index for reverse lookups on articles.generated_images (find which articles use a specific image)
 CREATE INDEX IF NOT EXISTS idx_articles_generated_images_gin ON articles USING GIN (generated_images);
 
+-- GIN index for querying which articles an image is used on (for duplicate prevention)
+CREATE INDEX IF NOT EXISTS idx_image_bank_used_on_gin ON image_bank_items USING GIN (used_on_articles);
+
 
 -- ============================================
 -- MIGRATIONS: Add columns if they don't exist
@@ -534,6 +542,23 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='articles' AND column_name='images_wp_pushed_at') THEN
         ALTER TABLE articles ADD COLUMN images_wp_pushed_at TIMESTAMP;
+    END IF;
+END
+$$;
+
+-- Add image bank items usage tracking columns (Gap 2 + Gap 4 fix)
+DO $$
+BEGIN
+    -- Multi-article usage tracking
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='image_bank_items' AND column_name='used_on_articles') THEN
+        ALTER TABLE image_bank_items ADD COLUMN used_on_articles JSONB DEFAULT '[]';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='image_bank_items' AND column_name='reuse_count') THEN
+        ALTER TABLE image_bank_items ADD COLUMN reuse_count INTEGER DEFAULT 0;
+    END IF;
+    -- Matched keywords tracking
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='image_bank_items' AND column_name='matched_keywords') THEN
+        ALTER TABLE image_bank_items ADD COLUMN matched_keywords JSONB DEFAULT NULL;
     END IF;
 END
 $$;
