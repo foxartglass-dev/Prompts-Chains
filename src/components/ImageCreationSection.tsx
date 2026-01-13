@@ -1031,7 +1031,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           image_order: data.settings.image_order || [],
           manual_variation_order: data.settings.manual_variation_order || [],
           // Prompt Problem Areas
-          prompt_problem_areas: data.settings.prompt_problem_areas || []
+          prompt_problem_areas: data.settings.prompt_problem_areas || [],
+          // Prompt Template System - ensure arrays are never null
+          prompt_templates: data.settings.prompt_templates || [],
+          text_snippets: data.settings.text_snippets || [],
+          placeholder_category_templates: data.settings.placeholder_category_templates || []
         };
         setSettings(loadedSettings);
         if (loadedSettings.audience_avatars.length > 0) {
