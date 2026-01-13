@@ -3438,6 +3438,10 @@ const App: React.FC = () => {
                                     tag: item.tag
                                 }));
                                 loadItems(workflowItems);
+                                // Debug: log what we have
+                                console.log('[Site Planning START] currentProject:', currentProject?.id);
+                                console.log('[Site Planning START] promptTemplates count:', currentProject?.state?.promptTemplates?.length);
+                                console.log('[Site Planning START] promptTemplates:', currentProject?.state?.promptTemplates);
                                 // Small delay to ensure items are loaded before processing
                                 setTimeout(() => processWorkflow(), 100);
                             }}
