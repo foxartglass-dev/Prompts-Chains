@@ -481,14 +481,21 @@ router.post('/generate-for-node', requireDb, async (req, res) => {
     }
 
     const workflow = workflows[0];
-    console.log(`[Generate for Node] Workflow ${workflowId} found, parsing state...`);
+    console.log(`[Generate for Node] Workflow ${workflowId} found, state type: ${typeof workflow.state}`);
 
+    // Handle both string JSON and already-parsed object
     let workflowState;
-    try {
-      workflowState = JSON.parse(workflow.state || '{}');
-    } catch (parseErr) {
-      console.error('[Generate for Node] Failed to parse workflow state:', parseErr.message);
-      return res.status(500).json({ error: 'Invalid workflow state JSON' });
+    if (typeof workflow.state === 'string') {
+      try {
+        workflowState = JSON.parse(workflow.state || '{}');
+      } catch (parseErr) {
+        console.error('[Generate for Node] Failed to parse workflow state:', parseErr.message);
+        return res.status(500).json({ error: 'Invalid workflow state JSON' });
+      }
+    } else if (typeof workflow.state === 'object' && workflow.state !== null) {
+      workflowState = workflow.state;
+    } else {
+      workflowState = {};
     }
 
     // 2. Get the prompt chain configuration
