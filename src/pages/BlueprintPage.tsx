@@ -2987,6 +2987,20 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">January 2026</h3>
 
       <div className="space-y-4">
+        {/* Jan 13 */}
+        <div className="border-l-4 border-green-500 pl-4">
+          <div className="text-sm text-green-400 font-semibold">Jan 13, 2026</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Console errors showing empty {} instead of message</strong>
+                <div className="text-xs text-gray-500">Error objects don't serialize to JSON → Extract err.message in catch blocks</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
         {/* Jan 11 */}
         <div className="border-l-4 border-brand-cyan pl-4">
           <div className="text-sm text-brand-cyan font-semibold">Jan 11, 2026</div>
