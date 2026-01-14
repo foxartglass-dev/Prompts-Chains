@@ -883,6 +883,25 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const mainPromptRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Auto-resize textarea to fit content
+  const autoResizeTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
+    if (!textarea) return;
+    // Reset height to auto to get the correct scrollHeight
+    textarea.style.height = 'auto';
+    // Set height to scrollHeight with a minimum of 4 rows (~100px) and max of 600px
+    const minHeight = 100;
+    const maxHeight = 600;
+    const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
+    textarea.style.height = `${newHeight}px`;
+  }, []);
+
+  // Auto-resize main prompt textarea when content changes
+  useEffect(() => {
+    if (mainPromptRef.current && activeAvatarId) {
+      autoResizeTextarea(mainPromptRef.current);
+    }
+  }, [activeAvatarId, autoResizeTextarea, settings.audience_avatars]);
+
   // Helper: Log to Processing Log
   const log = useCallback((message: string, status: LogStatus) => {
     if (addLog) {
@@ -8405,10 +8424,10 @@ Start by introducing yourself and asking about their business in a friendly way.
           </div>
 
           {/* Audience Avatars - Full-Width Section Pattern (expands to span both columns when open) */}
-          <div className={`bg-slate-900 rounded-lg border border-brand-gold/50 transition-all duration-300 ${
+          <div className={`bg-slate-900 rounded-lg transition-all duration-300 ${
             !avatarsCollapsed
-              ? 'relative -ml-4 -mr-4 xl:-ml-[calc(50vw-50%+1rem)] xl:-mr-[calc(50vw-50%+1rem)] xl:w-[calc(100vw-2rem)] p-4 xl:px-8'
-              : 'p-4'
+              ? 'relative left-1/2 -translate-x-1/2 w-[calc(100vw-2rem)] border-4 border-brand-gold p-4 px-8 shadow-lg shadow-brand-gold/20'
+              : 'border border-brand-gold/50 p-4'
           }`}>
             {/* Header - Always visible */}
             <div
@@ -8584,9 +8603,24 @@ Start by introducing yourself and asking about their business in a friendly way.
                       Templates
                     </button>
                     <button
-                      onClick={() => setShowTextSnippetBank(true)}
+                      onClick={() => {
+                        // Check for highlighted text in main prompt textarea
+                        if (mainPromptRef.current) {
+                          const textarea = mainPromptRef.current;
+                          const selectedText = textarea.value.substring(
+                            textarea.selectionStart,
+                            textarea.selectionEnd
+                          );
+                          if (selectedText.trim()) {
+                            // Pre-fill the snippet form with highlighted text
+                            setNewSnippetText(selectedText);
+                            setShowSnippetAddForm(true);
+                          }
+                        }
+                        setShowTextSnippetBank(true);
+                      }}
                       className="px-3 py-1.5 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-xs font-medium transition"
-                      title="Insert text snippets"
+                      title="Insert text snippets (highlight text first to create snippet from selection)"
                     >
                       Text Bank
                     </button>
@@ -8643,9 +8677,12 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <textarea
                     ref={mainPromptRef}
                     value={activeAvatar.mainPrompt}
-                    onChange={(e) => handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value })}
-                    rows={4}
-                    className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y"
+                    onChange={(e) => {
+                      handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
+                      autoResizeTextarea(e.target);
+                    }}
+                    className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y min-h-[100px] overflow-hidden"
+                    style={{ height: 'auto' }}
                     placeholder={activeAvatar.placeholderMode === 'advanced'
                       ? "Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
                       : "Professional cleaning photo, {variation}, bright natural lighting..."}
@@ -11428,10 +11465,16 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <label className="block text-sm text-gray-400 mb-1">Snippet Text *</label>
                       <textarea
                         value={newSnippetText}
-                        onChange={(e) => setNewSnippetText(e.target.value)}
+                        onChange={(e) => {
+                          setNewSnippetText(e.target.value);
+                          // Auto-expand textarea
+                          const textarea = e.target;
+                          textarea.style.height = 'auto';
+                          textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 100), 400)}px`;
+                        }}
                         placeholder="Enter the text content for this snippet..."
-                        rows={4}
-                        className="w-full bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white resize-none"
+                        className="w-full bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white resize-y min-h-[100px] overflow-hidden"
+                        style={{ height: 'auto' }}
                       />
                     </div>
                     <div className="flex justify-end gap-3">
