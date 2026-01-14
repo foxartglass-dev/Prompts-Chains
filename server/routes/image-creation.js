@@ -1341,7 +1341,9 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
 router.put('/settings/:workflowId', requireDb, async (req, res) => {
   try {
     const { workflowId } = req.params;
-    console.log('[Image Creation API] PUT settings for workflow:', workflowId);
+    console.log('[Image Creation API] ======= PUT /settings/:workflowId =======');
+    console.log('[Image Creation API] workflowId:', workflowId);
+    console.log('[Image Creation API] REQUEST BODY KEYS:', Object.keys(req.body));
     console.log('[Image Creation API] Received avatars:', req.body.audience_avatars?.length || 0);
 
     // Step 1: Look up the workflow's associated website_id
