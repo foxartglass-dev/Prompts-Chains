@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import FeedbackPopup from './FeedbackPopup';
 
 // Types for Feedback System
@@ -223,6 +224,7 @@ interface PromptSectionTemplate {
   name: string;
   description?: string;
   category?: string; // e.g., "Cleaning", "Construction", "Universal"
+  sourceTag?: string; // Tag this template originated from (e.g., "H", "J", "C")
   sections: PromptSection[];
   createdAt: string;
   updatedAt: string;
@@ -612,6 +614,17 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [showPlaceholderTemplates, setShowPlaceholderTemplates] = useState(false);
   // For apply template - track which sections/text to include
   const [templateSectionSelections, setTemplateSectionSelections] = useState<{ [sectionId: string]: { title: boolean; text: boolean } }>({});
+  // Save Template popup form state
+  const [saveTemplateName, setSaveTemplateName] = useState('');
+  const [saveTemplateDesc, setSaveTemplateDesc] = useState('');
+  const [saveTemplateCategory, setSaveTemplateCategory] = useState('');
+  // Save Template section selections (same format as apply: { [sectionId]: { title: boolean, text: boolean } })
+  const [saveTemplateSectionSelections, setSaveTemplateSectionSelections] = useState<{ [sectionId: string]: { title: boolean; text: boolean } }>({});
+  // Text Bank popup form state
+  const [newSnippetName, setNewSnippetName] = useState('');
+  const [newSnippetText, setNewSnippetText] = useState('');
+  const [newSnippetCategory, setNewSnippetCategory] = useState('');
+  const [showSnippetAddForm, setShowSnippetAddForm] = useState(false);
 
   // Legacy Chat (keeping for backwards compatibility)
   const [chatInput, setChatInput] = useState('');
@@ -699,6 +712,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [fetchingContext, setFetchingContext] = useState(false);
   const [avatarsCollapsed, setAvatarsCollapsed] = useState(true);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
+  const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Set<string>>(new Set()); // Track which individual categories are collapsed
 
   // Prompt Problem Areas state
   const [problemAreasCollapsed, setProblemAreasCollapsed] = useState(true);
@@ -869,6 +883,25 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const mainPromptRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Auto-resize textarea to fit content
+  const autoResizeTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
+    if (!textarea) return;
+    // Reset height to auto to get the correct scrollHeight
+    textarea.style.height = 'auto';
+    // Set height to scrollHeight with a minimum of 4 rows (~100px) and max of 600px
+    const minHeight = 100;
+    const maxHeight = 600;
+    const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
+    textarea.style.height = `${newHeight}px`;
+  }, []);
+
+  // Auto-resize main prompt textarea when content changes
+  useEffect(() => {
+    if (mainPromptRef.current && activeAvatarId) {
+      autoResizeTextarea(mainPromptRef.current);
+    }
+  }, [activeAvatarId, autoResizeTextarea, settings.audience_avatars]);
+
   // Helper: Log to Processing Log
   const log = useCallback((message: string, status: LogStatus) => {
     if (addLog) {
@@ -961,10 +994,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     };
   }, []);
 
-  const loadSettings = async () => {
+  const loadSettings = async (showSpinner = true) => {
     if (!workflowId) return;
-    setLoading(true);
-    setLoaded(false);
+    // Only show spinner on first load, not on refreshes
+    if (showSpinner && !loaded) {
+      setLoading(true);
+    }
     try {
       const res = await fetch(`/api/image-creation/settings/${workflowId}`);
       const data = await res.json();
@@ -1031,7 +1066,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           image_order: data.settings.image_order || [],
           manual_variation_order: data.settings.manual_variation_order || [],
           // Prompt Problem Areas
-          prompt_problem_areas: data.settings.prompt_problem_areas || []
+          prompt_problem_areas: data.settings.prompt_problem_areas || [],
+          // Prompt Template System - ensure arrays are never null
+          prompt_templates: data.settings.prompt_templates || [],
+          text_snippets: data.settings.text_snippets || [],
+          placeholder_category_templates: data.settings.placeholder_category_templates || []
         };
         setSettings(loadedSettings);
         if (loadedSettings.audience_avatars.length > 0) {
@@ -1519,25 +1558,49 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   /**
    * Save current prompt as a new template
    */
-  const handleSavePromptTemplate = (name: string, description: string, category: string) => {
+  const handleSavePromptTemplate = (
+    name: string,
+    description: string,
+    category: string,
+    selections: { [sectionId: string]: { title: boolean; text: boolean } },
+    sourceTag?: string
+  ) => {
     if (!activeAvatar) return;
 
-    const sections = parsePromptIntoSections(activeAvatar.mainPrompt);
+    const allSections = parsePromptIntoSections(activeAvatar.mainPrompt || '');
+
+    // Filter sections based on selections - only include sections where at least title OR text is selected
+    const filteredSections = allSections
+      .filter(section => {
+        const sel = selections[section.id];
+        return sel && (sel.title || sel.text);
+      })
+      .map(section => {
+        const sel = selections[section.id];
+        return {
+          ...section,
+          title: sel.title ? section.title : '',
+          text: sel.text ? section.text : ''
+        };
+      });
+
     const newTemplate: PromptSectionTemplate = {
       id: `template-${Date.now()}`,
       name,
       description,
       category: category || undefined,
-      sections,
+      sourceTag: sourceTag || activeAvatar.tag || undefined,
+      sections: filteredSections,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
     updateSettings({
-      prompt_templates: [...settings.prompt_templates, newTemplate]
+      prompt_templates: [...(settings.prompt_templates || []), newTemplate]
     });
-    showNotification(`Template "${name}" saved with ${sections.length} sections`, 'success');
+    showNotification(`Template "${name}" saved with ${filteredSections.length} sections`, 'success');
     setShowPromptTemplatePopup(null);
+    setSaveTemplateSectionSelections({});
   };
 
   /**
@@ -8362,8 +8425,13 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
           </div>
 
-          {/* Audience Avatars */}
-          <div className="bg-slate-900 p-4 rounded-lg border border-brand-gold/50">
+          {/* Audience Avatars - Full-Width Section Pattern (expands to span both columns when open) */}
+          <div className={`bg-slate-900 rounded-lg transition-all duration-300 ${
+            !avatarsCollapsed
+              ? 'relative left-1/2 -translate-x-1/2 w-[calc(100vw-2rem)] border-4 border-brand-gold p-4 px-8 shadow-lg shadow-brand-gold/20'
+              : 'border border-brand-gold/50 p-4'
+          }`}>
+            {/* Header - Always visible */}
             <div
               className="flex items-center justify-between cursor-pointer"
               onClick={() => setAvatarsCollapsed(!avatarsCollapsed)}
@@ -8371,6 +8439,7 @@ Start by introducing yourself and asking about their business in a friendly way.
               <div className="flex items-center gap-3">
                 <span className={`text-brand-gold transition-transform ${avatarsCollapsed ? '' : 'rotate-90'}`}>▶</span>
                 <h3 className="text-brand-gold font-semibold">Audience Avatars</h3>
+                {!avatarsCollapsed && <span className="text-xs text-emerald-400 bg-emerald-900/30 px-2 py-0.5 rounded">Full-Width Mode</span>}
                 {tags.length > 0 && (
                   <span className="text-xs text-brand-cyan/70 bg-brand-cyan/10 px-2 py-0.5 rounded">
                     Synced with Tag Manager: {tags.map(t => t.name).join(', ')}
@@ -8491,8 +8560,10 @@ Start by introducing yourself and asking about their business in a friendly way.
             </div>
 
             {activeAvatar && (
-              <div className="space-y-3">
-                <div className="flex gap-3 items-end">
+              <div className={`${activeAvatar.placeholderMode === 'advanced' ? 'xl:grid xl:grid-cols-2 xl:gap-6' : ''}`}>
+                {/* ===== LEFT COLUMN: Prompt Editing Area ===== */}
+                <div className="space-y-3">
+                <div className="flex gap-3 items-end flex-wrap">
                   <div className="w-48">
                     <label className="block text-xs text-brand-gold/70 mb-1">Avatar Name</label>
                     <input
@@ -8534,9 +8605,24 @@ Start by introducing yourself and asking about their business in a friendly way.
                       Templates
                     </button>
                     <button
-                      onClick={() => setShowTextSnippetBank(true)}
+                      onClick={() => {
+                        // Check for highlighted text in main prompt textarea
+                        if (mainPromptRef.current) {
+                          const textarea = mainPromptRef.current;
+                          const selectedText = textarea.value.substring(
+                            textarea.selectionStart,
+                            textarea.selectionEnd
+                          );
+                          if (selectedText.trim()) {
+                            // Pre-fill the snippet form with highlighted text
+                            setNewSnippetText(selectedText);
+                            setShowSnippetAddForm(true);
+                          }
+                        }
+                        setShowTextSnippetBank(true);
+                      }}
                       className="px-3 py-1.5 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-xs font-medium transition"
-                      title="Insert text snippets"
+                      title="Insert text snippets (highlight text first to create snippet from selection)"
                     >
                       Text Bank
                     </button>
@@ -8593,9 +8679,12 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <textarea
                     ref={mainPromptRef}
                     value={activeAvatar.mainPrompt}
-                    onChange={(e) => handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value })}
-                    rows={4}
-                    className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y"
+                    onChange={(e) => {
+                      handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
+                      autoResizeTextarea(e.target);
+                    }}
+                    className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y min-h-[100px] overflow-hidden"
+                    style={{ height: 'auto' }}
                     placeholder={activeAvatar.placeholderMode === 'advanced'
                       ? "Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
                       : "Professional cleaning photo, {variation}, bright natural lighting..."}
@@ -8638,18 +8727,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </div>
                   )}
                 </div>
+                </div>
+                {/* End LEFT COLUMN */}
 
-                {/* ========== ADVANCED MODE: Placeholder Categories ========== */}
+                {/* ===== RIGHT COLUMN: Placeholder Categories (Advanced Mode) ===== */}
                 {activeAvatar.placeholderMode === 'advanced' && (
-                  <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 space-y-3">
-                    <div
-                      className="flex items-center justify-between cursor-pointer"
-                      onClick={() => setCategoriesCollapsed(!categoriesCollapsed)}
-                    >
+                  <div className="space-y-3 mt-3 xl:mt-0">
+                  <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 space-y-3 h-fit xl:sticky xl:top-4">
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className={`text-purple-400 transition-transform ${categoriesCollapsed ? '' : 'rotate-90'}`}>▶</span>
-                        <label className="text-sm text-purple-300 font-medium cursor-pointer">Placeholder Categories</label>
-                        {categoriesCollapsed && (activeAvatar.placeholderCategories || []).length > 0 && (
+                        <label className="text-sm text-purple-300 font-medium">Placeholder Categories</label>
+                        {(activeAvatar.placeholderCategories || []).length > 0 && (
                           <span className="text-xs text-purple-400/70 bg-slate-800 px-2 py-0.5 rounded">
                             {(activeAvatar.placeholderCategories || []).length} categories
                           </span>
@@ -8693,18 +8781,36 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     )}
 
-                    {/* Category List */}
-                    {!categoriesCollapsed && (<>
-                    {(activeAvatar.placeholderCategories || []).map((category, catIndex) => (
-                      <div key={category.id} className={`rounded-lg p-3 space-y-2 transition-all ${
+                    {/* Category List - Each category individually collapsible */}
+                    {(activeAvatar.placeholderCategories || []).map((category, catIndex) => {
+                      const isCategoryCollapsed = collapsedCategoryIds.has(category.id);
+                      const toggleCategoryCollapse = () => {
+                        setCollapsedCategoryIds(prev => {
+                          const next = new Set(prev);
+                          if (next.has(category.id)) {
+                            next.delete(category.id);
+                          } else {
+                            next.add(category.id);
+                          }
+                          return next;
+                        });
+                      };
+                      return (
+                      <div key={category.id} className={`rounded-lg overflow-hidden transition-all ${
                         category.enabled !== false
                           ? 'bg-slate-800/50'
                           : 'bg-slate-900/30 opacity-50 border border-dashed border-slate-600'
                       }`}>
-                        <div className="flex items-center gap-2">
+                        {/* Category Header - Clickable to collapse/expand */}
+                        <div
+                          className="flex items-center gap-2 p-3 cursor-pointer hover:bg-slate-700/30 transition"
+                          onClick={toggleCategoryCollapse}
+                        >
+                          {/* Collapse Toggle */}
+                          <span className={`text-purple-400 transition-transform text-xs ${isCategoryCollapsed ? '' : 'rotate-90'}`}>▶</span>
                           {/* On/Off Toggle */}
                           <button
-                            onClick={() => handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false })}
+                            onClick={(e) => { e.stopPropagation(); handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false }); }}
                             className={`w-5 h-5 rounded flex items-center justify-center text-xs transition ${
                               category.enabled !== false
                                 ? 'bg-emerald-600 text-white'
@@ -8717,13 +8823,18 @@ Start by introducing yourself and asking about their business in a friendly way.
                           <input
                             type="text"
                             value={category.name}
+                            onClick={(e) => e.stopPropagation()}
                             onChange={(e) => handleUpdatePlaceholderCategory(category.id, { name: e.target.value, placeholder: `{${e.target.value.replace(/\s+/g, '_')}}` })}
                             className="flex-1 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
                             placeholder="Category name (e.g., Cleaning_Item)"
                           />
                           <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
+                          {isCategoryCollapsed && (
+                            <span className="text-xs text-slate-500">{category.options.length} options</span>
+                          )}
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               const companyCategory = prompt('Enter company/type category (e.g., Cleaning, Construction):');
                               if (companyCategory) {
                                 handleSavePlaceholderCategoryTemplate(category, companyCategory);
@@ -8735,7 +8846,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                             Save Template
                           </button>
                           <button
-                            onClick={() => handleRemovePlaceholderCategory(category.id)}
+                            onClick={(e) => { e.stopPropagation(); handleRemovePlaceholderCategory(category.id); }}
                             className="p-1 bg-red-600/50 hover:bg-red-600 rounded text-white transition"
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -8743,6 +8854,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                             </svg>
                           </button>
                         </div>
+
+                        {/* Category Content - Options (collapsible) */}
+                        {!isCategoryCollapsed && (
+                        <div className="p-3 pt-0 space-y-2">
 
                         {/* Options for this category - Stacked Layout */}
                         <div className="pl-2 space-y-3">
@@ -8864,8 +8979,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                             + Add Option
                           </button>
                         </div>
+                        </div>
+                        )}{/* End collapsible content */}
                       </div>
-                    ))}
+                    )})}
 
                     {(activeAvatar.placeholderCategories || []).length === 0 && (
                       <p className="text-xs text-purple-400/50 text-center py-2">No categories yet. Add one to get started.</p>
@@ -8978,11 +9095,11 @@ Start by introducing yourself and asking about their business in a friendly way.
                         </div>
                       </div>
                     )}
-                    </>)}
+                  </div>
                   </div>
                 )}
 
-                {/* ========== SIMPLE MODE: Variations ========== */}
+                {/* ========== SIMPLE MODE: Variations (stays in normal flow, not two-column) ========== */}
                 {(activeAvatar.placeholderMode || 'simple') === 'simple' && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -10276,9 +10393,9 @@ Start by introducing yourself and asking about their business in a friendly way.
         </div>
       )}
 
-      {/* Quick Image Preview Modal (for Draft Bank and Used/Archive) */}
-      {quickPreview && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4" onClick={() => setQuickPreview(null)}>
+      {/* Quick Image Preview Modal (for Draft Bank and Used/Archive) - Portal */}
+      {quickPreview && createPortal(
+        <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4" onClick={() => setQuickPreview(null)}>
           <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={() => setQuickPreview(null)}
@@ -10297,12 +10414,13 @@ Start by introducing yourself and asking about their business in a friendly way.
               <div className="mt-2 text-center text-white text-lg">{quickPreview.title}</div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Draft Bank Expanded View - Full-size scrollable grid */}
-      {draftBankExpandedView && (
-        <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
+      {/* Draft Bank Expanded View - Full-size scrollable grid (Portal) */}
+      {draftBankExpandedView && createPortal(
+        <div className="fixed inset-0 bg-slate-950 z-[9999] flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-amber-500/30 bg-slate-900">
             <h2 className="text-xl font-bold text-amber-400 flex items-center gap-2">
@@ -10383,12 +10501,13 @@ Start by introducing yourself and asking about their business in a friendly way.
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Used/Archive Expanded View - Full-size scrollable grid */}
-      {usedBankExpandedView && (
-        <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
+      {/* Used/Archive Expanded View - Full-size scrollable grid (Portal) */}
+      {usedBankExpandedView && createPortal(
+        <div className="fixed inset-0 bg-slate-950 z-[9999] flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-purple-500/30 bg-slate-900">
             <h2 className="text-xl font-bold text-purple-400 flex items-center gap-2">
@@ -10463,12 +10582,13 @@ Start by introducing yourself and asking about their business in a friendly way.
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Fullscreen Image Bank Modal */}
-      {bankFullscreen && (
-        <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col overflow-hidden">
+      {/* Fullscreen Image Bank Modal (Portal) */}
+      {bankFullscreen && createPortal(
+        <div className="fixed inset-0 bg-slate-950 z-[9999] flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex flex-col border-b border-brand-cyan/30 bg-slate-900">
             {/* Top row - Title and Close */}
@@ -10694,13 +10814,14 @@ Start by introducing yourself and asking about their business in a friendly way.
               <button onClick={selectAllForDownload} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm transition">Select All</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Image Preview Modal */}
-      {previewImage && (
+      {/* Image Preview Modal (Portal) */}
+      {previewImage && createPortal(
         <div
-          className="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4"
+          className="fixed inset-0 bg-black/95 z-[9999] flex flex-col items-center justify-center p-4"
           onClick={() => setPreviewImage(null)}
         >
           {/* Fixed container to prevent flickering */}
@@ -10801,7 +10922,8 @@ Start by introducing yourself and asking about their business in a friendly way.
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Floating Review Button - Shows when there are pending feedback requests */}
@@ -10861,148 +10983,276 @@ Start by introducing yourself and asking about their business in a friendly way.
 
       {/* ========== PROMPT TEMPLATE SYSTEM POPUPS ========== */}
 
-      {/* Save Template Popup */}
-      {showPromptTemplatePopup === 'save' && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-slate-900 rounded-xl w-[600px] max-h-[80vh] flex flex-col border border-emerald-500/30">
-            <div className="flex items-center justify-between p-4 border-b border-emerald-500/30">
-              <h2 className="text-lg font-semibold text-emerald-400">Save Prompt as Template</h2>
-              <button onClick={() => setShowPromptTemplatePopup(null)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
-            </div>
-            <div className="flex-1 overflow-auto p-4 space-y-4">
-              {(() => {
-                const [templateName, setTemplateName] = React.useState('');
-                const [templateDesc, setTemplateDesc] = React.useState('');
-                const [templateCategory, setTemplateCategory] = React.useState('');
-                const sections = activeAvatar ? parsePromptIntoSections(activeAvatar.mainPrompt) : [];
+      {/* Save Template Popup - Full Screen Centered (Portal) */}
+      {showPromptTemplatePopup === 'save' && (() => {
+        const sections = activeAvatar ? parsePromptIntoSections(activeAvatar.mainPrompt || '') : [];
+        // Initialize selections if empty (all selected by default)
+        if (Object.keys(saveTemplateSectionSelections).length === 0 && sections.length > 0) {
+          const initialSelections: { [key: string]: { title: boolean; text: boolean } } = {};
+          sections.forEach(s => { initialSelections[s.id] = { title: true, text: true }; });
+          setSaveTemplateSectionSelections(initialSelections);
+        }
+        const sourceTag = activeAvatar?.tag || 'Global';
 
-                return (
-                  <>
+        return createPortal(
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
+            <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[1200px] h-[90vh] flex flex-col border border-emerald-500/30">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-emerald-500/30 shrink-0">
+                <div>
+                  <h2 className="text-xl font-semibold text-emerald-400">Save Prompt as Template</h2>
+                  <p className="text-sm text-gray-400 mt-1">Select which sections to include in your template</p>
+                </div>
+                <button onClick={() => { setShowPromptTemplatePopup(null); setSaveTemplateName(''); setSaveTemplateDesc(''); setSaveTemplateCategory(''); setSaveTemplateSectionSelections({}); }} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-auto p-6">
+                {/* Top Form Fields - 2 column layout */}
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-4">
                     <div>
                       <label className="block text-sm text-gray-400 mb-1">Template Name *</label>
                       <input
                         type="text"
-                        value={templateName}
-                        onChange={(e) => setTemplateName(e.target.value)}
+                        value={saveTemplateName}
+                        onChange={(e) => setSaveTemplateName(e.target.value)}
                         placeholder="e.g., Cleaning Company Prompt"
                         className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-gray-400 mb-1">Description</label>
-                      <textarea
-                        value={templateDesc}
-                        onChange={(e) => setTemplateDesc(e.target.value)}
-                        placeholder="What this template is for..."
-                        rows={2}
-                        className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white resize-none"
                       />
                     </div>
                     <div>
                       <label className="block text-sm text-gray-400 mb-1">Category</label>
                       <input
                         type="text"
-                        value={templateCategory}
-                        onChange={(e) => setTemplateCategory(e.target.value)}
+                        value={saveTemplateCategory}
+                        onChange={(e) => setSaveTemplateCategory(e.target.value)}
                         placeholder="e.g., Cleaning, Construction, Universal"
                         className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white"
-                        list="template-categories"
+                        list="template-categories-save"
                       />
-                      <datalist id="template-categories">
-                        {templateCategories.map(cat => <option key={cat} value={cat} />)}
+                      <datalist id="template-categories-save">
+                        {(templateCategories || []).map(cat => <option key={cat} value={cat} />)}
                       </datalist>
                     </div>
+                  </div>
+                  <div className="space-y-4">
                     <div>
-                      <label className="block text-sm text-gray-400 mb-2">Detected Sections ({sections.length})</label>
-                      <div className="space-y-2 max-h-48 overflow-auto">
-                        {sections.map(section => (
-                          <div key={section.id} className="bg-slate-800 rounded p-2 border border-slate-700">
-                            <div className="text-emerald-300 text-sm font-medium">{section.title}</div>
-                            {section.text && (
-                              <div className="text-gray-400 text-xs mt-1 line-clamp-2">{section.text}</div>
-                            )}
-                          </div>
-                        ))}
-                        {sections.length === 0 && (
-                          <p className="text-gray-500 text-sm">No sections detected. Add section titles ending with ":" (e.g., "Pose / camera angle (CRITICAL):")</p>
-                        )}
+                      <label className="block text-sm text-gray-400 mb-1">Description</label>
+                      <textarea
+                        value={saveTemplateDesc}
+                        onChange={(e) => setSaveTemplateDesc(e.target.value)}
+                        placeholder="What this template is for..."
+                        rows={2}
+                        className="w-full bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-white resize-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Source Tag</label>
+                      <div className="bg-slate-800 border border-emerald-500/50 rounded px-3 py-2 text-emerald-300">
+                        Created from <span className="font-bold">{sourceTag}</span> tag
                       </div>
                     </div>
-                    <div className="flex justify-end gap-3 pt-2">
-                      <button onClick={() => setShowPromptTemplatePopup(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm">Cancel</button>
-                      <button
-                        onClick={() => handleSavePromptTemplate(templateName, templateDesc, templateCategory)}
-                        disabled={!templateName.trim()}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-white font-medium text-sm disabled:opacity-50"
-                      >
-                        Save Template
-                      </button>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
+                  </div>
+                </div>
 
-      {/* Apply/Browse Templates Popup */}
-      {showPromptTemplatePopup === 'apply' && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-slate-900 rounded-xl w-[700px] max-h-[85vh] flex flex-col border border-purple-500/30">
-            <div className="flex items-center justify-between p-4 border-b border-purple-500/30">
-              <h2 className="text-lg font-semibold text-purple-400">Prompt Templates</h2>
-              <button onClick={() => setShowPromptTemplatePopup(null)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+                {/* Section Selection Controls */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-sm text-gray-400">
+                    <span className="text-emerald-400 font-semibold">Sections to Include</span>
+                    <span className="ml-2">({sections.length} detected)</span>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        const newSel: typeof saveTemplateSectionSelections = {};
+                        sections.forEach(s => { newSel[s.id] = { title: true, text: true }; });
+                        setSaveTemplateSectionSelections(newSel);
+                      }}
+                      className="text-xs text-emerald-400 hover:text-emerald-300"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => {
+                        const newSel: typeof saveTemplateSectionSelections = {};
+                        sections.forEach(s => { newSel[s.id] = { title: true, text: false }; });
+                        setSaveTemplateSectionSelections(newSel);
+                      }}
+                      className="text-xs text-emerald-400 hover:text-emerald-300"
+                    >
+                      Titles Only
+                    </button>
+                    <button
+                      onClick={() => {
+                        const newSel: typeof saveTemplateSectionSelections = {};
+                        sections.forEach(s => { newSel[s.id] = { title: false, text: false }; });
+                        setSaveTemplateSectionSelections(newSel);
+                      }}
+                      className="text-xs text-gray-400 hover:text-gray-300"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sections Grid */}
+                <div className="space-y-3">
+                  {sections.map(section => {
+                    const sel = saveTemplateSectionSelections[section.id] || { title: true, text: true };
+                    const isSelected = sel.title || sel.text;
+                    return (
+                      <div
+                        key={section.id}
+                        className={`bg-slate-800 rounded-lg p-4 border-2 transition cursor-pointer ${isSelected ? 'border-emerald-500/50' : 'border-slate-700 opacity-50'}`}
+                        onClick={() => {
+                          // Toggle both title and text when clicking the card
+                          const currentlySelected = sel.title || sel.text;
+                          setSaveTemplateSectionSelections({
+                            ...saveTemplateSectionSelections,
+                            [section.id]: { title: !currentlySelected, text: !currentlySelected }
+                          });
+                        }}
+                      >
+                        <div className="flex items-start gap-4">
+                          {/* Checkboxes */}
+                          <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={sel.title}
+                                onChange={(e) => setSaveTemplateSectionSelections({
+                                  ...saveTemplateSectionSelections,
+                                  [section.id]: { ...sel, title: e.target.checked }
+                                })}
+                                className="accent-emerald-500 w-4 h-4"
+                              />
+                              <span className="text-xs text-emerald-300">Title</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={sel.text}
+                                onChange={(e) => setSaveTemplateSectionSelections({
+                                  ...saveTemplateSectionSelections,
+                                  [section.id]: { ...sel, text: e.target.checked }
+                                })}
+                                className="accent-emerald-500 w-4 h-4"
+                              />
+                              <span className="text-xs text-emerald-300">Text</span>
+                            </label>
+                          </div>
+                          {/* Section Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-emerald-300 font-medium">{section.title}</div>
+                            {section.text && (
+                              <div className="text-gray-400 text-sm mt-1 line-clamp-1">{section.text}</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {sections.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>No sections detected in your prompt.</p>
+                      <p className="text-sm mt-1">Add section titles ending with ":" (e.g., "Pose / camera angle (CRITICAL):")</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-3 p-4 border-t border-emerald-500/30 shrink-0">
+                <button
+                  onClick={() => { setShowPromptTemplatePopup(null); setSaveTemplateName(''); setSaveTemplateDesc(''); setSaveTemplateCategory(''); setSaveTemplateSectionSelections({}); }}
+                  className="px-6 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    handleSavePromptTemplate(saveTemplateName, saveTemplateDesc, saveTemplateCategory, saveTemplateSectionSelections, sourceTag);
+                    setSaveTemplateName('');
+                    setSaveTemplateDesc('');
+                    setSaveTemplateCategory('');
+                  }}
+                  disabled={!saveTemplateName.trim() || Object.values(saveTemplateSectionSelections).every(s => !s.title && !s.text)}
+                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-white font-medium disabled:opacity-50"
+                >
+                  Save Template
+                </button>
+              </div>
             </div>
-            <div className="flex-1 overflow-auto p-4">
-              {settings.prompt_templates.length === 0 ? (
-                <div className="text-center py-8 text-gray-400">
-                  <p className="mb-2">No templates saved yet</p>
+          </div>,
+          document.body
+        );
+      })()}
+
+      {/* Apply/Browse Templates Popup - Full Screen Centered (Portal) */}
+      {showPromptTemplatePopup === 'apply' && createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[1200px] h-[90vh] flex flex-col border border-purple-500/30">
+            <div className="flex items-center justify-between p-4 border-b border-purple-500/30 shrink-0">
+              <div>
+                <h2 className="text-xl font-semibold text-purple-400">Prompt Templates</h2>
+                <p className="text-sm text-gray-400 mt-1">Select a template to apply to your prompt</p>
+              </div>
+              <button onClick={() => setShowPromptTemplatePopup(null)} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              {(settings.prompt_templates || []).length === 0 ? (
+                <div className="text-center py-16 text-gray-400">
+                  <p className="text-lg mb-3">No templates saved yet</p>
                   <button
                     onClick={() => setShowPromptTemplatePopup('save')}
-                    className="text-purple-400 hover:text-purple-300"
+                    className="text-purple-400 hover:text-purple-300 text-lg"
                   >
                     Save your first template →
                   </button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {settings.prompt_templates.map(template => (
-                    <div key={template.id} className="bg-slate-800 rounded-lg border border-purple-500/30 overflow-hidden">
-                      <div className="p-3 border-b border-slate-700 flex items-center justify-between">
-                        <div>
-                          <h3 className="text-purple-300 font-medium">{template.name}</h3>
-                          {template.category && <span className="text-xs text-purple-400/60 bg-purple-900/30 px-2 py-0.5 rounded">{template.category}</span>}
-                          {template.description && <p className="text-gray-400 text-xs mt-1">{template.description}</p>}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {(settings.prompt_templates || []).map(template => (
+                    <div key={template.id} className="bg-slate-800 rounded-lg border border-purple-500/30 overflow-hidden hover:border-purple-500/60 transition">
+                      <div className="p-4 border-b border-slate-700 flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-purple-300 font-medium text-lg">{template.name}</h3>
+                            {template.sourceTag && <span className="text-xs text-emerald-400/80 bg-emerald-900/30 px-2 py-0.5 rounded">from {template.sourceTag}</span>}
+                            {template.category && <span className="text-xs text-purple-400/60 bg-purple-900/30 px-2 py-0.5 rounded">{template.category}</span>}
+                          </div>
+                          {template.description && <p className="text-gray-400 text-sm mt-1">{template.description}</p>}
+                          <p className="text-gray-500 text-xs mt-2">{template.sections.length} sections</p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 ml-4">
                           <button
                             onClick={() => {
                               setEditingTemplate(template);
-                              // Initialize all sections as selected
                               const selections: { [key: string]: { title: boolean; text: boolean } } = {};
                               template.sections.forEach(s => {
                                 selections[s.id] = { title: true, text: true };
                               });
                               setTemplateSectionSelections(selections);
                             }}
-                            className="px-3 py-1 bg-purple-600/30 hover:bg-purple-600/50 rounded text-purple-300 text-xs"
+                            className="px-4 py-2 bg-purple-600/30 hover:bg-purple-600/50 rounded text-purple-300 text-sm font-medium"
                           >
                             Apply
                           </button>
                           <button
                             onClick={() => handleDeleteTemplate(template.id)}
-                            className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 rounded text-red-300 text-xs"
+                            className="px-3 py-2 bg-red-600/30 hover:bg-red-600/50 rounded text-red-300 text-sm"
                           >
                             Delete
                           </button>
                         </div>
                       </div>
-                      <div className="p-3 space-y-1 max-h-32 overflow-auto">
+                      <div className="p-3 space-y-1 max-h-24 overflow-auto bg-slate-900/50">
                         {template.sections.map(section => (
-                          <div key={section.id} className="text-xs">
+                          <div key={section.id} className="text-xs flex items-start gap-2">
+                            <span className="text-purple-400">•</span>
                             <span className="text-gray-300">{section.title}</span>
-                            {section.text && <span className="text-gray-500 ml-2">({section.text.substring(0, 50)}...)</span>}
+                            {section.text && <span className="text-gray-500 truncate">- {section.text.substring(0, 60)}...</span>}
                           </div>
                         ))}
                       </div>
@@ -11012,24 +11262,36 @@ Start by introducing yourself and asking about their business in a friendly way.
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Apply Template with Section Selection */}
-      {editingTemplate && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-slate-900 rounded-xl w-[650px] max-h-[85vh] flex flex-col border border-purple-500/30">
-            <div className="flex items-center justify-between p-4 border-b border-purple-500/30">
+      {/* Apply Template with Section Selection - Full Screen Centered (Portal) */}
+      {editingTemplate && createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[1200px] h-[90vh] flex flex-col border border-purple-500/30">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-purple-500/30 shrink-0">
               <div>
-                <h2 className="text-lg font-semibold text-purple-400">Apply: {editingTemplate.name}</h2>
-                <p className="text-xs text-gray-400">Select which parts to include</p>
+                <h2 className="text-xl font-semibold text-purple-400">Apply: {editingTemplate.name}</h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-sm text-gray-400">Select which parts to include</p>
+                  {editingTemplate.sourceTag && <span className="text-xs text-emerald-400/80 bg-emerald-900/30 px-2 py-0.5 rounded">from {editingTemplate.sourceTag}</span>}
+                  {editingTemplate.category && <span className="text-xs text-purple-400/60 bg-purple-900/30 px-2 py-0.5 rounded">{editingTemplate.category}</span>}
+                </div>
               </div>
-              <button onClick={() => setEditingTemplate(null)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+              <button onClick={() => setEditingTemplate(null)} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
             </div>
-            <div className="flex-1 overflow-auto p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm text-gray-400">Sections</span>
-                <div className="flex gap-2">
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto p-6">
+              {/* Section Selection Controls */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-sm text-gray-400">
+                  <span className="text-purple-400 font-semibold">Sections</span>
+                  <span className="ml-2">({editingTemplate.sections.length} available)</span>
+                </div>
+                <div className="flex gap-3">
                   <button
                     onClick={() => {
                       const newSel: typeof templateSectionSelections = {};
@@ -11064,221 +11326,256 @@ Start by introducing yourself and asking about their business in a friendly way.
                     }}
                     className="text-xs text-gray-400 hover:text-gray-300"
                   >
-                    Clear
+                    Clear All
                   </button>
                 </div>
               </div>
+
+              {/* Sections Grid */}
               <div className="space-y-3">
                 {editingTemplate.sections.map(section => {
                   const sel = templateSectionSelections[section.id] || { title: false, text: false };
+                  const isSelected = sel.title || sel.text;
                   return (
-                    <div key={section.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
-                      <div className="flex items-center gap-3 mb-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={sel.title}
-                            onChange={(e) => setTemplateSectionSelections({
-                              ...templateSectionSelections,
-                              [section.id]: { ...sel, title: e.target.checked }
-                            })}
-                            className="accent-purple-500"
-                          />
-                          <span className="text-purple-300 font-medium text-sm">Title</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={sel.text}
-                            onChange={(e) => setTemplateSectionSelections({
-                              ...templateSectionSelections,
-                              [section.id]: { ...sel, text: e.target.checked }
-                            })}
-                            className="accent-purple-500"
-                          />
-                          <span className="text-purple-300 font-medium text-sm">Text</span>
-                        </label>
-                      </div>
-                      <div className={`text-sm ${sel.title ? 'text-white' : 'text-gray-500'}`}>{section.title}</div>
-                      {section.text && (
-                        <div className={`text-xs mt-1 ${sel.text ? 'text-gray-300' : 'text-gray-600'}`}>
-                          {section.text.substring(0, 200)}{section.text.length > 200 ? '...' : ''}
+                    <div
+                      key={section.id}
+                      className={`bg-slate-800 rounded-lg p-4 border-2 transition cursor-pointer ${isSelected ? 'border-purple-500/50' : 'border-slate-700 opacity-50'}`}
+                      onClick={() => {
+                        const currentlySelected = sel.title || sel.text;
+                        setTemplateSectionSelections({
+                          ...templateSectionSelections,
+                          [section.id]: { title: !currentlySelected, text: !currentlySelected }
+                        });
+                      }}
+                    >
+                      <div className="flex items-start gap-4">
+                        {/* Checkboxes */}
+                        <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={sel.title}
+                              onChange={(e) => setTemplateSectionSelections({
+                                ...templateSectionSelections,
+                                [section.id]: { ...sel, title: e.target.checked }
+                              })}
+                              className="accent-purple-500 w-4 h-4"
+                            />
+                            <span className="text-xs text-purple-300">Title</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={sel.text}
+                              onChange={(e) => setTemplateSectionSelections({
+                                ...templateSectionSelections,
+                                [section.id]: { ...sel, text: e.target.checked }
+                              })}
+                              className="accent-purple-500 w-4 h-4"
+                            />
+                            <span className="text-xs text-purple-300">Text</span>
+                          </label>
                         </div>
-                      )}
+                        {/* Section Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className={`font-medium ${sel.title ? 'text-purple-300' : 'text-gray-500'}`}>{section.title}</div>
+                          {section.text && (
+                            <div className={`text-sm mt-1 line-clamp-1 ${sel.text ? 'text-gray-300' : 'text-gray-600'}`}>
+                              {section.text}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 p-4 border-t border-purple-500/30">
-              <button onClick={() => setEditingTemplate(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm">Cancel</button>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-purple-500/30 shrink-0">
+              <button onClick={() => setEditingTemplate(null)} className="px-6 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white">Cancel</button>
               <button
                 onClick={() => {
                   handleApplyTemplate(editingTemplate, templateSectionSelections);
                   setEditingTemplate(null);
                 }}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded text-white font-medium text-sm"
+                disabled={Object.values(templateSectionSelections).every(s => !s.title && !s.text)}
+                className="px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded text-white font-medium disabled:opacity-50"
               >
                 Apply Selected
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Text Snippet Bank Popup */}
-      {showTextSnippetBank && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-slate-900 rounded-xl w-[700px] max-h-[85vh] flex flex-col border border-blue-500/30">
-            <div className="flex items-center justify-between p-4 border-b border-blue-500/30">
-              <h2 className="text-lg font-semibold text-blue-400">Text Snippet Bank</h2>
-              <button onClick={() => setShowTextSnippetBank(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+      {/* Text Snippet Bank Popup - Full Screen Centered (Portal) */}
+      {showTextSnippetBank && createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[1200px] h-[90vh] flex flex-col border border-blue-500/30">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-blue-500/30 shrink-0">
+              <div>
+                <h2 className="text-xl font-semibold text-blue-400">Text Snippet Bank</h2>
+                <p className="text-sm text-gray-400 mt-1">Reusable text blocks for quick insertion into prompts</p>
+              </div>
+              <button onClick={() => { setShowTextSnippetBank(false); setShowSnippetAddForm(false); setNewSnippetName(''); setNewSnippetText(''); setNewSnippetCategory(''); }} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
             </div>
-            <div className="flex-1 overflow-auto p-4">
-              {/* Add New Snippet Form */}
-              {(() => {
-                const [newSnippetName, setNewSnippetName] = React.useState('');
-                const [newSnippetText, setNewSnippetText] = React.useState('');
-                const [newSnippetCategory, setNewSnippetCategory] = React.useState('');
-                const [showAddForm, setShowAddForm] = React.useState(false);
 
-                return (
-                  <>
-                    {!showAddForm ? (
+            {/* Content */}
+            <div className="flex-1 overflow-auto p-6">
+              {/* Add New Snippet Form */}
+              {!showSnippetAddForm ? (
+                <button
+                  onClick={() => setShowSnippetAddForm(true)}
+                  className="mb-6 px-4 py-3 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-sm w-full font-medium"
+                >
+                  + Add New Snippet
+                </button>
+              ) : (
+                <div className="mb-6 bg-slate-800 rounded-lg p-4 border border-blue-500/30">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Snippet Name *</label>
+                        <input
+                          type="text"
+                          value={newSnippetName}
+                          onChange={(e) => setNewSnippetName(e.target.value)}
+                          placeholder="e.g., Camera Right Side"
+                          className="w-full bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Category *</label>
+                        <input
+                          type="text"
+                          value={newSnippetCategory}
+                          onChange={(e) => setNewSnippetCategory(e.target.value)}
+                          placeholder="e.g., Camera Angle"
+                          list="snippet-categories-add"
+                          className="w-full bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white"
+                        />
+                        <datalist id="snippet-categories-add">
+                          {(snippetCategories || []).map(cat => <option key={cat} value={cat} />)}
+                        </datalist>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Snippet Text *</label>
+                      <textarea
+                        value={newSnippetText}
+                        onChange={(e) => {
+                          setNewSnippetText(e.target.value);
+                          // Auto-expand textarea
+                          const textarea = e.target;
+                          textarea.style.height = 'auto';
+                          textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 100), 400)}px`;
+                        }}
+                        placeholder="Enter the text content for this snippet..."
+                        className="w-full bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white resize-y min-h-[100px] overflow-hidden"
+                        style={{ height: 'auto' }}
+                      />
+                    </div>
+                    <div className="flex justify-end gap-3">
+                      <button onClick={() => setShowSnippetAddForm(false)} className="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded text-white">Cancel</button>
                       <button
-                        onClick={() => setShowAddForm(true)}
-                        className="mb-4 px-3 py-2 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-sm w-full"
+                        onClick={() => {
+                          if (newSnippetName.trim() && newSnippetText.trim() && newSnippetCategory.trim()) {
+                            handleSaveTextSnippet(newSnippetName, newSnippetText, newSnippetCategory);
+                            setNewSnippetName('');
+                            setNewSnippetText('');
+                            setNewSnippetCategory('');
+                            setShowSnippetAddForm(false);
+                          }
+                        }}
+                        disabled={!newSnippetName.trim() || !newSnippetText.trim() || !newSnippetCategory.trim()}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white font-medium disabled:opacity-50"
                       >
-                        + Add New Snippet
+                        Save Snippet
                       </button>
-                    ) : (
-                      <div className="mb-4 bg-slate-800 rounded-lg p-3 border border-blue-500/30">
-                        <div className="space-y-3">
-                          <div className="flex gap-3">
-                            <input
-                              type="text"
-                              value={newSnippetName}
-                              onChange={(e) => setNewSnippetName(e.target.value)}
-                              placeholder="Snippet name"
-                              className="flex-1 bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm"
-                            />
-                            <input
-                              type="text"
-                              value={newSnippetCategory}
-                              onChange={(e) => setNewSnippetCategory(e.target.value)}
-                              placeholder="Category"
-                              list="snippet-categories"
-                              className="w-40 bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm"
-                            />
-                            <datalist id="snippet-categories">
-                              {snippetCategories.map(cat => <option key={cat} value={cat} />)}
-                            </datalist>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Category Filter */}
+              {(snippetCategories || []).length > 0 && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <span className="text-sm text-gray-400 mr-2">Filter:</span>
+                  <button
+                    onClick={() => setSnippetCategoryFilter('all')}
+                    className={`px-3 py-1 rounded text-sm font-medium transition ${snippetCategoryFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
+                  >
+                    All
+                  </button>
+                  {(snippetCategories || []).map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSnippetCategoryFilter(cat)}
+                      className={`px-3 py-1 rounded text-sm font-medium transition ${snippetCategoryFilter === cat ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Snippets List */}
+              {(settings.text_snippets || []).length === 0 ? (
+                <div className="text-center py-16 text-gray-400">
+                  <p className="text-lg mb-2">No snippets saved yet</p>
+                  <p className="text-sm">Add reusable text blocks for quick insertion into your prompts</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {(settings.text_snippets || [])
+                    .filter(s => snippetCategoryFilter === 'all' || s.category === snippetCategoryFilter)
+                    .map(snippet => (
+                      <div key={snippet.id} className="bg-slate-800 rounded-lg p-4 border border-slate-700 hover:border-blue-500/50 transition group">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-blue-300 font-medium">{snippet.name}</span>
+                            <span className="text-xs text-blue-400/60 bg-blue-900/30 px-2 py-0.5 rounded">{snippet.category}</span>
                           </div>
-                          <textarea
-                            value={newSnippetText}
-                            onChange={(e) => setNewSnippetText(e.target.value)}
-                            placeholder="Snippet text..."
-                            rows={3}
-                            className="w-full bg-slate-700 border border-blue-500/30 rounded px-3 py-2 text-white text-sm resize-none"
-                          />
-                          <div className="flex justify-end gap-2">
-                            <button onClick={() => setShowAddForm(false)} className="px-3 py-1 bg-slate-600 hover:bg-slate-500 rounded text-white text-xs">Cancel</button>
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition ml-2">
                             <button
-                              onClick={() => {
-                                if (newSnippetName.trim() && newSnippetText.trim() && newSnippetCategory.trim()) {
-                                  handleSaveTextSnippet(newSnippetName, newSnippetText, newSnippetCategory);
-                                  setNewSnippetName('');
-                                  setNewSnippetText('');
-                                  setNewSnippetCategory('');
-                                  setShowAddForm(false);
-                                }
-                              }}
-                              disabled={!newSnippetName.trim() || !newSnippetText.trim() || !newSnippetCategory.trim()}
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs disabled:opacity-50"
+                              onClick={() => handleInsertSnippet(snippet)}
+                              className="px-3 py-1.5 bg-blue-600/50 hover:bg-blue-600 rounded text-white text-sm font-medium"
                             >
-                              Save Snippet
+                              Insert
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSnippet(snippet.id)}
+                              className="px-3 py-1.5 bg-red-600/30 hover:bg-red-600/50 rounded text-red-300 text-sm"
+                            >
+                              Delete
                             </button>
                           </div>
                         </div>
+                        <p className="text-gray-400 text-sm line-clamp-2">{snippet.text}</p>
                       </div>
-                    )}
-
-                    {/* Category Filter */}
-                    {snippetCategories.length > 0 && (
-                      <div className="mb-4 flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setSnippetCategoryFilter('all')}
-                          className={`px-3 py-1 rounded text-xs font-medium transition ${snippetCategoryFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
-                        >
-                          All
-                        </button>
-                        {snippetCategories.map(cat => (
-                          <button
-                            key={cat}
-                            onClick={() => setSnippetCategoryFilter(cat)}
-                            className={`px-3 py-1 rounded text-xs font-medium transition ${snippetCategoryFilter === cat ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}
-                          >
-                            {cat}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Snippets List */}
-                    {settings.text_snippets.length === 0 ? (
-                      <div className="text-center py-8 text-gray-400">
-                        <p>No snippets saved yet</p>
-                        <p className="text-sm mt-1">Add reusable text blocks for quick insertion</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {settings.text_snippets
-                          .filter(s => snippetCategoryFilter === 'all' || s.category === snippetCategoryFilter)
-                          .map(snippet => (
-                            <div key={snippet.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700 hover:border-blue-500/50 transition group">
-                              <div className="flex items-center justify-between mb-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-blue-300 font-medium text-sm">{snippet.name}</span>
-                                  <span className="text-xs text-blue-400/60 bg-blue-900/30 px-2 py-0.5 rounded">{snippet.category}</span>
-                                </div>
-                                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
-                                  <button
-                                    onClick={() => handleInsertSnippet(snippet)}
-                                    className="px-2 py-1 bg-blue-600/50 hover:bg-blue-600 rounded text-white text-xs"
-                                  >
-                                    Insert
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteSnippet(snippet.id)}
-                                    className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 rounded text-red-300 text-xs"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </div>
-                              <p className="text-gray-400 text-xs line-clamp-2">{snippet.text}</p>
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
+                    ))}
+                </div>
+              )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Placeholder Category Templates Popup */}
-      {showPlaceholderTemplates && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      {/* Placeholder Category Templates Popup (Portal) */}
+      {showPlaceholderTemplates && createPortal(
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
           <div className="bg-slate-900 rounded-xl w-[650px] max-h-[85vh] flex flex-col border border-orange-500/30">
             <div className="flex items-center justify-between p-4 border-b border-orange-500/30">
               <h2 className="text-lg font-semibold text-orange-400">Placeholder Category Templates</h2>
               <button onClick={() => setShowPlaceholderTemplates(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
             <div className="flex-1 overflow-auto p-4">
-              {settings.placeholder_category_templates.length === 0 ? (
+              {(settings.placeholder_category_templates || []).length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <p className="mb-2">No placeholder templates saved yet</p>
                   <p className="text-sm">Save a placeholder category from any avatar to create a template</p>
@@ -11287,7 +11584,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                 <div className="space-y-3">
                   {/* Group by category */}
                   {(() => {
-                    const grouped = settings.placeholder_category_templates.reduce((acc, t) => {
+                    const grouped = (settings.placeholder_category_templates || []).reduce((acc, t) => {
                       const cat = t.category || 'Uncategorized';
                       if (!acc[cat]) acc[cat] = [];
                       acc[cat].push(t);
@@ -11318,7 +11615,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   <button
                                     onClick={() => {
                                       updateSettings({
-                                        placeholder_category_templates: settings.placeholder_category_templates.filter(t => t.id !== template.id)
+                                        placeholder_category_templates: (settings.placeholder_category_templates || []).filter(t => t.id !== template.id)
                                       });
                                       showNotification('Template deleted', 'success');
                                     }}
@@ -11342,7 +11639,8 @@ Start by introducing yourself and asking about their business in a friendly way.
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

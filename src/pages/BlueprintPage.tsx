@@ -1067,6 +1067,121 @@ const GoldenRules: React.FC = () => (
           </div>
         </div>
       </div>
+
+      {/* Rule 7 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-pink-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-pink-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">7</div>
+          <div>
+            <h3 className="text-lg font-bold text-pink-400">ALL popup/modal windows MUST use React Portals</h3>
+            <p className="text-gray-300 mt-2 text-sm">
+              Never render modals inside the component tree with just <code className="bg-slate-900 px-1 rounded">position: fixed</code>.
+              This causes flickering when the popup is inside a two-column layout or container with positioning.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-red-400 font-medium mb-2">❌ DON'T (causes flickering):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`{showPopup && (
+  <div className="fixed inset-0 bg-black/80 z-50">
+    ...modal content...
+  </div>
+)}`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-green-400 font-medium mb-2">✓ DO (correct way):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`import { createPortal } from 'react-dom';
+
+{showPopup && createPortal(
+  <div className="fixed inset-0 bg-black/80 z-[9999]">
+    ...modal content...
+  </div>,
+  document.body
+)}`}</pre>
+            </div>
+            <p className="text-gray-400 mt-3 text-xs">
+              <strong>Why:</strong> Portals render content outside the React component tree directly to document.body,
+              bypassing any parent containers that could affect positioning. Use <code className="bg-slate-900 px-1 rounded">z-[9999]</code> for highest priority.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Rule 8 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-cyan-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-cyan-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">8</div>
+          <div>
+            <h3 className="text-lg font-bold text-cyan-400">Full-Width Section Pattern for in-flow expansion</h3>
+            <p className="text-gray-300 mt-2 text-sm">
+              When a section needs to expand full-width but stay in the normal page flow (not overlay), use negative margins to break out of the container.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-cyan-400 font-medium mb-2">✓ CSS technique for full-width breakout:</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// When expanded, break out of container to span full viewport
+<div className={\`transition-all \${
+  isExpanded
+    ? 'relative -ml-4 -mr-4 xl:-ml-[calc(50vw-50%+1rem)] xl:-mr-[calc(50vw-50%+1rem)] xl:w-[calc(100vw-2rem)]'
+    : ''
+}\`}>
+  {/* Content stays in page flow, scrollable */}
+</div>`}</pre>
+            </div>
+            <p className="text-gray-400 mt-3 text-xs">
+              <strong>Use this pattern when:</strong> You need more horizontal space for complex content (like Audience Avatars with prompt + placeholders side-by-side)
+              but the user should still be able to scroll the page normally. The expanded section pushes other content down.
+            </p>
+            <p className="text-gray-400 mt-2 text-xs">
+              <strong>Examples:</strong> Audience Avatars dropdown in Image Creation section
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* UI Patterns Quick Reference */}
+    <div className="max-w-3xl mx-auto mt-8 bg-slate-800/50 rounded-xl p-6 border border-cyan-500/30">
+      <h3 className="text-lg font-bold text-cyan-400 mb-4">UI Patterns Quick Reference</h3>
+      <p className="text-gray-400 text-sm mb-4">Use these named patterns when communicating with AI agents about UI requirements.</p>
+      <div className="space-y-4">
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-pink-400 font-bold">Pattern A:</span>
+            <span className="text-white font-semibold">Portal Modal</span>
+            <span className="text-xs bg-pink-600/30 text-pink-300 px-2 py-0.5 rounded">Full-screen overlay</span>
+          </div>
+          <p className="text-gray-400 text-xs">
+            Covers entire viewport, blocks interaction with page behind it. Use for: Templates browser, image preview, settings popups, confirmations.
+          </p>
+          <p className="text-gray-500 text-xs mt-1">
+            <strong>Key:</strong> Uses <code className="bg-slate-800 px-1 rounded">createPortal()</code> to render at document.body
+          </p>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-cyan-400 font-bold">Pattern B:</span>
+            <span className="text-white font-semibold">Full-Width Section</span>
+            <span className="text-xs bg-cyan-600/30 text-cyan-300 px-2 py-0.5 rounded">In-flow expansion</span>
+          </div>
+          <p className="text-gray-400 text-xs">
+            Expands to span full viewport width but stays in normal page flow. Content above/below shifts. Page remains scrollable.
+          </p>
+          <p className="text-gray-500 text-xs mt-1">
+            <strong>Key:</strong> Uses negative margin CSS trick <code className="bg-slate-800 px-1 rounded">-ml-[calc(50vw-50%)]</code>
+          </p>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-brand-gold font-bold">Pattern C:</span>
+            <span className="text-white font-semibold">Standard Collapsible</span>
+            <span className="text-xs bg-brand-gold/30 text-brand-gold px-2 py-0.5 rounded">Normal dropdown</span>
+          </div>
+          <p className="text-gray-400 text-xs">
+            Standard collapsible section that expands/collapses in place. Stays within its container width.
+          </p>
+          <p className="text-gray-500 text-xs mt-1">
+            <strong>Key:</strong> Simple conditional rendering with state toggle
+          </p>
+        </div>
+      </div>
     </div>
 
     {/* File Reference */}
