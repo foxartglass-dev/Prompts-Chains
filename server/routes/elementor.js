@@ -531,7 +531,7 @@ router.post('/publish', async (req, res) => {
           imageQuality = config.image_quality || 'low';
 
           // Get prompt mode settings for Generate Live
-          const livePromptMode = config.live_prompt_mode || 'smart_prompt';
+          const livePromptMode = config.live_prompt_mode || 'main_prompt';
           // Fallback prompt mode - used when bank is empty and falls back to live
           const fallbackPromptMode = config.fallback_prompt_mode || 'main_prompt';
           const smartPromptGuidance = config.smart_prompt_guidance || '';
@@ -1273,7 +1273,7 @@ router.post('/publish', async (req, res) => {
             console.log('[Elementor Publish] Using FALLBACK prompt mode:', livePromptMode);
           } else {
             // Direct Generate Live mode
-            livePromptMode = config.live_prompt_mode || 'smart_prompt';
+            livePromptMode = config.live_prompt_mode || 'main_prompt';
           }
 
           smartPromptGuidance = config.smart_prompt_guidance || '';

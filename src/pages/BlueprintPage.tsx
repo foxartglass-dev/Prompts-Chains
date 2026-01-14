@@ -3814,7 +3814,7 @@ const SystemArchaeology: React.FC = () => (
 │  │  if (isFallbackFromBank) {                                           │
 │  │    use fallback_prompt_mode || live_prompt_mode || 'main_prompt'     │
 │  │  } else {                                                            │
-│  │    use live_prompt_mode || 'smart_prompt'  ← Direct live mode        │
+│  │    use live_prompt_mode || 'main_prompt'   ← Direct live mode        │
 │  │  }                                                                   │
 │  └── Passes mode to image-pipeline.js                                   │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -3864,8 +3864,8 @@ const SystemArchaeology: React.FC = () => (
                 <td>ImageCreationSection:5629</td>
                 <td>live_prompt_mode</td>
                 <td>elementor.js:524,1254</td>
-                <td>'smart_prompt'</td>
-                <td><span className="text-green-400">Active</span></td>
+                <td>'main_prompt'</td>
+                <td><span className="text-green-400">Active (FIXED Jan 2026)</span></td>
               </tr>
               <tr className="border-b border-slate-700">
                 <td className="py-2">fallback_prompt_mode</td>

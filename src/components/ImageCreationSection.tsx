@@ -539,8 +539,8 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   matching_rule_4: 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
   // Smart Matching Config - configurable parameters that code ACTUALLY reads
   smart_matching_config: { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 },
-  // Generate Live prompt mode - default to smart_prompt for backwards compatibility
-  live_prompt_mode: 'smart_prompt',
+  // Generate Live prompt mode - default to main_prompt (user's avatar template)
+  live_prompt_mode: 'main_prompt',
   smart_prompt_guidance: '', // Empty by default - user can add guardrails
   // Guided GPT mode settings
   guided_model: 'gpt-4o',

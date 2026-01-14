@@ -1021,7 +1021,7 @@ router.put('/settings/website/:websiteId', requireDb, async (req, res) => {
           ${JSON.stringify(settingsData.image_order ?? [])},
           ${settingsData.variation_order_mode ?? 'sequential'},
           ${JSON.stringify(settingsData.manual_variation_order ?? [])},
-          ${settingsData.live_prompt_mode ?? 'smart_prompt'},
+          ${settingsData.live_prompt_mode ?? 'main_prompt'},
           ${settingsData.smart_prompt_guidance ?? ''},
           ${JSON.stringify(settingsData.guided_guardrails ?? {})},
           ${JSON.stringify(settingsData.prompt_problem_areas ?? [])}
@@ -1237,7 +1237,7 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           // Image quality default
           image_quality: 'low',
           // Generate Live prompt mode
-          live_prompt_mode: 'smart_prompt',
+          live_prompt_mode: 'main_prompt',
           fallback_prompt_mode: 'main_prompt',
           smart_prompt_guidance: '',
           // Prompt Problem Areas
@@ -1315,7 +1315,7 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         // Image quality
         image_quality: results[0].image_quality || 'low',
         // Generate Live prompt mode
-        live_prompt_mode: results[0].live_prompt_mode || 'smart_prompt',
+        live_prompt_mode: results[0].live_prompt_mode || 'main_prompt',
         fallback_prompt_mode: results[0].fallback_prompt_mode || 'main_prompt',
         smart_prompt_guidance: results[0].smart_prompt_guidance || '',
         // Prompt Problem Areas
@@ -1531,7 +1531,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${JSON.stringify(image_order ?? [])},
                 ${variation_order_mode ?? 'sequential'},
                 ${JSON.stringify(manual_variation_order ?? [])},
-                ${live_prompt_mode ?? 'smart_prompt'},
+                ${live_prompt_mode ?? 'main_prompt'},
                 ${fallback_prompt_mode ?? 'main_prompt'},
                 ${smart_prompt_guidance ?? ''},
                 ${JSON.stringify(guided_guardrails ?? {})},
@@ -1589,7 +1589,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               ${JSON.stringify(image_order ?? [])},
               ${variation_order_mode ?? 'sequential'},
               ${JSON.stringify(manual_variation_order ?? [])},
-              ${live_prompt_mode ?? 'smart_prompt'},
+              ${live_prompt_mode ?? 'main_prompt'},
               ${fallback_prompt_mode ?? 'main_prompt'},
               ${smart_prompt_guidance ?? ''},
               ${JSON.stringify(guided_guardrails ?? {})},
