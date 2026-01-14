@@ -463,10 +463,42 @@ const App: React.FC = () => {
                 }
               }
 
-              if (Object.keys(workflowState).length > 0) {
-                setCurrentProjectState(() => workflowState);
-                setHasUnsavedChanges(false);
-              }
+              // Create or update the project with workflow state
+              // Use setCurrentProject directly to ensure state is set even if currentProject was null
+              const projectId = currentProject?.id || `workflow-${data.workflow.id}`;
+              setCurrentProject({
+                id: projectId,
+                name: data.workflow.name,
+                state: Object.keys(workflowState).length > 0 ? workflowState : (currentProject?.state || {
+                  apiKeys: { zeroGpt: '', anthropic: '', openai: '', gemini: '', grok: '', openRouter: '', xai: '' },
+                  useOpenRouter: false,
+                  autoSaveEnabled: false,
+                  autoSaveSeconds: 60,
+                  provider: 'anthropic',
+                  model: 'claude-sonnet-4-5-20250929',
+                  model2: 'not-in-use',
+                  model3: 'not-in-use',
+                  fileNameTemplate: '{tag}-{item_name}-output',
+                  wpCredentials: { url: '', user: '', password: '' },
+                  wpContentType: 'pages',
+                  wpTitleTemplate: '{item_name}',
+                  tags: [],
+                  placeholders: [],
+                  taggedSnippets: [],
+                  promptTemplates: [],
+                  optionVariables: [],
+                  projectNotes: '',
+                  workflowNotes: '',
+                  metaTitleCount: 3,
+                  metaDescriptionCount: 3,
+                  metaTitlePrompt: '',
+                  metaDescriptionPrompt: '',
+                  wpPublishMode: 'draft',
+                  articlePublishMode: 'draft',
+                  metaPublishMode: 'draft',
+                })
+              });
+              setHasUnsavedChanges(false);
 
               showNotification(`Loaded default workflow: ${data.workflow.name}`, 'info');
             }
@@ -1103,8 +1135,11 @@ const App: React.FC = () => {
         return { finalOutput: text.trim(), metaTitles: [] as string[], metaDescriptions: [] as string[] };
     };
 
-    const processWorkflow = async () => {
-        if (!currentProject || !items.length || !currentProject.state.promptTemplates.length) {
+    const processWorkflow = async (immediateItems?: WorkflowItem[]) => {
+        // Use immediateItems if provided (bypasses React state timing issues), otherwise use state
+        const itemsToProcess = immediateItems || items;
+
+        if (!currentProject || !itemsToProcess.length || !currentProject.state.promptTemplates.length) {
             addLog('Prerequisites not met: Add items and define at least one prompt.', LogStatus.ERROR);
             return;
         }
@@ -1126,10 +1161,10 @@ const App: React.FC = () => {
         setBatchImageCounts({ fromBank: 0, fromLive: 0 }); // Reset image counts for new batch
 
         const modelNames = activeModels.map(m => m.model.split('-').slice(0, 2).join('-')).join(', ');
-        addLog(`Starting batch processing for ${items.length} items using ${activeModels.length} model(s): ${modelNames}...`, LogStatus.INFO);
+        addLog(`Starting batch processing for ${itemsToProcess.length} items using ${activeModels.length} model(s): ${modelNames}...`, LogStatus.INFO);
         const startTime = Date.now();
 
-        for (const item of items) {
+        for (const item of itemsToProcess) {
             // Run workflow for each active model
             for (const { model: activeModel, label: modelLabel } of activeModels) {
                 const promptOutputs: Record<string, string> = {};
@@ -1802,7 +1837,7 @@ const App: React.FC = () => {
         <h2 className={`text-xl font-bold flex items-center text-brand-cyan py-2 px-4 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
           {icon}
           <span className="ml-3 shrink-0">{title}</span>
-          {rightContent && <div className="ml-auto flex items-center gap-3" onClick={e => e.stopPropagation()}>{rightContent}</div>}
+          {rightContent && <div className="ml-4 flex-1 flex items-center justify-end gap-3" onClick={e => e.stopPropagation()}>{rightContent}</div>}
            <svg className={`w-5 h-5 ml-3 shrink-0 transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </h2>
         <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? '' : 'max-h-0 overflow-hidden'}`}>
@@ -2171,13 +2206,45 @@ const App: React.FC = () => {
                                 }
                             }
 
+                            // Create or update the project with workflow state
+                            // Use setCurrentProject directly to ensure state is set even if currentProject was null
+                            const projectId = currentProject?.id || `workflow-${workflow.id}`;
+                            setCurrentProject({
+                                id: projectId,
+                                name: workflow.name,
+                                state: Object.keys(workflowState).length > 0 ? workflowState : (currentProject?.state || {
+                                    apiKeys: { zeroGpt: '', anthropic: '', openai: '', gemini: '', grok: '', openRouter: '', xai: '' },
+                                    useOpenRouter: false,
+                                    autoSaveEnabled: false,
+                                    autoSaveSeconds: 60,
+                                    provider: 'anthropic',
+                                    model: 'claude-sonnet-4-5-20250929',
+                                    model2: 'not-in-use',
+                                    model3: 'not-in-use',
+                                    fileNameTemplate: '{tag}-{item_name}-output',
+                                    wpCredentials: { url: '', user: '', password: '' },
+                                    wpContentType: 'pages',
+                                    wpTitleTemplate: '{item_name}',
+                                    tags: [],
+                                    placeholders: [],
+                                    taggedSnippets: [],
+                                    promptTemplates: [],
+                                    optionVariables: [],
+                                    projectNotes: '',
+                                    workflowNotes: '',
+                                    metaTitleCount: 3,
+                                    metaDescriptionCount: 3,
+                                    metaTitlePrompt: '',
+                                    metaDescriptionPrompt: '',
+                                    wpPublishMode: 'draft',
+                                    articlePublishMode: 'draft',
+                                    metaPublishMode: 'draft',
+                                })
+                            });
+                            setHasUnsavedChanges(false);
                             if (Object.keys(workflowState).length > 0) {
-                                // Load the saved state (with synced seoPlugin)
-                                setCurrentProjectState(() => workflowState);
-                                setHasUnsavedChanges(false);
                                 showNotification(`Loaded workflow: ${workflow.name}`, 'success');
                             } else {
-                                // No saved state, start fresh
                                 showNotification(`Loaded workflow: ${workflow.name} (new)`, 'info');
                             }
                         }
@@ -3424,24 +3491,24 @@ const App: React.FC = () => {
                             websiteId={currentProject?.website_id || undefined}
                             showNotification={showNotification}
                             onOpenArticles={() => setIsArticlesPageOpen(true)}
-                            imagePublishMode={currentProject?.state?.wpPublishMode || 'off'}
+                            imagePublishMode={currentProject?.state?.imagePublishMode || 'draft'}
                             articlePublishMode={currentProject?.state?.articlePublishMode || 'draft'}
                             metaPublishMode={currentProject?.state?.metaPublishMode || 'draft'}
-                            onImagePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, wpPublishMode: mode }))}
-                            onArticlePublishModeChange={(mode) => {
-                                // When Article goes to Draft, force Meta and Image to Draft too (same logic as Publishing to WP)
-                                if (mode === 'draft') {
-                                    setCurrentProjectState(prev => ({
-                                        ...prev,
-                                        articlePublishMode: 'draft',
-                                        metaPublishMode: 'draft',
-                                        wpPublishMode: prev.wpPublishMode === 'wordpress' ? 'draft' : prev.wpPublishMode
-                                    }));
-                                } else {
-                                    setCurrentProjectState(prev => ({ ...prev, articlePublishMode: mode }));
-                                }
-                            }}
+                            onImagePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, imagePublishMode: mode }))}
+                            onArticlePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, articlePublishMode: mode }))}
                             onMetaPublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, metaPublishMode: mode }))}
+                            onStartWorkflow={(sitePlanItems) => {
+                                // Convert site plan items to workflow items and start processing
+                                const workflowItems = sitePlanItems.map((item, index) => ({
+                                    id: index,
+                                    name: item.name,
+                                    tag: item.tag
+                                }));
+                                // Load items to display in UI
+                                loadItems(workflowItems);
+                                // Pass items directly to processWorkflow to bypass React state timing issues
+                                processWorkflow(workflowItems);
+                            }}
                         />
                     )}
 

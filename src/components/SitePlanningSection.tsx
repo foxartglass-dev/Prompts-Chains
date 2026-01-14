@@ -53,6 +53,8 @@ interface Props {
   onImagePublishModeChange?: (mode: 'off' | 'draft' | 'wordpress') => void;
   onArticlePublishModeChange?: (mode: 'draft' | 'wordpress') => void;
   onMetaPublishModeChange?: (mode: 'draft' | 'wordpress') => void;
+  // New: Connect to main workflow pipeline
+  onStartWorkflow?: (items: Array<{ name: string; tag: string | null }>) => void;
 }
 
 const PAGE_TYPES = [
@@ -82,7 +84,8 @@ const SitePlanningSection: React.FC<Props> = ({
   metaPublishMode = 'draft',
   onImagePublishModeChange,
   onArticlePublishModeChange,
-  onMetaPublishModeChange
+  onMetaPublishModeChange,
+  onStartWorkflow
 }) => {
   const [plan, setPlan] = useState<SitePlan | null>(null);
   const [nodes, setNodes] = useState<SitePlanNode[]>([]);
@@ -620,63 +623,45 @@ const SitePlanningSection: React.FC<Props> = ({
     setPushing(false);
   };
 
-  // Generate content for nodes (single, selected, or all)
-  const generateContent = async (nodesToGenerate: SitePlanNode[]) => {
-    if (!workflowId || nodesToGenerate.length === 0) {
-      showNotification('No nodes selected for generation', 'info');
+  // Unified Start button - sends items through the main workflow pipeline
+  const startProcessing = (nodesToProcess: SitePlanNode[]) => {
+    if (nodesToProcess.length === 0) {
+      showNotification('No nodes selected for processing', 'info');
       return;
     }
 
-    setGenerating(true);
-    setGenerationProgress({ current: 0, total: nodesToGenerate.length, currentTitle: '' });
-
-    try {
-      for (let i = 0; i < nodesToGenerate.length; i++) {
-        const node = nodesToGenerate[i];
-        setGenerationProgress({ current: i + 1, total: nodesToGenerate.length, currentTitle: node.title });
-
-        // Call the workflow generation endpoint for this node
-        // This uses the existing workflow/prompt chain system
-        const res = await fetch('/api/workflows/generate-for-node', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            workflowId,
-            nodeId: node.id,
-            nodeTitle: node.title,
-            targetKeyword: node.target_keyword || node.title,
-            pageType: node.page_type,
-          }),
-        });
-
-        const data = await res.json();
-
-        if (data.success && data.articleId) {
-          // Link the article to the node
-          await fetch(`/api/site-planning/link-article/${node.id}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ articleId: data.articleId }),
-          });
-
-          showNotification(`Generated: ${node.title}`, 'success');
-        } else if (data.error) {
-          console.error(`Failed to generate ${node.title}:`, data.error);
-          showNotification(`Failed: ${node.title} - ${data.error}`, 'error');
-        }
-      }
-
-      showNotification(`Generation complete! ${nodesToGenerate.length} pages processed.`, 'success');
-      loadPlan(); // Refresh to show updated status
-    } catch (error: any) {
-      console.error('Generation error:', error);
-      showNotification('Generation failed: ' + error.message, 'error');
+    if (!onStartWorkflow) {
+      showNotification('Workflow connection not available', 'error');
+      return;
     }
 
-    setGenerating(false);
-    setGenerationProgress(null);
+    // Convert site plan nodes to workflow items
+    // Each node title should already include the tag like "Deep Cleaning(H)"
+    // The main workflow will parse the tag from the name
+    const workflowItems = nodesToProcess.map(node => {
+      // Extract tag from title if present (e.g., "Deep Cleaning(H)" -> tag: "H")
+      const tagMatch = node.title.match(/\(([^)]+)\)$/);
+      const tag = tagMatch ? tagMatch[1] : null;
+
+      return {
+        name: node.title, // Keep full name including tag for proper display
+        tag
+      };
+    });
+
+    showNotification(`Adding ${workflowItems.length} items to workflow...`, 'info');
+
+    // Send to main workflow - this will load items and start processing
+    onStartWorkflow(workflowItems);
+
+    // Reset selection
     setSelectionMode(false);
     setSelectedNodes(new Set());
+  };
+
+  // Legacy function for single node generation (used by per-node button)
+  const generateContent = async (nodesToGenerate: SitePlanNode[]) => {
+    startProcessing(nodesToGenerate);
   };
 
   // Generate all pages
@@ -942,34 +927,7 @@ const SitePlanningSection: React.FC<Props> = ({
             </span>
           )}
 
-          {/* Start Workflow button - follows toggle settings */}
-          <button
-            onClick={() => pushToWordPress(articlePublishMode === 'wordpress' ? 'publish' : 'draft')}
-            disabled={pushing || flatNodes.filter(n => !n.wp_page_id).length === 0}
-            className={`px-3 py-1.5 rounded text-white text-sm transition disabled:opacity-50 flex items-center gap-1 ${
-              articlePublishMode === 'wordpress' ? 'bg-green-600 hover:bg-green-700' : 'bg-brand-cyan hover:bg-brand-cyan/80'
-            }`}
-          >
-            {pushing ? (
-              <>
-                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Working...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Start {articlePublishMode === 'wordpress' ? '(WP)' : '(Draft)'}
-              </>
-            )}
-          </button>
-
-          {/* Generation Mode Controls */}
+          {/* UNIFIED START BUTTON - Respects toggle settings */}
           <div className="flex items-center gap-2 border-r border-slate-600 pr-4 mr-2">
             {/* Toggle Selection Mode */}
             <button
@@ -997,99 +955,117 @@ const SitePlanningSection: React.FC<Props> = ({
               </button>
             )}
 
-            {/* Generate Selected (when in selection mode) */}
+            {/* Start Selected (when in selection mode with items selected) */}
             {selectionMode && selectedNodes.size > 0 && (
               <button
                 onClick={generateSelected}
-                disabled={generating}
-                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition flex items-center gap-1"
+                disabled={!onStartWorkflow}
+                className={`px-4 py-1.5 rounded text-white text-sm font-semibold transition flex items-center gap-2 ${
+                  articlePublishMode === 'wordpress'
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-purple-600 hover:bg-purple-700'
+                }`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Generate {selectedNodes.size} Selected
+                Start {selectedNodes.size}
               </button>
             )}
 
-            {/* Generate All (when not in selection mode) */}
+            {/* Main START Button (when not in selection mode) */}
             {!selectionMode && (
               <button
                 onClick={generateAll}
-                disabled={generating || flatNodes.length === 0}
-                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600 rounded text-white text-sm transition flex items-center gap-1"
+                disabled={flatNodes.length === 0 || !onStartWorkflow}
+                className={`px-5 py-2 rounded text-white font-bold transition flex items-center gap-2 shadow-lg ${
+                  articlePublishMode === 'wordpress'
+                    ? 'bg-green-600 hover:bg-green-700 disabled:bg-slate-600'
+                    : 'bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600'
+                }`}
+                title="Adds items to workflow and starts processing through the Processing Log"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Generate All ({flatNodes.length})
+                START ({flatNodes.length})
               </button>
             )}
           </div>
 
-          {/* Import/Export Group - Stacked compact */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowTabImportModal(true)}
-              className="px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded-l text-white text-xs transition"
-              title="Import tab-indented list"
-            >
-              Import
-            </button>
-            <div className="flex flex-col gap-0.5">
-              <button
-                onClick={() => setShowImportModal(true)}
-                className="px-1.5 py-0.5 bg-slate-600 hover:bg-slate-500 rounded-tr text-white text-[10px] transition"
-                title="Import CSV"
-              >
-                CSV
-              </button>
-              <button
-                onClick={exportSitePlan}
-                disabled={flatNodes.length === 0}
-                className="px-1.5 py-0.5 bg-teal-600 hover:bg-teal-500 disabled:bg-slate-700 disabled:opacity-50 rounded-br text-white text-[10px] transition"
-                title="Export JSON"
-              >
-                Export
-              </button>
-            </div>
-          </div>
+          {/* Check sync button */}
+          <button
+            onClick={checkSync}
+            disabled={syncing}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm transition disabled:opacity-50"
+          >
+            {syncing ? 'Checking...' : 'Check WP Sync'}
+          </button>
 
-          {/* Location & Analysis Group */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowLocationModal(true)}
-              className="px-2 py-1 bg-amber-600 hover:bg-amber-700 rounded text-white text-xs transition"
-              title="Add location"
-            >
-              +Loc
-            </button>
-            <button
-              onClick={() => { setShowGapModal(true); analyzeGaps(); }}
-              className="px-2 py-1 bg-pink-600 hover:bg-pink-700 rounded text-white text-xs transition"
-              title="Neighborhoods gap analysis"
-            >
-              Gaps
-            </button>
-          </div>
+          {/* Tab Import button */}
+          <button
+            onClick={() => setShowTabImportModal(true)}
+            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition flex items-center gap-1"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Import List
+          </button>
 
-          {/* Sync & Add Page */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={checkSync}
-              disabled={syncing}
-              className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs transition disabled:opacity-50"
-              title="Check WordPress sync"
-            >
-              {syncing ? '...' : 'Sync'}
-            </button>
-            <button
-              onClick={() => setAddingToParent(0)}
-              className="px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-white text-xs transition"
-              title="Add root page"
-            >
-              +Page
-            </button>
-          </div>
+          {/* Multi-location button */}
+          <button
+            onClick={() => setShowLocationModal(true)}
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 rounded text-white text-sm transition flex items-center gap-1"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            + Location
+          </button>
+
+          {/* Gap Analysis button */}
+          <button
+            onClick={() => { setShowGapModal(true); analyzeGaps(); }}
+            className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 rounded text-white text-sm transition flex items-center gap-1"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+            Neighborhoods
+          </button>
+
+          {/* Import CSV button */}
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 rounded text-white text-sm transition"
+          >
+            CSV
+          </button>
+
+          {/* Export Site Plan button */}
+          <button
+            onClick={exportSitePlan}
+            disabled={flatNodes.length === 0}
+            className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:bg-slate-600 disabled:opacity-50 rounded text-white text-sm transition flex items-center gap-1"
+            title="Export site plan as JSON"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export
+          </button>
+
+          {/* Add root page */}
+          <button
+            onClick={() => setAddingToParent(0)}
+            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white text-sm transition"
+          >
+            + Add Page
+          </button>
         </div>
       </div>
 
@@ -1108,7 +1084,44 @@ const SitePlanningSection: React.FC<Props> = ({
 
         {/* Right: Publish Mode Toggles */}
         <div className="flex items-center gap-4">
-          {/* Article Mode - Must be WP before Meta/Image can be WP */}
+          {/* Image Mode */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Image:</span>
+            <div className="flex rounded-lg overflow-hidden border border-slate-600">
+              <button
+                onClick={() => onImagePublishModeChange?.('off')}
+                className={`px-2.5 py-1 text-xs font-medium transition ${
+                  imagePublishMode === 'off'
+                    ? 'bg-slate-500 text-white'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                Off
+              </button>
+              <button
+                onClick={() => onImagePublishModeChange?.('draft')}
+                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
+                  imagePublishMode === 'draft'
+                    ? 'bg-brand-gold text-slate-900'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                Draft
+              </button>
+              <button
+                onClick={() => onImagePublishModeChange?.('wordpress')}
+                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
+                  imagePublishMode === 'wordpress'
+                    ? 'bg-brand-gold text-slate-900'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                WPress
+              </button>
+            </div>
+          </div>
+
+          {/* Article Mode */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">Article:</span>
             <div className="flex rounded-lg overflow-hidden border border-slate-600">
@@ -1126,7 +1139,7 @@ const SitePlanningSection: React.FC<Props> = ({
                 onClick={() => onArticlePublishModeChange?.('wordpress')}
                 className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
                   articlePublishMode === 'wordpress'
-                    ? 'bg-green-600 text-white'
+                    ? 'bg-brand-gold text-slate-900'
                     : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
                 }`}
               >
@@ -1135,7 +1148,7 @@ const SitePlanningSection: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Meta Mode - Disabled when Article is Draft */}
+          {/* Meta Mode */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">Meta:</span>
             <div className="flex rounded-lg overflow-hidden border border-slate-600">
@@ -1150,54 +1163,11 @@ const SitePlanningSection: React.FC<Props> = ({
                 Draft
               </button>
               <button
-                onClick={() => articlePublishMode === 'wordpress' && onMetaPublishModeChange?.('wordpress')}
-                disabled={articlePublishMode === 'draft'}
+                onClick={() => onMetaPublishModeChange?.('wordpress')}
                 className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
                   metaPublishMode === 'wordpress'
-                    ? 'bg-green-600 text-white'
-                    : articlePublishMode === 'draft'
-                      ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                      : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
-                }`}
-              >
-                WPress
-              </button>
-            </div>
-          </div>
-
-          {/* Image Mode - WP option disabled when Article is Draft */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Image:</span>
-            <div className="flex rounded-lg overflow-hidden border border-slate-600">
-              <button
-                onClick={() => onImagePublishModeChange?.('off')}
-                className={`px-2.5 py-1 text-xs font-medium transition ${
-                  imagePublishMode === 'off'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
-                }`}
-              >
-                Off
-              </button>
-              <button
-                onClick={() => onImagePublishModeChange?.('draft')}
-                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
-                  imagePublishMode === 'draft'
                     ? 'bg-brand-gold text-slate-900'
                     : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
-                }`}
-              >
-                Draft
-              </button>
-              <button
-                onClick={() => articlePublishMode === 'wordpress' && onImagePublishModeChange?.('wordpress')}
-                disabled={articlePublishMode === 'draft'}
-                className={`px-2.5 py-1 text-xs font-medium transition border-l border-slate-600 ${
-                  imagePublishMode === 'wordpress'
-                    ? 'bg-green-600 text-white'
-                    : articlePublishMode === 'draft'
-                      ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                      : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
                 }`}
               >
                 WPress
@@ -1831,24 +1801,26 @@ const SitePlanningSection: React.FC<Props> = ({
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9998]">
           <div className="bg-slate-900 rounded-xl border border-slate-700 p-8 max-w-md w-full mx-4">
             <div className="flex items-center justify-center mb-6">
-              <svg className="animate-spin h-12 w-12 text-purple-500" viewBox="0 0 24 24">
+              <svg className={`animate-spin h-12 w-12 ${articlePublishMode === 'wordpress' ? 'text-green-500' : 'text-purple-500'}`} viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
             </div>
-            <h3 className="text-xl font-semibold text-white text-center mb-2">Generating Content</h3>
+            <h3 className="text-xl font-semibold text-white text-center mb-2">
+              {articlePublishMode === 'wordpress' ? 'Processing → WordPress' : 'Processing → Draft'}
+            </h3>
             <p className="text-gray-400 text-center mb-4">
-              {generationProgress.current} of {generationProgress.total} pages
+              Step {generationProgress.current} of {generationProgress.total}
             </p>
             <div className="bg-slate-700 rounded-full h-3 mb-4 overflow-hidden">
               <div
-                className="bg-purple-500 h-full transition-all duration-300"
+                className={`h-full transition-all duration-300 ${articlePublishMode === 'wordpress' ? 'bg-green-500' : 'bg-purple-500'}`}
                 style={{ width: `${(generationProgress.current / generationProgress.total) * 100}%` }}
               />
             </div>
             {generationProgress.currentTitle && (
               <p className="text-sm text-gray-500 text-center truncate">
-                Current: {generationProgress.currentTitle}
+                {generationProgress.currentTitle}
               </p>
             )}
           </div>
