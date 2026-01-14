@@ -937,13 +937,29 @@ const DataSourcesDiagram: React.FC = () => (
             <code className="text-brand-gold">image_generation_model</code>
             <span className="text-gray-400">gpt-image-1.5/flux/etc</span>
           </div>
-          <div className="flex justify-between items-center py-1">
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
             <code className="text-brand-gold">audience_avatars</code>
             <span className="text-gray-400">JSONB personas</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
+            <code className="text-brand-gold">website_id</code>
+            <span className="text-gray-400">Links to website (preferred)</span>
+          </div>
+          <div className="flex justify-between items-center py-1">
+            <code className="text-brand-gold">workflow_id</code>
+            <span className="text-gray-400">Links to workflow (legacy)</span>
           </div>
         </div>
         <div className="mt-4 p-3 bg-red-900/30 rounded-lg text-xs text-red-300">
           <strong>NOTE:</strong> Derive fallback from smart_matching_mode, NOT from a separate fallback_to_live field!
+        </div>
+        <div className="mt-2 p-3 bg-yellow-900/30 rounded-lg text-xs text-yellow-300">
+          <strong>CRITICAL - Settings Storage:</strong> Settings can be stored at WEBSITE or WORKFLOW level:
+          <ul className="list-disc list-inside mt-1 space-y-1">
+            <li><strong>Save (PUT):</strong> Prefers website_id if workflow is linked to a website</li>
+            <li><strong>Read (elementor.js):</strong> MUST check website_id first, then fall back to workflow_id</li>
+            <li><strong>Bug Pattern:</strong> If UI edits don't reflect in generated content, check read/write mismatch!</li>
+          </ul>
         </div>
       </div>
 
@@ -1405,6 +1421,62 @@ const KnownIssuesDiagram: React.FC = () => (
             that runs on component mount. Stats now display correctly in collapsed header.
           </div>
         </div>
+
+        <div className="bg-slate-800 rounded-lg p-4 border border-brand-gold/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Main Prompt changes not reflected in generated images</span>
+            <span className="text-xs bg-brand-gold/20 text-brand-gold px-2 py-0.5 rounded">MAJOR FIX - Jan 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> When editing the Main Prompt in Image Creation settings, the new prompt was saved
+            but generated images still used the OLD prompt. This caused confusion where the UI showed one prompt
+            but images were generated with a different (hardcoded-looking) prompt.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root Cause:</strong> Settings were being saved to <code className="bg-slate-900 px-1 rounded">website_id</code> level
+            (image-creation.js PUT endpoint), but <code className="bg-slate-900 px-1 rounded">elementor.js</code> was only reading from
+            <code className="bg-slate-900 px-1 rounded">workflow_id</code> level - completely missing the website-level settings!
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Updated <code className="bg-slate-900 px-1 rounded">server/routes/elementor.js</code> in TWO places
+            (~line 460 and ~line 1210) to:
+            <ol className="list-decimal list-inside mt-1 space-y-1">
+              <li>First lookup the workflow's <code className="bg-slate-900 px-1 rounded">website_id</code></li>
+              <li>Try fetching settings from <code className="bg-slate-900 px-1 rounded">website_id</code> first</li>
+              <li>Only fall back to <code className="bg-slate-900 px-1 rounded">workflow_id</code> if no website settings exist</li>
+            </ol>
+          </div>
+          <div className="text-sm text-red-400 mt-2">
+            <strong>IMPORTANT:</strong> If this issue recurs, check that elementor.js checks website_id BEFORE workflow_id!
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4 border border-brand-gold/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Test Mode toggles not working (draft pushed to WP)</span>
+            <span className="text-xs bg-brand-gold/20 text-brand-gold px-2 py-0.5 rounded">Jan 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> When using Test Mode, setting Article/Meta/Image to "Draft" mode still
+            pushed content to WordPress. The toggles appeared to do nothing.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root Cause:</strong> Two issues:
+            <ol className="list-decimal list-inside mt-1 space-y-1">
+              <li><strong>React async state:</strong> <code className="bg-slate-900 px-1 rounded">setCurrentProjectState()</code> doesn't update immediately.
+                  When <code className="bg-slate-900 px-1 rounded">processWorkflow()</code> was called right after, it read STALE values from the closure.</li>
+              <li><strong>Wrong field name:</strong> Test runner was setting <code className="bg-slate-900 px-1 rounded">imagePublishMode</code>
+                  but processWorkflow reads <code className="bg-slate-900 px-1 rounded">wpPublishMode</code></li>
+            </ol>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Modified <code className="bg-slate-900 px-1 rounded">processWorkflow()</code> in <code className="bg-slate-900 px-1 rounded">App.tsx</code>
+            to accept optional <code className="bg-slate-900 px-1 rounded">publishModeOverrides</code> parameter. Test runner now passes modes directly,
+            bypassing React state entirely.
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1459,6 +1531,50 @@ const KnownIssuesDiagram: React.FC = () => (
             <strong>Location:</strong> Image Bank section → Draft Image Bank / Used Archive panels
           </div>
         </div>
+
+        <div className="bg-slate-800 rounded-lg p-4 border border-red-500/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-red-400">★</span>
+            <span className="font-semibold text-white">Test Mode - Image Pipeline Tester</span>
+            <span className="text-xs bg-red-600/20 text-red-400 px-2 py-0.5 rounded">Jan 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Purpose:</strong> Test all 4 image source configurations without manually changing settings.
+            Uses the REAL workflow paths to verify everything works end-to-end.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>4 Image Sources:</strong>
+            <ul className="list-disc list-inside mt-1 space-y-1">
+              <li><strong>Pull from Bank:</strong> Uses existing images from Image Bank</li>
+              <li><strong>Generate Live - Main Prompt:</strong> Uses avatar's mainPrompt template with smart matching</li>
+              <li><strong>Generate Live - Guided GPT:</strong> Uses GPT-4o with guardrails to create prompts</li>
+              <li><strong>Generate Live - Smart Prompt:</strong> Legacy mode, analyzes article content</li>
+            </ul>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Toggle Settings:</strong>
+            <ul className="list-disc list-inside mt-1 space-y-1">
+              <li><strong>Article:</strong> Draft (save to DB only) or WP (create WordPress page)</li>
+              <li><strong>Meta:</strong> Draft (save to DB only) or WP (push SEO meta to page)</li>
+              <li><strong>Image:</strong> Off, Draft (process but don't embed), or WP (full embed)</li>
+            </ul>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Files:</strong>
+            <ul className="list-disc list-inside mt-1 space-y-1">
+              <li><code className="bg-slate-900 px-1 rounded">src/components/TestRunnerPopup.tsx</code> - The popup UI</li>
+              <li><code className="bg-slate-900 px-1 rounded">App.tsx</code> - <code className="bg-slate-900 px-1 rounded">runTestSequence()</code> function, <code className="bg-slate-900 px-1 rounded">processWorkflow()</code> with overrides</li>
+            </ul>
+          </div>
+          <div className="text-sm text-yellow-400 mt-2">
+            <strong>IMPORTANT:</strong> Toggles bypass React state - values are passed directly to processWorkflow()
+            via <code className="bg-slate-900 px-1 rounded">publishModeOverrides</code> parameter. Do NOT rely on <code className="bg-slate-900 px-1 rounded">setCurrentProjectState()</code>
+            for immediate reads!
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Location:</strong> Small red "Test" button next to "Or, upload TXT file" in Site Planning section
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1486,6 +1602,22 @@ const KnownIssuesDiagram: React.FC = () => (
           <div className="text-gray-300">
             <strong>Image: Off status showing unexpectedly:</strong> If workflow image settings aren't loaded,
             the UI might show "Image: Off" even when images are enabled. Usually resolves on page refresh.
+          </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-yellow-400">⚠</span>
+          <div className="text-gray-300">
+            <strong>React state is async - don't read after set!</strong> If you call <code className="bg-slate-900 px-1 rounded">setCurrentProjectState()</code>
+            and immediately read from <code className="bg-slate-900 px-1 rounded">currentProject.state</code>, you get the OLD value.
+            Use callback parameters or pass values directly to functions instead.
+          </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <span className="text-yellow-400">⚠</span>
+          <div className="text-gray-300">
+            <strong>Website vs Workflow settings mismatch:</strong> Settings can be stored at website_id OR workflow_id level.
+            If UI edits don't reflect in backend behavior, check if the save is going to one table
+            but the read is coming from another!
           </div>
         </div>
       </div>
