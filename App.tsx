@@ -1601,8 +1601,11 @@ const App: React.FC = () => {
           const imageSettings: Record<string, string> = {};
 
           if (step.imageSource === 'bank') {
+            imageSettings.integration_mode = 'bank';
             imageSettings.smart_matching_mode = 'bank_only';
           } else {
+            // Generate Live modes (main-prompt, guided-gpt, smart-prompt)
+            imageSettings.integration_mode = 'live';
             imageSettings.smart_matching_mode = 'generate_only';
             // Set the live prompt mode
             if (step.imageSource === 'main-prompt') {
