@@ -1455,6 +1455,38 @@ const KnownIssuesDiagram: React.FC = () => (
         <div className="bg-slate-800 rounded-lg p-4 border border-brand-gold/50">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">fallback_prompt_mode not being saved to database</span>
+            <span className="text-xs bg-brand-gold/20 text-brand-gold px-2 py-0.5 rounded">MAJOR FIX - Jan 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> When selecting Main Prompt in "Generate Live" mode, images were generated using
+            Legacy/Smart Prompt instead. The UI showed Main Prompt was selected, but wrong images were produced.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root Cause:</strong> The <code className="bg-slate-900 px-1 rounded">fallback_prompt_mode</code> setting was completely missing from:
+            <ol className="list-decimal list-inside mt-1 space-y-1">
+              <li>Database schema (no column existed)</li>
+              <li>Server PUT handler (not extracting from request body)</li>
+              <li>Server INSERT/UPDATE queries (not saving to database)</li>
+              <li>Server GET response (not returning to frontend)</li>
+            </ol>
+            The UI let users select it, but it was never persisted - defaulted to 'smart_prompt' on publish.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added <code className="bg-slate-900 px-1 rounded">fallback_prompt_mode</code> column to:
+            <ul className="list-disc list-inside mt-1 space-y-1">
+              <li><code className="bg-slate-900 px-1 rounded">server/db/schema.sql</code> - CREATE TABLE and migration</li>
+              <li><code className="bg-slate-900 px-1 rounded">server/routes/image-creation.js</code> - GET, PUT, INSERT, UPDATE</li>
+            </ul>
+          </div>
+          <div className="text-sm text-red-400 mt-2">
+            <strong>IMPORTANT:</strong> When adding new settings, check: schema column, PUT extraction, INSERT/UPDATE queries, GET response!
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4 border border-brand-gold/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
             <span className="font-semibold text-white">Test Mode toggles not working (draft pushed to WP)</span>
             <span className="text-xs bg-brand-gold/20 text-brand-gold px-2 py-0.5 rounded">Jan 2026</span>
           </div>

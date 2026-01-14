@@ -282,7 +282,8 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   variation_order_mode VARCHAR(20) DEFAULT 'sequential', -- 'sequential', 'random', 'manual'
   manual_variation_order JSONB DEFAULT '[]', -- Array of variation IDs in manual order
   -- Generate Live prompt mode settings
-  live_prompt_mode VARCHAR(20) DEFAULT 'smart_prompt', -- 'main_prompt' or 'smart_prompt'
+  live_prompt_mode VARCHAR(20) DEFAULT 'smart_prompt', -- 'main_prompt', 'guided_gpt', or 'smart_prompt'
+  fallback_prompt_mode VARCHAR(20) DEFAULT 'main_prompt', -- Prompt mode when bank fallback to live generation
   smart_prompt_guidance TEXT DEFAULT '', -- Guidance/guardrails for GPT-4o when using smart_prompt mode
   -- Guided GPT guardrails (instructions, uniformDescription, defaultSubject, avoidList)
   guided_guardrails JSONB DEFAULT '{}',
@@ -303,6 +304,9 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'live_prompt_mode') THEN
     ALTER TABLE image_creation_settings ADD COLUMN live_prompt_mode VARCHAR(20) DEFAULT 'smart_prompt';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'fallback_prompt_mode') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN fallback_prompt_mode VARCHAR(20) DEFAULT 'main_prompt';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'smart_prompt_guidance') THEN
     ALTER TABLE image_creation_settings ADD COLUMN smart_prompt_guidance TEXT DEFAULT '';

@@ -1113,7 +1113,7 @@ router.post('/settings/migrate-to-website/:workflowId', requireDb, async (req, r
         auto_tag_enabled, chat_history, consultant_chat_history, consultant_model,
         worker_chat_history, worker_model, integration_mode, fallback_to_live,
         image_order, variation_order_mode, manual_variation_order, live_prompt_mode,
-        smart_prompt_guidance, guided_guardrails, prompt_problem_areas
+        fallback_prompt_mode, smart_prompt_guidance, guided_guardrails, prompt_problem_areas
       )
       SELECT
         ${websiteId}, enabled, prompt_assistant_model, image_generation_model, image_quality,
@@ -1121,7 +1121,7 @@ router.post('/settings/migrate-to-website/:workflowId', requireDb, async (req, r
         auto_tag_enabled, chat_history, consultant_chat_history, consultant_model,
         worker_chat_history, worker_model, integration_mode, fallback_to_live,
         image_order, variation_order_mode, manual_variation_order, live_prompt_mode,
-        smart_prompt_guidance, guided_guardrails, prompt_problem_areas
+        fallback_prompt_mode, smart_prompt_guidance, guided_guardrails, prompt_problem_areas
       FROM image_creation_settings WHERE workflow_id = ${workflowId}
     `;
 
@@ -1238,6 +1238,7 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           image_quality: 'low',
           // Generate Live prompt mode
           live_prompt_mode: 'smart_prompt',
+          fallback_prompt_mode: 'main_prompt',
           smart_prompt_guidance: '',
           // Prompt Problem Areas
           prompt_problem_areas: []
@@ -1315,6 +1316,7 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         image_quality: results[0].image_quality || 'low',
         // Generate Live prompt mode
         live_prompt_mode: results[0].live_prompt_mode || 'smart_prompt',
+        fallback_prompt_mode: results[0].fallback_prompt_mode || 'main_prompt',
         smart_prompt_guidance: results[0].smart_prompt_guidance || '',
         // Prompt Problem Areas
         prompt_problem_areas: results[0].prompt_problem_areas || []
@@ -1394,6 +1396,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       smart_matching_config,
       // Generate Live prompt mode
       live_prompt_mode,
+      fallback_prompt_mode,
       smart_prompt_guidance,
       // Guided GPT guardrails (instructions, uniformDescription, defaultSubject, avoidList)
       guided_guardrails,
@@ -1486,6 +1489,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 variation_order_mode,
                 manual_variation_order,
                 live_prompt_mode,
+                fallback_prompt_mode,
                 smart_prompt_guidance,
                 guided_guardrails,
                 prompt_problem_areas
@@ -1512,6 +1516,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${variation_order_mode ?? 'sequential'},
                 ${JSON.stringify(manual_variation_order ?? [])},
                 ${live_prompt_mode ?? 'smart_prompt'},
+                ${fallback_prompt_mode ?? 'main_prompt'},
                 ${smart_prompt_guidance ?? ''},
                 ${JSON.stringify(guided_guardrails ?? {})},
                 ${JSON.stringify(prompt_problem_areas ?? [])}
@@ -1542,6 +1547,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 variation_order_mode,
                 manual_variation_order,
                 live_prompt_mode,
+                fallback_prompt_mode,
                 smart_prompt_guidance,
                 guided_guardrails,
                 prompt_problem_areas
@@ -1568,6 +1574,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               ${variation_order_mode ?? 'sequential'},
               ${JSON.stringify(manual_variation_order ?? [])},
               ${live_prompt_mode ?? 'smart_prompt'},
+              ${fallback_prompt_mode ?? 'main_prompt'},
               ${smart_prompt_guidance ?? ''},
               ${JSON.stringify(guided_guardrails ?? {})},
               ${JSON.stringify(prompt_problem_areas ?? [])}
@@ -1577,7 +1584,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           return result[0].id;
         } catch (insertErr) {
           // If it failed due to missing column, try without live_prompt_mode columns
-          if (insertErr.message?.includes('live_prompt_mode') || insertErr.message?.includes('smart_prompt_guidance') || insertErr.message?.includes('guided_guardrails') || insertErr.message?.includes('prompt_problem_areas')) {
+          if (insertErr.message?.includes('live_prompt_mode') || insertErr.message?.includes('smart_prompt_guidance') || insertErr.message?.includes('guided_guardrails') || insertErr.message?.includes('prompt_problem_areas') || insertErr.message?.includes('fallback_prompt_mode')) {
             console.log('[Image Creation API] Falling back to INSERT without live_prompt columns');
             // Use website_id or workflow_id based on saveToWebsite flag
             const result = saveToWebsite
@@ -1711,6 +1718,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
                 manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
                 live_prompt_mode = COALESCE(${live_prompt_mode}, live_prompt_mode),
+                fallback_prompt_mode = COALESCE(${fallback_prompt_mode}, fallback_prompt_mode),
                 smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
                 guided_guardrails = COALESCE(${guided_guardrails ? JSON.stringify(guided_guardrails) : null}::jsonb, guided_guardrails),
                 prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
@@ -1742,6 +1750,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
                 manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
                 live_prompt_mode = COALESCE(${live_prompt_mode}, live_prompt_mode),
+                fallback_prompt_mode = COALESCE(${fallback_prompt_mode}, fallback_prompt_mode),
                 smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
                 guided_guardrails = COALESCE(${guided_guardrails ? JSON.stringify(guided_guardrails) : null}::jsonb, guided_guardrails),
                 prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
@@ -1751,7 +1760,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           }
         } catch (updateErr) {
           // If it failed due to missing column, try without live_prompt_mode columns
-          if (updateErr.message?.includes('live_prompt_mode') || updateErr.message?.includes('smart_prompt_guidance') || updateErr.message?.includes('guided_guardrails')) {
+          if (updateErr.message?.includes('live_prompt_mode') || updateErr.message?.includes('fallback_prompt_mode') || updateErr.message?.includes('smart_prompt_guidance') || updateErr.message?.includes('guided_guardrails')) {
             console.log('[Image Creation API] Falling back to UPDATE without live_prompt columns');
             // Use separate UPDATE statements based on saveToWebsite flag
             if (saveToWebsite) {
