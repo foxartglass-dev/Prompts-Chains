@@ -506,6 +506,13 @@ router.post('/publish', async (req, res) => {
         if (settingsResult.length > 0) {
           const config = settingsResult[0];
 
+          // DEBUG: Log FIRST read from database
+          console.log('[Elementor Publish] FIRST READ - DB config:', {
+            integration_mode: config.integration_mode,
+            live_prompt_mode: config.live_prompt_mode,
+            smart_matching_mode: config.smart_matching_mode
+          });
+
           // Check integration_mode to determine behavior
           const integrationMode = config.integration_mode || 'bank';
           const smartMatchingMode = config.smart_matching_mode || 'bank_first';
@@ -1243,6 +1250,15 @@ router.post('/publish', async (req, res) => {
 
         if (settingsResult.length > 0) {
           const config = settingsResult[0];
+
+          // DEBUG: Log what we read from database
+          console.log('[Elementor Publish] DEBUG - DB config read:', {
+            integration_mode: config.integration_mode,
+            live_prompt_mode: config.live_prompt_mode,
+            fallback_prompt_mode: config.fallback_prompt_mode,
+            smart_matching_mode: config.smart_matching_mode
+          });
+          console.log('[Elementor Publish] DEBUG - effectiveUseBank:', effectiveUseBank, 'imagesFromBank:', imagesFromBank, 'isFallbackFromBank:', isFallbackFromBank);
 
           // Use fallback_prompt_mode when falling back from bank, otherwise use live_prompt_mode
           if (isFallbackFromBank || (effectiveUseBank && imagesFromBank === 0)) {

@@ -1404,6 +1404,14 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       prompt_problem_areas
     } = req.body;
 
+    // DEBUG: Log what Test Mode is sending
+    console.log('[Image Creation API] PUT received:', {
+      integration_mode,
+      live_prompt_mode,
+      smart_matching_mode,
+      fallback_prompt_mode
+    });
+
     // Check if settings exist - prefer website-level, fall back to workflow-level
     let existing = [];
     let saveToWebsite = false;
