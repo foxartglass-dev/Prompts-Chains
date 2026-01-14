@@ -458,9 +458,44 @@ router.post('/publish', async (req, res) => {
     // Skip ALL image-related steps if articleOnly mode
     if (!articleOnly && workflowId && isDatabaseEnabled()) {
       try {
-        const settingsResult = await sql`
-          SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
-        `;
+        // First, lookup the workflow's associated website_id
+        let websiteId = null;
+        try {
+          const workflowResult = await sql`
+            SELECT website_id FROM workflows WHERE id = ${workflowId}
+          `;
+          if (workflowResult.length > 0 && workflowResult[0].website_id) {
+            websiteId = workflowResult[0].website_id;
+            console.log('[Elementor Publish] Workflow linked to website:', websiteId);
+          }
+        } catch (err) {
+          console.log('[Elementor Publish] Could not lookup website:', err.message);
+        }
+
+        // Try website-level settings first (preferred), then fall back to workflow-level
+        let settingsResult = [];
+        if (websiteId) {
+          try {
+            settingsResult = await sql`
+              SELECT * FROM image_creation_settings WHERE website_id = ${websiteId}
+            `;
+            if (settingsResult.length > 0) {
+              console.log('[Elementor Publish] Using WEBSITE-level settings for website:', websiteId);
+            }
+          } catch (websiteErr) {
+            console.log('[Elementor Publish] website_id column not available, using workflow-level');
+          }
+        }
+
+        // Fall back to workflow-level settings if no website settings found
+        if (settingsResult.length === 0) {
+          settingsResult = await sql`
+            SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+          `;
+          if (settingsResult.length > 0) {
+            console.log('[Elementor Publish] Using WORKFLOW-level settings');
+          }
+        }
 
         console.log('[Elementor Publish] Settings found:', settingsResult.length > 0);
         if (settingsResult.length > 0) {
@@ -1173,9 +1208,39 @@ router.post('/publish', async (req, res) => {
 
     if (workflowId && isDatabaseEnabled()) {
       try {
-        const settingsResult = await sql`
-          SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
-        `;
+        // First, lookup the workflow's associated website_id (same pattern as earlier in code)
+        let liveGenWebsiteId = null;
+        try {
+          const workflowResult = await sql`
+            SELECT website_id FROM workflows WHERE id = ${workflowId}
+          `;
+          if (workflowResult.length > 0 && workflowResult[0].website_id) {
+            liveGenWebsiteId = workflowResult[0].website_id;
+          }
+        } catch (err) {
+          // Ignore - will use workflow-level settings
+        }
+
+        // Try website-level settings first, then workflow-level
+        let settingsResult = [];
+        if (liveGenWebsiteId) {
+          try {
+            settingsResult = await sql`
+              SELECT * FROM image_creation_settings WHERE website_id = ${liveGenWebsiteId}
+            `;
+            if (settingsResult.length > 0) {
+              console.log('[Elementor Publish] Live gen using WEBSITE-level settings');
+            }
+          } catch (websiteErr) {
+            // Fall back to workflow-level
+          }
+        }
+        if (settingsResult.length === 0) {
+          settingsResult = await sql`
+            SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+          `;
+        }
+
         if (settingsResult.length > 0) {
           const config = settingsResult[0];
 
