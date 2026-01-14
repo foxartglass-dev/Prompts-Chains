@@ -1563,14 +1563,14 @@ const App: React.FC = () => {
       metaMode: 'draft' | 'wordpress';
       imageMode: 'off' | 'draft' | 'wordpress';
       imageSource: 'bank' | 'main-prompt' | 'guided-gpt' | 'smart-prompt';
-    }>) => {
+    }>, keyword: string, tag: string) => {
       if (!currentWorkflowId) {
         showNotification('No workflow selected', 'error');
         return;
       }
 
       setIsRunningTestSequence(true);
-      addLog(`🧪 Starting Test Sequence with ${steps.length} steps...`, LogStatus.INFO);
+      addLog(`🧪 Starting Test Sequence with ${steps.length} steps for "${keyword}" (${tag})...`, LogStatus.INFO);
 
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
@@ -1615,8 +1615,8 @@ const App: React.FC = () => {
           // 3. Create a test item and run the workflow
           const testItem: WorkflowItem = {
             id: Date.now(),
-            name: `Test-${i + 1}-${step.articleMode}-${step.imageSource}(H)`,
-            tag: 'H' // Use default H tag
+            name: `${keyword}(${tag})`,
+            tag: tag
           };
 
           // Add item to items list
@@ -2066,7 +2066,7 @@ const App: React.FC = () => {
             <TestRunnerPopup
               isOpen={isTestRunnerOpen}
               onClose={() => setIsTestRunnerOpen(false)}
-              onRunTest={(steps) => {
+              onRunTest={(steps, keyword, tag) => {
                 // Convert steps to the format expected by runTestSequence
                 const formattedSteps = steps.map(s => ({
                   articleMode: s.articleMode,
@@ -2074,11 +2074,12 @@ const App: React.FC = () => {
                   imageMode: s.imageMode,
                   imageSource: s.imageSource
                 }));
-                runTestSequence(formattedSteps);
+                runTestSequence(formattedSteps, keyword, tag);
               }}
               currentArticleMode={currentProject?.state?.articlePublishMode || 'draft'}
               currentMetaMode={currentProject?.state?.metaPublishMode || 'draft'}
               currentImageMode={currentProject?.state?.imagePublishMode || 'off'}
+              availableTags={currentProject?.state?.tags || []}
             />
 
             {/* Settings Modal */}

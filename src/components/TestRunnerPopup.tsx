@@ -8,6 +8,8 @@ interface TestStep {
   imageMode: 'off' | 'draft' | 'wordpress';
   imageSource: 'bank' | 'main-prompt' | 'guided-gpt' | 'smart-prompt';
   status: 'pending' | 'running' | 'completed' | 'failed';
+  keyword: string;
+  tag: string;
 }
 
 interface TestPreset {
@@ -19,10 +21,11 @@ interface TestPreset {
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onRunTest: (steps: TestStep[]) => void;
+  onRunTest: (steps: TestStep[], keyword: string, tag: string) => void;
   currentArticleMode: 'draft' | 'wordpress';
   currentMetaMode: 'draft' | 'wordpress';
   currentImageMode: 'off' | 'draft' | 'wordpress';
+  availableTags: Array<{ name: string }>;
 }
 
 const STORAGE_KEY = 'test-runner-presets';
@@ -33,12 +36,17 @@ const TestRunnerPopup: React.FC<Props> = ({
   onRunTest,
   currentArticleMode,
   currentMetaMode,
-  currentImageMode
+  currentImageMode,
+  availableTags
 }) => {
   // Toggle states for building test steps
   const [articleMode, setArticleMode] = useState<'draft' | 'wordpress'>(currentArticleMode);
   const [metaMode, setMetaMode] = useState<'draft' | 'wordpress'>(currentMetaMode);
   const [imageMode, setImageMode] = useState<'off' | 'draft' | 'wordpress'>(currentImageMode);
+
+  // Test item settings
+  const [testKeyword, setTestKeyword] = useState('Test Cleaning Service');
+  const [selectedTag, setSelectedTag] = useState(availableTags[0]?.name || 'H');
 
   // Current test queue
   const [testQueue, setTestQueue] = useState<TestStep[]>([]);
@@ -47,6 +55,13 @@ const TestRunnerPopup: React.FC<Props> = ({
   const [presets, setPresets] = useState<TestPreset[]>([]);
   const [presetName, setPresetName] = useState('');
   const [showSavePreset, setShowSavePreset] = useState(false);
+
+  // Update selected tag when availableTags changes
+  useEffect(() => {
+    if (availableTags.length > 0 && !availableTags.find(t => t.name === selectedTag)) {
+      setSelectedTag(availableTags[0].name);
+    }
+  }, [availableTags, selectedTag]);
 
   // Load presets from localStorage
   useEffect(() => {
@@ -74,7 +89,9 @@ const TestRunnerPopup: React.FC<Props> = ({
       metaMode,
       imageMode,
       imageSource,
-      status: 'pending'
+      status: 'pending',
+      keyword: testKeyword,
+      tag: selectedTag
     };
     setTestQueue([...testQueue, newStep]);
   };
@@ -124,7 +141,11 @@ const TestRunnerPopup: React.FC<Props> = ({
   // Run the test
   const runTest = () => {
     if (testQueue.length === 0) return;
-    onRunTest(testQueue);
+    if (!testKeyword.trim()) {
+      alert('Please enter a test keyword');
+      return;
+    }
+    onRunTest(testQueue, testKeyword.trim(), selectedTag);
     onClose();
   };
 
@@ -170,6 +191,45 @@ const TestRunnerPopup: React.FC<Props> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Test Item - Keyword and Tag */}
+          <div className="bg-slate-800 rounded-lg p-4 border-2 border-brand-gold/50">
+            <h3 className="text-sm font-semibold text-brand-gold mb-3">Test Item (What to Generate)</h3>
+            <div className="flex flex-wrap gap-4">
+              {/* Keyword Input */}
+              <div className="flex-1 min-w-[200px]">
+                <label className="text-xs text-gray-400 block mb-1">Keyword / Page Topic</label>
+                <input
+                  type="text"
+                  value={testKeyword}
+                  onChange={(e) => setTestKeyword(e.target.value)}
+                  placeholder="e.g., Deep Cleaning Service"
+                  className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-gold"
+                />
+              </div>
+
+              {/* Tag Selector */}
+              <div className="w-32">
+                <label className="text-xs text-gray-400 block mb-1">Tag</label>
+                <select
+                  value={selectedTag}
+                  onChange={(e) => setSelectedTag(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-gold"
+                >
+                  {availableTags.length > 0 ? (
+                    availableTags.map(tag => (
+                      <option key={tag.name} value={tag.name}>{tag.name}</option>
+                    ))
+                  ) : (
+                    <option value="H">H</option>
+                  )}
+                </select>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              This will create articles like "{testKeyword}({selectedTag})" for each test step
+            </p>
+          </div>
+
           {/* Toggle Settings */}
           <div className="bg-slate-800 rounded-lg p-4">
             <h3 className="text-sm font-semibold text-gray-400 mb-3">Step Settings</h3>
