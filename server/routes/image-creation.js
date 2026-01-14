@@ -1702,7 +1702,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           // Use separate UPDATE statements based on saveToWebsite flag
           // (Cannot use ternary with sql tagged template literals)
           if (saveToWebsite) {
-            await sql`
+            const updateResult = await sql`
               UPDATE image_creation_settings
               SET
                 enabled = COALESCE(${enabled}, enabled),
@@ -1732,9 +1732,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
                 updated_at = CURRENT_TIMESTAMP
               WHERE website_id = ${websiteId}
+              RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
             `;
+            console.log('[Image Creation API] UPDATE WEBSITE result:', updateResult[0]);
           } else {
-            await sql`
+            const updateResult = await sql`
               UPDATE image_creation_settings
               SET
                 enabled = COALESCE(${enabled}, enabled),
@@ -1764,7 +1766,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
                 updated_at = CURRENT_TIMESTAMP
               WHERE workflow_id = ${workflowId}
+              RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
             `;
+            console.log('[Image Creation API] UPDATE WORKFLOW result:', updateResult[0]);
           }
         } catch (updateErr) {
           // If it failed due to missing column, try without live_prompt_mode columns

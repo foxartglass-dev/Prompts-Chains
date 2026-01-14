@@ -506,8 +506,11 @@ router.post('/publish', async (req, res) => {
         if (settingsResult.length > 0) {
           const config = settingsResult[0];
 
-          // DEBUG: Log FIRST read from database
+          // DEBUG: Log FIRST read from database (include row ID for verification)
           console.log('[Elementor Publish] FIRST READ - DB config:', {
+            row_id: config.id,
+            website_id: config.website_id,
+            workflow_id: config.workflow_id,
             integration_mode: config.integration_mode,
             live_prompt_mode: config.live_prompt_mode,
             smart_matching_mode: config.smart_matching_mode
@@ -1251,8 +1254,11 @@ router.post('/publish', async (req, res) => {
         if (settingsResult.length > 0) {
           const config = settingsResult[0];
 
-          // DEBUG: Log what we read from database
-          console.log('[Elementor Publish] DEBUG - DB config read:', {
+          // DEBUG: Log what we read from database (SECOND READ - include row ID for verification)
+          console.log('[Elementor Publish] SECOND READ - DB config:', {
+            row_id: config.id,
+            website_id: config.website_id,
+            workflow_id: config.workflow_id,
             integration_mode: config.integration_mode,
             live_prompt_mode: config.live_prompt_mode,
             fallback_prompt_mode: config.fallback_prompt_mode,
