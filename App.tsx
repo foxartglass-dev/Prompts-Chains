@@ -1144,9 +1144,21 @@ const App: React.FC = () => {
         return { finalOutput: text.trim(), metaTitles: [] as string[], metaDescriptions: [] as string[] };
     };
 
-    const processWorkflow = async (immediateItems?: WorkflowItem[]) => {
+    const processWorkflow = async (
+        immediateItems?: WorkflowItem[],
+        publishModeOverrides?: {
+            articlePublishMode?: 'draft' | 'wordpress';
+            metaPublishMode?: 'draft' | 'wordpress';
+            wpPublishMode?: 'off' | 'draft' | 'wordpress';
+        }
+    ) => {
         // Use immediateItems if provided (bypasses React state timing issues), otherwise use state
         const itemsToProcess = immediateItems || items;
+
+        // Use overrides if provided (bypasses React state timing issues for test runner)
+        const effectiveArticlePublishMode = publishModeOverrides?.articlePublishMode ?? currentProject?.state.articlePublishMode ?? 'draft';
+        const effectiveMetaPublishMode = publishModeOverrides?.metaPublishMode ?? currentProject?.state.metaPublishMode ?? 'draft';
+        const effectiveWpPublishMode = publishModeOverrides?.wpPublishMode ?? currentProject?.state.wpPublishMode ?? 'draft';
 
         if (!currentProject || !itemsToProcess.length || !currentProject.state.promptTemplates.length) {
             addLog('Prerequisites not met: Add items and define at least one prompt.', LogStatus.ERROR);
@@ -1354,8 +1366,8 @@ const App: React.FC = () => {
                         // - Article: wordpress → Create WP page
                         // - Article: draft + Image: draft/wordpress → Process images, save to article, don't create WP page
                         // - Article: draft + Image: off → Skip entirely
-                        const shouldProcessImages = currentProject.state.wpPublishMode !== 'off';
-                        const shouldPublishToWP = currentProject.state.articlePublishMode === 'wordpress';
+                        const shouldProcessImages = effectiveWpPublishMode !== 'off';
+                        const shouldPublishToWP = effectiveArticlePublishMode === 'wordpress';
 
                         if (shouldPublishToWP || shouldProcessImages) {
                             const { url, user, password } = currentProject.state.wpCredentials;
@@ -1387,7 +1399,7 @@ const App: React.FC = () => {
 
                                     // Publish via Elementor (with Image Bank integration if enabled)
                                     // Image toggle (wpPublishMode): 'off' = no images, 'draft'/'wordpress' = include images
-                                    const includeImages = currentProject.state.wpPublishMode !== 'off';
+                                    const includeImages = effectiveWpPublishMode !== 'off';
 
                                     // Validate workflowId exists when images are enabled
                                     if (includeImages && !currentWorkflowId) {
@@ -1422,7 +1434,7 @@ const App: React.FC = () => {
                                             // Pass article ID so generated images are saved to the article record
                                             articleId: savedArticleId,
                                             // Image Draft Mode: match images and save to article, but DON'T embed in WP page
-                                            imageDraftMode: currentProject.state.wpPublishMode === 'draft',
+                                            imageDraftMode: effectiveWpPublishMode === 'draft',
                                             // Skip WP page creation when Article is on draft (just process images)
                                             skipWpPageCreation: !shouldPublishToWP,
                                         }),
@@ -1507,7 +1519,7 @@ const App: React.FC = () => {
 
                                         // Auto-push SEO meta if metaPublishMode is 'wordpress' and we have meta data
                                         // (Image toggle is independent - only controls images, not meta publishing)
-                                        if (currentProject.state.metaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
+                                        if (effectiveMetaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
                                             addLog(`[${itemLabel}] Auto-pushing SEO meta...`, LogStatus.WORKING, item.id);
                                             try {
                                                 const seoResponse = await fetch('/api/seo/push-direct', {
@@ -1577,12 +1589,12 @@ const App: React.FC = () => {
         addLog(`🧪 Test Step ${i + 1}/${steps.length}: Article=${step.articleMode}, Meta=${step.metaMode}, Image=${step.imageMode}, Source=${step.imageSource}`, LogStatus.INFO);
 
         try {
-          // 1. Set the publish modes (same as clicking the toggles)
+          // 1. Update UI to show current publish modes (for user visibility)
           setCurrentProjectState(prev => ({
             ...prev,
             articlePublishMode: step.articleMode,
             metaPublishMode: step.metaMode,
-            imagePublishMode: step.imageMode
+            wpPublishMode: step.imageMode  // Note: state uses wpPublishMode not imagePublishMode
           }));
 
           // 2. Update image creation settings via API (same as clicking Bank/Live buttons)
@@ -1622,11 +1634,13 @@ const App: React.FC = () => {
           // Add item to items list
           setItems([testItem]);
 
-          // Wait for state to update
-          await new Promise(resolve => setTimeout(resolve, 200));
-
-          // 4. Run the workflow (same as clicking the Start button)
-          await processWorkflow([testItem]);
+          // 4. Run the workflow with explicit overrides (bypasses React state timing issues)
+          // These overrides are passed directly to processWorkflow, not through React state
+          await processWorkflow([testItem], {
+            articlePublishMode: step.articleMode,
+            metaPublishMode: step.metaMode,
+            wpPublishMode: step.imageMode
+          });
 
           addLog(`✅ Test Step ${i + 1} completed`, LogStatus.SUCCESS);
 
