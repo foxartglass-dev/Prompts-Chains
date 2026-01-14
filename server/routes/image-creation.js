@@ -2118,6 +2118,85 @@ router.post('/verify-replicate', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/image-creation/debug-levels/:workflowId
+ * DEBUG: Compare settings stored at website-level vs workflow-level
+ * Helps diagnose issues where old prompts are cached at the wrong level
+ */
+router.get('/debug-levels/:workflowId', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+
+    // Get website_id from workflow
+    let websiteId = null;
+    const workflowResult = await sql`
+      SELECT website_id, name FROM workflows WHERE id = ${workflowId}
+    `;
+    if (workflowResult.length > 0) {
+      websiteId = workflowResult[0].website_id;
+    }
+
+    // Get workflow-level settings
+    const workflowSettings = await sql`
+      SELECT id, workflow_id, website_id, integration_mode, live_prompt_mode,
+             audience_avatars, updated_at
+      FROM image_creation_settings WHERE workflow_id = ${workflowId}
+    `;
+
+    // Get website-level settings (if websiteId exists)
+    let websiteSettings = [];
+    if (websiteId) {
+      websiteSettings = await sql`
+        SELECT id, workflow_id, website_id, integration_mode, live_prompt_mode,
+               audience_avatars, updated_at
+        FROM image_creation_settings WHERE website_id = ${websiteId}
+      `;
+    }
+
+    // Extract mainPrompt from avatars for easy comparison
+    const extractMainPrompt = (avatars) => {
+      if (!avatars || !avatars.length) return '(no avatars)';
+      const first = avatars[0];
+      if (!first.mainPrompt) return '(empty mainPrompt)';
+      return first.mainPrompt.substring(0, 100) + '...';
+    };
+
+    res.json({
+      success: true,
+      workflowId,
+      websiteId,
+      workflowName: workflowResult[0]?.name || 'Unknown',
+      comparison: {
+        workflowLevel: workflowSettings.length > 0 ? {
+          id: workflowSettings[0].id,
+          live_prompt_mode: workflowSettings[0].live_prompt_mode,
+          mainPrompt_preview: extractMainPrompt(workflowSettings[0].audience_avatars),
+          updated_at: workflowSettings[0].updated_at,
+          hasAvatars: (workflowSettings[0].audience_avatars || []).length
+        } : null,
+        websiteLevel: websiteSettings.length > 0 ? {
+          id: websiteSettings[0].id,
+          live_prompt_mode: websiteSettings[0].live_prompt_mode,
+          mainPrompt_preview: extractMainPrompt(websiteSettings[0].audience_avatars),
+          updated_at: websiteSettings[0].updated_at,
+          hasAvatars: (websiteSettings[0].audience_avatars || []).length
+        } : null,
+      },
+      recommendation: websiteSettings.length > 0 && workflowSettings.length > 0
+        ? 'DUPLICATE DATA - Settings exist at BOTH levels! Delete one to fix caching issues.'
+        : websiteSettings.length > 0
+        ? 'Using WEBSITE-level settings (correct)'
+        : workflowSettings.length > 0
+        ? 'Using WORKFLOW-level settings only'
+        : 'NO SETTINGS FOUND at either level'
+    });
+
+  } catch (error) {
+    console.error('[Image Creation API] Debug levels error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ========================================
 // IMAGE BANK INTEGRATION FOR ARTICLES
 // ========================================
