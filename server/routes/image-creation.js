@@ -1413,6 +1413,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       smart_matching_mode,
       fallback_prompt_mode
     });
+    console.log('[Image Creation API] TYPE CHECK:', {
+      live_prompt_mode_type: typeof live_prompt_mode,
+      live_prompt_mode_value: JSON.stringify(live_prompt_mode),
+      is_undefined: live_prompt_mode === undefined,
+      is_null: live_prompt_mode === null
+    });
 
     // Check if settings exist - prefer website-level, fall back to workflow-level
     let existing = [];
@@ -1905,6 +1911,13 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
     // Try to update smart_matching fields separately
     await tryUpdateSmartMatching();
+
+    // VERIFICATION: Read back what was saved to confirm
+    const verifyQuery = saveToWebsite
+      ? sql`SELECT id, integration_mode, live_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE website_id = ${websiteId}`
+      : sql`SELECT id, integration_mode, live_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
+    const verifyResult = await verifyQuery;
+    console.log('[Image Creation API] VERIFICATION READ after save:', verifyResult[0]);
 
     console.log('[Image Creation API] Update complete for workflow:', workflowId);
     res.json({ success: true, updated: true });
