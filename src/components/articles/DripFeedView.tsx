@@ -133,7 +133,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
 
   // UI state
   const [showSettings, setShowSettings] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(true);  // Show by default in 3-column layout
   const [showNotifications, setShowNotifications] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -162,7 +162,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
   const [testingSms, setTestingSms] = useState(false);
 
   // Processing Log state
-  const [showProcessingLog, setShowProcessingLog] = useState(false);
+  const [showProcessingLog, setShowProcessingLog] = useState(true);  // Show by default in 3-column layout
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
@@ -186,6 +186,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [nextQueueSlot, setNextQueueSlot] = useState<{ date: string; time: string; windowStart: string; windowEnd: string } | null>(null);
 
   // Toast message state (auto-dismissing)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -252,7 +253,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         }
       }
     } catch (err) {
-      console.error('Error fetching drip feed data:', err instanceof Error ? err.message : err);
+      console.error('Error fetching drip feed data:', err);
       setError('Failed to load drip feed data');
     } finally {
       setLoading(false);
@@ -351,7 +352,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         setLogEntries(data.logs || []);
       }
     } catch (err) {
-      console.error('Error fetching logs:', err instanceof Error ? err.message : err);
+      console.error('Error fetching logs:', err);
     } finally {
       setLoadingLogs(false);
     }
@@ -567,7 +568,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         setTestStatus(data);
       }
     } catch (err) {
-      console.error('Failed to fetch test status:', err instanceof Error ? err.message : err);
+      console.error('Failed to fetch test status:', err);
     }
   };
 
@@ -678,39 +679,103 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
     }
   };
 
-  // Queue article behind the last scheduled one (one-click)
-  const [queuingArticleId, setQueuingArticleId] = useState<number | null>(null);
-  const queueArticleBehindLast = async (article: ScheduleWithArticle) => {
-    if (!websiteId) return;
+  // Calculate the next available queue slot based on current schedules and settings
+  const calculateNextQueueSlot = useCallback(() => {
+    if (!settings) return null;
 
-    setQueuingArticleId(article.id);
+    const perDay = varianceEnabled
+      ? Math.floor(Math.random() * (varianceMax - varianceMin + 1)) + varianceMin
+      : articlesPerDay;
+
+    // Parse time window
+    const [startHour, startMin] = publishTimeStart.split(':').map(Number);
+    const [endHour, endMin] = publishTimeEnd.split(':').map(Number);
+
+    // Start from today
+    let checkDate = new Date();
+    checkDate.setHours(0, 0, 0, 0);
+
+    // Find the next available slot
+    for (let dayOffset = 0; dayOffset < 365; dayOffset++) {
+      const currentDate = new Date(checkDate);
+      currentDate.setDate(checkDate.getDate() + dayOffset);
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const dayOfWeek = currentDate.getDay();
+
+      // Skip if this day is excluded
+      if (skipWeekdays.includes(dayOfWeek) || skipDates.includes(dateStr)) {
+        continue;
+      }
+
+      // Count existing scheduled articles for this day (only pending/unscheduled)
+      const existingForDay = schedules.filter(s => {
+        const sDate = typeof s.scheduled_date === 'string'
+          ? s.scheduled_date.split('T')[0]
+          : new Date(s.scheduled_date).toISOString().split('T')[0];
+        return sDate === dateStr && (s.status === 'pending' || s.status === 'unscheduled');
+      });
+
+      // If there's room for more articles this day
+      if (existingForDay.length < perDay) {
+        // Calculate a time slot
+        const totalMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+        const slotIndex = existingForDay.length;
+        const minuteOffset = Math.round((totalMinutes / (perDay + 1)) * (slotIndex + 1));
+        const slotMinutes = startHour * 60 + startMin + minuteOffset;
+        const slotHour = Math.floor(slotMinutes / 60);
+        const slotMin = slotMinutes % 60;
+        const timeStr = `${slotHour.toString().padStart(2, '0')}:${slotMin.toString().padStart(2, '0')}`;
+
+        return {
+          date: dateStr,
+          time: timeStr,
+          windowStart: publishTimeStart,
+          windowEnd: publishTimeEnd
+        };
+      }
+    }
+
+    return null;
+  }, [settings, schedules, varianceEnabled, varianceMin, varianceMax, articlesPerDay, publishTimeStart, publishTimeEnd, skipWeekdays, skipDates]);
+
+  // Update next queue slot when modal opens or schedules change
+  useEffect(() => {
+    if (schedulingArticle) {
+      const slot = calculateNextQueueSlot();
+      setNextQueueSlot(slot);
+    }
+  }, [schedulingArticle, schedules, calculateNextQueueSlot]);
+
+  // Add to queue using calculated slot
+  const addToQueue = async () => {
+    if (!nextQueueSlot || !schedulingArticle) return;
+    setScheduleDate(nextQueueSlot.date);
+    setScheduleTime(nextQueueSlot.time);
+    // Auto-submit after setting values
+    setSavingSchedule(true);
     try {
-      const res = await fetch(`/api/drip-feed/schedule/${websiteId}`, {
-        method: 'POST',
+      const res = await fetch(`/api/drip-feed/schedule/${websiteId}/${schedulingArticle.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          articleIds: [article.article_id],
-          queueBehindLast: true
+          scheduled_date: nextQueueSlot.date,
+          scheduled_time: nextQueueSlot.time,
+          status: 'pending'
         })
       });
 
       if (res.ok) {
-        const data = await res.json();
-        const scheduled = data.schedules?.[0];
-        if (scheduled) {
-          showToast(`Queued "${article.keyword}" for ${formatDate(scheduled.scheduled_date)} at ${formatTime(scheduled.scheduled_time)}`, 'success');
-        } else {
-          showToast(`Queued "${article.keyword}" successfully`, 'success');
-        }
+        showToast(`Added to queue: ${formatDate(nextQueueSlot.date)} at ${formatTime(nextQueueSlot.time)}`, 'success');
+        setSchedulingArticle(null);
         fetchData();
       } else {
         const data = await res.json();
-        setError(data.error || 'Failed to queue article');
+        setError(data.error || 'Failed to add to queue');
       }
     } catch (err) {
-      setError('Failed to queue article');
+      setError('Failed to add to queue');
     } finally {
-      setQueuingArticleId(null);
+      setSavingSchedule(false);
     }
   };
 
@@ -739,7 +804,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         if (statsData) {
           setStats(statsData);
         }
-      }).catch(err => console.error('Auto-refresh error:', err instanceof Error ? err.message : err));
+      }).catch(err => console.error('Auto-refresh error:', err));
     }, 5000); // Refresh every 5 seconds
 
     return () => clearInterval(refreshInterval);
@@ -1230,69 +1295,6 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         </div>
       )}
 
-      {/* Calendar Panel (collapsible) */}
-      {showCalendar && (
-        <div className="flex-shrink-0 bg-slate-800/30 border-b border-slate-700 px-4 py-3">
-          <div className="flex items-center justify-between mb-3">
-            <button
-              onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
-              className="p-1 hover:bg-slate-700 rounded text-gray-400"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <span className="text-white font-medium text-sm">
-              {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-            </span>
-            <button
-              onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
-              className="p-1 hover:bg-slate-700 rounded text-gray-400"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {weekdayNames.map((name) => (
-              <div key={name} className="text-center text-xs text-gray-500 py-1">
-                {name}
-              </div>
-            ))}
-            {getDaysInMonth(calendarMonth).map((date, index) => {
-              const dateStr = date.toISOString().split('T')[0];
-              const isCurrentMonth = date.getMonth() === calendarMonth.getMonth();
-              const isToday = dateStr === new Date().toISOString().split('T')[0];
-              const isSkipped = skipWeekdays.includes(date.getDay()) || skipDates.includes(dateStr);
-              const scheduledCount = groupedSchedules[dateStr]?.length || 0;
-
-              return (
-                <div
-                  key={index}
-                  className={`relative p-1.5 text-center rounded text-sm ${
-                    !isCurrentMonth
-                      ? 'text-gray-600'
-                      : isSkipped
-                        ? 'bg-red-900/30 text-red-400'
-                        : isToday
-                          ? 'bg-brand-cyan/20 text-brand-cyan font-medium'
-                          : 'text-gray-300'
-                  }`}
-                >
-                  {date.getDate()}
-                  {scheduledCount > 0 && (
-                    <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[9px] text-amber-400 font-bold">
-                      {scheduledCount}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Notifications Panel (collapsible) */}
       {showNotifications && (
         <div className="flex-shrink-0 bg-slate-800/30 border-b border-slate-700 px-4 py-3">
@@ -1496,87 +1498,6 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         </div>
       )}
 
-      {/* Processing Log Panel */}
-      {showProcessingLog && (
-        <div className="flex-shrink-0 bg-slate-800/50 border-b border-brand-cyan/30 px-4 py-3 max-h-64 overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-brand-cyan">Processing Log</span>
-              <span className="text-xs text-gray-500">({logEntries.length} entries)</span>
-              {loadingLogs && <span className="text-xs text-gray-400 animate-pulse">Refreshing...</span>}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={fetchLogs}
-                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-gray-300"
-              >
-                Refresh
-              </button>
-              <button
-                onClick={copyLogsToClipboard}
-                disabled={logEntries.length === 0}
-                className="px-2 py-1 bg-brand-cyan/20 hover:bg-brand-cyan/30 rounded text-xs text-brand-cyan disabled:opacity-50"
-              >
-                Copy All
-              </button>
-            </div>
-          </div>
-          <div className="flex-1 overflow-auto bg-slate-900/50 rounded border border-slate-700/50">
-            {logEntries.length === 0 ? (
-              <div className="p-4 text-center text-gray-500 text-sm">
-                No log entries yet. Activity will appear here when articles are processed.
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-800">
-                {logEntries.map((log) => {
-                  const time = new Date(log.created_at);
-                  const timeStr = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-                  const dateStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-                  const actionColors: Record<string, string> = {
-                    published: 'text-green-400 bg-green-600/20',
-                    failed: 'text-red-400 bg-red-600/20',
-                    scheduled: 'text-blue-400 bg-blue-600/20',
-                    cancelled: 'text-gray-400 bg-gray-600/20',
-                    retried: 'text-amber-400 bg-amber-600/20',
-                    added_to_queue: 'text-purple-400 bg-purple-600/20'
-                  };
-
-                  return (
-                    <div key={log.id} className="flex items-center gap-3 px-3 py-1.5 text-xs hover:bg-slate-800/50">
-                      <span className="text-gray-500 font-mono w-24 flex-shrink-0">
-                        {dateStr} {timeStr}
-                      </span>
-                      <span className={`px-1.5 py-0.5 rounded font-medium uppercase ${actionColors[log.action] || 'text-gray-400 bg-gray-600/20'}`}>
-                        {log.action}
-                      </span>
-                      <span className="text-white truncate flex-1">
-                        {log.keyword || `Article #${log.article_id}`}
-                      </span>
-                      {log.error_message && (
-                        <span className="text-red-400 truncate max-w-[200px]" title={log.error_message}>
-                          {log.error_message}
-                        </span>
-                      )}
-                      {log.details?.wp_post_url && (
-                        <a
-                          href={log.details.wp_post_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300"
-                        >
-                          View
-                        </a>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Test Mode Panel */}
       {showTestMode && (
         <div className="flex-shrink-0 bg-orange-900/20 border-b border-orange-500/30 px-4 py-3">
@@ -1724,177 +1645,263 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
         </div>
       )}
 
-      {/* Main Content: Schedule Queue */}
-      <div className="flex-1 overflow-auto p-4">
-        {Object.keys(groupedSchedules).length > 0 ? (
-          <div className="space-y-3">
-            {Object.entries(groupedSchedules)
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([date, articles]) => {
-                const isSkipped = skipWeekdays.includes(new Date(date + 'T00:00:00').getDay()) ||
-                                 skipDates.includes(date);
-
-                return (
-                  <div key={date} className="bg-slate-800/50 rounded-lg overflow-hidden border border-slate-700/50">
-                    <div className={`px-3 py-1.5 flex items-center justify-between ${
-                      isSkipped ? 'bg-red-900/20' : 'bg-slate-700/50'
-                    }`}>
-                      <span className={`text-sm font-medium ${isSkipped ? 'text-red-400' : 'text-white'}`}>
-                        {formatDate(date)}
-                        {isSkipped && <span className="ml-2 text-xs opacity-75">SKIPPED</span>}
-                      </span>
-                      <span className="text-xs text-gray-400">{articles.length} article{articles.length !== 1 ? 's' : ''}</span>
-                    </div>
-                    <div className="divide-y divide-slate-700/50">
-                      {articles.map((article) => {
-                        // Calculate countdown for this article
-                        const scheduledDateStr = typeof article.scheduled_date === 'string'
-                          ? article.scheduled_date.split('T')[0]
-                          : new Date(article.scheduled_date).toISOString().split('T')[0];
-                        const secondsUntil = getSecondsUntilScheduled(scheduledDateStr, article.scheduled_time);
-                        const countdownStyle = getCountdownStyle(secondsUntil, article.status);
-                        const isInFinalMinute = secondsUntil <= 60 && secondsUntil > 0 && article.status === 'pending';
-                        const isOverdue = secondsUntil <= 0 && article.status === 'pending';
-
-                        return (
-                          <div
-                            key={article.id}
-                            className={`px-3 py-2 flex items-center justify-between transition-all duration-300 ${
-                              isInFinalMinute ? 'bg-yellow-900/20' :
-                              isOverdue ? 'bg-red-900/20' :
-                              article.status === 'published' ? 'bg-green-900/10' :
-                              'hover:bg-slate-700/30'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              {/* Test Mode Checkbox */}
-                              {showTestMode && article.status === 'pending' && (
-                                <input
-                                  type="checkbox"
-                                  checked={selectedTestArticles.includes(article.article_id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedTestArticles([...selectedTestArticles, article.article_id]);
-                                    } else {
-                                      setSelectedTestArticles(selectedTestArticles.filter(id => id !== article.article_id));
-                                    }
-                                  }}
-                                  className="w-4 h-4 rounded border-orange-500 bg-slate-700 text-orange-500"
-                                />
-                              )}
-
-                              {/* Time with countdown */}
-                              <div className="flex items-center gap-2 min-w-[140px]">
-                                <span className="text-xs text-gray-400 w-16">
-                                  {formatTime(article.scheduled_time)}
-                                </span>
-                                {article.status === 'pending' && (
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${countdownStyle}`}>
-                                    {isOverdue ? 'DUE' : formatCountdown(secondsUntil)}
-                                  </span>
-                                )}
-                              </div>
-
-                              <button
-                                onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
-                                className="text-sm text-white hover:text-brand-cyan hover:underline transition text-left"
-                                title="Click to edit article"
-                              >
-                                {article.keyword}
-                              </button>
-                              {!article.selected_meta_title && (
-                                <button
-                                  onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
-                                  className="px-1.5 py-0.5 bg-amber-600/30 hover:bg-amber-600/50 text-amber-400 rounded text-[10px] cursor-pointer transition"
-                                  title="Click to add meta"
-                                >
-                                  No Meta
-                                </button>
-                              )}
-
-                              {/* Status badge - clickable for unscheduled */}
-                              {article.status === 'unscheduled' ? (
-                                <button
-                                  onClick={() => openScheduleModal(article)}
-                                  className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-600/30 text-orange-400 hover:bg-orange-600/50 border border-orange-500/50 cursor-pointer transition flex items-center gap-1"
-                                  title="Click to schedule this article"
-                                >
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                  </svg>
-                                  unscheduled
-                                </button>
-                              ) : (
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                  article.status === 'published' ? 'bg-green-600/30 text-green-400' :
-                                  article.status === 'failed' ? 'bg-red-600/30 text-red-400' :
-                                  article.status === 'publishing' ? 'bg-purple-600/30 text-purple-400 animate-pulse' :
-                                  'bg-blue-600/30 text-blue-400'
-                                }`}>
-                                  {article.status === 'publishing' ? '⏳ Publishing...' : article.status}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              {/* Queue and Schedule buttons for unscheduled articles */}
-                              {article.status === 'unscheduled' && (
-                                <>
-                                  <button
-                                    onClick={() => queueArticleBehindLast(article)}
-                                    disabled={queuingArticleId === article.id}
-                                    className="px-2 py-0.5 bg-green-600/30 hover:bg-green-600/50 disabled:opacity-50 rounded text-green-400 text-xs flex items-center gap-1"
-                                    title="Queue behind the last scheduled article"
-                                  >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                                    </svg>
-                                    {queuingArticleId === article.id ? 'Queueing...' : 'Queue'}
-                                  </button>
-                                  <button
-                                    onClick={() => openScheduleModal(article)}
-                                    className="px-2 py-0.5 bg-brand-cyan/30 hover:bg-brand-cyan/50 rounded text-brand-cyan text-xs flex items-center gap-1"
-                                  >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6l4 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    Schedule
-                                  </button>
-                                </>
-                              )}
-                              {article.wp_post_url && (
-                                <a
-                                  href={article.wp_post_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-2 py-0.5 bg-green-600/30 hover:bg-green-600/50 rounded text-green-400 text-xs"
-                                >
-                                  View ↗
-                                </a>
-                              )}
-                              {(article.status === 'pending' || article.status === 'unscheduled') && (
-                                <button
-                                  onClick={() => removeFromSchedule(article.id)}
-                                  className="px-2 py-0.5 bg-red-600/30 hover:bg-red-600/50 rounded text-red-400 text-xs"
-                                >
-                                  Remove
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+      {/* Main Content: Three-Column Layout */}
+      <div className="flex-1 overflow-hidden flex gap-2 p-2">
+        {/* LEFT COLUMN: Schedule Queue */}
+        <div className="flex-1 overflow-auto bg-slate-800/30 rounded-lg border border-slate-700/50">
+          <div className="sticky top-0 px-3 py-2 bg-slate-800/90 border-b border-slate-700/50 flex items-center justify-between">
+            <span className="text-sm font-semibold text-white">Schedule Queue</span>
+            <span className="text-xs text-gray-500">{schedules.length} articles</span>
           </div>
-        ) : (
-          <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-3">
-            <svg className="w-12 h-12 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <p>No articles scheduled</p>
-            <p className="text-sm text-gray-600">Select articles in the Articles tab and click "Add to Drip Feed"</p>
+          <div className="p-2">
+            {Object.keys(groupedSchedules).length > 0 ? (
+              <div className="space-y-2">
+                {Object.entries(groupedSchedules)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([date, articles]) => {
+                    const isSkipped = skipWeekdays.includes(new Date(date + 'T00:00:00').getDay()) ||
+                                     skipDates.includes(date);
+
+                    return (
+                      <div key={date} className="bg-slate-900/50 rounded-lg overflow-hidden border border-slate-700/30">
+                        <div className={`px-2 py-1 flex items-center justify-between ${
+                          isSkipped ? 'bg-red-900/20' : 'bg-slate-700/30'
+                        }`}>
+                          <span className={`text-xs font-medium ${isSkipped ? 'text-red-400' : 'text-white'}`}>
+                            {formatDate(date)}
+                            {isSkipped && <span className="ml-1 text-[10px] opacity-75">SKIPPED</span>}
+                          </span>
+                          <span className="text-[10px] text-gray-500">{articles.length}</span>
+                        </div>
+                        <div className="divide-y divide-slate-800/50">
+                          {articles.map((article) => {
+                            const scheduledDateStr = typeof article.scheduled_date === 'string'
+                              ? article.scheduled_date.split('T')[0]
+                              : new Date(article.scheduled_date).toISOString().split('T')[0];
+                            const secondsUntil = getSecondsUntilScheduled(scheduledDateStr, article.scheduled_time);
+                            const countdownStyle = getCountdownStyle(secondsUntil, article.status);
+                            const isInFinalMinute = secondsUntil <= 60 && secondsUntil > 0 && article.status === 'pending';
+                            const isOverdue = secondsUntil <= 0 && article.status === 'pending';
+
+                            return (
+                              <div
+                                key={article.id}
+                                className={`px-2 py-1.5 flex items-center justify-between transition-all duration-300 ${
+                                  isInFinalMinute ? 'bg-yellow-900/20' :
+                                  isOverdue ? 'bg-red-900/20' :
+                                  article.status === 'published' ? 'bg-green-900/10' :
+                                  'hover:bg-slate-700/30'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  {showTestMode && article.status === 'pending' && (
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedTestArticles.includes(article.article_id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedTestArticles([...selectedTestArticles, article.article_id]);
+                                        } else {
+                                          setSelectedTestArticles(selectedTestArticles.filter(id => id !== article.article_id));
+                                        }
+                                      }}
+                                      className="w-3 h-3 flex-shrink-0"
+                                    />
+                                  )}
+                                  <span className="text-[10px] text-gray-400 w-14 flex-shrink-0">
+                                    {formatTime(article.scheduled_time)}
+                                  </span>
+                                  {article.status === 'pending' && (
+                                    <span className={`px-1 py-0.5 rounded text-[9px] font-mono border flex-shrink-0 ${countdownStyle}`}>
+                                      {isOverdue ? 'DUE' : formatCountdown(secondsUntil)}
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => onOpenArticle && onOpenArticle(article.article_id)}
+                                    className="text-xs text-white hover:text-brand-cyan transition truncate"
+                                  >
+                                    {article.keyword}
+                                  </button>
+                                  {!article.selected_meta_title && (
+                                    <span className="px-1 py-0.5 bg-amber-600/30 text-amber-400 rounded text-[9px] flex-shrink-0">!</span>
+                                  )}
+                                  {article.status === 'unscheduled' ? (
+                                    <button
+                                      onClick={() => openScheduleModal(article)}
+                                      className="px-1 py-0.5 rounded text-[9px] bg-orange-600/30 text-orange-400 hover:bg-orange-600/50 flex-shrink-0"
+                                    >
+                                      unscheduled
+                                    </button>
+                                  ) : (
+                                    <span className={`px-1 py-0.5 rounded text-[9px] flex-shrink-0 ${
+                                      article.status === 'published' ? 'bg-green-600/30 text-green-400' :
+                                      article.status === 'failed' ? 'bg-red-600/30 text-red-400' :
+                                      article.status === 'publishing' ? 'bg-purple-600/30 text-purple-400 animate-pulse' :
+                                      'bg-blue-600/20 text-blue-400'
+                                    }`}>
+                                      {article.status === 'publishing' ? '...' : article.status}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {article.status === 'unscheduled' && (
+                                    <button
+                                      onClick={() => openScheduleModal(article)}
+                                      className="px-1.5 py-0.5 bg-brand-cyan/30 hover:bg-brand-cyan/50 rounded text-brand-cyan text-[10px]"
+                                    >
+                                      Schedule
+                                    </button>
+                                  )}
+                                  {article.wp_post_url && (
+                                    <a href={article.wp_post_url} target="_blank" rel="noopener noreferrer"
+                                      className="px-1.5 py-0.5 bg-green-600/30 hover:bg-green-600/50 rounded text-green-400 text-[10px]">
+                                      View
+                                    </a>
+                                  )}
+                                  {(article.status === 'pending' || article.status === 'unscheduled') && (
+                                    <button
+                                      onClick={() => removeFromSchedule(article.id)}
+                                      className="px-1.5 py-0.5 bg-red-600/30 hover:bg-red-600/50 rounded text-red-400 text-[10px]"
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            ) : (
+              <div className="h-48 flex flex-col items-center justify-center text-gray-500 gap-2">
+                <svg className="w-8 h-8 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <p className="text-xs">No articles scheduled</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* MIDDLE COLUMN: Processing Log */}
+        {showProcessingLog && (
+          <div className="w-72 flex-shrink-0 overflow-hidden flex flex-col bg-slate-800/30 rounded-lg border border-brand-cyan/30">
+            <div className="sticky top-0 px-2 py-2 bg-slate-800/90 border-b border-slate-700/50 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-brand-cyan">Log</span>
+                <span className="text-[10px] text-gray-500">({logEntries.length})</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={fetchLogs} className="px-1.5 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[10px] text-gray-300">
+                  ↻
+                </button>
+                <button onClick={copyLogsToClipboard} disabled={logEntries.length === 0}
+                  className="px-1.5 py-0.5 bg-brand-cyan/20 hover:bg-brand-cyan/30 rounded text-[10px] text-brand-cyan disabled:opacity-50">
+                  Copy
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto">
+              {logEntries.length === 0 ? (
+                <div className="p-4 text-center text-gray-500 text-xs">No log entries yet</div>
+              ) : (
+                <div className="divide-y divide-slate-800/50">
+                  {logEntries.map((log) => {
+                    const time = new Date(log.created_at);
+                    const timeStr = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                    const dateStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    const actionColors: Record<string, string> = {
+                      published: 'text-green-400 bg-green-600/20',
+                      failed: 'text-red-400 bg-red-600/20',
+                      scheduled: 'text-blue-400 bg-blue-600/20',
+                      cancelled: 'text-gray-400 bg-gray-600/20',
+                      retried: 'text-amber-400 bg-amber-600/20',
+                      added_to_queue: 'text-purple-400 bg-purple-600/20'
+                    };
+                    return (
+                      <div key={log.id} className="px-2 py-1 text-[10px] hover:bg-slate-800/50">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-gray-500 font-mono">{dateStr}</span>
+                          <span className={`px-1 py-0.5 rounded font-medium uppercase ${actionColors[log.action] || 'text-gray-400 bg-gray-600/20'}`}>
+                            {log.action}
+                          </span>
+                        </div>
+                        <div className="text-white truncate mt-0.5">{log.keyword || `#${log.article_id}`}</div>
+                        {log.error_message && (
+                          <div className="text-red-400 truncate text-[9px]">{log.error_message}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* RIGHT COLUMN: Calendar */}
+        {showCalendar && (
+          <div className="w-56 flex-shrink-0 overflow-hidden flex flex-col bg-slate-800/30 rounded-lg border border-slate-700/50">
+            <div className="px-2 py-2 bg-slate-800/90 border-b border-slate-700/50 flex items-center justify-between">
+              <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1))}
+                className="p-0.5 hover:bg-slate-700 rounded text-gray-400">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <span className="text-xs text-white font-medium">
+                {calendarMonth.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+              </span>
+              <button onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1))}
+                className="p-0.5 hover:bg-slate-700 rounded text-gray-400">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-2">
+              <div className="grid grid-cols-7 gap-0.5 mb-1">
+                {weekdayNames.map((name) => (
+                  <div key={name} className="text-center text-[9px] text-gray-500 py-0.5">
+                    {name.charAt(0)}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-0.5">
+                {getDaysInMonth(calendarMonth).map((date, index) => {
+                  const dateStr = date.toISOString().split('T')[0];
+                  const isCurrentMonth = date.getMonth() === calendarMonth.getMonth();
+                  const isToday = dateStr === new Date().toISOString().split('T')[0];
+                  const isSkipped = skipWeekdays.includes(date.getDay()) || skipDates.includes(dateStr);
+                  const scheduledCount = groupedSchedules[dateStr]?.length || 0;
+
+                  return (
+                    <div
+                      key={index}
+                      className={`relative p-1 text-center rounded text-[10px] ${
+                        !isCurrentMonth
+                          ? 'text-gray-700'
+                          : isSkipped
+                            ? 'bg-red-900/30 text-red-400'
+                            : isToday
+                              ? 'bg-brand-cyan/20 text-brand-cyan font-medium'
+                              : 'text-gray-300 hover:bg-slate-700/50'
+                      }`}
+                    >
+                      {date.getDate()}
+                      {scheduledCount > 0 && (
+                        <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[7px] text-amber-400 font-bold">
+                          {scheduledCount}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1927,6 +1934,45 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
               <div className="bg-slate-900/50 rounded-lg p-3">
                 <div className="text-xs text-gray-500 mb-1">Article</div>
                 <div className="text-white font-medium">{schedulingArticle.keyword}</div>
+              </div>
+
+              {/* Quick Add to Queue Option */}
+              {nextQueueSlot && (
+                <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs text-green-400 font-semibold mb-1 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Quick Add to Queue
+                      </div>
+                      <div className="text-white font-medium">
+                        {formatDate(nextQueueSlot.date)} at {formatTime(nextQueueSlot.time)}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        Window: {formatTime(nextQueueSlot.windowStart)} - {formatTime(nextQueueSlot.windowEnd)}
+                      </div>
+                    </div>
+                    <button
+                      onClick={addToQueue}
+                      disabled={savingSchedule}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white font-medium rounded-lg transition disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Add to Queue
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-slate-700"></div>
+                <span className="text-xs text-gray-500">or pick specific date/time</span>
+                <div className="flex-1 h-px bg-slate-700"></div>
               </div>
 
               {/* Date and Time Inputs */}
@@ -1992,7 +2038,7 @@ const DripFeedView: React.FC<DripFeedViewProps> = ({ websiteId, onOpenArticle, r
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                     </svg>
-                    Schedule
+                    Schedule Custom
                   </>
                 )}
               </button>
