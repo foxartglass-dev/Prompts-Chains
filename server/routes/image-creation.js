@@ -1893,6 +1893,36 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       }
     };
 
+    // Separate function to update just live_prompt_mode (ensures it's saved even if other columns fail)
+    const tryUpdateLivePromptMode = async () => {
+      if (live_prompt_mode === undefined || live_prompt_mode === null) {
+        return false; // Nothing to update
+      }
+      try {
+        if (saveToWebsite) {
+          await sql`
+            UPDATE image_creation_settings
+            SET live_prompt_mode = ${live_prompt_mode}
+            WHERE website_id = ${websiteId}
+          `;
+        } else {
+          await sql`
+            UPDATE image_creation_settings
+            SET live_prompt_mode = ${live_prompt_mode}
+            WHERE workflow_id = ${workflowId}
+          `;
+        }
+        console.log('[Image Creation API] Successfully saved live_prompt_mode:', live_prompt_mode);
+        return true;
+      } catch (err) {
+        if (err.message?.includes('live_prompt_mode')) {
+          console.log('[Image Creation API] live_prompt_mode column not available yet (run migration 007)');
+          return false;
+        }
+        throw err;
+      }
+    };
+
     if (existing.length === 0) {
       // Insert new settings
       console.log('[Image Creation API] Creating new settings record...');
@@ -1901,6 +1931,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
       // Try to set smart_matching fields
       await tryUpdateSmartMatching();
+
+      // Ensure live_prompt_mode is saved (fallback may have skipped it)
+      await tryUpdateLivePromptMode();
 
       return res.json({ success: true, id: newId, created: true });
     }
@@ -1911,6 +1944,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
     // Try to update smart_matching fields separately
     await tryUpdateSmartMatching();
+
+    // Ensure live_prompt_mode is saved (fallback may have skipped it)
+    await tryUpdateLivePromptMode();
 
     // VERIFICATION: Read back what was saved to confirm
     const verifyQuery = saveToWebsite
