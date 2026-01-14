@@ -2868,10 +2868,21 @@ const App: React.FC = () => {
                                         >
                                             Add Items from Text
                                         </button>
-                                        <label htmlFor="file-upload" className="cursor-pointer text-xs text-center text-brand-gold hover:text-brand-gold-light transition">
-                                            {fileName ? `File: ${fileName}` : 'Or, upload TXT file'}
-                                            <input id="file-upload" type="file" accept=".txt,.csv" onChange={handleFileChange} className="hidden" />
-                                        </label>
+                                        <div className="flex items-center justify-center gap-2">
+                                            <label htmlFor="file-upload" className="cursor-pointer text-xs text-brand-gold hover:text-brand-gold-light transition">
+                                                {fileName ? `File: ${fileName}` : 'Or, upload TXT file'}
+                                                <input id="file-upload" type="file" accept=".txt,.csv" onChange={handleFileChange} className="hidden" />
+                                            </label>
+                                            {/* Small Test Mode Button */}
+                                            <button
+                                                onClick={() => setIsTestRunnerOpen(true)}
+                                                disabled={isRunningTestSequence}
+                                                className="px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold rounded transition"
+                                                title="Test image pipelines"
+                                            >
+                                                {isRunningTestSequence ? '...' : 'Test'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -2879,18 +2890,6 @@ const App: React.FC = () => {
                             <button onClick={processWorkflow} disabled={isRunDisabled} className={`w-full flex items-center justify-center font-bold py-4 px-6 rounded-xl transition-all btn-press border-2 ${isRunDisabled ? 'bg-slate-900 border-brand-cyan text-brand-cyan/50 cursor-not-allowed' : 'bg-gradient-to-r from-brand-cyan to-brand-cyan-dark hover:from-brand-cyan-dark hover:to-brand-cyan text-slate-900 border-transparent shadow-card hover:shadow-glow-cyan'}`}>
                                 {isProcessing ? <Icon type="working" className="h-5 w-5 animate-spin mr-2" /> : <Icon type="play" className="h-5 w-5 mr-2" />}
                                 {getRunButtonText()}
-                            </button>
-
-                            {/* Test Mode Button */}
-                            <button
-                                onClick={() => setIsTestRunnerOpen(true)}
-                                disabled={isRunningTestSequence}
-                                className="w-full flex items-center justify-center font-bold py-2 px-4 rounded-lg transition-all bg-red-600 hover:bg-red-500 text-white border-2 border-red-400 mt-2"
-                            >
-                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                                </svg>
-                                {isRunningTestSequence ? 'Running Tests...' : 'Test Mode'}
                             </button>
                         </div>
                     , true,
