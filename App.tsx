@@ -1618,11 +1618,17 @@ const App: React.FC = () => {
           }
 
           // Save settings via API
-          await fetch(`/api/image-creation/settings/${currentWorkflowId}`, {
+          console.log('[Test Mode] Saving image settings:', imageSettings);
+          const saveResponse = await fetch(`/api/image-creation/settings/${currentWorkflowId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(imageSettings)
           });
+          const saveResult = await saveResponse.json();
+          console.log('[Test Mode] Save response:', saveResult);
+          if (!saveResponse.ok) {
+            console.error('[Test Mode] Save failed:', saveResult);
+          }
 
           // Small delay to ensure settings are saved
           await new Promise(resolve => setTimeout(resolve, 500));
