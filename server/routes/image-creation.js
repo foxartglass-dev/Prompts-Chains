@@ -2197,6 +2197,78 @@ router.get('/debug-levels/:workflowId', requireDb, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/image-creation/sync-levels/:workflowId
+ * FIX: Delete stale workflow-level settings when website-level settings exist
+ * This resolves the "old prompt stuck in cache" issue
+ */
+router.post('/sync-levels/:workflowId', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+
+    // Get website_id from workflow
+    let websiteId = null;
+    const workflowResult = await sql`
+      SELECT website_id, name FROM workflows WHERE id = ${workflowId}
+    `;
+    if (workflowResult.length > 0) {
+      websiteId = workflowResult[0].website_id;
+    }
+
+    if (!websiteId) {
+      return res.json({
+        success: false,
+        message: 'No website_id linked to this workflow - nothing to sync'
+      });
+    }
+
+    // Check if both levels have settings
+    const workflowSettings = await sql`
+      SELECT id FROM image_creation_settings WHERE workflow_id = ${workflowId}
+    `;
+    const websiteSettings = await sql`
+      SELECT id FROM image_creation_settings WHERE website_id = ${websiteId}
+    `;
+
+    if (workflowSettings.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No workflow-level settings to delete - already clean',
+        deleted: 0
+      });
+    }
+
+    if (websiteSettings.length === 0) {
+      return res.json({
+        success: false,
+        message: 'No website-level settings exist - cannot delete workflow settings without replacement'
+      });
+    }
+
+    // BOTH exist - delete the workflow-level (stale) settings
+    console.log(`[SYNC LEVELS] Deleting workflow-level settings for workflow ${workflowId}`);
+    console.log(`[SYNC LEVELS] Website-level settings at website ${websiteId} will be used instead`);
+
+    const deleteResult = await sql`
+      DELETE FROM image_creation_settings WHERE workflow_id = ${workflowId}
+      RETURNING id
+    `;
+
+    console.log(`[SYNC LEVELS] Deleted ${deleteResult.length} stale workflow-level rows`);
+
+    res.json({
+      success: true,
+      message: `Deleted ${deleteResult.length} stale workflow-level settings. Website-level settings will now be used.`,
+      deleted: deleteResult.length,
+      deletedIds: deleteResult.map(r => r.id)
+    });
+
+  } catch (error) {
+    console.error('[Image Creation API] Sync levels error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ========================================
 // IMAGE BANK INTEGRATION FOR ARTICLES
 // ========================================
