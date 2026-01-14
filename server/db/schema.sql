@@ -337,6 +337,23 @@ BEGIN
 END $$;
 
 -- ============================================
+-- TEST MODE PRESETS
+-- ============================================
+
+-- Test presets for Test Mode - saved per workflow
+CREATE TABLE IF NOT EXISTS test_presets (
+  id SERIAL PRIMARY KEY,
+  workflow_id INTEGER REFERENCES workflows(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  steps JSONB NOT NULL DEFAULT '[]', -- Array of {articleMode, metaMode, imageMode, imageSource, keyword, tag}
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index for fast lookup by workflow
+CREATE INDEX IF NOT EXISTS idx_test_presets_workflow ON test_presets(workflow_id);
+
+-- ============================================
 -- SITE PLANNING (Section 8 - The Site Truth)
 -- ============================================
 

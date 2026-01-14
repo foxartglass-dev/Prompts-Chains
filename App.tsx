@@ -2092,8 +2092,9 @@ const App: React.FC = () => {
               }}
               currentArticleMode={currentProject?.state?.articlePublishMode || 'draft'}
               currentMetaMode={currentProject?.state?.metaPublishMode || 'draft'}
-              currentImageMode={currentProject?.state?.imagePublishMode || 'off'}
+              currentImageMode={currentProject?.state?.imagePublishMode || 'draft'}
               availableTags={currentProject?.state?.tags || []}
+              workflowId={currentProject?.id}
             />
 
             {/* Settings Modal */}

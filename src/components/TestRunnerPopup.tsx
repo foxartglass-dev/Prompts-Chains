@@ -26,9 +26,8 @@ interface Props {
   currentMetaMode: 'draft' | 'wordpress';
   currentImageMode: 'off' | 'draft' | 'wordpress';
   availableTags: Array<{ name: string }>;
+  workflowId?: string; // For database storage of presets
 }
-
-const STORAGE_KEY = 'test-runner-presets';
 
 const TestRunnerPopup: React.FC<Props> = ({
   isOpen,
@@ -37,7 +36,8 @@ const TestRunnerPopup: React.FC<Props> = ({
   currentArticleMode,
   currentMetaMode,
   currentImageMode,
-  availableTags
+  availableTags,
+  workflowId
 }) => {
   // Toggle states for building test steps
   const [articleMode, setArticleMode] = useState<'draft' | 'wordpress'>(currentArticleMode);
@@ -55,6 +55,7 @@ const TestRunnerPopup: React.FC<Props> = ({
   const [presets, setPresets] = useState<TestPreset[]>([]);
   const [presetName, setPresetName] = useState('');
   const [showSavePreset, setShowSavePreset] = useState(false);
+  const [loadingPresets, setLoadingPresets] = useState(false);
 
   // Update selected tag when availableTags changes
   useEffect(() => {
@@ -63,23 +64,32 @@ const TestRunnerPopup: React.FC<Props> = ({
     }
   }, [availableTags, selectedTag]);
 
-  // Load presets from localStorage
+  // Load presets from database when popup opens
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        setPresets(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to load presets:', e);
-      }
-    }
-  }, []);
+    const loadPresets = async () => {
+      if (!workflowId || !isOpen) return;
 
-  // Save presets to localStorage
-  const savePresets = (newPresets: TestPreset[]) => {
-    setPresets(newPresets);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newPresets));
-  };
+      setLoadingPresets(true);
+      try {
+        const res = await fetch(`/api/test-presets/${workflowId}`);
+        const data = await res.json();
+        if (data.success && data.presets) {
+          // Transform DB format to local format
+          const transformed = data.presets.map((p: any) => ({
+            id: String(p.id),
+            name: p.name,
+            steps: p.steps
+          }));
+          setPresets(transformed);
+        }
+      } catch (e) {
+        console.error('Failed to load presets from database:', e);
+      }
+      setLoadingPresets(false);
+    };
+
+    loadPresets();
+  }, [workflowId, isOpen]);
 
   // Add a test step to the queue
   const addTestStep = (imageSource: 'bank' | 'main-prompt' | 'guided-gpt' | 'smart-prompt') => {
@@ -106,36 +116,62 @@ const TestRunnerPopup: React.FC<Props> = ({
     setTestQueue([]);
   };
 
-  // Save current queue as preset
-  const saveAsPreset = () => {
-    if (!presetName.trim() || testQueue.length === 0) return;
+  // Save current queue as preset (to database)
+  const saveAsPreset = async () => {
+    if (!presetName.trim() || testQueue.length === 0 || !workflowId) return;
 
-    const newPreset: TestPreset = {
-      id: `preset-${Date.now()}`,
-      name: presetName.trim(),
-      steps: testQueue.map(({ articleMode, metaMode, imageMode, imageSource }) => ({
-        articleMode, metaMode, imageMode, imageSource
-      }))
-    };
+    const steps = testQueue.map(({ articleMode, metaMode, imageMode, imageSource, keyword, tag }) => ({
+      articleMode, metaMode, imageMode, imageSource, keyword, tag
+    }));
 
-    savePresets([...presets, newPreset]);
+    try {
+      const res = await fetch(`/api/test-presets/${workflowId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: presetName.trim(), steps })
+      });
+      const data = await res.json();
+      if (data.success && data.preset) {
+        const newPreset: TestPreset = {
+          id: String(data.preset.id),
+          name: data.preset.name,
+          steps: data.preset.steps
+        };
+        setPresets([newPreset, ...presets]);
+      }
+    } catch (e) {
+      console.error('Failed to save preset:', e);
+    }
+
     setPresetName('');
     setShowSavePreset(false);
   };
 
   // Load a preset
   const loadPreset = (preset: TestPreset) => {
-    const steps: TestStep[] = preset.steps.map((step, index) => ({
+    const steps: TestStep[] = preset.steps.map((step: any, index: number) => ({
       ...step,
       id: `test-${Date.now()}-${index}`,
-      status: 'pending' as const
+      status: 'pending' as const,
+      keyword: step.keyword || testKeyword,
+      tag: step.tag || selectedTag
     }));
     setTestQueue(steps);
   };
 
-  // Delete a preset
-  const deletePreset = (id: string) => {
-    savePresets(presets.filter(p => p.id !== id));
+  // Delete a preset (from database)
+  const deletePreset = async (id: string) => {
+    try {
+      const res = await fetch(`/api/test-presets/${id}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPresets(presets.filter(p => p.id !== id));
+      }
+    } catch (e) {
+      console.error('Failed to delete preset:', e);
+    }
   };
 
   // Run the test
