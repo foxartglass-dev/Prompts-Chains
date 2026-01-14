@@ -994,10 +994,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     };
   }, []);
 
-  const loadSettings = async () => {
+  const loadSettings = async (showSpinner = true) => {
     if (!workflowId) return;
-    setLoading(true);
-    setLoaded(false);
+    // Only show spinner on first load, not on refreshes
+    if (showSpinner && !loaded) {
+      setLoading(true);
+    }
     try {
       const res = await fetch(`/api/image-creation/settings/${workflowId}`);
       const data = await res.json();

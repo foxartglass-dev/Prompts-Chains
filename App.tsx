@@ -1802,7 +1802,7 @@ const App: React.FC = () => {
         <h2 className={`text-xl font-bold flex items-center text-brand-cyan py-2 px-4 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
           {icon}
           <span className="ml-3 shrink-0">{title}</span>
-          {rightContent && <div className="ml-4 flex-1 flex items-center justify-end gap-3" onClick={e => e.stopPropagation()}>{rightContent}</div>}
+          {rightContent && <div className="ml-auto flex items-center gap-3" onClick={e => e.stopPropagation()}>{rightContent}</div>}
            <svg className={`w-5 h-5 ml-3 shrink-0 transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         </h2>
         <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? '' : 'max-h-0 overflow-hidden'}`}>
