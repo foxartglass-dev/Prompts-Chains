@@ -1152,8 +1152,9 @@ const App: React.FC = () => {
             wpPublishMode?: 'off' | 'draft' | 'wordpress';
         }
     ) => {
-        // Use immediateItems if provided (bypasses React state timing issues), otherwise use state
-        const itemsToProcess = immediateItems || items;
+        // Use immediateItems if provided AND it's actually an array (bypasses React state timing issues)
+        // Note: onClick={processWorkflow} passes an event object, so we must check Array.isArray
+        const itemsToProcess = (Array.isArray(immediateItems) ? immediateItems : null) || items;
 
         // Use overrides if provided (bypasses React state timing issues for test runner)
         const effectiveArticlePublishMode = publishModeOverrides?.articlePublishMode ?? currentProject?.state.articlePublishMode ?? 'draft';
