@@ -5,7 +5,7 @@ interface BlueprintPageProps {
   onClose: () => void;
 }
 
-type BlueprintTab = 'start-here' | 'image-flow' | 'image-recycle' | 'push-all' | 'individual-buttons' | 'data-sources' | 'golden-rules' | 'known-issues' | 'drip-feed' | 'changelog' | 'notes' | 'agent-template';
+type BlueprintTab = 'start-here' | 'image-flow' | 'image-recycle' | 'push-all' | 'individual-buttons' | 'data-sources' | 'golden-rules' | 'known-issues' | 'drip-feed' | 'changelog' | 'notes' | 'agent-template' | 'system-archaeology';
 
 const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<BlueprintTab>('start-here');
@@ -25,6 +25,7 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
     { id: 'changelog', label: 'Changelog' },
     { id: 'notes', label: 'Notes' },
     { id: 'agent-template', label: 'Agent Template' },
+    { id: 'system-archaeology', label: '🏗️ System Archaeology' },
   ];
 
   return (
@@ -86,6 +87,7 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
           {activeTab === 'changelog' && <ChangelogDiagram />}
           {activeTab === 'notes' && <NotesEditor />}
           {activeTab === 'agent-template' && <AgentTemplate />}
+          {activeTab === 'system-archaeology' && <SystemArchaeology />}
         </main>
       </div>
     </div>
@@ -3605,6 +3607,487 @@ const ChangelogDiagram: React.FC = () => (
       <div className="flex items-center gap-2">
         <span className="text-yellow-400 font-bold">PERF</span>
         <span className="text-gray-400">Performance</span>
+      </div>
+    </div>
+  </div>
+);
+
+// System Archaeology - Mapping all the ways systems have been built for clean SAS rewrite
+const SystemArchaeology: React.FC = () => (
+  <div className="space-y-8 max-w-6xl mx-auto">
+    {/* Header */}
+    <div className="text-center mb-8">
+      <h2 className="text-3xl font-bold text-brand-gold mb-2">System Archaeology</h2>
+      <p className="text-gray-400 text-lg">Map every layer before the clean rebuild</p>
+    </div>
+
+    {/* Why This Exists */}
+    <div className="bg-gradient-to-r from-purple-900/30 to-blue-900/30 rounded-xl p-6 border border-purple-500/50">
+      <h3 className="text-xl font-bold text-purple-400 mb-4">Why We Need This</h3>
+      <div className="text-gray-300 space-y-3">
+        <p>
+          This codebase is an <strong className="text-white">MVP built by multiple AI agents over time</strong>.
+          Features were added incrementally - sometimes building on top of previous systems, sometimes partially replacing them.
+          The result is <strong className="text-yellow-400">layers upon layers</strong> of code, some active, some dead, some half-built.
+        </p>
+        <p>
+          Before we can do a <strong className="text-brand-cyan">clean SAS rewrite</strong>, we need a complete map of:
+        </p>
+        <ul className="list-disc list-inside ml-4 space-y-1 text-gray-400">
+          <li><strong className="text-white">How it works RIGHT NOW</strong> - The current truth</li>
+          <li><strong className="text-white">All the ways it WAS wired</strong> - Legacy code, stubs, dead paths</li>
+          <li><strong className="text-white">What's actively used vs abandoned</strong> - What to keep vs delete</li>
+          <li><strong className="text-white">The BEST way to rebuild it</strong> - If we could do it over, how?</li>
+        </ul>
+        <p className="text-brand-gold mt-4">
+          This page is where we collect all system investigations. When we're ready for the rewrite,
+          we'll have a complete 3D picture of everything and can pick the best architecture.
+        </p>
+      </div>
+    </div>
+
+    {/* Instructions for Agents */}
+    <div className="bg-red-900/20 rounded-xl p-6 border border-red-500/50">
+      <h3 className="text-xl font-bold text-red-400 mb-4">📋 Instructions for Agents</h3>
+      <div className="text-gray-300 space-y-4">
+        <p className="text-lg">
+          <strong className="text-white">If you've been sent here to map out a system, follow these steps:</strong>
+        </p>
+
+        <div className="bg-slate-800 rounded-lg p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <span className="bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">1</span>
+            <div>
+              <strong className="text-white">Trace the Full Path</strong>
+              <p className="text-gray-400 text-sm">Start from UI → API → Database → Runtime. Don't just read code - trace actual execution.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">2</span>
+            <div>
+              <strong className="text-white">Find ALL Configuration Options</strong>
+              <p className="text-gray-400 text-sm">Where is each setting stored? Set? Read? What are valid values? What's the default?</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">3</span>
+            <div>
+              <strong className="text-white">Dig for Historical Layers</strong>
+              <p className="text-gray-400 text-sm">What was the original way? What was added later? What's dead code now?</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">4</span>
+            <div>
+              <strong className="text-white">Document Inconsistencies</strong>
+              <p className="text-gray-400 text-sm">UI settings not saved? Server reading wrong location? Duplicate logic?</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">5</span>
+            <div>
+              <strong className="text-white">Recommend the Clean Version</strong>
+              <p className="text-gray-400 text-sm">If rebuilding from scratch, what's the simplest, cleanest architecture?</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-yellow-900/30 rounded-lg p-4 border border-yellow-500/30">
+          <p className="text-yellow-400 font-semibold">Output Format</p>
+          <p className="text-gray-400 text-sm mt-1">
+            Add your investigation to this page following the example below. Include: Purpose, Current Architecture Diagram,
+            Configuration Matrix, Historical Layers, Issues Found, and Clean Version Recommendation.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {/* Investigation Template */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-xl font-bold text-brand-cyan mb-4">📝 Investigation Template</h3>
+      <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm text-gray-300 overflow-x-auto">
+        <pre>{`## [System Name] - Archaeology Report
+
+### Purpose
+[One paragraph: What is this system supposed to do?]
+
+### Current Architecture
+[ASCII diagram showing UI → API → DB → Runtime flow]
+
+### Configuration Matrix
+| Setting | UI Location | DB Column | Server Read | Default | Status |
+|---------|-------------|-----------|-------------|---------|--------|
+| ...     | ...         | ...       | ...         | ...     | Active/Dead/Partial |
+
+### Historical Layers
+| Component | Original Way | Added Later | Current | Dead Code |
+|-----------|-------------|-------------|---------|-----------|
+| ...       | ...         | ...         | ...     | ...       |
+
+### Issues Found
+- [ ] Issue 1: Description
+- [ ] Issue 2: Description
+
+### Stubs & Half-Built Systems
+- Name: What it is, why it's abandoned
+
+### Clean Version Recommendation
+[Proposed simplified architecture diagram]
+[What to remove, what to keep, what to rename]
+
+### Files Touched
+- file1.ts - Description
+- file2.js - Description`}</pre>
+      </div>
+    </div>
+
+    {/* Divider */}
+    <div className="border-t border-brand-gold/50 my-8"></div>
+    <h2 className="text-2xl font-bold text-brand-gold text-center">Completed Investigations</h2>
+
+    {/* INVESTIGATION 1: Image Prompt Mode System */}
+    <div className="bg-slate-800 rounded-xl p-6 border border-brand-gold/50">
+      <div className="flex items-center gap-3 mb-4">
+        <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold">COMPLETE</span>
+        <h3 className="text-xl font-bold text-white">Image Prompt Mode System</h3>
+        <span className="text-gray-400 text-sm">Jan 2026</span>
+      </div>
+
+      {/* Purpose */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Purpose</h4>
+        <p className="text-gray-300">
+          The Image Creation system has <strong className="text-white">3 prompt modes</strong> for generating images:
+          <strong className="text-brand-gold"> Main Prompt</strong> (avatar template with smart matching),
+          <strong className="text-emerald-400"> Guided GPT</strong> (AI with guardrails), and
+          <strong className="text-purple-400"> Smart Prompt</strong> (legacy content analysis).
+          These modes apply both to direct "Generate Live" and to fallback when bank is empty.
+        </p>
+      </div>
+
+      {/* Current Architecture */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Current Architecture</h4>
+        <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs text-gray-300 overflow-x-auto">
+          <pre>{`┌─────────────────────────────────────────────────────────────────────────┐
+│                         FRONTEND (UI Layer)                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│  ImageCreationSection.tsx                                                │
+│  ├── integration_mode: 'live' | 'bank'     ← Master toggle               │
+│  ├── live_prompt_mode: 3 buttons           ← For direct "Generate Live"  │
+│  ├── fallback_prompt_mode: 3 buttons       ← For bank→live fallback      │
+│  └── updateSettings() → saves ALL to server                              │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         SERVER (API Layer)                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│  image-creation.js                                                       │
+│  ├── GET  /settings/:workflowId → returns live_prompt_mode,              │
+│  │                                 fallback_prompt_mode                  │
+│  ├── PUT  /settings/:workflowId → saves to website_id OR workflow_id     │
+│  └── Priority: website_id > workflow_id                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         DATABASE (Storage Layer)                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│  image_creation_settings table                                           │
+│  ├── website_id OR workflow_id    ← Can store at EITHER level            │
+│  ├── live_prompt_mode             ← 'main_prompt'|'guided_gpt'|'smart'   │
+│  ├── fallback_prompt_mode         ← 'main_prompt'|'guided_gpt'|'smart'   │
+│  ├── audience_avatars (JSONB)     ← Contains mainPrompt templates        │
+│  └── guided_guardrails (JSONB)    ← Contains GPT instructions            │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      PUBLISH ENGINE (Runtime)                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│  elementor.js (2 separate reads!)                                        │
+│  ├── ~Line 460: Initial settings read (integration_mode, model, etc)     │
+│  ├── ~Line 1210: Generate Live settings read (prompt mode, avatar)       │
+│  │                                                                       │
+│  │  Decision Logic:                                                      │
+│  │  if (isFallbackFromBank) {                                           │
+│  │    use fallback_prompt_mode || live_prompt_mode || 'main_prompt'     │
+│  │  } else {                                                            │
+│  │    use live_prompt_mode || 'smart_prompt'  ← Direct live mode        │
+│  │  }                                                                   │
+│  └── Passes mode to image-pipeline.js                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      IMAGE PIPELINE (Generator)                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│  image-pipeline.js                                                       │
+│  ├── if livePromptMode === 'main_prompt':                               │
+│  │     → smartMatchForPosition() + buildPromptWithReplacements()        │
+│  ├── else if livePromptMode === 'guided_gpt':                           │
+│  │     → generateGuidedPrompt() with guardrails                         │
+│  ├── else (smart_prompt):                                               │
+│  │     → extractImageAction() legacy content analysis                   │
+│  └── All paths → generateImage() with final prompt                      │
+└─────────────────────────────────────────────────────────────────────────┘`}</pre>
+        </div>
+      </div>
+
+      {/* Configuration Matrix */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Configuration Matrix</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-600">
+                <th className="text-left py-2 text-gray-400">Setting</th>
+                <th className="text-left py-2 text-gray-400">UI Location</th>
+                <th className="text-left py-2 text-gray-400">DB Column</th>
+                <th className="text-left py-2 text-gray-400">Server Read</th>
+                <th className="text-left py-2 text-gray-400">Default</th>
+                <th className="text-left py-2 text-gray-400">Status</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-300">
+              <tr className="border-b border-slate-700">
+                <td className="py-2">integration_mode</td>
+                <td>ImageCreationSection</td>
+                <td>integration_mode</td>
+                <td>elementor.js:510</td>
+                <td>'bank'</td>
+                <td><span className="text-green-400">Active</span></td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2">live_prompt_mode</td>
+                <td>ImageCreationSection:5629</td>
+                <td>live_prompt_mode</td>
+                <td>elementor.js:524,1254</td>
+                <td>'smart_prompt'</td>
+                <td><span className="text-green-400">Active</span></td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2">fallback_prompt_mode</td>
+                <td>ImageCreationSection:7642</td>
+                <td>fallback_prompt_mode</td>
+                <td>elementor.js:1250</td>
+                <td>'main_prompt'</td>
+                <td><span className="text-green-400">Active (FIXED Jan 2026)</span></td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2">fallback_to_live</td>
+                <td>ImageCreationSection</td>
+                <td>fallback_to_live</td>
+                <td>elementor.js:516-518</td>
+                <td>true</td>
+                <td><span className="text-yellow-400">LEGACY - overridden by smart_matching_mode</span></td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2">smart_matching_mode</td>
+                <td>ImageCreationSection</td>
+                <td>smart_matching_mode</td>
+                <td>elementor.js:511</td>
+                <td>'bank_first'</td>
+                <td><span className="text-green-400">Active - SOURCE OF TRUTH for fallback</span></td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2">audience_avatars</td>
+                <td>ImageCreationSection</td>
+                <td>audience_avatars (JSONB)</td>
+                <td>elementor.js:528,1262</td>
+                <td>[default avatar]</td>
+                <td><span className="text-green-400">Active</span></td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2">guided_guardrails</td>
+                <td>ImageCreationSection</td>
+                <td>guided_guardrails (JSONB)</td>
+                <td>elementor.js:539,1268</td>
+                <td>{'{}'}</td>
+                <td><span className="text-green-400">Active</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Historical Layers */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Historical Layers (Archaeology)</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-600">
+                <th className="text-left py-2 text-gray-400">Component</th>
+                <th className="text-left py-2 text-gray-400">Original Way</th>
+                <th className="text-left py-2 text-gray-400">Added Later</th>
+                <th className="text-left py-2 text-gray-400">Current</th>
+                <th className="text-left py-2 text-gray-400">Dead Code</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-300">
+              <tr className="border-b border-slate-700">
+                <td className="py-2">Storage Level</td>
+                <td>workflow_id only</td>
+                <td>website_id added</td>
+                <td className="text-green-400">Both, website preferred</td>
+                <td>None</td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2">Prompt Mode</td>
+                <td>Hardcoded smart_prompt</td>
+                <td>live_prompt_mode column</td>
+                <td className="text-green-400">DB-driven, 3 modes</td>
+                <td>None now</td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2">Fallback Logic</td>
+                <td>fallback_to_live boolean</td>
+                <td>smart_matching_mode</td>
+                <td className="text-green-400">smart_matching_mode is truth</td>
+                <td className="text-yellow-400">fallback_to_live still read but ignored</td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2">Avatar Selection</td>
+                <td>Single default avatar</td>
+                <td>Multi-avatar with tags</td>
+                <td className="text-green-400">Tag-based selection</td>
+                <td className="text-yellow-400">variations array partially orphaned</td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2">Settings Read</td>
+                <td>Single read workflow_id</td>
+                <td>Added website_id check</td>
+                <td className="text-yellow-400">TWO separate reads in elementor.js</td>
+                <td>Could consolidate</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Stubs & Half-Built */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Stubs & Half-Built Systems</h4>
+        <div className="space-y-2">
+          <div className="bg-slate-900 rounded p-3">
+            <span className="text-yellow-400 font-semibold">fallback_to_live boolean</span>
+            <span className="text-gray-400 text-sm ml-2">- Still in schema/UI but overridden by smart_matching_mode</span>
+          </div>
+          <div className="bg-slate-900 rounded p-3">
+            <span className="text-yellow-400 font-semibold">variations array in avatars</span>
+            <span className="text-gray-400 text-sm ml-2">- Old system, mostly replaced by tag-based selection</span>
+          </div>
+          <div className="bg-slate-900 rounded p-3">
+            <span className="text-yellow-400 font-semibold">smart_matching_enabled toggle</span>
+            <span className="text-gray-400 text-sm ml-2">- Exists but behavior unclear vs smart_matching_mode</span>
+          </div>
+          <div className="bg-slate-900 rounded p-3">
+            <span className="text-yellow-400 font-semibold">matching_rule_1-4</span>
+            <span className="text-gray-400 text-sm ml-2">- Editable rules in DB but unclear if code reads them</span>
+          </div>
+          <div className="bg-slate-900 rounded p-3">
+            <span className="text-yellow-400 font-semibold">Duplicate settings reads</span>
+            <span className="text-gray-400 text-sm ml-2">- elementor.js lines 460 and 1210 both query same table</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Clean Version Recommendation */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Clean Version Recommendation</h4>
+        <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs text-gray-300 overflow-x-auto">
+          <pre>{`// RECOMMENDED: Unified Settings Object
+imageSettings = {
+  source: 'bank' | 'live',              // replaces integration_mode
+  bankFallback: 'none' | 'live',        // replaces smart_matching_mode
+  liveMode: 'template' | 'ai' | 'legacy',  // clearer names
+  fallbackMode: 'template' | 'ai' | 'legacy',
+  templates: [...],                      // replaces audience_avatars
+  aiConfig: {                            // replaces guided_guardrails
+    model: string,
+    instructions: string,
+    avoid: string[]
+  }
+}
+
+REMOVE:
+- fallback_to_live (replaced by bankFallback)
+- smart_matching_enabled (confusing, consolidate)
+- variations array (use tags only)
+- matching_rule_1-4 (unless actively used)
+- Duplicate settings reads in elementor.js (read ONCE, pass around)
+
+RENAME FOR CLARITY:
+- 'smart_prompt' → 'legacy' (it's the old way)
+- 'main_prompt' → 'template' (clearer)
+- 'guided_gpt' → 'ai' (model-agnostic)`}</pre>
+        </div>
+      </div>
+
+      {/* Files Touched */}
+      <div>
+        <h4 className="text-brand-cyan font-semibold mb-2">Files Touched</h4>
+        <div className="grid md:grid-cols-2 gap-2 text-sm">
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">src/components/ImageCreationSection.tsx</code>
+            <span className="text-gray-400 block text-xs">UI for all settings, 3-button toggles</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/routes/image-creation.js</code>
+            <span className="text-gray-400 block text-xs">GET/PUT API, DB queries</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/routes/elementor.js</code>
+            <span className="text-gray-400 block text-xs">Publish engine, reads settings twice</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/services/image-pipeline.js</code>
+            <span className="text-gray-400 block text-xs">Actual prompt generation per mode</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/db/schema.sql</code>
+            <span className="text-gray-400 block text-xs">Table definition, migrations</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Placeholder for future investigations */}
+    <div className="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center">
+      <p className="text-gray-500 text-lg">More investigations will be added here as systems are mapped.</p>
+      <p className="text-gray-600 text-sm mt-2">Use the template above to document any system you're working on.</p>
+    </div>
+
+    {/* Quick Reference: Common Patterns to Look For */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-cyan mb-4">Quick Reference: Red Flags to Look For</h3>
+      <div className="grid md:grid-cols-2 gap-4 text-sm">
+        <div className="bg-slate-900 rounded-lg p-3">
+          <span className="text-red-400 font-semibold">UI saves but server ignores</span>
+          <p className="text-gray-400 text-xs mt-1">Check req.body destructuring matches UI payload</p>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-3">
+          <span className="text-red-400 font-semibold">DB column doesn't exist</span>
+          <p className="text-gray-400 text-xs mt-1">Check schema.sql AND run migrations</p>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-3">
+          <span className="text-red-400 font-semibold">website_id vs workflow_id mismatch</span>
+          <p className="text-gray-400 text-xs mt-1">Save goes to one, read comes from other</p>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-3">
+          <span className="text-red-400 font-semibold">Default overrides DB value</span>
+          <p className="text-gray-400 text-xs mt-1">Look for: value || 'default' when value is NULL</p>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-3">
+          <span className="text-red-400 font-semibold">Duplicate reads of same data</span>
+          <p className="text-gray-400 text-xs mt-1">Multiple queries that could be one pass-through</p>
+        </div>
+        <div className="bg-slate-900 rounded-lg p-3">
+          <span className="text-red-400 font-semibold">Boolean vs mode string confusion</span>
+          <p className="text-gray-400 text-xs mt-1">e.g., fallback_to_live vs smart_matching_mode</p>
+        </div>
       </div>
     </div>
   </div>
