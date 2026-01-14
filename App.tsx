@@ -28,6 +28,7 @@ import LocalVikingSection from './src/components/LocalVikingSection';
 import { VibeCoderToggle } from './src/components/VibeCoderNotepad';
 import HelpButton from './src/components/HelpButton';
 import LogViewer from './src/components/LogViewer';
+import TestRunnerPopup from './src/components/TestRunnerPopup';
 
 // Types for workflow
 interface WorkflowItem {
@@ -225,6 +226,14 @@ const App: React.FC = () => {
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
     const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
     const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
+    const [isTestRunnerOpen, setIsTestRunnerOpen] = useState(false);
+    const [testQueue, setTestQueue] = useState<Array<{
+      articleMode: 'draft' | 'wordpress';
+      metaMode: 'draft' | 'wordpress';
+      imageMode: 'off' | 'draft' | 'wordpress';
+      imageSource: 'bank' | 'main-prompt' | 'guided-gpt' | 'smart-prompt';
+    }>>([]);
+    const [isRunningTestSequence, setIsRunningTestSequence] = useState(false);
     const [defaultWorkflow, setDefaultWorkflow] = useState<DefaultWorkflowConfig | null>(() => {
       // Load from localStorage on init
       const saved = localStorage.getItem('promptflow_default_workflow');
@@ -1547,7 +1556,96 @@ const App: React.FC = () => {
         addLog(`Batch processing complete in ${duration} minutes.`, LogStatus.SUCCESS);
         setIsProcessing(false);
     };
-    
+
+    // Test Runner - runs test sequence using the REAL workflow paths
+    const runTestSequence = async (steps: Array<{
+      articleMode: 'draft' | 'wordpress';
+      metaMode: 'draft' | 'wordpress';
+      imageMode: 'off' | 'draft' | 'wordpress';
+      imageSource: 'bank' | 'main-prompt' | 'guided-gpt' | 'smart-prompt';
+    }>) => {
+      if (!currentWorkflowId) {
+        showNotification('No workflow selected', 'error');
+        return;
+      }
+
+      setIsRunningTestSequence(true);
+      addLog(`🧪 Starting Test Sequence with ${steps.length} steps...`, LogStatus.INFO);
+
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+        addLog(`🧪 Test Step ${i + 1}/${steps.length}: Article=${step.articleMode}, Meta=${step.metaMode}, Image=${step.imageMode}, Source=${step.imageSource}`, LogStatus.INFO);
+
+        try {
+          // 1. Set the publish modes (same as clicking the toggles)
+          setCurrentProjectState(prev => ({
+            ...prev,
+            articlePublishMode: step.articleMode,
+            metaPublishMode: step.metaMode,
+            imagePublishMode: step.imageMode
+          }));
+
+          // 2. Update image creation settings via API (same as clicking Bank/Live buttons)
+          const imageSettings: Record<string, string> = {};
+
+          if (step.imageSource === 'bank') {
+            imageSettings.smart_matching_mode = 'bank_only';
+          } else {
+            imageSettings.smart_matching_mode = 'generate_only';
+            // Set the live prompt mode
+            if (step.imageSource === 'main-prompt') {
+              imageSettings.live_prompt_mode = 'main_prompt';
+            } else if (step.imageSource === 'guided-gpt') {
+              imageSettings.live_prompt_mode = 'guided_gpt';
+            } else if (step.imageSource === 'smart-prompt') {
+              imageSettings.live_prompt_mode = 'smart_prompt';
+            }
+          }
+
+          // Save settings via API
+          await fetch(`/api/image-creation/settings/${currentWorkflowId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(imageSettings)
+          });
+
+          // Small delay to ensure settings are saved
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // 3. Create a test item and run the workflow
+          const testItem: WorkflowItem = {
+            id: Date.now(),
+            name: `Test-${i + 1}-${step.articleMode}-${step.imageSource}(H)`,
+            tag: 'H' // Use default H tag
+          };
+
+          // Add item to items list
+          setItems([testItem]);
+
+          // Wait for state to update
+          await new Promise(resolve => setTimeout(resolve, 200));
+
+          // 4. Run the workflow (same as clicking the Start button)
+          await processWorkflow([testItem]);
+
+          addLog(`✅ Test Step ${i + 1} completed`, LogStatus.SUCCESS);
+
+        } catch (error: any) {
+          addLog(`❌ Test Step ${i + 1} failed: ${error.message}`, LogStatus.ERROR);
+        }
+
+        // Wait between tests
+        if (i < steps.length - 1) {
+          addLog(`⏳ Waiting 2 seconds before next test...`, LogStatus.INFO);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+
+      setIsRunningTestSequence(false);
+      addLog(`🧪 Test Sequence Complete! Ran ${steps.length} tests.`, LogStatus.SUCCESS);
+      showNotification(`Test sequence complete - ${steps.length} tests run`, 'success');
+    };
+
     // Helper to strip tag suffix like "(H)" from item names
     const stripTagFromName = (name: string): string => {
         return name.replace(/\s*\([^)]+\)\s*$/, '').trim();
@@ -1962,6 +2060,25 @@ const App: React.FC = () => {
             <BlueprintPage
               isOpen={isBlueprintOpen}
               onClose={() => setIsBlueprintOpen(false)}
+            />
+
+            {/* Test Runner Popup */}
+            <TestRunnerPopup
+              isOpen={isTestRunnerOpen}
+              onClose={() => setIsTestRunnerOpen(false)}
+              onRunTest={(steps) => {
+                // Convert steps to the format expected by runTestSequence
+                const formattedSteps = steps.map(s => ({
+                  articleMode: s.articleMode,
+                  metaMode: s.metaMode,
+                  imageMode: s.imageMode,
+                  imageSource: s.imageSource
+                }));
+                runTestSequence(formattedSteps);
+              }}
+              currentArticleMode={currentProject?.state?.articlePublishMode || 'draft'}
+              currentMetaMode={currentProject?.state?.metaPublishMode || 'draft'}
+              currentImageMode={currentProject?.state?.imagePublishMode || 'off'}
             />
 
             {/* Settings Modal */}
@@ -2761,6 +2878,18 @@ const App: React.FC = () => {
                             <button onClick={processWorkflow} disabled={isRunDisabled} className={`w-full flex items-center justify-center font-bold py-4 px-6 rounded-xl transition-all btn-press border-2 ${isRunDisabled ? 'bg-slate-900 border-brand-cyan text-brand-cyan/50 cursor-not-allowed' : 'bg-gradient-to-r from-brand-cyan to-brand-cyan-dark hover:from-brand-cyan-dark hover:to-brand-cyan text-slate-900 border-transparent shadow-card hover:shadow-glow-cyan'}`}>
                                 {isProcessing ? <Icon type="working" className="h-5 w-5 animate-spin mr-2" /> : <Icon type="play" className="h-5 w-5 mr-2" />}
                                 {getRunButtonText()}
+                            </button>
+
+                            {/* Test Mode Button */}
+                            <button
+                                onClick={() => setIsTestRunnerOpen(true)}
+                                disabled={isRunningTestSequence}
+                                className="w-full flex items-center justify-center font-bold py-2 px-4 rounded-lg transition-all bg-red-600 hover:bg-red-500 text-white border-2 border-red-400 mt-2"
+                            >
+                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                </svg>
+                                {isRunningTestSequence ? 'Running Tests...' : 'Test Mode'}
                             </button>
                         </div>
                     , true,
