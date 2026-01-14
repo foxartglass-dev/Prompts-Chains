@@ -1918,6 +1918,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       : sql`SELECT id, integration_mode, live_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
     const verifyResult = await verifyQuery;
     console.log('[Image Creation API] VERIFICATION READ after save:', verifyResult[0]);
+    if (verifyResult.length > 1) {
+      console.log('[Image Creation API] WARNING: Multiple rows found!', verifyResult.map(r => r.id));
+    }
 
     console.log('[Image Creation API] Update complete for workflow:', workflowId);
     res.json({ success: true, updated: true });
