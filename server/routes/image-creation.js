@@ -1420,6 +1420,23 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       is_null: live_prompt_mode === null
     });
 
+    // DEBUG: Log avatar mainPrompt to trace stale data issue
+    if (audience_avatars && audience_avatars.length > 0) {
+      console.log('[Image Creation API] ===== AVATAR DATA BEING SAVED =====');
+      audience_avatars.forEach((avatar, idx) => {
+        const promptPreview = avatar.mainPrompt
+          ? avatar.mainPrompt.substring(0, 100) + '...'
+          : '(empty)';
+        console.log(`[Image Creation API] Avatar[${idx}] "${avatar.name}" (tag: ${avatar.tag || 'none'}):`);
+        console.log(`[Image Creation API]   mainPrompt: ${promptPreview}`);
+        // Check for the OLD construction site prompt
+        if (avatar.mainPrompt && avatar.mainPrompt.includes('construction site')) {
+          console.log('[Image Creation API]   ⚠️ WARNING: Contains "construction site" - this may be STALE DATA!');
+        }
+      });
+      console.log('[Image Creation API] ===================================');
+    }
+
     // Check if settings exist - prefer website-level, fall back to workflow-level
     let existing = [];
     let saveToWebsite = false;
@@ -2281,6 +2298,30 @@ router.get('/debug-levels/:workflowId', requireDb, async (req, res) => {
       return first.mainPrompt.substring(0, 100) + '...';
     };
 
+    // Check for stale "construction site" text in prompts
+    const checkForStalePrompt = (avatars) => {
+      if (!avatars || !avatars.length) return { hasStale: false };
+      const houseAvatar = avatars.find(a => a.name === 'House Cleaning' || a.tag === 'H');
+      if (!houseAvatar || !houseAvatar.mainPrompt) return { hasStale: false };
+      const hasConstructionSite = houseAvatar.mainPrompt.includes('construction site');
+      return {
+        hasStale: hasConstructionSite,
+        warning: hasConstructionSite ? '⚠️ STALE: Contains "construction site" text!' : '✅ OK',
+        fullPromptLength: houseAvatar.mainPrompt.length
+      };
+    };
+
+    // Get all avatars summary
+    const getAvatarsSummary = (avatars) => {
+      if (!avatars || !avatars.length) return [];
+      return avatars.map(a => ({
+        name: a.name,
+        tag: a.tag || 'none',
+        mainPromptPreview: a.mainPrompt ? a.mainPrompt.substring(0, 80) + '...' : '(empty)',
+        hasConstructionSite: a.mainPrompt ? a.mainPrompt.includes('construction site') : false
+      }));
+    };
+
     res.json({
       success: true,
       workflowId,
@@ -2291,15 +2332,19 @@ router.get('/debug-levels/:workflowId', requireDb, async (req, res) => {
           id: workflowSettings[0].id,
           live_prompt_mode: workflowSettings[0].live_prompt_mode,
           mainPrompt_preview: extractMainPrompt(workflowSettings[0].audience_avatars),
+          staleCheck: checkForStalePrompt(workflowSettings[0].audience_avatars),
           updated_at: workflowSettings[0].updated_at,
-          hasAvatars: (workflowSettings[0].audience_avatars || []).length
+          hasAvatars: (workflowSettings[0].audience_avatars || []).length,
+          avatarsSummary: getAvatarsSummary(workflowSettings[0].audience_avatars)
         } : null,
         websiteLevel: websiteSettings.length > 0 ? {
           id: websiteSettings[0].id,
           live_prompt_mode: websiteSettings[0].live_prompt_mode,
           mainPrompt_preview: extractMainPrompt(websiteSettings[0].audience_avatars),
+          staleCheck: checkForStalePrompt(websiteSettings[0].audience_avatars),
           updated_at: websiteSettings[0].updated_at,
-          hasAvatars: (websiteSettings[0].audience_avatars || []).length
+          hasAvatars: (websiteSettings[0].audience_avatars || []).length,
+          avatarsSummary: getAvatarsSummary(websiteSettings[0].audience_avatars)
         } : null,
       },
       recommendation: websiteSettings.length > 0 && workflowSettings.length > 0
@@ -2385,6 +2430,109 @@ router.post('/sync-levels/:workflowId', requireDb, async (req, res) => {
 
   } catch (error) {
     console.error('[Image Creation API] Sync levels error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/image-creation/fix-avatar-prompt/:workflowId
+ * FIX: Directly update a specific avatar's mainPrompt in the database
+ * Use this when the avatar mainPrompt is stale/cached
+ *
+ * Body: {
+ *   avatarTag: "H",              // Tag of avatar to update
+ *   newMainPrompt: "..."         // New prompt text
+ *   level: "website" | "workflow" // Which level to update (default: website)
+ * }
+ */
+router.post('/fix-avatar-prompt/:workflowId', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+    const { avatarTag, newMainPrompt, level = 'website' } = req.body;
+
+    if (!avatarTag || !newMainPrompt) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: avatarTag and newMainPrompt'
+      });
+    }
+
+    // Get website_id from workflow
+    let websiteId = null;
+    const workflowResult = await sql`
+      SELECT website_id, name FROM workflows WHERE id = ${workflowId}
+    `;
+    if (workflowResult.length > 0) {
+      websiteId = workflowResult[0].website_id;
+    }
+
+    // Determine which settings row to update
+    let settingsRow;
+    if (level === 'website' && websiteId) {
+      settingsRow = await sql`
+        SELECT id, audience_avatars FROM image_creation_settings WHERE website_id = ${websiteId}
+      `;
+    } else {
+      settingsRow = await sql`
+        SELECT id, audience_avatars FROM image_creation_settings WHERE workflow_id = ${workflowId}
+      `;
+    }
+
+    if (settingsRow.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `No settings found at ${level} level`
+      });
+    }
+
+    const currentAvatars = settingsRow[0].audience_avatars || [];
+    const settingsId = settingsRow[0].id;
+
+    // Find and update the avatar
+    const avatarIndex = currentAvatars.findIndex(
+      a => a.tag === avatarTag || a.name === avatarTag
+    );
+
+    if (avatarIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        error: `Avatar with tag/name "${avatarTag}" not found`,
+        availableAvatars: currentAvatars.map(a => ({ name: a.name, tag: a.tag }))
+      });
+    }
+
+    // Log the before/after
+    const oldPrompt = currentAvatars[avatarIndex].mainPrompt;
+    console.log(`[FIX AVATAR] Updating avatar "${currentAvatars[avatarIndex].name}" (tag: ${avatarTag})`);
+    console.log(`[FIX AVATAR] OLD prompt (first 100 chars): ${oldPrompt?.substring(0, 100)}...`);
+    console.log(`[FIX AVATAR] NEW prompt (first 100 chars): ${newMainPrompt.substring(0, 100)}...`);
+
+    // Update the avatar mainPrompt
+    currentAvatars[avatarIndex].mainPrompt = newMainPrompt;
+
+    // Save back to database
+    await sql`
+      UPDATE image_creation_settings
+      SET audience_avatars = ${JSON.stringify(currentAvatars)}::jsonb,
+          updated_at = NOW()
+      WHERE id = ${settingsId}
+    `;
+
+    console.log(`[FIX AVATAR] ✅ Successfully updated avatar mainPrompt at ${level} level (settings id: ${settingsId})`);
+
+    res.json({
+      success: true,
+      message: `Updated avatar "${currentAvatars[avatarIndex].name}" mainPrompt`,
+      level,
+      settingsId,
+      avatarName: currentAvatars[avatarIndex].name,
+      avatarTag,
+      oldPromptPreview: oldPrompt?.substring(0, 100) + '...',
+      newPromptPreview: newMainPrompt.substring(0, 100) + '...'
+    });
+
+  } catch (error) {
+    console.error('[Image Creation API] Fix avatar prompt error:', error);
     res.status(500).json({ error: error.message });
   }
 });
