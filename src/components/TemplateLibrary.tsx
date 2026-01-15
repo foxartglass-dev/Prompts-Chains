@@ -82,15 +82,25 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
 
       const res = await fetch(url);
       if (!res.ok) {
-        // Database tables may not exist
+        const errorData = await res.json().catch(() => ({}));
+        const errorMsg = errorData.error || `Server error: ${res.status}`;
+        // Show specific error for missing database/table
+        if (res.status === 503) {
+          setError('Database not configured. Templates require a database connection.');
+        } else if (res.status === 500 && errorMsg.includes('does not exist')) {
+          setError('Templates table not found. Run database migrations to create the templates table.');
+        } else {
+          setError(`Failed to load templates: ${errorMsg}`);
+        }
         setTemplates([]);
         return;
       }
       const data = await res.json();
       setTemplates(Array.isArray(data) ? data : (Array.isArray(data.templates) ? data.templates : []));
     } catch (err) {
+      console.error('Failed to fetch templates:', err);
+      setError(`Network error: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setTemplates([]);
-      // Don't show error for missing tables
     } finally {
       setLoading(false);
     }
@@ -103,6 +113,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     }
 
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/templates/from-workflow/${currentWorkflowId}`, {
         method: 'POST',
@@ -116,15 +127,27 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
       });
 
       const data = await res.json();
+      if (!res.ok) {
+        // Show specific error for database issues
+        if (res.status === 503) {
+          setError('Database not configured. Cannot save templates without a database.');
+        } else if (data.error?.includes('does not exist')) {
+          setError('Templates table not found. Run database migrations first.');
+        } else {
+          setError(data.error || `Failed to create template (${res.status})`);
+        }
+        return;
+      }
       if (data.template) {
         setTemplates([data.template, ...templates]);
         setViewMode('browse');
         setCreateForm({ name: '', description: '', tags: '' });
       } else {
-        setError(data.error || 'Failed to create template');
+        setError('Template saved but response was unexpected');
       }
     } catch (err) {
-      setError('Failed to create template');
+      console.error('Failed to create template:', err);
+      setError(`Network error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -137,6 +160,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     }
 
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/templates/from-website/${currentWebsiteId}`, {
         method: 'POST',
@@ -149,15 +173,26 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
       });
 
       const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 503) {
+          setError('Database not configured. Cannot save templates without a database.');
+        } else if (data.error?.includes('does not exist')) {
+          setError('Templates table not found. Run database migrations first.');
+        } else {
+          setError(data.error || `Failed to create template (${res.status})`);
+        }
+        return;
+      }
       if (data.template) {
         setTemplates([data.template, ...templates]);
         setViewMode('browse');
         setCreateForm({ name: '', description: '', tags: '' });
       } else {
-        setError(data.error || 'Failed to create template');
+        setError('Template saved but response was unexpected');
       }
     } catch (err) {
-      setError('Failed to create template');
+      console.error('Failed to create template:', err);
+      setError(`Network error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -172,6 +207,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     }
 
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/templates/${template.id}/apply/${currentWorkflowId}`, {
         method: 'POST',
@@ -180,14 +216,19 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
       });
 
       const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || `Failed to apply template (${res.status})`);
+        return;
+      }
       if (data.workflow) {
         onApplyTemplate?.(template);
         onClose();
       } else {
-        setError(data.error || 'Failed to apply template');
+        setError('Template applied but response was unexpected');
       }
     } catch (err) {
-      setError('Failed to apply template');
+      console.error('Failed to apply template:', err);
+      setError(`Network error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -200,6 +241,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     }
 
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/templates/${template.id}/apply-to-website/${currentWebsiteId}`, {
         method: 'POST',
@@ -207,14 +249,19 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
       });
 
       const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || `Failed to apply template (${res.status})`);
+        return;
+      }
       if (data.workflows) {
         onApplyTemplate?.(template);
         onClose();
       } else {
-        setError(data.error || 'Failed to apply template');
+        setError('Template applied but response was unexpected');
       }
     } catch (err) {
-      setError('Failed to apply template');
+      console.error('Failed to apply template:', err);
+      setError(`Network error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -223,15 +270,22 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
   const deleteTemplate = async (id: number) => {
     if (!confirm('Delete this template?')) return;
 
+    setError(null);
     try {
-      await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Failed to delete template (${res.status})`);
+        return;
+      }
       setTemplates(templates.filter(t => t.id !== id));
       if (selectedTemplate?.id === id) {
         setSelectedTemplate(null);
         setViewMode('browse');
       }
     } catch (err) {
-      setError('Failed to delete template');
+      console.error('Failed to delete template:', err);
+      setError(`Network error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
