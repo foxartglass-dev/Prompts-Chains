@@ -213,19 +213,55 @@ router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
         if (imageSettings.length > 0) {
           const settings = imageSettings[0];
           templateData.imageCreation = {
+            // Core settings
             enabled: settings.enabled,
             prompt_assistant_model: settings.prompt_assistant_model,
             image_generation_model: settings.image_generation_model,
             image_quality: settings.image_quality,
+            // Reference and logo images
             reference_images: settings.reference_images || [],
             logo_images: settings.logo_images || [],
+            // Audience avatars
             audience_avatars: settings.audience_avatars || [],
+            // Image bank and categories
             image_bank: settings.image_bank || [],
             image_categories: settings.image_categories || [],
+            // Auto-tagging and smart matching
             auto_tag_enabled: settings.auto_tag_enabled,
             smart_matching_enabled: settings.smart_matching_enabled,
             fallback_to_live: settings.fallback_to_live,
-            variation_order_mode: settings.variation_order_mode
+            variation_order_mode: settings.variation_order_mode,
+            manual_variation_order: settings.manual_variation_order || [],
+            // Integration mode (bank vs live)
+            integration_mode: settings.integration_mode || 'bank',
+            // Prompt mode settings
+            live_prompt_mode: settings.live_prompt_mode || 'main_prompt',
+            fallback_prompt_mode: settings.fallback_prompt_mode || 'main_prompt',
+            smart_prompt_guidance: settings.smart_prompt_guidance || '',
+            // Guided GPT guardrails
+            guided_guardrails: settings.guided_guardrails || {},
+            // Editable matching rules
+            matching_rule_1: settings.matching_rule_1,
+            matching_rule_2: settings.matching_rule_2,
+            matching_rule_3: settings.matching_rule_3,
+            matching_rule_4: settings.matching_rule_4,
+            // Smart matching config
+            smart_matching_config: settings.smart_matching_config || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 },
+            // Image order
+            image_order: settings.image_order || [],
+            // Dual chat system
+            consultant_chat_history: settings.consultant_chat_history || [],
+            consultant_model: settings.consultant_model || 'gpt-4o',
+            worker_chat_history: settings.worker_chat_history || [],
+            worker_model: settings.worker_model || 'gpt-4o-mini',
+            // Legacy chat history
+            chat_history: settings.chat_history || [],
+            // Placeholder Category Templates
+            placeholder_category_templates: settings.placeholder_category_templates || [],
+            // Prompt Templates
+            prompt_templates: settings.prompt_templates || [],
+            // Text Snippets
+            text_snippets: settings.text_snippets || []
           };
         }
       } catch (err) {
@@ -436,6 +472,26 @@ router.post('/:id/apply/:workflowId', requireDb, async (req, res) => {
                 smart_matching_enabled = COALESCE(${img.smart_matching_enabled}, smart_matching_enabled),
                 fallback_to_live = COALESCE(${img.fallback_to_live}, fallback_to_live),
                 variation_order_mode = COALESCE(${img.variation_order_mode}, variation_order_mode),
+                manual_variation_order = COALESCE(${JSON.stringify(img.manual_variation_order)}, manual_variation_order),
+                integration_mode = COALESCE(${img.integration_mode}, integration_mode),
+                live_prompt_mode = COALESCE(${img.live_prompt_mode}, live_prompt_mode),
+                fallback_prompt_mode = COALESCE(${img.fallback_prompt_mode}, fallback_prompt_mode),
+                smart_prompt_guidance = COALESCE(${img.smart_prompt_guidance}, smart_prompt_guidance),
+                guided_guardrails = COALESCE(${JSON.stringify(img.guided_guardrails)}, guided_guardrails),
+                matching_rule_1 = COALESCE(${img.matching_rule_1}, matching_rule_1),
+                matching_rule_2 = COALESCE(${img.matching_rule_2}, matching_rule_2),
+                matching_rule_3 = COALESCE(${img.matching_rule_3}, matching_rule_3),
+                matching_rule_4 = COALESCE(${img.matching_rule_4}, matching_rule_4),
+                smart_matching_config = COALESCE(${JSON.stringify(img.smart_matching_config)}, smart_matching_config),
+                image_order = COALESCE(${JSON.stringify(img.image_order)}, image_order),
+                consultant_chat_history = ${JSON.stringify([...(currentSettings.consultant_chat_history || []), ...(img.consultant_chat_history || [])])},
+                consultant_model = COALESCE(${img.consultant_model}, consultant_model),
+                worker_chat_history = ${JSON.stringify([...(currentSettings.worker_chat_history || []), ...(img.worker_chat_history || [])])},
+                worker_model = COALESCE(${img.worker_model}, worker_model),
+                chat_history = ${JSON.stringify([...(currentSettings.chat_history || []), ...(img.chat_history || [])])},
+                placeholder_category_templates = ${JSON.stringify([...(currentSettings.placeholder_category_templates || []), ...(img.placeholder_category_templates || [])])},
+                prompt_templates = ${JSON.stringify([...(currentSettings.prompt_templates || []), ...(img.prompt_templates || [])])},
+                text_snippets = ${JSON.stringify([...(currentSettings.text_snippets || []), ...(img.text_snippets || [])])},
                 updated_at = CURRENT_TIMESTAMP
               WHERE workflow_id = ${workflowId}
             `;
@@ -457,6 +513,26 @@ router.post('/:id/apply/:workflowId', requireDb, async (req, res) => {
                 smart_matching_enabled = ${img.smart_matching_enabled ?? true},
                 fallback_to_live = ${img.fallback_to_live ?? true},
                 variation_order_mode = ${img.variation_order_mode || 'sequential'},
+                manual_variation_order = ${JSON.stringify(img.manual_variation_order || [])},
+                integration_mode = ${img.integration_mode || 'bank'},
+                live_prompt_mode = ${img.live_prompt_mode || 'main_prompt'},
+                fallback_prompt_mode = ${img.fallback_prompt_mode || 'main_prompt'},
+                smart_prompt_guidance = ${img.smart_prompt_guidance || ''},
+                guided_guardrails = ${JSON.stringify(img.guided_guardrails || {})},
+                matching_rule_1 = ${img.matching_rule_1 || null},
+                matching_rule_2 = ${img.matching_rule_2 || null},
+                matching_rule_3 = ${img.matching_rule_3 || null},
+                matching_rule_4 = ${img.matching_rule_4 || null},
+                smart_matching_config = ${JSON.stringify(img.smart_matching_config || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 })},
+                image_order = ${JSON.stringify(img.image_order || [])},
+                consultant_chat_history = ${JSON.stringify(img.consultant_chat_history || [])},
+                consultant_model = ${img.consultant_model || 'gpt-4o'},
+                worker_chat_history = ${JSON.stringify(img.worker_chat_history || [])},
+                worker_model = ${img.worker_model || 'gpt-4o-mini'},
+                chat_history = ${JSON.stringify(img.chat_history || [])},
+                placeholder_category_templates = ${JSON.stringify(img.placeholder_category_templates || [])},
+                prompt_templates = ${JSON.stringify(img.prompt_templates || [])},
+                text_snippets = ${JSON.stringify(img.text_snippets || [])},
                 updated_at = CURRENT_TIMESTAMP
               WHERE workflow_id = ${workflowId}
             `;
@@ -468,7 +544,12 @@ router.post('/:id/apply/:workflowId', requireDb, async (req, res) => {
               workflow_id, enabled, prompt_assistant_model, image_generation_model,
               image_quality, reference_images, logo_images, audience_avatars,
               image_bank, image_categories, auto_tag_enabled, smart_matching_enabled,
-              fallback_to_live, variation_order_mode
+              fallback_to_live, variation_order_mode, manual_variation_order,
+              integration_mode, live_prompt_mode, fallback_prompt_mode, smart_prompt_guidance,
+              guided_guardrails, matching_rule_1, matching_rule_2, matching_rule_3, matching_rule_4,
+              smart_matching_config, image_order, consultant_chat_history, consultant_model,
+              worker_chat_history, worker_model, chat_history,
+              placeholder_category_templates, prompt_templates, text_snippets
             ) VALUES (
               ${workflowId},
               ${img.enabled ?? false},
@@ -483,7 +564,27 @@ router.post('/:id/apply/:workflowId', requireDb, async (req, res) => {
               ${img.auto_tag_enabled ?? true},
               ${img.smart_matching_enabled ?? true},
               ${img.fallback_to_live ?? true},
-              ${img.variation_order_mode || 'sequential'}
+              ${img.variation_order_mode || 'sequential'},
+              ${JSON.stringify(img.manual_variation_order || [])},
+              ${img.integration_mode || 'bank'},
+              ${img.live_prompt_mode || 'main_prompt'},
+              ${img.fallback_prompt_mode || 'main_prompt'},
+              ${img.smart_prompt_guidance || ''},
+              ${JSON.stringify(img.guided_guardrails || {})},
+              ${img.matching_rule_1 || null},
+              ${img.matching_rule_2 || null},
+              ${img.matching_rule_3 || null},
+              ${img.matching_rule_4 || null},
+              ${JSON.stringify(img.smart_matching_config || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 })},
+              ${JSON.stringify(img.image_order || [])},
+              ${JSON.stringify(img.consultant_chat_history || [])},
+              ${img.consultant_model || 'gpt-4o'},
+              ${JSON.stringify(img.worker_chat_history || [])},
+              ${img.worker_model || 'gpt-4o-mini'},
+              ${JSON.stringify(img.chat_history || [])},
+              ${JSON.stringify(img.placeholder_category_templates || [])},
+              ${JSON.stringify(img.prompt_templates || [])},
+              ${JSON.stringify(img.text_snippets || [])}
             )
           `;
         }
@@ -560,14 +661,29 @@ router.post('/:id/apply/:workflowId', requireDb, async (req, res) => {
         }
 
         // Second pass: Update parent_id based on parent_slug
+        const parentLinkErrors = [];
         for (const node of nodes) {
-          if (node.parent_slug && slugToIdMap[node.parent_slug] && slugToIdMap[node.slug]) {
+          if (node.parent_slug) {
+            // Validate parent_slug exists in our created nodes
+            if (!slugToIdMap[node.parent_slug]) {
+              parentLinkErrors.push(`Node "${node.title}" (${node.slug}) references non-existent parent slug "${node.parent_slug}"`);
+              continue;
+            }
+            if (!slugToIdMap[node.slug]) {
+              parentLinkErrors.push(`Node "${node.title}" has no slug - cannot link to parent`);
+              continue;
+            }
             await sql`
               UPDATE site_plan_nodes
               SET parent_id = ${slugToIdMap[node.parent_slug]}
               WHERE id = ${slugToIdMap[node.slug]}
             `;
           }
+        }
+
+        // Log any parent linking issues (but don't fail the whole operation)
+        if (parentLinkErrors.length > 0) {
+          console.warn('[Templates] Site plan parent linking warnings:', parentLinkErrors);
         }
 
         // Update site plan metadata
@@ -578,9 +694,12 @@ router.post('/:id/apply/:workflowId', requireDb, async (req, res) => {
           WHERE id = ${sitePlanId}
         `;
 
-        console.log('[Templates] Applied site planning to workflow:', workflowId, '- Created', nodes.length, 'nodes');
+        console.log('[Templates] Applied site planning to workflow:', workflowId, '- Created', nodes.length, 'nodes',
+          parentLinkErrors.length > 0 ? `(${parentLinkErrors.length} parent link warnings)` : '');
       } catch (siteErr) {
         console.error('[Templates] Failed to apply site planning:', siteErr.message);
+        // Re-throw to let the caller know site planning failed
+        throw new Error(`Site planning failed: ${siteErr.message}`);
       }
     }
 

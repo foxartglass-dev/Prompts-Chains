@@ -294,6 +294,12 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   matching_rule_4 TEXT DEFAULT 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
   -- Smart Matching Config (configurable parameters that code ACTUALLY reads)
   smart_matching_config JSONB DEFAULT '{"wordRange": 75, "primaryWeight": 10, "secondaryWeight": 1}',
+  -- Placeholder Category Templates (saved templates for placeholder categories)
+  placeholder_category_templates JSONB DEFAULT '[]',
+  -- Prompt Templates (saved prompt templates)
+  prompt_templates JSONB DEFAULT '[]',
+  -- Text Snippets (saved text snippets)
+  text_snippets JSONB DEFAULT '[]',
   -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -333,6 +339,18 @@ BEGIN
   -- Smart Matching Config (configurable parameters that code ACTUALLY reads)
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'smart_matching_config') THEN
     ALTER TABLE image_creation_settings ADD COLUMN smart_matching_config JSONB DEFAULT '{"wordRange": 75, "primaryWeight": 10, "secondaryWeight": 1}';
+  END IF;
+  -- Placeholder Category Templates
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'placeholder_category_templates') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN placeholder_category_templates JSONB DEFAULT '[]';
+  END IF;
+  -- Prompt Templates
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'prompt_templates') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN prompt_templates JSONB DEFAULT '[]';
+  END IF;
+  -- Text Snippets
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'text_snippets') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN text_snippets JSONB DEFAULT '[]';
   END IF;
 END $$;
 

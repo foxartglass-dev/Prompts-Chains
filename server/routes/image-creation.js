@@ -1241,7 +1241,13 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           fallback_prompt_mode: 'main_prompt',
           smart_prompt_guidance: '',
           // Prompt Problem Areas
-          prompt_problem_areas: []
+          prompt_problem_areas: [],
+          // Placeholder Category Templates
+          placeholder_category_templates: [],
+          // Prompt Templates
+          prompt_templates: [],
+          // Text Snippets
+          text_snippets: []
         },
         isNew: true
       });
@@ -1319,7 +1325,13 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         fallback_prompt_mode: results[0].fallback_prompt_mode || 'main_prompt',
         smart_prompt_guidance: results[0].smart_prompt_guidance || '',
         // Prompt Problem Areas
-        prompt_problem_areas: results[0].prompt_problem_areas || []
+        prompt_problem_areas: results[0].prompt_problem_areas || [],
+        // Placeholder Category Templates
+        placeholder_category_templates: results[0].placeholder_category_templates || [],
+        // Prompt Templates
+        prompt_templates: results[0].prompt_templates || [],
+        // Text Snippets
+        text_snippets: results[0].text_snippets || []
       },
       imageBankMigrated  // Tell frontend to use new /api/image-bank API
     });
@@ -1403,7 +1415,13 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       // Guided GPT guardrails (instructions, uniformDescription, defaultSubject, avoidList)
       guided_guardrails,
       // Prompt Problem Areas
-      prompt_problem_areas
+      prompt_problem_areas,
+      // Placeholder Category Templates
+      placeholder_category_templates,
+      // Prompt Templates
+      prompt_templates,
+      // Text Snippets
+      text_snippets
     } = req.body;
 
     // DEBUG: Log what Test Mode is sending
@@ -1508,7 +1526,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 fallback_prompt_mode,
                 smart_prompt_guidance,
                 guided_guardrails,
-                prompt_problem_areas
+                prompt_problem_areas,
+                placeholder_category_templates,
+                prompt_templates,
+                text_snippets
               ) VALUES (
                 ${websiteId},
                 ${enabled ?? false},
@@ -1535,7 +1556,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${fallback_prompt_mode ?? 'main_prompt'},
                 ${smart_prompt_guidance ?? ''},
                 ${JSON.stringify(guided_guardrails ?? {})},
-                ${JSON.stringify(prompt_problem_areas ?? [])}
+                ${JSON.stringify(prompt_problem_areas ?? [])},
+                ${JSON.stringify(placeholder_category_templates ?? [])},
+                ${JSON.stringify(prompt_templates ?? [])},
+                ${JSON.stringify(text_snippets ?? [])}
               )
               RETURNING id
             `
@@ -1566,7 +1590,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 fallback_prompt_mode,
                 smart_prompt_guidance,
                 guided_guardrails,
-                prompt_problem_areas
+                prompt_problem_areas,
+                placeholder_category_templates,
+                prompt_templates,
+                text_snippets
               ) VALUES (
                 ${workflowId},
               ${enabled ?? false},
@@ -1593,7 +1620,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               ${fallback_prompt_mode ?? 'main_prompt'},
               ${smart_prompt_guidance ?? ''},
               ${JSON.stringify(guided_guardrails ?? {})},
-              ${JSON.stringify(prompt_problem_areas ?? [])}
+              ${JSON.stringify(prompt_problem_areas ?? [])},
+              ${JSON.stringify(placeholder_category_templates ?? [])},
+              ${JSON.stringify(prompt_templates ?? [])},
+              ${JSON.stringify(text_snippets ?? [])}
             )
             RETURNING id
           `;
@@ -1738,6 +1768,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
                 guided_guardrails = COALESCE(${guided_guardrails ? JSON.stringify(guided_guardrails) : null}::jsonb, guided_guardrails),
                 prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
+                placeholder_category_templates = COALESCE(${placeholder_category_templates ? JSON.stringify(placeholder_category_templates) : null}::jsonb, placeholder_category_templates),
+                prompt_templates = COALESCE(${prompt_templates ? JSON.stringify(prompt_templates) : null}::jsonb, prompt_templates),
+                text_snippets = COALESCE(${text_snippets ? JSON.stringify(text_snippets) : null}::jsonb, text_snippets),
                 updated_at = CURRENT_TIMESTAMP
               WHERE website_id = ${websiteId}
               RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
@@ -1772,6 +1805,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
                 guided_guardrails = COALESCE(${guided_guardrails ? JSON.stringify(guided_guardrails) : null}::jsonb, guided_guardrails),
                 prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
+                placeholder_category_templates = COALESCE(${placeholder_category_templates ? JSON.stringify(placeholder_category_templates) : null}::jsonb, placeholder_category_templates),
+                prompt_templates = COALESCE(${prompt_templates ? JSON.stringify(prompt_templates) : null}::jsonb, prompt_templates),
+                text_snippets = COALESCE(${text_snippets ? JSON.stringify(text_snippets) : null}::jsonb, text_snippets),
                 updated_at = CURRENT_TIMESTAMP
               WHERE workflow_id = ${workflowId}
               RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
