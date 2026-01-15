@@ -929,11 +929,11 @@ const DataSourcesDiagram: React.FC = () => (
         <div className="space-y-2 text-sm">
           <div className="flex justify-between items-center py-1 border-b border-slate-700">
             <code className="text-brand-gold">smart_matching_mode</code>
-            <span className="text-gray-400">bank_first/bank_only/etc</span>
+            <span className="text-gray-400">bank_first (default) / bank_only / generate_first / generate_only</span>
           </div>
           <div className="flex justify-between items-center py-1 border-b border-slate-700">
             <code className="text-brand-gold">integration_mode</code>
-            <span className="text-gray-400">bank or live</span>
+            <span className="text-gray-400">live (default since Jan 15) / bank</span>
           </div>
           <div className="flex justify-between items-center py-1 border-b border-slate-700">
             <code className="text-brand-gold">image_generation_model</code>
@@ -1124,9 +1124,84 @@ const GoldenRules: React.FC = () => (
       </div>
 
       {/* Rule 8 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-orange-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-orange-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">8</div>
+          <div>
+            <h3 className="text-lg font-bold text-orange-400">Settings hierarchy: website_id FIRST, then workflow_id</h3>
+            <p className="text-gray-300 mt-2 text-sm">
+              <code className="bg-slate-900 px-1 rounded">image_creation_settings</code> can be stored at EITHER level.
+              When reading settings anywhere in the codebase, ALWAYS check <code className="bg-slate-900 px-1 rounded">website_id</code> first!
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-orange-400 font-medium mb-2">Pattern to follow (pseudo-code):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// 1. Get the website_id for the workflow
+const workflow = await getWorkflow(workflowId);
+const websiteId = workflow?.website_id;
+
+// 2. Try website-level settings FIRST
+let settings = null;
+if (websiteId) {
+  settings = await getSettingsByWebsiteId(websiteId);
+}
+
+// 3. Fall back to workflow-level if no website settings
+if (!settings) {
+  settings = await getSettingsByWorkflowId(workflowId);
+}`}</pre>
+            </div>
+            <p className="text-red-400 mt-3 text-xs">
+              <strong>BUG PATTERN:</strong> If UI changes don't reflect in behavior, check if code is reading from the wrong level!
+              This has caused multiple bugs: Main Prompt not working, bank settings ignored, etc.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Rule 9 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-rose-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-rose-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">9</div>
+          <div>
+            <h3 className="text-lg font-bold text-rose-400">NEVER silently swallow API errors</h3>
+            <p className="text-gray-300 mt-2 text-sm">
+              When an API call fails, ALWAYS show the error to the user. Empty catch blocks or catch-and-ignore patterns
+              make debugging impossible and confuse users.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-red-400 font-medium mb-2">Bad (DO NOT):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`try {
+  const data = await fetchTemplates();
+  setTemplates(data);
+} catch (e) {
+  console.log(e);  // User sees nothing!
+  setTemplates([]); // Looks like no templates exist
+}`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-green-400 font-medium mb-2">Good (DO):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`try {
+  const data = await fetchTemplates();
+  setTemplates(data);
+  setError(null);
+} catch (e) {
+  console.error('Template fetch failed:', e);
+  setError(e.message || 'Failed to load templates');
+  // Show error in UI with retry button
+}`}</pre>
+            </div>
+            <p className="text-gray-400 mt-3 text-xs">
+              <strong>Why:</strong> Template Library had this bug - users saw empty state when server was erroring.
+              Always give users visibility into what went wrong.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Rule 10 */}
       <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-cyan-500">
         <div className="flex items-start gap-4">
-          <div className="bg-cyan-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">8</div>
+          <div className="bg-cyan-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">10</div>
           <div>
             <h3 className="text-lg font-bold text-cyan-400">Full-Width Section Pattern for in-flow expansion</h3>
             <p className="text-gray-300 mt-2 text-sm">
@@ -1254,6 +1329,76 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues (Jan 2026)</h3>
 
       <div className="space-y-4">
+        <div className="bg-slate-800 rounded-lg p-4 border border-brand-cyan/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Template Library silent failures</span>
+            <span className="text-xs bg-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded">Jan 15, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> When Template Library API call failed, the UI showed nothing - no error message, just empty state.
+            Users thought there were no templates when actually the server was returning errors.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added proper error state and display in <code className="bg-slate-900 px-1 rounded">TemplateLibrary.tsx</code>.
+            Now shows red error text with the actual error message and a "Retry" button.
+          </div>
+          <div className="text-sm text-red-400 mt-2">
+            <strong>Pattern:</strong> Always catch and DISPLAY API errors - never silently swallow them!
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4 border border-brand-gold/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Image Bank settings read from wrong level</span>
+            <span className="text-xs bg-brand-gold/20 text-brand-gold px-2 py-0.5 rounded">CRITICAL - Jan 15, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Image Bank matching code was only reading settings from <code className="bg-slate-900 px-1 rounded">workflow_id</code>.
+            But settings are now saved at <code className="bg-slate-900 px-1 rounded">website_id</code> level. Result: changes in UI had no effect.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Updated all image bank service functions to check <code className="bg-slate-900 px-1 rounded">website_id</code> FIRST,
+            then fall back to <code className="bg-slate-900 px-1 rounded">workflow_id</code>. Same pattern as elementor.js.
+          </div>
+          <div className="text-sm text-red-400 mt-2">
+            <strong>CRITICAL:</strong> This is the same bug pattern as "Main Prompt not reflecting" - always check both levels!
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4 border border-brand-cyan/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">smart_matching_mode not persisting on save</span>
+            <span className="text-xs bg-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded">Jan 15, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Changing bank fallback mode (bank_first vs bank_only) in UI didn't stick after page refresh.
+            The toggle would flip back to default.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added <code className="bg-slate-900 px-1 rounded">tryUpdateSmartMatchingMode()</code> as a separate
+            function that explicitly updates just the smart_matching_mode column. Ensures it's saved even if other fields have issues.
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4 border border-brand-cyan/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Test Runner using wrong bank mode</span>
+            <span className="text-xs bg-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded">Jan 15, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Test Runner "Pull from Bank" option was setting <code className="bg-slate-900 px-1 rounded">bank_only</code>
+            which means if no bank images match, it returns nothing - no fallback to live generation.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Changed to <code className="bg-slate-900 px-1 rounded">bank_first</code> so it will try bank first,
+            then fall back to live generation if bank is empty. This matches expected user behavior.
+          </div>
+        </div>
+
         <div className="bg-slate-800 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-green-400">✓</span>
@@ -1654,6 +1799,55 @@ const KnownIssuesDiagram: React.FC = () => (
             but the read is coming from another!
           </div>
         </div>
+      </div>
+    </div>
+
+    {/* Smart Matching Mode Quick Reference */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-gold/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">smart_matching_mode Quick Reference</h3>
+      <p className="text-gray-400 text-sm mb-4">This setting controls WHERE images come from and whether fallback is allowed. Very important!</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-600">
+              <th className="text-left py-2 text-gray-400">Mode</th>
+              <th className="text-left py-2 text-gray-400">Primary Source</th>
+              <th className="text-left py-2 text-gray-400">If Empty...</th>
+              <th className="text-left py-2 text-gray-400">Use Case</th>
+            </tr>
+          </thead>
+          <tbody className="text-gray-300">
+            <tr className="border-b border-slate-700">
+              <td className="py-2"><code className="text-brand-gold">bank_first</code></td>
+              <td>Image Bank</td>
+              <td className="text-green-400">Falls back to Live generation</td>
+              <td>Best default - use bank when available, generate otherwise</td>
+            </tr>
+            <tr className="border-b border-slate-700">
+              <td className="py-2"><code className="text-brand-gold">bank_only</code></td>
+              <td>Image Bank</td>
+              <td className="text-red-400">Fails / No images</td>
+              <td>When you only want pre-approved bank images, no AI generation</td>
+            </tr>
+            <tr className="border-b border-slate-700">
+              <td className="py-2"><code className="text-brand-gold">generate_first</code></td>
+              <td>Live AI Generation</td>
+              <td className="text-green-400">Falls back to Bank</td>
+              <td>Prefer fresh AI images, use bank if generation fails</td>
+            </tr>
+            <tr className="border-b border-slate-700">
+              <td className="py-2"><code className="text-brand-gold">generate_only</code></td>
+              <td>Live AI Generation</td>
+              <td className="text-red-400">Fails / No images</td>
+              <td>Always generate fresh, never use bank</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-4 p-3 bg-yellow-900/30 rounded-lg text-xs text-yellow-300">
+        <strong>TIP:</strong> Use <code className="bg-slate-900 px-1 rounded">bank_first</code> as the default for most workflows.
+        It ensures you always get images - either from bank or freshly generated. Changed from <code className="bg-slate-900 px-1 rounded">bank_only</code>
+        in Test Runner (Jan 15, 2026) because <code className="bg-slate-900 px-1 rounded">bank_only</code> was causing empty results when bank was empty.
       </div>
     </div>
 
@@ -3424,6 +3618,69 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">January 2026</h3>
 
       <div className="space-y-4">
+        {/* Jan 15 */}
+        <div className="border-l-4 border-brand-gold pl-4">
+          <div className="text-sm text-brand-gold font-semibold">Jan 15, 2026</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Template Library now shows errors instead of silently failing</strong>
+                <div className="text-xs text-gray-500">API errors were swallowed → Now displays error message in red text with retry option</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Image Bank reads from website-level settings first</strong>
+                <div className="text-xs text-gray-500">Was only reading workflow_id → Now checks website_id FIRST, then falls back to workflow_id</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Bank fallback (smart_matching_mode) now saves correctly</strong>
+                <div className="text-xs text-gray-500">Added tryUpdateSmartMatchingMode() separate function to ensure setting persists</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Test Runner bank mode changed from bank_only to bank_first</strong>
+                <div className="text-xs text-gray-500">Was using 'bank_only' which never falls back → Now uses 'bank_first' for proper fallback behavior</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Tabbed section for Problem Areas, Reference Images, Logo & Action Shots</strong>
+                <div className="text-xs text-gray-500">Consolidated resource inputs into a clean tabbed interface in Image Creation section</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Audience Avatars full-page modal with Portal</strong>
+                <div className="text-xs text-gray-500">Expand button opens modal using createPortal() to avoid flickering issues</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Default changed to Generate Live + Main Prompt</strong>
+                <div className="text-xs text-gray-500">New workflows now default to live image generation instead of bank</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-yellow-400 font-bold">PERF</span>
+              <div>
+                <strong>Main Prompt textarea auto-resize with requestAnimationFrame</strong>
+                <div className="text-xs text-gray-500">Smooth resize on section expand without layout thrashing</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
         {/* Jan 13 */}
         <div className="border-l-4 border-green-500 pl-4">
           <div className="text-sm text-green-400 font-semibold">Jan 13, 2026</div>
