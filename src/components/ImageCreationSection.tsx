@@ -8425,9 +8425,16 @@ Start by introducing yourself and asking about their business in a friendly way.
           </div>
 
           {/* Audience Avatars - Full-Width Section Pattern (expands to span both columns when open) */}
+          {/* When expanded, use fixed positioning to break out of all parent constraints */}
+          {!avatarsCollapsed && (
+            <div
+              className="fixed inset-0 bg-black/50 z-30"
+              onClick={() => setAvatarsCollapsed(true)}
+            />
+          )}
           <div className={`bg-slate-900 rounded-lg transition-all duration-300 ${
             !avatarsCollapsed
-              ? 'w-screen -ml-[calc((100vw-100%)/2)] border-4 border-brand-gold p-4 px-8 shadow-lg shadow-brand-gold/20 max-w-none'
+              ? 'fixed left-4 right-4 top-16 bottom-4 z-40 border-4 border-brand-gold p-4 px-8 shadow-lg shadow-brand-gold/20 overflow-y-auto'
               : 'border border-brand-gold/50 p-4'
           }`}>
             {/* Header - Always visible */}
@@ -8682,8 +8689,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
                       autoResizeTextarea(e.target);
                     }}
-                    className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-y min-h-[100px] overflow-hidden"
-                    style={{ height: 'auto' }}
+                    className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-none min-h-[100px]"
                     placeholder={activeAvatar.placeholderMode === 'advanced'
                       ? "Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
                       : "Professional cleaning photo, {variation}, bright natural lighting..."}
