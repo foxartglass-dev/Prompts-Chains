@@ -227,9 +227,13 @@ router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
             fallback_to_live: settings.fallback_to_live,
             variation_order_mode: settings.variation_order_mode
           };
+          console.log('[Template] Included image creation settings');
+        } else {
+          console.log('[Template] No image creation settings found for workflow', workflowId);
         }
       } catch (err) {
-        console.log('[Template] No image creation settings found for workflow');
+        // Log actual error but continue - don't fail the whole save
+        console.error('[Template] Error fetching image creation settings:', err.message);
       }
     }
 
@@ -266,9 +270,13 @@ router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
               parent_slug: nodes.find(p => p.id === n.parent_id)?.slug || null
             }))
           };
+          console.log('[Template] Included site planning with', nodes.length, 'nodes');
+        } else {
+          console.log('[Template] No site planning found for workflow', workflowId);
         }
       } catch (err) {
-        console.log('[Template] No site planning found for workflow');
+        // Log actual error but continue - don't fail the whole save
+        console.error('[Template] Error fetching site planning:', err.message);
       }
     }
 

@@ -16,6 +16,7 @@ const SECTION_OPTIONS = [
   { key: 'snippets', label: 'Tagged Snippets', desc: 'Large reusable text blocks', stateKey: 'taggedSnippets' },
   { key: 'settings', label: 'Settings', desc: 'Model, provider, output settings', stateKey: null },
   { key: 'imageCreation', label: 'Image Creation', desc: 'Avatars, reference images, bank, categories', stateKey: null, isExternal: true },
+  { key: 'sitePlanning', label: 'Site Planning', desc: 'Site structure, pages, hierarchy', stateKey: null, isExternal: true },
 ];
 
 const SaveTemplatePopup: React.FC<SaveTemplatePopupProps> = ({
@@ -35,7 +36,8 @@ const SaveTemplatePopup: React.FC<SaveTemplatePopupProps> = ({
     tags: true,
     snippets: true,
     settings: true,
-    imageCreation: true
+    imageCreation: true,
+    sitePlanning: true
   });
 
   if (!isOpen) return null;
@@ -99,7 +101,8 @@ const SaveTemplatePopup: React.FC<SaveTemplatePopupProps> = ({
       tags: checked,
       snippets: checked,
       settings: checked,
-      imageCreation: checked
+      imageCreation: checked,
+      sitePlanning: checked
     });
   };
 
