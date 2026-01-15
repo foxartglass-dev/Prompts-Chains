@@ -888,10 +888,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     if (!textarea) return;
     // Reset height to auto to get the correct scrollHeight
     textarea.style.height = 'auto';
-    // Set height to scrollHeight with a minimum of 4 rows (~100px) and max of 600px
+    // Set height to scrollHeight with a minimum of 4 rows (~100px) - no max limit so it expands fully
     const minHeight = 100;
-    const maxHeight = 600;
-    const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
+    const newHeight = Math.max(textarea.scrollHeight, minHeight);
     textarea.style.height = `${newHeight}px`;
   }, []);
 
@@ -8428,7 +8427,7 @@ Start by introducing yourself and asking about their business in a friendly way.
           {/* Audience Avatars - Full-Width Section Pattern (expands to span both columns when open) */}
           <div className={`bg-slate-900 rounded-lg transition-all duration-300 ${
             !avatarsCollapsed
-              ? 'relative left-1/2 -translate-x-1/2 w-[calc(100vw-2rem)] border-4 border-brand-gold p-4 px-8 shadow-lg shadow-brand-gold/20'
+              ? 'w-screen -ml-[calc((100vw-100%)/2)] border-4 border-brand-gold p-4 px-8 shadow-lg shadow-brand-gold/20 max-w-none'
               : 'border border-brand-gold/50 p-4'
           }`}>
             {/* Header - Always visible */}
