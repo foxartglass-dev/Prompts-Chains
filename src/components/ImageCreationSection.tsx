@@ -445,11 +445,29 @@ interface ImageCreationSettings {
   placement_rule: string;
   smart_matching_rule: string;
   match_plurals: boolean; // Auto-match plurals (counter → counters, sink → sinks)
-  // Editable Smart Matching Rules (the 4 core rules)
+  // Editable Smart Matching Rules (the 4 core rules) - LEGACY: kept for backwards compatibility
   matching_rule_1: string; // Primary keywords rule
   matching_rule_2: string; // Secondary keywords fallback rule
   matching_rule_3: string; // No duplicate primaries rule
   matching_rule_4: string; // Different primaries for secondary matches rule
+  // Rule titles (editable) - LEGACY: kept for backwards compatibility
+  matching_rule_1_title: string;
+  matching_rule_2_title: string;
+  matching_rule_3_title: string;
+  matching_rule_4_title: string;
+  // Per-tag Smart Matching Rules - each tag (H, J, C) gets its own rules
+  smart_matching_rules_by_tag: {
+    [tagName: string]: {
+      rule_1: string;
+      rule_1_title: string;
+      rule_2: string;
+      rule_2_title: string;
+      rule_3: string;
+      rule_3_title: string;
+      rule_4: string;
+      rule_4_title: string;
+    }
+  } | null;
   // Smart Matching Config (configurable parameters that code ACTUALLY reads)
   smart_matching_config: {
     wordRange: number;      // Words to search before/after image position (default 75)
@@ -537,6 +555,13 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   matching_rule_2: 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.',
   matching_rule_3: 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).',
   matching_rule_4: 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
+  // Rule titles (editable) - default titles
+  matching_rule_1_title: 'Primary Keywords Rule',
+  matching_rule_2_title: 'Secondary Keywords Fallback Rule',
+  matching_rule_3_title: 'No Duplicate Primaries Rule',
+  matching_rule_4_title: 'Different Primaries for Secondary Matches Rule',
+  // Per-tag Smart Matching Rules - null means use global rules
+  smart_matching_rules_by_tag: null,
   // Smart Matching Config - configurable parameters that code ACTUALLY reads
   smart_matching_config: { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 },
   // Generate Live prompt mode - default to main_prompt (user's avatar template)
@@ -713,6 +738,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [avatarsCollapsed, setAvatarsCollapsed] = useState(true);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
   const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Set<string>>(new Set()); // Track which individual categories are collapsed
+
+  // Smart Matching Rules per-tag tab state
+  const [selectedRulesTag, setSelectedRulesTag] = useState<string | null>(null);
 
   // Prompt Problem Areas state
   const [problemAreasCollapsed, setProblemAreasCollapsed] = useState(true);
@@ -7798,16 +7826,125 @@ Start by introducing yourself and asking about their business in a friendly way.
                 {/* 4 COLORED RULES - Only show when Smart Matching is ON */}
                 {settings.smart_matching_enabled ? (
                   <>
-                    {/* Numbered Rules List - EDITABLE */}
+                    {/* Tag Tabs for Per-Tag Rules */}
+                    {allTags.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1 mb-4 border-b border-slate-700 pb-3">
+                        <span className="text-xs text-slate-400 mr-2">Rules for:</span>
+                        {allTags.map((tag) => {
+                          const isSelected = selectedRulesTag === tag;
+                          const hasCustomRules = settings.smart_matching_rules_by_tag?.[tag];
+                          return (
+                            <button
+                              key={tag}
+                              onClick={() => setSelectedRulesTag(isSelected ? null : tag)}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                                isSelected
+                                  ? 'bg-brand-gold text-slate-900 shadow-lg shadow-brand-gold/30'
+                                  : hasCustomRules
+                                    ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-600/50'
+                                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                              }`}
+                            >
+                              {tag}
+                              {hasCustomRules && !isSelected && <span className="ml-1 text-[10px]">✓</span>}
+                            </button>
+                          );
+                        })}
+                        <button
+                          onClick={() => setSelectedRulesTag(null)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                            selectedRulesTag === null
+                              ? 'bg-slate-600 text-white'
+                              : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                          }`}
+                        >
+                          Global
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Selected Tag Info */}
+                    {selectedRulesTag && (
+                      <div className="mb-3 p-2 bg-brand-gold/10 border border-brand-gold/30 rounded-lg flex items-center justify-between">
+                        <span className="text-sm text-brand-gold">
+                          Editing rules for tag: <strong>{selectedRulesTag}</strong>
+                        </span>
+                        <button
+                          onClick={() => {
+                            // Initialize tag rules from global if not set
+                            if (!settings.smart_matching_rules_by_tag?.[selectedRulesTag]) {
+                              updateSettings({
+                                smart_matching_rules_by_tag: {
+                                  ...settings.smart_matching_rules_by_tag,
+                                  [selectedRulesTag]: {
+                                    rule_1: settings.matching_rule_1 || '',
+                                    rule_1_title: settings.matching_rule_1_title || 'Primary Keywords Rule',
+                                    rule_2: settings.matching_rule_2 || '',
+                                    rule_2_title: settings.matching_rule_2_title || 'Secondary Keywords Fallback Rule',
+                                    rule_3: settings.matching_rule_3 || '',
+                                    rule_3_title: settings.matching_rule_3_title || 'No Duplicate Primaries Rule',
+                                    rule_4: settings.matching_rule_4 || '',
+                                    rule_4_title: settings.matching_rule_4_title || 'Different Primaries for Secondary Matches Rule',
+                                  }
+                                }
+                              });
+                            }
+                          }}
+                          className="text-xs text-brand-cyan hover:text-brand-cyan-light"
+                        >
+                          {settings.smart_matching_rules_by_tag?.[selectedRulesTag] ? 'Reset from Global' : 'Copy from Global'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Numbered Rules List - EDITABLE with editable titles */}
                     <div className="space-y-3">
                       {/* Rule 1 - Emerald */}
                       <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-emerald-500">
                         <span className="w-6 h-6 flex items-center justify-center bg-emerald-600 rounded-full text-white text-xs font-bold shrink-0">1</span>
                         <div className="flex-1">
-                          <label className="text-xs text-emerald-400 font-semibold mb-1 block">Primary Keywords Rule</label>
+                          <input
+                            type="text"
+                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
+                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_1_title
+                              : (settings.matching_rule_1_title || 'Primary Keywords Rule')}
+                            onChange={(e) => {
+                              if (selectedRulesTag) {
+                                updateSettings({
+                                  smart_matching_rules_by_tag: {
+                                    ...settings.smart_matching_rules_by_tag,
+                                    [selectedRulesTag]: {
+                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
+                                      rule_1_title: e.target.value
+                                    }
+                                  }
+                                });
+                              } else {
+                                updateSettings({ matching_rule_1_title: e.target.value });
+                              }
+                            }}
+                            className="text-xs text-emerald-400 font-semibold mb-1 block bg-transparent border-b border-transparent hover:border-emerald-500/50 focus:border-emerald-500 focus:outline-none w-full"
+                            placeholder="Rule title..."
+                          />
                           <textarea
-                            value={settings.matching_rule_1 || 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.'}
-                            onChange={(e) => updateSettings({ matching_rule_1: e.target.value })}
+                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
+                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_1
+                              : (settings.matching_rule_1 || 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.')}
+                            onChange={(e) => {
+                              if (selectedRulesTag) {
+                                updateSettings({
+                                  smart_matching_rules_by_tag: {
+                                    ...settings.smart_matching_rules_by_tag,
+                                    [selectedRulesTag]: {
+                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
+                                      rule_1: e.target.value
+                                    }
+                                  }
+                                });
+                              } else {
+                                updateSettings({ matching_rule_1: e.target.value });
+                              }
+                            }}
                             className="w-full bg-slate-800 border border-emerald-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-emerald-500"
                             rows={2}
                             placeholder="Rule for primary keyword matching..."
@@ -7819,10 +7956,48 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-amber-500">
                         <span className="w-6 h-6 flex items-center justify-center bg-amber-600 rounded-full text-white text-xs font-bold shrink-0">2</span>
                         <div className="flex-1">
-                          <label className="text-xs text-amber-400 font-semibold mb-1 block">Secondary Keywords Fallback Rule</label>
+                          <input
+                            type="text"
+                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
+                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_2_title
+                              : (settings.matching_rule_2_title || 'Secondary Keywords Fallback Rule')}
+                            onChange={(e) => {
+                              if (selectedRulesTag) {
+                                updateSettings({
+                                  smart_matching_rules_by_tag: {
+                                    ...settings.smart_matching_rules_by_tag,
+                                    [selectedRulesTag]: {
+                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
+                                      rule_2_title: e.target.value
+                                    }
+                                  }
+                                });
+                              } else {
+                                updateSettings({ matching_rule_2_title: e.target.value });
+                              }
+                            }}
+                            className="text-xs text-amber-400 font-semibold mb-1 block bg-transparent border-b border-transparent hover:border-amber-500/50 focus:border-amber-500 focus:outline-none w-full"
+                            placeholder="Rule title..."
+                          />
                           <textarea
-                            value={settings.matching_rule_2 || 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.'}
-                            onChange={(e) => updateSettings({ matching_rule_2: e.target.value })}
+                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
+                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_2
+                              : (settings.matching_rule_2 || 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.')}
+                            onChange={(e) => {
+                              if (selectedRulesTag) {
+                                updateSettings({
+                                  smart_matching_rules_by_tag: {
+                                    ...settings.smart_matching_rules_by_tag,
+                                    [selectedRulesTag]: {
+                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
+                                      rule_2: e.target.value
+                                    }
+                                  }
+                                });
+                              } else {
+                                updateSettings({ matching_rule_2: e.target.value });
+                              }
+                            }}
                             className="w-full bg-slate-800 border border-amber-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-amber-500"
                             rows={2}
                             placeholder="Rule for secondary keyword fallback..."
@@ -7834,10 +8009,48 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-red-500">
                         <span className="w-6 h-6 flex items-center justify-center bg-red-600 rounded-full text-white text-xs font-bold shrink-0">3</span>
                         <div className="flex-1">
-                          <label className="text-xs text-red-400 font-semibold mb-1 block">No Duplicate Primaries Rule</label>
+                          <input
+                            type="text"
+                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
+                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_3_title
+                              : (settings.matching_rule_3_title || 'No Duplicate Primaries Rule')}
+                            onChange={(e) => {
+                              if (selectedRulesTag) {
+                                updateSettings({
+                                  smart_matching_rules_by_tag: {
+                                    ...settings.smart_matching_rules_by_tag,
+                                    [selectedRulesTag]: {
+                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
+                                      rule_3_title: e.target.value
+                                    }
+                                  }
+                                });
+                              } else {
+                                updateSettings({ matching_rule_3_title: e.target.value });
+                              }
+                            }}
+                            className="text-xs text-red-400 font-semibold mb-1 block bg-transparent border-b border-transparent hover:border-red-500/50 focus:border-red-500 focus:outline-none w-full"
+                            placeholder="Rule title..."
+                          />
                           <textarea
-                            value={settings.matching_rule_3 || 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).'}
-                            onChange={(e) => updateSettings({ matching_rule_3: e.target.value })}
+                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
+                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_3
+                              : (settings.matching_rule_3 || 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).')}
+                            onChange={(e) => {
+                              if (selectedRulesTag) {
+                                updateSettings({
+                                  smart_matching_rules_by_tag: {
+                                    ...settings.smart_matching_rules_by_tag,
+                                    [selectedRulesTag]: {
+                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
+                                      rule_3: e.target.value
+                                    }
+                                  }
+                                });
+                              } else {
+                                updateSettings({ matching_rule_3: e.target.value });
+                              }
+                            }}
                             className="w-full bg-slate-800 border border-red-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-red-500"
                             rows={2}
                             placeholder="Rule for preventing duplicate primary keywords..."
@@ -7849,10 +8062,48 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <div className="flex items-start gap-3 bg-slate-900/50 p-3 rounded-lg border-l-4 border-purple-500">
                         <span className="w-6 h-6 flex items-center justify-center bg-purple-600 rounded-full text-white text-xs font-bold shrink-0">4</span>
                         <div className="flex-1">
-                          <label className="text-xs text-purple-400 font-semibold mb-1 block">Different Primaries for Secondary Matches Rule</label>
+                          <input
+                            type="text"
+                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
+                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_4_title
+                              : (settings.matching_rule_4_title || 'Different Primaries for Secondary Matches Rule')}
+                            onChange={(e) => {
+                              if (selectedRulesTag) {
+                                updateSettings({
+                                  smart_matching_rules_by_tag: {
+                                    ...settings.smart_matching_rules_by_tag,
+                                    [selectedRulesTag]: {
+                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
+                                      rule_4_title: e.target.value
+                                    }
+                                  }
+                                });
+                              } else {
+                                updateSettings({ matching_rule_4_title: e.target.value });
+                              }
+                            }}
+                            className="text-xs text-purple-400 font-semibold mb-1 block bg-transparent border-b border-transparent hover:border-purple-500/50 focus:border-purple-500 focus:outline-none w-full"
+                            placeholder="Rule title..."
+                          />
                           <textarea
-                            value={settings.matching_rule_4 || 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).'}
-                            onChange={(e) => updateSettings({ matching_rule_4: e.target.value })}
+                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
+                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_4
+                              : (settings.matching_rule_4 || 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).')}
+                            onChange={(e) => {
+                              if (selectedRulesTag) {
+                                updateSettings({
+                                  smart_matching_rules_by_tag: {
+                                    ...settings.smart_matching_rules_by_tag,
+                                    [selectedRulesTag]: {
+                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
+                                      rule_4: e.target.value
+                                    }
+                                  }
+                                });
+                              } else {
+                                updateSettings({ matching_rule_4: e.target.value });
+                              }
+                            }}
                             className="w-full bg-slate-800 border border-purple-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-purple-500"
                             rows={2}
                             placeholder="Rule for secondary keyword primary diversity..."
