@@ -3549,7 +3549,10 @@ const App: React.FC = () => {
                         </div>
                         )}
                     </div>
+                </div>
 
+                {/* Full Width - Prompt Workflow */}
+                <div className="xl:col-span-2">
                     {renderSection('6. Prompt Workflow', 'prompts', <Icon type="document" className="h-6 w-6"/>,
                         <div className="space-y-4">
                             {currentProject.state.promptTemplates.map((prompt, index) => (
@@ -3618,7 +3621,10 @@ const App: React.FC = () => {
                             </div>
                         </div>
                     )}
+                </div>
 
+                {/* Remaining sections - full width */}
+                <div className="xl:col-span-2 flex flex-col gap-8">
                     {/* 7. Image Creation Section */}
                     {renderSection('7. Image Creation', 'imageCreation',
                         <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
