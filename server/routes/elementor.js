@@ -602,9 +602,44 @@ router.post('/publish', async (req, res) => {
     console.log('[Image Bank] Checking conditions: effectiveUseBank=', effectiveUseBank, 'workflowId=', workflowId, 'dbEnabled=', isDatabaseEnabled(), 'articleOnly=', articleOnly);
     if (!articleOnly && effectiveUseBank && workflowId && isDatabaseEnabled()) {
       try {
-        const bankImages = await sql`
-          SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
-        `;
+        // First, lookup the workflow's associated website_id
+        let bankWebsiteId = null;
+        try {
+          const workflowResult = await sql`
+            SELECT website_id FROM workflows WHERE id = ${workflowId}
+          `;
+          if (workflowResult.length > 0 && workflowResult[0].website_id) {
+            bankWebsiteId = workflowResult[0].website_id;
+            console.log('[Image Bank] Workflow linked to website:', bankWebsiteId);
+          }
+        } catch (err) {
+          console.log('[Image Bank] Could not lookup website:', err.message);
+        }
+
+        // Try website-level settings first, then fall back to workflow-level
+        let bankImages = [];
+        if (bankWebsiteId) {
+          try {
+            bankImages = await sql`
+              SELECT * FROM image_creation_settings WHERE website_id = ${bankWebsiteId}
+            `;
+            if (bankImages.length > 0) {
+              console.log('[Image Bank] Using WEBSITE-level settings for website:', bankWebsiteId);
+            }
+          } catch (websiteErr) {
+            console.log('[Image Bank] website_id column not available, using workflow-level');
+          }
+        }
+
+        // Fall back to workflow-level settings if no website settings found
+        if (bankImages.length === 0) {
+          bankImages = await sql`
+            SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}
+          `;
+          if (bankImages.length > 0) {
+            console.log('[Image Bank] Using WORKFLOW-level settings');
+          }
+        }
 
         // Note: We don't check 'enabled' here - if integration_mode is 'bank', user wants bank
         if (bankImages.length > 0) {
