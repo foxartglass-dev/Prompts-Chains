@@ -343,7 +343,7 @@ const App: React.FC = () => {
                 for (const prompt of currentProject.state.promptTemplates) {
                     addLog(`[${item.name}] Running prompt: "${prompt.name}"...`, LogStatus.INFO, item.id);
                     const filledPrompt = fillPrompt(prompt.template, item, promptOutputs);
-                    const output = await generateLlmContent(filledPrompt, currentProject.state.selectedModel, { claude: currentProject.state.apiKeys.claude });
+                    const output = await generateLlmContent(filledPrompt, currentProject.state.selectedModel, { claude: currentProject.state.apiKeys?.claude });
                     if (output.startsWith('Error:')) throw new Error(output);
                     promptOutputs[prompt.outputKey] = output;
                 }
@@ -357,7 +357,7 @@ const App: React.FC = () => {
                 addLog(`[${item.name}] Generated final content.`, LogStatus.INFO, item.id);
 
                 addLog(`[${item.name}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, item.id);
-                const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
+                const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys?.zeroGpt, finalOutput);
                 addLog(`[${item.name}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
 
                 const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
@@ -536,7 +536,7 @@ const App: React.FC = () => {
       </div>
     );
     
-    const isClaudeKeyMissing = currentProject.state.selectedModel === 'claude' && !currentProject.state.apiKeys.claude;
+    const isClaudeKeyMissing = currentProject.state.selectedModel === 'claude' && !currentProject.state.apiKeys?.claude;
     const isRunDisabled = isProcessing || !items.length || isClaudeKeyMissing;
 
     const getRunButtonText = () => {
@@ -578,11 +578,11 @@ const App: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-400 mb-1">ZeroGPT API Key (Optional)</label>
-                                    <input type="password" placeholder="ZeroGPT API Key" value={currentProject.state.apiKeys.zeroGpt} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, zeroGpt: e.target.value}}))} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500" />
+                                    <input type="password" placeholder="ZeroGPT API Key" value={currentProject.state.apiKeys?.zeroGpt ?? ''} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...(p.apiKeys ?? {}), zeroGpt: e.target.value}}))} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-400 mb-1">Anthropic API Key (Optional)</label>
-                                    <input type="password" placeholder="Anthropic Claude API Key" value={currentProject.state.apiKeys.claude} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, claude: e.target.value}}))} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500" />
+                                    <input type="password" placeholder="Anthropic Claude API Key" value={currentProject.state.apiKeys?.claude ?? ''} onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...(p.apiKeys ?? {}), claude: e.target.value}}))} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500" />
                                 </div>
                             </div>
                              <div>

@@ -43,6 +43,23 @@ const createNewProjectObject = (name: string = "Untitled Project"): Project => (
   state: JSON.parse(JSON.stringify(initialProjectState)), // Deep copy to avoid reference issues
 });
 
+// Migration function to fill in missing state properties from older saved projects
+const migrateProject = (project: Project): Project => ({
+  ...project,
+  state: {
+    ...initialProjectState,  // Start with defaults
+    ...project.state,        // Override with saved values
+    apiKeys: {
+      ...initialProjectState.apiKeys,
+      ...(project.state?.apiKeys ?? {}),
+    },
+    wpCredentials: {
+      ...initialProjectState.wpCredentials,
+      ...(project.state?.wpCredentials ?? {}),
+    },
+  },
+});
+
 
 const useProjectManager = (
     onSuccess?: (message: string, type: 'success' | 'info' | 'error') => void
@@ -56,8 +73,10 @@ const useProjectManager = (
       if (storedProjects) {
         const parsedProjects = JSON.parse(storedProjects);
         if (Array.isArray(parsedProjects) && parsedProjects.length > 0) {
-          setProjects(parsedProjects);
-          setCurrentProject(parsedProjects[0]);
+          // Migrate all projects to ensure they have required state properties
+          const migratedProjects = parsedProjects.map(migrateProject);
+          setProjects(migratedProjects);
+          setCurrentProject(migratedProjects[0]);
         } else {
           // If storage is empty or invalid, create a new default project
           const defaultProject = createNewProjectObject("Untitled Project");
