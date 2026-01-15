@@ -1286,6 +1286,17 @@ router.post('/publish', async (req, res) => {
           const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
           targetAvatar = selectAvatarForTag(avatars, articleTag);
 
+          // DEBUG: Log all avatars and their mainPrompts to identify stale data
+          console.log('[Avatar Debug] Total avatars in config:', avatars.length);
+          avatars.forEach((av, idx) => {
+            const promptPreview = av.mainPrompt ? av.mainPrompt.substring(0, 80) : '(empty)';
+            console.log(`[Avatar Debug] [${idx}] "${av.name}" (tag: ${av.tag || 'none'}) mainPrompt: ${promptPreview}...`);
+          });
+          if (targetAvatar) {
+            console.log(`[Avatar Debug] Selected: "${targetAvatar.name}" for tag "${articleTag}"`);
+            console.log(`[Avatar Debug] Selected mainPrompt (full): ${targetAvatar.mainPrompt || '(empty)'}`);
+          }
+
           // Get per-tag guardrails if available (merge with base guardrails)
           const baseGuardrails = config.guided_guardrails || {};
           const perTagDescription = articleTag && config.guided_guardrails_by_tag?.[articleTag]
