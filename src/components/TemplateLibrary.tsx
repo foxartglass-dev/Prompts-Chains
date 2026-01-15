@@ -20,7 +20,7 @@ interface TemplateLibraryProps {
   currentWebsiteId?: number;
 }
 
-type ViewMode = 'browse' | 'create' | 'preview';
+type ViewMode = 'browse' | 'create' | 'preview' | 'edit';
 
 const TEMPLATE_TYPES = [
   { value: 'full_workflow', label: 'Full Workflow', description: 'Complete workflow with all settings' },
@@ -43,6 +43,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('browse');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
 
   // Filters
   const [typeFilter, setTypeFilter] = useState<string>('');
@@ -235,6 +236,69 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     }
   };
 
+  // Start editing an existing template
+  const startEditTemplate = (template: Template) => {
+    setEditingTemplateId(template.id);
+    setCreateForm({
+      name: template.name,
+      description: template.description || '',
+      tags: template.tags?.join(', ') || ''
+    });
+    // Populate includes from template
+    if (template.includes) {
+      setIncludes({
+        prompts: template.includes.prompts ?? true,
+        placeholders: template.includes.placeholders ?? true,
+        tags: template.includes.tags ?? true,
+        snippets: template.includes.snippets ?? true,
+        settings: template.includes.settings ?? true,
+        imageCreation: template.includes.imageCreation ?? true,
+        sitePlanning: template.includes.sitePlanning ?? true
+      });
+    }
+    setViewMode('edit');
+  };
+
+  // Update existing template
+  const updateTemplate = async () => {
+    if (!editingTemplateId) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const template = templates.find(t => t.id === editingTemplateId);
+      if (!template) throw new Error('Template not found');
+
+      const res = await fetch(`/api/templates/${editingTemplateId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: createForm.name,
+          description: createForm.description,
+          templateType: template.template_type,
+          templateData: template.template_data,
+          tags: createForm.tags.split(',').map(t => t.trim()).filter(Boolean)
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to update template');
+      }
+
+      const data = await res.json();
+      // Update templates list with updated template
+      setTemplates(templates.map(t => t.id === editingTemplateId ? data.template : t));
+      setViewMode('browse');
+      setEditingTemplateId(null);
+      setCreateForm({ name: '', description: '', tags: '' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update template');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getTypeLabel = (type: string) => {
     return TEMPLATE_TYPES.find(t => t.value === type)?.label || type;
   };
@@ -395,8 +459,16 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                             </button>
                           )}
                           <button
+                            onClick={() => startEditTemplate(template)}
+                            className="px-2 py-1.5 bg-brand-gold/20 hover:bg-brand-gold/30 border border-brand-gold rounded text-sm text-brand-gold"
+                            title="Edit template"
+                          >
+                            ✎
+                          </button>
+                          <button
                             onClick={() => deleteTemplate(template.id)}
-                            className="px-2 py-1.5 border border-brand-cyan rounded text-sm text-brand-cyan hover:bg-brand-cyan/10"
+                            className="px-2 py-1.5 border border-red-500/50 rounded text-sm text-red-400 hover:bg-red-500/10"
+                            title="Delete template"
                           >
                             &times;
                           </button>
@@ -502,6 +574,76 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                     )}
                     <button
                       onClick={() => setViewMode('browse')}
+                      className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {viewMode === 'edit' && editingTemplateId && (
+            <div className="flex-1 p-6 overflow-auto">
+              <div className="max-w-2xl mx-auto">
+                <h3 className="text-lg font-medium text-white mb-6">Edit Template</h3>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Template Name *</label>
+                    <input
+                      type="text"
+                      value={createForm.name}
+                      onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                      placeholder="e.g., My SEO Workflow"
+                      className="w-full px-3 py-2 bg-slate-800 border border-gray-700 rounded text-white focus:border-brand-cyan focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Description</label>
+                    <textarea
+                      value={createForm.description}
+                      onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                      placeholder="What is this template for?"
+                      rows={3}
+                      className="w-full px-3 py-2 bg-slate-800 border border-gray-700 rounded text-white focus:border-brand-cyan focus:outline-none resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Tags (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={createForm.tags}
+                      onChange={(e) => setCreateForm({ ...createForm, tags: e.target.value })}
+                      placeholder="seo, cleaning, local"
+                      className="w-full px-3 py-2 bg-slate-800 border border-gray-700 rounded text-white focus:border-brand-cyan focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="bg-slate-800/50 p-4 rounded border border-gray-700">
+                    <p className="text-sm text-gray-400">
+                      <strong className="text-brand-gold">Note:</strong> Editing updates the template's name, description, and tags.
+                      The template content remains unchanged. To update content, delete this template and create a new one.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={updateTemplate}
+                      disabled={!createForm.name || loading}
+                      className="px-4 py-2 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-slate-900 font-medium disabled:opacity-50"
+                    >
+                      {loading ? 'Saving...' : 'Update Template'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setViewMode('browse');
+                        setEditingTemplateId(null);
+                        setCreateForm({ name: '', description: '', tags: '' });
+                      }}
                       className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white"
                     >
                       Cancel
