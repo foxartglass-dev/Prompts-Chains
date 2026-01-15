@@ -352,8 +352,8 @@ const NewAgentStartHere: React.FC = () => (
 const ImageFlowDiagram: React.FC = () => (
   <div className="space-y-6">
     <div className="text-center mb-8">
-      <h2 className="text-2xl font-bold text-brand-cyan mb-2">Image Pipeline</h2>
-      <p className="text-gray-400">This is the flow that keeps getting broken. Pay attention!</p>
+      <h2 className="text-2xl font-bold text-brand-cyan mb-2">Image Pipeline Architecture</h2>
+      <p className="text-gray-400">The complete image flow - verified against source code Jan 2025</p>
     </div>
 
     {/* Main Flow Diagram */}
@@ -361,24 +361,26 @@ const ImageFlowDiagram: React.FC = () => (
       <div className="flex flex-col items-center gap-4">
 
         {/* Two Sources Box */}
-        <div className="flex gap-8 justify-center">
+        <div className="flex gap-8 justify-center flex-wrap">
           {/* Image Bank Source */}
-          <div className="bg-slate-700 rounded-lg p-4 border-2 border-brand-gold w-64 text-center">
-            <div className="text-brand-gold font-bold mb-2">IMAGE BANK</div>
+          <div className="bg-slate-700 rounded-lg p-4 border-2 border-brand-gold w-72 text-center">
+            <div className="text-brand-gold font-bold mb-2">IMAGE BANK (Pre-made)</div>
             <div className="text-sm text-gray-300 space-y-1">
-              <div>Pre-generated images</div>
+              <div>- Already have WordPress URLs</div>
+              <div>- Tagged by avatar (H, J, C)</div>
               <div className="text-xs text-gray-400">Stored in: <code className="bg-slate-800 px-1 rounded">image_bank_items</code></div>
-              <div className="text-xs text-gray-400">Already have WordPress URLs</div>
+              <div className="text-xs text-gray-400">Has: url, wp_url, wp_media_id, avatar_tag</div>
             </div>
           </div>
 
           {/* Generate Live Source */}
-          <div className="bg-slate-700 rounded-lg p-4 border-2 border-brand-cyan w-64 text-center">
-            <div className="text-brand-cyan font-bold mb-2">GENERATE LIVE</div>
+          <div className="bg-slate-700 rounded-lg p-4 border-2 border-brand-cyan w-72 text-center">
+            <div className="text-brand-cyan font-bold mb-2">GENERATE LIVE (On-demand)</div>
             <div className="text-sm text-gray-300 space-y-1">
-              <div>On-the-fly AI generation</div>
-              <div className="text-xs text-gray-400">Returns BASE64 data URLs</div>
-              <div className="text-xs text-gray-400">Needs upload to get wpUrl</div>
+              <div>- AI generates base64 first</div>
+              <div>- Needs upload to get wpMediaUrl</div>
+              <div className="text-xs text-gray-400">Uses OpenAI/Flux models</div>
+              <div className="text-xs text-gray-400">Returns BASE64 data URLs initially</div>
             </div>
           </div>
         </div>
@@ -386,33 +388,57 @@ const ImageFlowDiagram: React.FC = () => (
         {/* Arrow Down */}
         <div className="text-4xl text-brand-cyan animate-pulse">↓</div>
 
-        {/* Smart Matching Mode Decision */}
-        <div className="bg-red-900/30 rounded-lg p-4 border-2 border-red-500 w-full max-w-xl">
-          <div className="text-red-400 font-bold mb-2 text-center">CRITICAL: smart_matching_mode</div>
+        {/* TOP-LEVEL: integration_mode Decision */}
+        <div className="bg-purple-900/30 rounded-lg p-4 border-2 border-purple-500 w-full max-w-2xl">
+          <div className="text-purple-400 font-bold mb-2 text-center">LEVEL 1: integration_mode (Top-Level Decision)</div>
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="bg-slate-800 p-3 rounded">
-              <code className="text-brand-gold">'bank_first'</code>
-              <div className="text-gray-300 mt-1">Use bank, generate if empty</div>
-              <div className="text-green-400 text-xs">fallback = TRUE</div>
+            <div className="bg-slate-800 p-3 rounded border border-purple-500/50">
+              <code className="text-purple-400">'bank'</code> <span className="text-gray-500 text-xs">(default)</span>
+              <div className="text-gray-300 mt-1">Pull from Image Bank</div>
+              <div className="text-brand-cyan text-xs mt-1">→ Then check smart_matching_mode for fallback</div>
             </div>
-            <div className="bg-slate-800 p-3 rounded">
+            <div className="bg-slate-800 p-3 rounded border border-purple-500/50">
+              <code className="text-purple-400">'live'</code>
+              <div className="text-gray-300 mt-1">Generate Live (skip bank entirely)</div>
+              <div className="text-brand-cyan text-xs mt-1">→ Always creates new images with AI</div>
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-purple-300 text-center">
+            Code: <code className="bg-slate-800 px-1 rounded">elementor.js:520</code> - <code className="bg-slate-800 px-1 rounded">config.integration_mode || 'bank'</code>
+          </div>
+        </div>
+
+        {/* Arrow Down */}
+        <div className="text-4xl text-brand-cyan animate-pulse">↓</div>
+
+        {/* LEVEL 2: smart_matching_mode (only when integration_mode='bank') */}
+        <div className="bg-red-900/30 rounded-lg p-4 border-2 border-red-500 w-full max-w-2xl">
+          <div className="text-red-400 font-bold mb-2 text-center">LEVEL 2: smart_matching_mode (Bank Fallback Behavior)</div>
+          <div className="text-xs text-gray-400 text-center mb-3">Only applies when integration_mode = 'bank'</div>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="bg-slate-800 p-3 rounded border border-green-500/50">
+              <code className="text-brand-gold">'bank_first'</code> <span className="text-gray-500 text-xs">(default)</span>
+              <div className="text-gray-300 mt-1">Use bank, generate if empty</div>
+              <div className="text-green-400 text-xs">fallbackToLive = TRUE</div>
+            </div>
+            <div className="bg-slate-800 p-3 rounded border border-red-500/50">
               <code className="text-brand-gold">'bank_only'</code>
               <div className="text-gray-300 mt-1">Only use bank, never generate</div>
-              <div className="text-red-400 text-xs">fallback = FALSE</div>
+              <div className="text-red-400 text-xs">fallbackToLive = FALSE</div>
             </div>
-            <div className="bg-slate-800 p-3 rounded">
+            <div className="bg-slate-800 p-3 rounded border border-yellow-500/30 opacity-70">
               <code className="text-brand-gold">'generate_first'</code>
               <div className="text-gray-300 mt-1">Generate first, bank as backup</div>
-              <div className="text-green-400 text-xs">fallback = TRUE</div>
+              <div className="text-yellow-400 text-xs">Uses legacy fallback_to_live</div>
             </div>
-            <div className="bg-slate-800 p-3 rounded">
+            <div className="bg-slate-800 p-3 rounded border border-yellow-500/30 opacity-70">
               <code className="text-brand-gold">'generate_only'</code>
               <div className="text-gray-300 mt-1">Only generate, never use bank</div>
-              <div className="text-red-400 text-xs">fallback = FALSE</div>
+              <div className="text-yellow-400 text-xs">Uses legacy fallback_to_live</div>
             </div>
           </div>
           <div className="mt-3 text-xs text-red-300 text-center">
-            Source of truth: <code className="bg-slate-800 px-1 rounded">image_creation_settings.smart_matching_mode</code>
+            Code: <code className="bg-slate-800 px-1 rounded">elementor.js:521-528</code> - Only bank_first/bank_only explicitly handled
           </div>
         </div>
 
@@ -420,30 +446,71 @@ const ImageFlowDiagram: React.FC = () => (
         <div className="text-4xl text-brand-cyan animate-pulse">↓</div>
 
         {/* Two Destinations */}
-        <div className="flex gap-8 justify-center">
+        <div className="flex gap-8 justify-center flex-wrap">
           {/* Draft Mode */}
-          <div className="bg-slate-700 rounded-lg p-4 border-2 border-yellow-500 w-64 text-center">
+          <div className="bg-slate-700 rounded-lg p-4 border-2 border-yellow-500 w-72 text-center">
             <div className="text-yellow-500 font-bold mb-2">DRAFT MODE</div>
             <div className="text-sm text-gray-300 space-y-1">
               <div><code className="bg-slate-800 px-1 rounded text-xs">imageDraftMode: true</code></div>
               <div className="text-xs text-gray-400 mt-2">Images go to:</div>
-              <div className="text-xs text-brand-cyan">→ articles.generated_images</div>
-              <div className="text-xs text-brand-cyan">→ Draft Image Bank</div>
-              <div className="text-xs text-gray-500 mt-1">NO WordPress page yet</div>
+              <div className="text-xs text-brand-cyan">→ articles.generated_images array</div>
+              <div className="text-xs text-brand-cyan">→ Also to Draft Image Bank</div>
+              <div className="text-xs text-green-400 mt-2">wpUrl NOT required</div>
+              <div className="text-xs text-gray-500">(May be base64 - large!)</div>
             </div>
           </div>
 
           {/* WordPress Mode */}
-          <div className="bg-slate-700 rounded-lg p-4 border-2 border-green-500 w-64 text-center">
+          <div className="bg-slate-700 rounded-lg p-4 border-2 border-green-500 w-72 text-center">
             <div className="text-green-500 font-bold mb-2">WORDPRESS MODE</div>
             <div className="text-sm text-gray-300 space-y-1">
               <div><code className="bg-slate-800 px-1 rounded text-xs">imageDraftMode: false</code></div>
               <div className="text-xs text-gray-400 mt-2">Images go to:</div>
-              <div className="text-xs text-brand-cyan">→ Embedded in WP page</div>
-              <div className="text-xs text-brand-cyan">→ Via Elementor structure</div>
-              <div className="text-xs text-gray-500 mt-1">Page created on WordPress</div>
+              <div className="text-xs text-brand-cyan">→ Embedded in Elementor page</div>
+              <div className="text-xs text-brand-cyan">→ Page created immediately</div>
+              <div className="text-xs text-red-400 mt-2">Requires wpMediaUrl!</div>
+              <div className="text-xs text-gray-500">(Images without wpUrl skipped)</div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Image Filtering Logic */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">Image Filtering Logic</h3>
+      <div className="text-xs text-gray-400 mb-4">Location: <code className="bg-slate-900 px-1 rounded">server/routes/elementor.js</code> (Lines 681-957)</div>
+
+      <div className="space-y-3 text-sm">
+        <div className="bg-slate-900 p-3 rounded">
+          <span className="text-brand-cyan font-bold">1.</span> <span className="text-gray-300">Extract article tag from keyword:</span>
+          <code className="bg-slate-800 px-2 py-1 rounded ml-2 text-brand-gold">"Standard Cleaning(H)" → "H"</code>
+          <div className="text-xs text-gray-500 mt-1">Line 682: <code>keyword?.match(/\(([A-Z])\)/i)</code></div>
+        </div>
+
+        <div className="bg-slate-900 p-3 rounded">
+          <span className="text-brand-cyan font-bold">2.</span> <span className="text-gray-300">Filter by avatar tag match (if article has tag, image must too)</span>
+          <div className="text-xs text-gray-500 mt-1">Line 710-714: <code>img.avatarTag === articleTag</code></div>
+        </div>
+
+        <div className="bg-slate-900 p-3 rounded">
+          <span className="text-brand-cyan font-bold">3.</span> <span className="text-gray-300">Skip already-used images</span>
+          <div className="text-xs text-gray-500 mt-1">Line 700-701: <code>if (img.used) return false</code></div>
+        </div>
+
+        <div className="bg-slate-900 p-3 rounded">
+          <span className="text-brand-cyan font-bold">4.</span> <span className="text-gray-300">Smart content matching:</span>
+          <div className="ml-4 mt-2 space-y-1">
+            <div className="text-brand-gold">- PRIMARY keywords = <span className="text-green-400">10 points</span> <span className="text-xs text-gray-500">(line 875)</span></div>
+            <div className="text-brand-gold">- SECONDARY keywords = <span className="text-yellow-400">1 point</span> <span className="text-xs text-gray-500">(line 904)</span></div>
+            <div className="text-red-400">- Never duplicate PRIMARY keywords on same page <span className="text-xs text-gray-500">(line 946)</span></div>
+            <div className="text-purple-400">- Disambiguation: "sink" → check if "Kitchen" or "Bathroom" in article <span className="text-xs text-gray-500">(line 869-880)</span></div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 p-3 rounded">
+          <span className="text-brand-cyan font-bold">5.</span> <span className="text-gray-300">Plural form matching (enabled by default)</span>
+          <div className="text-xs text-gray-500 mt-1">Lines 751-772: "counter" matches "counters", "city" matches "cities"</div>
         </div>
       </div>
     </div>
@@ -530,6 +597,86 @@ const ImageFlowDiagram: React.FC = () => (
             Code: <code className="bg-slate-900 px-1 rounded">server/routes/image-creation.js</code> batch-generate endpoint
           </div>
         </div>
+      </div>
+    </div>
+
+    {/* Key Files Reference Table */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">Key Files for Image Flow</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-600">
+              <th className="text-left py-2 px-3 text-brand-cyan">Area</th>
+              <th className="text-left py-2 px-3 text-brand-cyan">File</th>
+              <th className="text-left py-2 px-3 text-brand-cyan">Key Lines</th>
+            </tr>
+          </thead>
+          <tbody className="text-gray-300">
+            <tr className="border-b border-slate-700">
+              <td className="py-2 px-3">Image filtering/matching</td>
+              <td className="py-2 px-3"><code className="bg-slate-900 px-1 rounded text-xs">server/routes/elementor.js</code></td>
+              <td className="py-2 px-3 text-brand-gold">681-957</td>
+            </tr>
+            <tr className="border-b border-slate-700">
+              <td className="py-2 px-3">Image generation orchestration</td>
+              <td className="py-2 px-3"><code className="bg-slate-900 px-1 rounded text-xs">server/services/image-pipeline.js</code></td>
+              <td className="py-2 px-3 text-brand-gold">310-520</td>
+            </tr>
+            <tr className="border-b border-slate-700">
+              <td className="py-2 px-3">Image bank database access</td>
+              <td className="py-2 px-3"><code className="bg-slate-900 px-1 rounded text-xs">server/services/image-bank.js</code></td>
+              <td className="py-2 px-3 text-gray-400">All</td>
+            </tr>
+            <tr className="border-b border-slate-700">
+              <td className="py-2 px-3">Push images to WP</td>
+              <td className="py-2 px-3"><code className="bg-slate-900 px-1 rounded text-xs">server/routes/articles.js</code></td>
+              <td className="py-2 px-3 text-brand-gold">423-687</td>
+            </tr>
+            <tr className="border-b border-slate-700">
+              <td className="py-2 px-3">Image creation settings</td>
+              <td className="py-2 px-3"><code className="bg-slate-900 px-1 rounded text-xs">server/routes/image-creation.js</code></td>
+              <td className="py-2 px-3 text-gray-400">All</td>
+            </tr>
+            <tr>
+              <td className="py-2 px-3">Article UI with buttons</td>
+              <td className="py-2 px-3"><code className="bg-slate-900 px-1 rounded text-xs">src/components/articles/ArticleListView.tsx</code></td>
+              <td className="py-2 px-3 text-brand-gold">372-483</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {/* Push to WordPress Order - Critical Warning */}
+    <div className="bg-red-900/30 rounded-xl p-6 border-2 border-red-500">
+      <h3 className="text-lg font-bold text-red-400 mb-4">PUSH TO WORDPRESS (Strict Order!)</h3>
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-brand-cyan text-slate-900 w-8 h-8 rounded-full flex items-center justify-center font-bold">1</div>
+          <div className="text-gray-300">
+            <code className="bg-slate-900 px-2 py-1 rounded text-brand-cyan">POST /api/articles/:id/push-images</code>
+            <div className="text-xs text-gray-400 mt-1">Upload base64 → Get wpMediaUrl + wpMediaId</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="bg-brand-gold text-slate-900 w-8 h-8 rounded-full flex items-center justify-center font-bold">2</div>
+          <div className="text-gray-300">
+            <code className="bg-slate-900 px-2 py-1 rounded text-brand-gold">POST /api/elementor/publish</code>
+            <div className="text-xs text-gray-400 mt-1">Create page with embedded images</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="bg-green-500 text-slate-900 w-8 h-8 rounded-full flex items-center justify-center font-bold">3</div>
+          <div className="text-gray-300">
+            <code className="bg-slate-900 px-2 py-1 rounded text-green-400">POST /api/seo/push-direct</code>
+            <div className="text-xs text-gray-400 mt-1">Push meta to SEO plugin</div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 p-3 bg-red-950 rounded-lg border border-red-700">
+        <div className="text-red-300 text-sm font-bold">CRITICAL: Images → Page → Meta (NEVER change this order!)</div>
+        <div className="text-xs text-gray-400 mt-1">If page is created before images are uploaded, images won't appear on WordPress.</div>
       </div>
     </div>
   </div>
