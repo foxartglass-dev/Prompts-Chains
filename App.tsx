@@ -1311,7 +1311,7 @@ const App: React.FC = () => {
                     } else {
                         // No option variables - proceed normally
                         addLog(`[${itemLabel}] Checking AI score with ZeroGPT...`, LogStatus.WORKING, item.id);
-                        const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys.zeroGpt, finalOutput);
+                        const { score: aiScore, wordCount } = await checkAiScore(currentProject.state.apiKeys?.zeroGpt || '', finalOutput);
                         addLog(`[${itemLabel}] AI score: ${aiScore}%, Word count: ${wordCount}`, LogStatus.INFO, item.id);
 
                         const status = aiScore >= 40 ? 'FLAGGED' : 'PASSED';
@@ -1974,7 +1974,7 @@ const App: React.FC = () => {
       return url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
     };
     
-    const isApiKeyMissing = currentProject.state.provider === 'anthropic' && !currentProject.state.apiKeys.anthropic;
+    const isApiKeyMissing = currentProject.state.provider === 'anthropic' && !currentProject.state.apiKeys?.anthropic;
     const isRunDisabled = isProcessing || !items.length || isApiKeyMissing;
 
     const getRunButtonText = () => {
@@ -2164,7 +2164,7 @@ const App: React.FC = () => {
                                     type="password"
                                     placeholder="Open Router API Key"
                                     value={currentProject.state.apiKeys?.openRouter || ''}
-                                    onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, openRouter: e.target.value}}))}
+                                    onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...(p.apiKeys ?? {}), openRouter: e.target.value}}))}
                                     className="w-full bg-slate-700 border border-purple-500/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-purple-500"
                                 />
                             </div>
@@ -2179,7 +2179,7 @@ const App: React.FC = () => {
                                             type="password"
                                             placeholder="sk-ant-..."
                                             value={currentProject.state.apiKeys?.anthropic || ''}
-                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, anthropic: e.target.value}}))}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...(p.apiKeys ?? {}), anthropic: e.target.value}}))}
                                             className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
                                         />
                                     </div>
@@ -2189,7 +2189,7 @@ const App: React.FC = () => {
                                             type="password"
                                             placeholder="sk-..."
                                             value={currentProject.state.apiKeys?.openai || ''}
-                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, openai: e.target.value}}))}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...(p.apiKeys ?? {}), openai: e.target.value}}))}
                                             className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
                                         />
                                     </div>
@@ -2199,7 +2199,7 @@ const App: React.FC = () => {
                                             type="password"
                                             placeholder="AIza..."
                                             value={currentProject.state.apiKeys?.gemini || ''}
-                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, gemini: e.target.value}}))}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...(p.apiKeys ?? {}), gemini: e.target.value}}))}
                                             className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
                                         />
                                     </div>
@@ -2209,7 +2209,7 @@ const App: React.FC = () => {
                                             type="password"
                                             placeholder="xai-..."
                                             value={currentProject.state.apiKeys?.grok || ''}
-                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, grok: e.target.value}}))}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...(p.apiKeys ?? {}), grok: e.target.value}}))}
                                             className="w-full bg-slate-700 border border-brand-gold/50 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-brand-gold"
                                         />
                                     </div>
@@ -2219,7 +2219,7 @@ const App: React.FC = () => {
                                             type="password"
                                             placeholder="ZeroGPT API Key"
                                             value={currentProject.state.apiKeys?.zeroGpt || ''}
-                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...p.apiKeys, zeroGpt: e.target.value}}))}
+                                            onChange={e => setCurrentProjectState(p => ({...p, apiKeys: {...(p.apiKeys ?? {}), zeroGpt: e.target.value}}))}
                                             className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-slate-500"
                                         />
                                     </div>
