@@ -568,7 +568,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   live_prompt_mode: 'main_prompt',
   smart_prompt_guidance: '', // Empty by default - user can add guardrails
   // Guided GPT mode settings
-  guided_model: 'gpt-4o',
+  guided_model: 'gpt-5.2-2025-12-11',
   guided_guardrails: null,
   guided_guardrails_by_tag: null, // Per-tag descriptions for Guided GPT (like conditional snippets)
   // Prompt Problem Areas - High priority prompting issues
@@ -745,6 +745,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Prompt Problem Areas state
   const [problemAreasCollapsed, setProblemAreasCollapsed] = useState(true);
+
+  // Tabbed section for Problem Areas, Reference Images, Logo & Action Shots
+  const [activeResourceTab, setActiveResourceTab] = useState<'problem_areas' | 'reference_images' | 'logo_action'>('problem_areas');
   const [activeProblemAreaId, setActiveProblemAreaId] = useState<string | null>(null);
   const [editingProblemArea, setEditingProblemArea] = useState<PromptProblemArea | null>(null);
 
@@ -2998,7 +3001,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: settings.guided_model || 'gpt-4o',
+          model: settings.guided_model || 'gpt-5.2-2025-12-11',
           messages: historyToSend.map(m => ({
             role: m.role,
             content: m.content,
@@ -5734,7 +5737,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <div>
                           <label className="text-[10px] text-emerald-400 mb-1 block">AI Model:</label>
                           <select
-                            value={settings.guided_model || 'gpt-4o'}
+                            value={settings.guided_model || 'gpt-5.2-2025-12-11'}
                             onChange={(e) => updateSettings({ guided_model: e.target.value })}
                             className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white"
                           >
