@@ -8694,19 +8694,8 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
           </div>
 
-          {/* Audience Avatars - Full-Width Section Pattern (expands to span both columns when open) */}
-          {/* When expanded, use fixed positioning to break out of all parent constraints */}
-          {!avatarsCollapsed && (
-            <div
-              className="fixed inset-0 bg-black/50 z-30"
-              onClick={() => setAvatarsCollapsed(true)}
-            />
-          )}
-          <div className={`bg-slate-900 rounded-lg transition-all duration-300 ${
-            !avatarsCollapsed
-              ? 'fixed left-4 right-4 top-16 bottom-4 z-40 border-4 border-brand-gold p-4 px-8 shadow-lg shadow-brand-gold/20 overflow-y-auto'
-              : 'border border-brand-gold/50 p-4'
-          }`}>
+          {/* Audience Avatars - Simple collapsible section */}
+          <div className="bg-slate-900 rounded-lg border border-brand-gold/50 p-4">
             {/* Header - Always visible */}
             <div
               className="flex items-center justify-between cursor-pointer"
@@ -8715,7 +8704,6 @@ Start by introducing yourself and asking about their business in a friendly way.
               <div className="flex items-center gap-3">
                 <span className={`text-brand-gold transition-transform ${avatarsCollapsed ? '' : 'rotate-90'}`}>▶</span>
                 <h3 className="text-brand-gold font-semibold">Audience Avatars</h3>
-                {!avatarsCollapsed && <span className="text-xs text-emerald-400 bg-emerald-900/30 px-2 py-0.5 rounded">Full-Width Mode</span>}
                 {tags.length > 0 && (
                   <span className="text-xs text-brand-cyan/70 bg-brand-cyan/10 px-2 py-0.5 rounded">
                     Synced with Tag Manager: {tags.map(t => t.name).join(', ')}
