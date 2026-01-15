@@ -736,6 +736,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   }>({ articles: [], workflow: null, websites: [], lastFetched: null });
   const [fetchingContext, setFetchingContext] = useState(false);
   const [avatarsCollapsed, setAvatarsCollapsed] = useState(true);
+  const [avatarsExpandedView, setAvatarsExpandedView] = useState(false); // Full-page expanded view
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
   const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Set<string>>(new Set()); // Track which individual categories are collapsed
 
@@ -8727,7 +8728,19 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </span>
                 )}
               </div>
-              <button onClick={(e) => { e.stopPropagation(); handleAddAvatar(); }} className="text-brand-cyan hover:text-brand-cyan-light text-sm font-medium transition">+ Add Avatar</button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setAvatarsExpandedView(true); }}
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+                  title="Expand to full screen"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  </svg>
+                  Expand
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); handleAddAvatar(); }} className="text-brand-cyan hover:text-brand-cyan-light text-sm font-medium transition">+ Add Avatar</button>
+              </div>
             </div>
 
             {!avatarsCollapsed && <div className="mt-3">
@@ -11912,6 +11925,233 @@ Start by introducing yourself and asking about their business in a friendly way.
                   })()}
                 </div>
               )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Audience Avatars Expanded View - Full-page modal (Portal) */}
+      {avatarsExpandedView && createPortal(
+        <div className="fixed inset-0 bg-slate-950 z-[9999] flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-brand-gold/30 bg-slate-900">
+            <h2 className="text-xl font-bold text-brand-gold flex items-center gap-2">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              Audience Avatars
+              {tags.length > 0 && (
+                <span className="text-sm text-brand-cyan/70 bg-brand-cyan/10 px-2 py-0.5 rounded ml-2">
+                  Synced with Tag Manager: {tags.map(t => t.name).join(', ')}
+                </span>
+              )}
+            </h2>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => handleAddAvatar()}
+                className="px-3 py-1.5 text-sm bg-brand-cyan hover:bg-brand-cyan-dark text-white rounded transition"
+              >
+                + Add Avatar
+              </button>
+              <button
+                onClick={() => setAvatarsExpandedView(false)}
+                className="p-2 hover:bg-slate-800 rounded-full text-white transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Content - scrollable */}
+          <div className="flex-1 overflow-auto p-6">
+            {/* Two-column layout for expanded view */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {/* LEFT: Avatar Selection & Main Prompt */}
+              <div className="space-y-4">
+                {/* Tag tabs */}
+                <div className="flex flex-wrap items-center gap-1 border-b border-slate-700 pb-3">
+                  {allTags.map((tag) => {
+                    const count = avatarsByTag.grouped[tag]?.length || 0;
+                    const isSelected = selectedTagTab === tag;
+                    return (
+                      <button
+                        key={tag}
+                        onClick={() => {
+                          setSelectedTagTab(tag);
+                          const avatarsForTag = avatarsByTag.grouped[tag] || [];
+                          if (avatarsForTag.length > 0) {
+                            setActiveAvatarId(avatarsForTag[0].id);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                          isSelected
+                            ? 'bg-brand-gold text-slate-900 shadow-lg shadow-brand-gold/30'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        {tag} <span className="text-xs opacity-70">({count})</span>
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => {
+                      setSelectedTagTab('global');
+                      if (avatarsByTag.globalAvatars.length > 0) {
+                        setActiveAvatarId(avatarsByTag.globalAvatars[0].id);
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      selectedTagTab === 'global'
+                        ? 'bg-slate-600 text-white'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    }`}
+                  >
+                    Global
+                  </button>
+                </div>
+
+                {/* Avatar sub-tabs for selected tag */}
+                {avatarsForSelectedTag.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {avatarsForSelectedTag.map((avatar) => (
+                      <button
+                        key={avatar.id}
+                        onClick={() => setActiveAvatarId(avatar.id)}
+                        className={`px-3 py-1.5 rounded text-sm transition ${
+                          activeAvatarId === avatar.id
+                            ? 'bg-brand-gold/20 border-2 border-brand-gold text-brand-gold'
+                            : 'bg-slate-800 border border-slate-600 text-slate-300 hover:border-slate-500'
+                        }`}
+                      >
+                        {avatar.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Active Avatar Details */}
+                {activeAvatar && (
+                  <div className="bg-slate-800/50 rounded-lg p-4 border border-brand-gold/30">
+                    <div className="flex items-center gap-3 mb-4">
+                      <input
+                        type="text"
+                        value={activeAvatar.name}
+                        onChange={(e) => handleUpdateAvatar(activeAvatar.id, { name: e.target.value })}
+                        className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white font-semibold"
+                        placeholder="Avatar Name"
+                      />
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleUpdateAvatar(activeAvatar.id, { placeholderMode: 'simple' })}
+                          className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                            (activeAvatar.placeholderMode || 'simple') === 'simple'
+                              ? 'bg-brand-gold text-slate-900'
+                              : 'bg-slate-700 text-slate-300'
+                          }`}
+                        >
+                          Simple
+                        </button>
+                        <button
+                          onClick={() => handleUpdateAvatar(activeAvatar.id, { placeholderMode: 'advanced' })}
+                          className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                            activeAvatar.placeholderMode === 'advanced'
+                              ? 'bg-brand-gold text-slate-900'
+                              : 'bg-slate-700 text-slate-300'
+                          }`}
+                        >
+                          Advanced
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Main Prompt */}
+                    <div>
+                      <label className="block text-xs text-brand-gold/70 mb-1">
+                        Main Prompt {(activeAvatar.placeholderMode || 'simple') === 'simple' ? `(use {'{variation}'} placeholder)` : '(use placeholder categories)'}
+                      </label>
+                      <textarea
+                        value={activeAvatar.mainPrompt}
+                        onChange={(e) => handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value })}
+                        className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono min-h-[150px]"
+                        placeholder="Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* RIGHT: Placeholder Categories */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-purple-400">Placeholder Categories</h3>
+                  {activeAvatar && activeAvatar.placeholderMode === 'advanced' && (
+                    <button
+                      onClick={() => {
+                        const newId = `cat_${Date.now()}`;
+                        handleUpdateAvatar(activeAvatar.id, {
+                          placeholderCategories: [
+                            ...(activeAvatar.placeholderCategories || []),
+                            { id: newId, placeholder: '{New_Category}', options: [] }
+                          ]
+                        });
+                      }}
+                      className="text-purple-400 hover:text-purple-300 text-sm font-medium"
+                    >
+                      + Add Category
+                    </button>
+                  )}
+                </div>
+
+                {activeAvatar && activeAvatar.placeholderMode === 'advanced' && (
+                  <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                    {(activeAvatar.placeholderCategories || []).map((cat, catIndex) => (
+                      <div key={cat.id} className="bg-slate-800/50 rounded-lg p-3 border border-purple-500/30">
+                        <div className="flex items-center gap-2 mb-2">
+                          <input
+                            type="text"
+                            value={cat.placeholder}
+                            onChange={(e) => {
+                              const updated = [...(activeAvatar.placeholderCategories || [])];
+                              updated[catIndex] = { ...cat, placeholder: e.target.value };
+                              handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updated });
+                            }}
+                            className="flex-1 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-purple-300 text-sm font-mono"
+                          />
+                          <button
+                            onClick={() => {
+                              const updated = (activeAvatar.placeholderCategories || []).filter(c => c.id !== cat.id);
+                              handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updated });
+                            }}
+                            className="p-1 text-red-400 hover:text-red-300"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {(cat.options || []).map((opt, optIndex) => (
+                            <span key={optIndex} className="px-2 py-0.5 bg-purple-600/30 border border-purple-500/50 rounded text-purple-300 text-xs">
+                              {opt.primary}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {activeAvatar && (activeAvatar.placeholderMode || 'simple') === 'simple' && (
+                  <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-600">
+                    <p className="text-slate-400 text-sm">
+                      Switch to <strong className="text-purple-400">Advanced</strong> mode to use placeholder categories with multiple options per category.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>,
