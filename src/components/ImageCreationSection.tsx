@@ -537,7 +537,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   consultant_model: 'gpt-4o', // Default to vision model for consultant
   worker_chat_history: [],
   worker_model: 'gpt-4o-mini', // Default to cheaper model for worker
-  integration_mode: 'bank',
+  integration_mode: 'live',
   fallback_to_live: true,
   fallback_prompt_mode: 'main_prompt', // Default: use Main Prompt when falling back to live
   image_order: [],
@@ -947,6 +947,18 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       });
     }
   }, [activeAvatarMainPrompt, autoResizeTextarea]);
+
+  // Auto-resize when Audience Avatars section is expanded
+  useEffect(() => {
+    if (!avatarsCollapsed && mainPromptRef.current) {
+      // Give DOM time to render the textarea, then resize
+      setTimeout(() => {
+        if (mainPromptRef.current) {
+          autoResizeTextarea(mainPromptRef.current);
+        }
+      }, 100);
+    }
+  }, [avatarsCollapsed, autoResizeTextarea]);
 
   // Helper: Log to Processing Log
   const log = useCallback((message: string, status: LogStatus) => {
