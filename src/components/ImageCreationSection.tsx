@@ -1484,7 +1484,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     const globalAvatars: AudienceAvatar[] = [];
     const untaggedAvatars: AudienceAvatar[] = [];
 
-    settings.audience_avatars.forEach(avatar => {
+    // Defensive: ensure audience_avatars is an array and items are valid objects
+    const avatars = settings.audience_avatars || [];
+    avatars.forEach(avatar => {
+      if (!avatar || typeof avatar !== 'object') return; // Skip invalid entries
       if (avatar.isGlobal) {
         globalAvatars.push(avatar);
       } else if (avatar.tag) {
@@ -1508,9 +1511,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Get all unique tags (from Tag Manager and existing avatars)
   const allTags = useMemo(() => {
     const tagSet = new Set<string>();
-    tags.forEach(t => tagSet.add(t.name));
-    settings.audience_avatars.forEach(a => {
-      if (a.tag && !a.isGlobal) tagSet.add(a.tag);
+    // Defensive: ensure tags array exists and items have name property
+    (tags || []).forEach(t => {
+      if (t?.name) tagSet.add(t.name);
+    });
+    // Defensive: ensure audience_avatars array exists and items are valid
+    (settings.audience_avatars || []).forEach(a => {
+      if (a?.tag && !a.isGlobal) tagSet.add(a.tag);
     });
     return Array.from(tagSet);
   }, [tags, settings.audience_avatars]);
