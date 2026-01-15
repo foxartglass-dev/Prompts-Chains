@@ -141,13 +141,13 @@ function applyDefaults(project: Project, defaults: any): Project {
     state: {
       ...project.state,
       apiKeys: {
-        anthropic: project.state.apiKeys.anthropic || defaults.anthropicApiKey || '',
-        zeroGpt: project.state.apiKeys.zeroGpt || defaults.zeroGptApiKey || '',
+        anthropic: project.state?.apiKeys?.anthropic || defaults.anthropicApiKey || '',
+        zeroGpt: project.state?.apiKeys?.zeroGpt || defaults.zeroGptApiKey || '',
       },
       wpCredentials: {
-        url: project.state.wpCredentials.url || defaults.wpUrl || '',
-        user: project.state.wpCredentials.user || defaults.wpUser || '',
-        password: project.state.wpCredentials.password || defaults.wpPassword || '',
+        url: project.state?.wpCredentials?.url || defaults.wpUrl || '',
+        user: project.state?.wpCredentials?.user || defaults.wpUser || '',
+        password: project.state?.wpCredentials?.password || defaults.wpPassword || '',
       },
     },
   };
