@@ -1893,30 +1893,69 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       }
     };
 
-    // Separate function to update just live_prompt_mode (ensures it's saved even if other columns fail)
+    // Separate function to update live_prompt_mode AND fallback_prompt_mode (ensures they're saved even if other columns fail)
     const tryUpdateLivePromptMode = async () => {
-      if (live_prompt_mode === undefined || live_prompt_mode === null) {
+      const hasLiveMode = live_prompt_mode !== undefined && live_prompt_mode !== null;
+      const hasFallbackMode = fallback_prompt_mode !== undefined && fallback_prompt_mode !== null;
+
+      if (!hasLiveMode && !hasFallbackMode) {
         return false; // Nothing to update
       }
+
       try {
-        if (saveToWebsite) {
-          await sql`
-            UPDATE image_creation_settings
-            SET live_prompt_mode = ${live_prompt_mode}
-            WHERE website_id = ${websiteId}
-          `;
-        } else {
-          await sql`
-            UPDATE image_creation_settings
-            SET live_prompt_mode = ${live_prompt_mode}
-            WHERE workflow_id = ${workflowId}
-          `;
+        // Build dynamic SET clause based on what's provided
+        if (hasLiveMode && hasFallbackMode) {
+          if (saveToWebsite) {
+            await sql`
+              UPDATE image_creation_settings
+              SET live_prompt_mode = ${live_prompt_mode},
+                  fallback_prompt_mode = ${fallback_prompt_mode}
+              WHERE website_id = ${websiteId}
+            `;
+          } else {
+            await sql`
+              UPDATE image_creation_settings
+              SET live_prompt_mode = ${live_prompt_mode},
+                  fallback_prompt_mode = ${fallback_prompt_mode}
+              WHERE workflow_id = ${workflowId}
+            `;
+          }
+          console.log('[Image Creation API] Successfully saved live_prompt_mode:', live_prompt_mode, 'fallback_prompt_mode:', fallback_prompt_mode);
+        } else if (hasLiveMode) {
+          if (saveToWebsite) {
+            await sql`
+              UPDATE image_creation_settings
+              SET live_prompt_mode = ${live_prompt_mode}
+              WHERE website_id = ${websiteId}
+            `;
+          } else {
+            await sql`
+              UPDATE image_creation_settings
+              SET live_prompt_mode = ${live_prompt_mode}
+              WHERE workflow_id = ${workflowId}
+            `;
+          }
+          console.log('[Image Creation API] Successfully saved live_prompt_mode:', live_prompt_mode);
+        } else if (hasFallbackMode) {
+          if (saveToWebsite) {
+            await sql`
+              UPDATE image_creation_settings
+              SET fallback_prompt_mode = ${fallback_prompt_mode}
+              WHERE website_id = ${websiteId}
+            `;
+          } else {
+            await sql`
+              UPDATE image_creation_settings
+              SET fallback_prompt_mode = ${fallback_prompt_mode}
+              WHERE workflow_id = ${workflowId}
+            `;
+          }
+          console.log('[Image Creation API] Successfully saved fallback_prompt_mode:', fallback_prompt_mode);
         }
-        console.log('[Image Creation API] Successfully saved live_prompt_mode:', live_prompt_mode);
         return true;
       } catch (err) {
-        if (err.message?.includes('live_prompt_mode')) {
-          console.log('[Image Creation API] live_prompt_mode column not available yet (run migration 007)');
+        if (err.message?.includes('live_prompt_mode') || err.message?.includes('fallback_prompt_mode')) {
+          console.log('[Image Creation API] live_prompt_mode/fallback_prompt_mode columns not available yet (run migration 007)');
           return false;
         }
         throw err;
@@ -1950,8 +1989,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
     // VERIFICATION: Read back what was saved to confirm
     const verifyQuery = saveToWebsite
-      ? sql`SELECT id, integration_mode, live_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE website_id = ${websiteId}`
-      : sql`SELECT id, integration_mode, live_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
+      ? sql`SELECT id, integration_mode, live_prompt_mode, fallback_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE website_id = ${websiteId}`
+      : sql`SELECT id, integration_mode, live_prompt_mode, fallback_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
     const verifyResult = await verifyQuery;
     console.log('[Image Creation API] VERIFICATION READ after save:', verifyResult[0]);
     if (verifyResult.length > 1) {
