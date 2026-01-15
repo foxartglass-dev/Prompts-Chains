@@ -8314,31 +8314,64 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
           </div>
 
-      {/* ========== PROMPT PROBLEM AREAS ========== */}
-      <div className="bg-slate-900 rounded-lg border border-orange-500/50 overflow-hidden">
-        <div
-          className="flex items-center justify-between p-3 cursor-pointer hover:bg-slate-800/50 transition"
-          onClick={() => setProblemAreasCollapsed(!problemAreasCollapsed)}
-        >
-          <div className="flex items-center gap-2">
-            <span className={`text-orange-400 transition-transform ${problemAreasCollapsed ? '' : 'rotate-90'}`}>▶</span>
-            <span className="text-orange-400 font-semibold">🎯 Prompt Problem Areas</span>
-            {settings.prompt_problem_areas.length > 0 && (
-              <span className="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded">
-                {settings.prompt_problem_areas.length} areas • {settings.prompt_problem_areas.flatMap(a => a.prompts.filter(p => p.status === 'working')).length} working
-              </span>
-            )}
-          </div>
+      {/* ========== RESOURCE TABS: Problem Areas, Reference Images, Logo & Action Shots ========== */}
+      <div className="bg-slate-900 rounded-lg border border-slate-600 overflow-hidden">
+        {/* Tab Bar */}
+        <div className="flex border-b border-slate-700">
           <button
-            onClick={(e) => { e.stopPropagation(); handleAddProblemArea(); }}
-            className="text-orange-400 hover:text-orange-300 text-sm font-medium transition"
+            onClick={() => setActiveResourceTab('problem_areas')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+              activeResourceTab === 'problem_areas'
+                ? 'bg-orange-500/20 text-orange-400 border-b-2 border-orange-500'
+                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+            }`}
           >
-            + Add Area
+            🎯 Prompt Problem Areas
+            {settings.prompt_problem_areas.length > 0 && (
+              <span className="text-xs bg-orange-500/30 px-1.5 py-0.5 rounded">{settings.prompt_problem_areas.length}</span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveResourceTab('reference_images')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+              activeResourceTab === 'reference_images'
+                ? 'bg-brand-gold/20 text-brand-gold border-b-2 border-brand-gold'
+                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+            }`}
+          >
+            Reference Images
+            {settings.reference_images.length > 0 && (
+              <span className="text-xs bg-brand-gold/30 px-1.5 py-0.5 rounded">{settings.reference_images.length}</span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveResourceTab('logo_action')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+              activeResourceTab === 'logo_action'
+                ? 'bg-pink-500/20 text-pink-400 border-b-2 border-pink-500'
+                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+            }`}
+          >
+            Logo & Action Shots
+            {(logoImages.length > 0 || actionShots.length > 0) && (
+              <span className="text-xs bg-pink-500/30 px-1.5 py-0.5 rounded">{logoImages.length + actionShots.length}</span>
+            )}
           </button>
         </div>
 
-        {!problemAreasCollapsed && (
-          <div className="p-3 border-t border-orange-500/30 space-y-3">
+        {/* Tab Content */}
+        {/* Prompt Problem Areas Tab */}
+        {activeResourceTab === 'problem_areas' && (
+          <div className="p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-orange-400 font-semibold text-sm">Manage Problem Areas</span>
+              <button
+                onClick={() => handleAddProblemArea()}
+                className="text-orange-400 hover:text-orange-300 text-sm font-medium transition"
+              >
+                + Add Area
+              </button>
+            </div>
             {settings.prompt_problem_areas.length === 0 ? (
               <div className="text-center py-6 text-slate-500">
                 <p className="text-sm">No problem areas yet.</p>
@@ -8528,105 +8561,71 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
           </div>
         )}
-      </div>
 
-      {/* Reference Images (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-brand-gold/50 overflow-hidden">
-            <button
-              onClick={() => setIsReferenceOpen(!isReferenceOpen)}
-              className="w-full flex items-center justify-between p-3 text-brand-gold hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        {/* Reference Images Tab */}
+        {activeResourceTab === 'reference_images' && (
+          <div className="p-4 space-y-3">
+            <div className="flex gap-2">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-sm transition"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                Reference Images ({settings.reference_images.length})
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isReferenceOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {isReferenceOpen && (
-              <div className="p-4 border-t border-brand-gold/30 space-y-3">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-sm transition"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    Upload
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={(e) => handleUploadReference(e.target.files)}
-                    className="hidden"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Or paste image URL..."
-                    className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleAddReferenceUrl((e.target as HTMLInputElement).value);
-                        (e.target as HTMLInputElement).value = '';
-                      }
-                    }}
-                  />
-                </div>
-                {settings.reference_images.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-2">
-                    {settings.reference_images.map((img, idx) => (
-                      <div key={idx} className="relative group">
-                        <img src={img.url} alt={img.filename || `Ref ${idx + 1}`} className="w-full h-24 object-cover rounded border border-brand-gold/30" />
-                        <button onClick={() => handleRemoveReference(idx)} className="absolute top-1 right-1 p-1 bg-red-600/80 rounded opacity-0 group-hover:opacity-100 transition">
-                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
+                Upload
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={(e) => handleUploadReference(e.target.files)}
+                className="hidden"
+              />
+              <input
+                type="text"
+                placeholder="Or paste image URL..."
+                className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddReferenceUrl((e.target as HTMLInputElement).value);
+                    (e.target as HTMLInputElement).value = '';
+                  }
+                }}
+              />
+            </div>
+            {settings.reference_images.length > 0 ? (
+              <div className="grid grid-cols-4 gap-2">
+                {settings.reference_images.map((img, idx) => (
+                  <div key={idx} className="relative group">
+                    <img src={img.url} alt={img.filename || `Ref ${idx + 1}`} className="w-full h-24 object-cover rounded border border-brand-gold/30" />
+                    <button onClick={() => handleRemoveReference(idx)} className="absolute top-1 right-1 p-1 bg-red-600/80 rounded opacity-0 group-hover:opacity-100 transition">
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
-                ) : (
-                  <p className="text-center text-brand-gold/50 py-4">No reference images yet.</p>
-                )}
+                ))}
               </div>
+            ) : (
+              <p className="text-center text-brand-gold/50 py-4">No reference images yet.</p>
             )}
           </div>
+        )}
 
-          {/* Logo & Action Shots (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-pink-500/50 overflow-hidden">
-            <button
-              onClick={() => setIsLogoOpen(!isLogoOpen)}
-              className="w-full flex items-center justify-between p-3 text-pink-400 hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-                </svg>
-                Logo & Action Shots ({logoImages.length} logo, {actionShots.length} action)
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isLogoOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {isLogoOpen && (
-              <div className="p-4 border-t border-pink-500/30 space-y-4">
-                {/* Logo Upload */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm text-pink-300 font-medium">Logo Image (the actual logo)</label>
-                    <button
-                      onClick={() => logoFileInputRef.current?.click()}
-                      className="flex items-center gap-1 px-3 py-1 bg-pink-600 hover:bg-pink-500 rounded text-white text-xs transition"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {/* Logo & Action Shots Tab */}
+        {activeResourceTab === 'logo_action' && (
+          <div className="p-4 space-y-4">
+            {/* Logo Upload */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm text-pink-300 font-medium">Logo Image (the actual logo)</label>
+                <button
+                  onClick={() => logoFileInputRef.current?.click()}
+                  className="flex items-center gap-1 px-3 py-1 bg-pink-600 hover:bg-pink-500 rounded text-white text-xs transition"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                       </svg>
                       Upload Logo
@@ -8703,12 +8702,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                   )}
                 </div>
 
-                <p className="text-xs text-pink-300/70 bg-pink-900/30 p-2 rounded">
-                  <strong>Tip:</strong> These images help AI understand your brand. Use <code className="bg-pink-900/50 px-1 rounded">{'{logo}'}</code> in prompts to reference the logo placement.
-                </p>
-              </div>
-            )}
+            <p className="text-xs text-pink-300/70 bg-pink-900/30 p-2 rounded">
+              <strong>Tip:</strong> These images help AI understand your brand. Use <code className="bg-pink-900/50 px-1 rounded">{'{logo}'}</code> in prompts to reference the logo placement.
+            </p>
           </div>
+        )}
+      </div>
+      {/* End Resource Tabs */}
 
           {/* Audience Avatars - Simple collapsible section */}
           <div className="bg-slate-900 rounded-lg border border-brand-gold/50 p-4">
