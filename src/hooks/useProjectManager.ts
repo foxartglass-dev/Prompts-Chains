@@ -195,21 +195,25 @@ async function fetchDefaultConfig() {
 function applyDefaults(project: Project, defaults: any): Project {
   if (!defaults) return project;
 
+  // Defensive: ensure nested objects exist before accessing properties
+  const apiKeys = project.state?.apiKeys || {};
+  const wpCredentials = project.state?.wpCredentials || {};
+
   return {
     ...project,
     state: {
       ...project.state,
       apiKeys: {
-        anthropic: project.state.apiKeys.anthropic || defaults.anthropicApiKey || '',
-        openai: project.state.apiKeys.openai || defaults.openaiApiKey || '',
-        gemini: project.state.apiKeys.gemini || defaults.geminiApiKey || '',
-        xai: project.state.apiKeys.xai || defaults.xaiApiKey || '',
-        zeroGpt: project.state.apiKeys.zeroGpt || defaults.zeroGptApiKey || '',
+        anthropic: apiKeys.anthropic || defaults.anthropicApiKey || '',
+        openai: apiKeys.openai || defaults.openaiApiKey || '',
+        gemini: apiKeys.gemini || defaults.geminiApiKey || '',
+        xai: apiKeys.xai || defaults.xaiApiKey || '',
+        zeroGpt: apiKeys.zeroGpt || defaults.zeroGptApiKey || '',
       },
       wpCredentials: {
-        url: project.state.wpCredentials.url || defaults.wpUrl || '',
-        user: project.state.wpCredentials.user || defaults.wpUser || '',
-        password: project.state.wpCredentials.password || defaults.wpPassword || '',
+        url: wpCredentials.url || defaults.wpUrl || '',
+        user: wpCredentials.user || defaults.wpUser || '',
+        password: wpCredentials.password || defaults.wpPassword || '',
       },
     },
   };
