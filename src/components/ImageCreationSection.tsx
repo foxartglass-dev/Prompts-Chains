@@ -8706,9 +8706,33 @@ Start by introducing yourself and asking about their business in a friendly way.
                     <label className="block text-xs text-brand-gold/70">
                       Main Prompt {(activeAvatar.placeholderMode || 'simple') === 'simple' ? `(use {'{variation}'} placeholder)` : '(use placeholder categories below)'}
                     </label>
-                    {(activeAvatar.placeholderMode || 'simple') === 'simple' && (
-                      <button onClick={insertVariationPlaceholder} className="text-xs text-brand-cyan hover:text-brand-cyan-light">+ Insert {'{variation}'}</button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {(activeAvatar.placeholderMode || 'simple') === 'simple' && (
+                        <button onClick={insertVariationPlaceholder} className="text-xs text-brand-cyan hover:text-brand-cyan-light">+ Insert {'{variation}'}</button>
+                      )}
+                      {/* Template Buttons - same as collapsed view */}
+                      <button
+                        onClick={() => setShowPromptTemplatePopup('save')}
+                        className="px-2 py-1 bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/50 rounded text-emerald-300 text-[10px] font-medium transition"
+                        title="Save current prompt as template"
+                      >
+                        Save Template
+                      </button>
+                      <button
+                        onClick={() => setShowPromptTemplatePopup('apply')}
+                        className="px-2 py-1 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 rounded text-purple-300 text-[10px] font-medium transition"
+                        title="Apply a saved template"
+                      >
+                        Templates
+                      </button>
+                      <button
+                        onClick={() => setShowTextSnippetBank(true)}
+                        className="px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-[10px] font-medium transition"
+                        title="Insert text snippets"
+                      >
+                        Text Bank
+                      </button>
+                    </div>
                   </div>
                   <textarea
                     ref={mainPromptRef}
