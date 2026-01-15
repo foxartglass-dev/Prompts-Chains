@@ -897,9 +897,28 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Auto-resize main prompt textarea when content changes
   useEffect(() => {
     if (mainPromptRef.current && activeAvatarId) {
-      autoResizeTextarea(mainPromptRef.current);
+      // Use requestAnimationFrame to ensure DOM has rendered the new content before measuring
+      requestAnimationFrame(() => {
+        if (mainPromptRef.current) {
+          autoResizeTextarea(mainPromptRef.current);
+        }
+      });
     }
   }, [activeAvatarId, autoResizeTextarea, settings.audience_avatars]);
+
+  // Get the active avatar's mainPrompt for tracking content changes
+  const activeAvatarMainPrompt = settings.audience_avatars.find(a => a.id === activeAvatarId)?.mainPrompt || '';
+
+  // Also auto-resize when the mainPrompt content changes (not just avatar switch)
+  useEffect(() => {
+    if (mainPromptRef.current && activeAvatarMainPrompt) {
+      requestAnimationFrame(() => {
+        if (mainPromptRef.current) {
+          autoResizeTextarea(mainPromptRef.current);
+        }
+      });
+    }
+  }, [activeAvatarMainPrompt, autoResizeTextarea]);
 
   // Helper: Log to Processing Log
   const log = useCallback((message: string, status: LogStatus) => {
