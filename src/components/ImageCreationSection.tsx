@@ -1474,8 +1474,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     onHeaderControlsReady(headerControls);
   }, [onHeaderControlsReady, loading, settings.image_generation_model, settings.image_quality, saving, loaded, hasUnsavedChanges, forceSave, saveSettings]);
 
-  // Get active avatar
-  const activeAvatar = settings.audience_avatars.find(a => a.id === activeAvatarId) || settings.audience_avatars[0];
+  // Get active avatar - with fallback to prevent crashes from empty/corrupted data
+  const defaultAvatar: AudienceAvatar = { id: 0, name: 'Default', mainPrompt: '', variations: [] };
+  const avatarsArray = settings.audience_avatars || [];
+  const activeAvatar = avatarsArray.find(a => a?.id === activeAvatarId) || avatarsArray[0] || defaultAvatar;
 
   // ========== Multi-prompt per tag system ==========
   // Group avatars by tag (including global ones)
