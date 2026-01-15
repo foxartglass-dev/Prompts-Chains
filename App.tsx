@@ -1602,7 +1602,8 @@ const App: React.FC = () => {
 
           if (step.imageSource === 'bank') {
             imageSettings.integration_mode = 'bank';
-            imageSettings.smart_matching_mode = 'bank_only';
+            // Use bank_first to enable fallback to generate when bank is empty
+            imageSettings.smart_matching_mode = 'bank_first';
           } else {
             // Generate Live modes (main-prompt, guided-gpt, smart-prompt)
             imageSettings.integration_mode = 'live';
