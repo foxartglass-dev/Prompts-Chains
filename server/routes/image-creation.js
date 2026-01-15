@@ -1902,60 +1902,67 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
         return false; // Nothing to update
       }
 
+      // Helper to save just live_prompt_mode
+      const saveLiveModeOnly = async () => {
+        if (saveToWebsite) {
+          await sql`UPDATE image_creation_settings SET live_prompt_mode = ${live_prompt_mode} WHERE website_id = ${websiteId}`;
+        } else {
+          await sql`UPDATE image_creation_settings SET live_prompt_mode = ${live_prompt_mode} WHERE workflow_id = ${workflowId}`;
+        }
+        console.log('[Image Creation API] Successfully saved live_prompt_mode:', live_prompt_mode);
+      };
+
       try {
-        // Build dynamic SET clause based on what's provided
+        // Try to save both if both are provided
         if (hasLiveMode && hasFallbackMode) {
-          if (saveToWebsite) {
-            await sql`
-              UPDATE image_creation_settings
-              SET live_prompt_mode = ${live_prompt_mode},
-                  fallback_prompt_mode = ${fallback_prompt_mode}
-              WHERE website_id = ${websiteId}
-            `;
-          } else {
-            await sql`
-              UPDATE image_creation_settings
-              SET live_prompt_mode = ${live_prompt_mode},
-                  fallback_prompt_mode = ${fallback_prompt_mode}
-              WHERE workflow_id = ${workflowId}
-            `;
+          try {
+            if (saveToWebsite) {
+              await sql`
+                UPDATE image_creation_settings
+                SET live_prompt_mode = ${live_prompt_mode},
+                    fallback_prompt_mode = ${fallback_prompt_mode}
+                WHERE website_id = ${websiteId}
+              `;
+            } else {
+              await sql`
+                UPDATE image_creation_settings
+                SET live_prompt_mode = ${live_prompt_mode},
+                    fallback_prompt_mode = ${fallback_prompt_mode}
+                WHERE workflow_id = ${workflowId}
+              `;
+            }
+            console.log('[Image Creation API] Successfully saved live_prompt_mode:', live_prompt_mode, 'fallback_prompt_mode:', fallback_prompt_mode);
+          } catch (bothErr) {
+            // If combined update fails (likely missing fallback_prompt_mode column), save just live_prompt_mode
+            if (bothErr.message?.includes('fallback_prompt_mode')) {
+              console.log('[Image Creation API] fallback_prompt_mode column missing, saving just live_prompt_mode');
+              await saveLiveModeOnly();
+            } else {
+              throw bothErr;
+            }
           }
-          console.log('[Image Creation API] Successfully saved live_prompt_mode:', live_prompt_mode, 'fallback_prompt_mode:', fallback_prompt_mode);
         } else if (hasLiveMode) {
-          if (saveToWebsite) {
-            await sql`
-              UPDATE image_creation_settings
-              SET live_prompt_mode = ${live_prompt_mode}
-              WHERE website_id = ${websiteId}
-            `;
-          } else {
-            await sql`
-              UPDATE image_creation_settings
-              SET live_prompt_mode = ${live_prompt_mode}
-              WHERE workflow_id = ${workflowId}
-            `;
-          }
-          console.log('[Image Creation API] Successfully saved live_prompt_mode:', live_prompt_mode);
+          await saveLiveModeOnly();
         } else if (hasFallbackMode) {
-          if (saveToWebsite) {
-            await sql`
-              UPDATE image_creation_settings
-              SET fallback_prompt_mode = ${fallback_prompt_mode}
-              WHERE website_id = ${websiteId}
-            `;
-          } else {
-            await sql`
-              UPDATE image_creation_settings
-              SET fallback_prompt_mode = ${fallback_prompt_mode}
-              WHERE workflow_id = ${workflowId}
-            `;
+          try {
+            if (saveToWebsite) {
+              await sql`UPDATE image_creation_settings SET fallback_prompt_mode = ${fallback_prompt_mode} WHERE website_id = ${websiteId}`;
+            } else {
+              await sql`UPDATE image_creation_settings SET fallback_prompt_mode = ${fallback_prompt_mode} WHERE workflow_id = ${workflowId}`;
+            }
+            console.log('[Image Creation API] Successfully saved fallback_prompt_mode:', fallback_prompt_mode);
+          } catch (fallbackErr) {
+            if (fallbackErr.message?.includes('fallback_prompt_mode')) {
+              console.log('[Image Creation API] fallback_prompt_mode column not available yet (run migration 007)');
+            } else {
+              throw fallbackErr;
+            }
           }
-          console.log('[Image Creation API] Successfully saved fallback_prompt_mode:', fallback_prompt_mode);
         }
         return true;
       } catch (err) {
-        if (err.message?.includes('live_prompt_mode') || err.message?.includes('fallback_prompt_mode')) {
-          console.log('[Image Creation API] live_prompt_mode/fallback_prompt_mode columns not available yet (run migration 007)');
+        if (err.message?.includes('live_prompt_mode')) {
+          console.log('[Image Creation API] live_prompt_mode column not available yet (run migration 007)');
           return false;
         }
         throw err;
@@ -1987,14 +1994,24 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
     // Ensure live_prompt_mode is saved (fallback may have skipped it)
     await tryUpdateLivePromptMode();
 
-    // VERIFICATION: Read back what was saved to confirm
-    const verifyQuery = saveToWebsite
-      ? sql`SELECT id, integration_mode, live_prompt_mode, fallback_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE website_id = ${websiteId}`
-      : sql`SELECT id, integration_mode, live_prompt_mode, fallback_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
-    const verifyResult = await verifyQuery;
-    console.log('[Image Creation API] VERIFICATION READ after save:', verifyResult[0]);
-    if (verifyResult.length > 1) {
-      console.log('[Image Creation API] WARNING: Multiple rows found!', verifyResult.map(r => r.id));
+    // VERIFICATION: Read back what was saved to confirm (wrapped in try/catch for missing columns)
+    try {
+      const verifyQuery = saveToWebsite
+        ? sql`SELECT id, integration_mode, live_prompt_mode, fallback_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE website_id = ${websiteId}`
+        : sql`SELECT id, integration_mode, live_prompt_mode, fallback_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
+      const verifyResult = await verifyQuery;
+      console.log('[Image Creation API] VERIFICATION READ after save:', verifyResult[0]);
+      if (verifyResult.length > 1) {
+        console.log('[Image Creation API] WARNING: Multiple rows found!', verifyResult.map(r => r.id));
+      }
+    } catch (verifyErr) {
+      // Fallback verification without fallback_prompt_mode if column doesn't exist
+      console.log('[Image Creation API] Verification with fallback_prompt_mode failed, trying without...');
+      const verifyQuery = saveToWebsite
+        ? sql`SELECT id, integration_mode, live_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE website_id = ${websiteId}`
+        : sql`SELECT id, integration_mode, live_prompt_mode, smart_matching_mode FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
+      const verifyResult = await verifyQuery;
+      console.log('[Image Creation API] VERIFICATION READ after save:', verifyResult[0]);
     }
 
     console.log('[Image Creation API] Update complete for workflow:', workflowId);

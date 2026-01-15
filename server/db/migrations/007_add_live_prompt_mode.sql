@@ -10,6 +10,15 @@ BEGIN
   END IF;
 END $$;
 
+-- Add fallback_prompt_mode column if it doesn't exist (for Bank First mode fallback)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'fallback_prompt_mode') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN fallback_prompt_mode VARCHAR(20) DEFAULT 'main_prompt';
+    RAISE NOTICE 'Added fallback_prompt_mode column';
+  END IF;
+END $$;
+
 -- Add smart_prompt_guidance column if it doesn't exist
 DO $$
 BEGIN
