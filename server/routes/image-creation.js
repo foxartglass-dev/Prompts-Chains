@@ -1893,6 +1893,28 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       }
     };
 
+    // Separate function to update JUST smart_matching_mode (critical for bank fallback behavior)
+    const tryUpdateSmartMatchingMode = async () => {
+      if (smart_matching_mode === undefined || smart_matching_mode === null) {
+        return false; // Nothing to update
+      }
+      try {
+        if (saveToWebsite) {
+          await sql`UPDATE image_creation_settings SET smart_matching_mode = ${smart_matching_mode} WHERE website_id = ${websiteId}`;
+        } else {
+          await sql`UPDATE image_creation_settings SET smart_matching_mode = ${smart_matching_mode} WHERE workflow_id = ${workflowId}`;
+        }
+        console.log('[Image Creation API] Successfully saved smart_matching_mode:', smart_matching_mode);
+        return true;
+      } catch (err) {
+        if (err.message?.includes('smart_matching_mode')) {
+          console.log('[Image Creation API] smart_matching_mode column not available');
+          return false;
+        }
+        throw err;
+      }
+    };
+
     // Separate function to update live_prompt_mode AND fallback_prompt_mode (ensures they're saved even if other columns fail)
     const tryUpdateLivePromptMode = async () => {
       const hasLiveMode = live_prompt_mode !== undefined && live_prompt_mode !== null;
@@ -1978,6 +2000,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       // Try to set smart_matching fields
       await tryUpdateSmartMatching();
 
+      // Ensure smart_matching_mode is saved (critical for bank fallback)
+      await tryUpdateSmartMatchingMode();
+
       // Ensure live_prompt_mode is saved (fallback may have skipped it)
       await tryUpdateLivePromptMode();
 
@@ -1990,6 +2015,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
     // Try to update smart_matching fields separately
     await tryUpdateSmartMatching();
+
+    // Ensure smart_matching_mode is saved (critical for bank fallback)
+    await tryUpdateSmartMatchingMode();
 
     // Ensure live_prompt_mode is saved (fallback may have skipped it)
     await tryUpdateLivePromptMode();
