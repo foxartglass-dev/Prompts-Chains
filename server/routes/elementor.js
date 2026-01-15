@@ -775,7 +775,7 @@ router.post('/publish', async (req, res) => {
             console.log('[Smart Matching] Enabled, mode:', smartMatchingMode, ', plurals:', matchPlurals);
 
             // Normalize article content for keyword matching
-            const articleText = (cleanedContent || contentHtml || '').toLowerCase();
+            const articleText = (cleanedContent || '').toLowerCase();
 
             // ═══════════════════════════════════════════════════════════════
             // DISAMBIGUATION: Detect keywords that exist in multiple categories
