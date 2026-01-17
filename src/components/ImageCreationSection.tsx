@@ -637,8 +637,18 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [showTextSnippetBank, setShowTextSnippetBank] = useState(false);
   const [snippetCategoryFilter, setSnippetCategoryFilter] = useState<string>('all');
   const [showPlaceholderTemplates, setShowPlaceholderTemplates] = useState(false);
+  // Placeholder template editing state
+  const [editingPlaceholderTemplate, setEditingPlaceholderTemplate] = useState<PlaceholderCategoryTemplate | null>(null);
+  const [editPlaceholderTemplateName, setEditPlaceholderTemplateName] = useState('');
+  const [editPlaceholderTemplateCategory, setEditPlaceholderTemplateCategory] = useState('');
+  const [placeholderTemplateOptionSelections, setPlaceholderTemplateOptionSelections] = useState<{ [key: number]: boolean }>({});
   // For apply template - track which sections/text to include
   const [templateSectionSelections, setTemplateSectionSelections] = useState<{ [sectionId: string]: { title: boolean; text: boolean } }>({});
+  // Template edit mode: 'apply' = selecting sections to apply, 'edit' = editing the template itself
+  const [templateEditMode, setTemplateEditMode] = useState<'apply' | 'edit'>('apply');
+  const [editTemplateName, setEditTemplateName] = useState('');
+  const [editTemplateDesc, setEditTemplateDesc] = useState('');
+  const [editTemplateCategory, setEditTemplateCategory] = useState('');
   // Save Template popup form state
   const [saveTemplateName, setSaveTemplateName] = useState('');
   const [saveTemplateDesc, setSaveTemplateDesc] = useState('');
@@ -747,6 +757,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [problemAreasCollapsed, setProblemAreasCollapsed] = useState(true);
 
   // Tabbed section for Problem Areas, Reference Images, Logo & Action Shots
+  const [resourceTabsCollapsed, setResourceTabsCollapsed] = useState(true); // Collapsed by default
   const [activeResourceTab, setActiveResourceTab] = useState<'problem_areas' | 'reference_images' | 'logo_action'>('problem_areas');
   const [activeProblemAreaId, setActiveProblemAreaId] = useState<string | null>(null);
   const [editingProblemArea, setEditingProblemArea] = useState<PromptProblemArea | null>(null);
@@ -8316,52 +8327,88 @@ Start by introducing yourself and asking about their business in a friendly way.
 
       {/* ========== RESOURCE TABS: Problem Areas, Reference Images, Logo & Action Shots ========== */}
       <div className="bg-slate-900 rounded-lg border border-slate-600 overflow-hidden">
-        {/* Tab Bar */}
-        <div className="flex border-b border-slate-700">
-          <button
-            onClick={() => setActiveResourceTab('problem_areas')}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-              activeResourceTab === 'problem_areas'
-                ? 'bg-orange-500/20 text-orange-400 border-b-2 border-orange-500'
-                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
-            }`}
-          >
-            🎯 Prompt Problem Areas
+        {/* Collapsible Header */}
+        <button
+          onClick={() => setResourceTabsCollapsed(!resourceTabsCollapsed)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/50 hover:bg-slate-800 transition-all"
+        >
+          <div className="flex items-center gap-3">
+            <svg
+              className={`w-4 h-4 text-slate-400 transition-transform ${resourceTabsCollapsed ? '' : 'rotate-180'}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+            </svg>
+            <span className="text-slate-300 font-medium text-sm">Prompt Resources</span>
+          </div>
+          <div className="flex items-center gap-2">
             {settings.prompt_problem_areas.length > 0 && (
-              <span className="text-xs bg-orange-500/30 px-1.5 py-0.5 rounded">{settings.prompt_problem_areas.length}</span>
+              <span className="text-xs bg-orange-500/30 text-orange-400 px-2 py-0.5 rounded">
+                🎯 {settings.prompt_problem_areas.length}
+              </span>
             )}
-          </button>
-          <button
-            onClick={() => setActiveResourceTab('reference_images')}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-              activeResourceTab === 'reference_images'
-                ? 'bg-brand-gold/20 text-brand-gold border-b-2 border-brand-gold'
-                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
-            }`}
-          >
-            Reference Images
             {settings.reference_images.length > 0 && (
-              <span className="text-xs bg-brand-gold/30 px-1.5 py-0.5 rounded">{settings.reference_images.length}</span>
+              <span className="text-xs bg-brand-gold/30 text-brand-gold px-2 py-0.5 rounded">
+                📷 {settings.reference_images.length}
+              </span>
             )}
-          </button>
-          <button
-            onClick={() => setActiveResourceTab('logo_action')}
-            className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-              activeResourceTab === 'logo_action'
-                ? 'bg-pink-500/20 text-pink-400 border-b-2 border-pink-500'
-                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
-            }`}
-          >
-            Logo & Action Shots
             {(logoImages.length > 0 || actionShots.length > 0) && (
-              <span className="text-xs bg-pink-500/30 px-1.5 py-0.5 rounded">{logoImages.length + actionShots.length}</span>
+              <span className="text-xs bg-pink-500/30 text-pink-400 px-2 py-0.5 rounded">
+                🏷️ {logoImages.length + actionShots.length}
+              </span>
             )}
-          </button>
-        </div>
+          </div>
+        </button>
 
-        {/* Tab Content */}
-        {/* Prompt Problem Areas Tab */}
-        {activeResourceTab === 'problem_areas' && (
+        {/* Expanded Content */}
+        {!resourceTabsCollapsed && (
+          <>
+            {/* Tab Bar */}
+            <div className="flex border-t border-b border-slate-700">
+              <button
+                onClick={() => setActiveResourceTab('problem_areas')}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                  activeResourceTab === 'problem_areas'
+                    ? 'bg-orange-500/20 text-orange-400 border-b-2 border-orange-500'
+                    : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                }`}
+              >
+                🎯 Prompt Problem Areas
+                {settings.prompt_problem_areas.length > 0 && (
+                  <span className="text-xs bg-orange-500/30 px-1.5 py-0.5 rounded">{settings.prompt_problem_areas.length}</span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveResourceTab('reference_images')}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                  activeResourceTab === 'reference_images'
+                    ? 'bg-brand-gold/20 text-brand-gold border-b-2 border-brand-gold'
+                    : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                }`}
+              >
+                Reference Images
+                {settings.reference_images.length > 0 && (
+                  <span className="text-xs bg-brand-gold/30 px-1.5 py-0.5 rounded">{settings.reference_images.length}</span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveResourceTab('logo_action')}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                  activeResourceTab === 'logo_action'
+                    ? 'bg-pink-500/20 text-pink-400 border-b-2 border-pink-500'
+                    : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                }`}
+              >
+                Logo & Action Shots
+                {(logoImages.length > 0 || actionShots.length > 0) && (
+                  <span className="text-xs bg-pink-500/30 px-1.5 py-0.5 rounded">{logoImages.length + actionShots.length}</span>
+                )}
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            {/* Prompt Problem Areas Tab */}
+            {activeResourceTab === 'problem_areas' && (
           <div className="p-3 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-orange-400 font-semibold text-sm">Manage Problem Areas</span>
@@ -8706,6 +8753,8 @@ Start by introducing yourself and asking about their business in a friendly way.
               <strong>Tip:</strong> These images help AI understand your brand. Use <code className="bg-pink-900/50 px-1 rounded">{'{logo}'}</code> in prompts to reference the logo placement.
             </p>
           </div>
+        )}
+          </>
         )}
       </div>
       {/* End Resource Tabs */}
@@ -11520,6 +11569,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                           <button
                             onClick={() => {
                               setEditingTemplate(template);
+                              setTemplateEditMode('apply');
                               const selections: { [key: string]: { title: boolean; text: boolean } } = {};
                               template.sections.forEach(s => {
                                 selections[s.id] = { title: true, text: true };
@@ -11529,6 +11579,23 @@ Start by introducing yourself and asking about their business in a friendly way.
                             className="px-4 py-2 bg-purple-600/30 hover:bg-purple-600/50 rounded text-purple-300 text-sm font-medium"
                           >
                             Apply
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingTemplate(template);
+                              setTemplateEditMode('edit');
+                              setEditTemplateName(template.name);
+                              setEditTemplateDesc(template.description || '');
+                              setEditTemplateCategory(template.category || '');
+                              const selections: { [key: string]: { title: boolean; text: boolean } } = {};
+                              template.sections.forEach(s => {
+                                selections[s.id] = { title: true, text: true };
+                              });
+                              setTemplateSectionSelections(selections);
+                            }}
+                            className="px-3 py-2 bg-blue-600/30 hover:bg-blue-600/50 rounded text-blue-300 text-sm"
+                          >
+                            Edit
                           </button>
                           <button
                             onClick={() => handleDeleteTemplate(template.id)}
@@ -11557,18 +11624,22 @@ Start by introducing yourself and asking about their business in a friendly way.
         document.body
       )}
 
-      {/* Apply Template with Section Selection - Full Screen Centered (Portal) */}
+      {/* Apply/Edit Template with Section Selection - Full Screen Centered (Portal) */}
       {editingTemplate && createPortal(
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
-          <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[1200px] h-[90vh] flex flex-col border border-purple-500/30">
+          <div className={`bg-slate-900 rounded-xl w-[90vw] max-w-[1200px] h-[90vh] flex flex-col border ${templateEditMode === 'edit' ? 'border-blue-500/30' : 'border-purple-500/30'}`}>
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-purple-500/30 shrink-0">
+            <div className={`flex items-center justify-between p-4 border-b shrink-0 ${templateEditMode === 'edit' ? 'border-blue-500/30' : 'border-purple-500/30'}`}>
               <div>
-                <h2 className="text-xl font-semibold text-purple-400">Apply: {editingTemplate.name}</h2>
+                <h2 className={`text-xl font-semibold ${templateEditMode === 'edit' ? 'text-blue-400' : 'text-purple-400'}`}>
+                  {templateEditMode === 'edit' ? 'Edit Template' : `Apply: ${editingTemplate.name}`}
+                </h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <p className="text-sm text-gray-400">Select which parts to include</p>
+                  <p className="text-sm text-gray-400">
+                    {templateEditMode === 'edit' ? 'Modify template details and sections' : 'Select which parts to include'}
+                  </p>
                   {editingTemplate.sourceTag && <span className="text-xs text-emerald-400/80 bg-emerald-900/30 px-2 py-0.5 rounded">from {editingTemplate.sourceTag}</span>}
-                  {editingTemplate.category && <span className="text-xs text-purple-400/60 bg-purple-900/30 px-2 py-0.5 rounded">{editingTemplate.category}</span>}
+                  {templateEditMode !== 'edit' && editingTemplate.category && <span className="text-xs text-purple-400/60 bg-purple-900/30 px-2 py-0.5 rounded">{editingTemplate.category}</span>}
                 </div>
               </div>
               <button onClick={() => setEditingTemplate(null)} className="text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
@@ -11576,6 +11647,42 @@ Start by introducing yourself and asking about their business in a friendly way.
 
             {/* Content */}
             <div className="flex-1 overflow-auto p-6">
+              {/* Edit Mode Form Fields */}
+              {templateEditMode === 'edit' && (
+                <div className="grid grid-cols-2 gap-4 mb-6 bg-slate-800/50 p-4 rounded-lg border border-blue-500/20">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Template Name</label>
+                    <input
+                      type="text"
+                      value={editTemplateName}
+                      onChange={(e) => setEditTemplateName(e.target.value)}
+                      className="w-full bg-slate-800 border border-blue-500/50 rounded px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Category</label>
+                    <input
+                      type="text"
+                      value={editTemplateCategory}
+                      onChange={(e) => setEditTemplateCategory(e.target.value)}
+                      className="w-full bg-slate-800 border border-blue-500/50 rounded px-3 py-2 text-white"
+                      list="template-categories-edit"
+                    />
+                    <datalist id="template-categories-edit">
+                      {(templateCategories || []).map(cat => <option key={cat} value={cat} />)}
+                    </datalist>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-sm text-gray-400 mb-1">Description</label>
+                    <textarea
+                      value={editTemplateDesc}
+                      onChange={(e) => setEditTemplateDesc(e.target.value)}
+                      rows={2}
+                      className="w-full bg-slate-800 border border-blue-500/50 rounded px-3 py-2 text-white resize-none"
+                    />
+                  </div>
+                </div>
+              )}
               {/* Section Selection Controls */}
               <div className="flex items-center justify-between mb-4">
                 <div className="text-sm text-gray-400">
@@ -11684,18 +11791,48 @@ Start by introducing yourself and asking about their business in a friendly way.
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-3 p-4 border-t border-purple-500/30 shrink-0">
+            <div className={`flex items-center justify-end gap-3 p-4 border-t shrink-0 ${templateEditMode === 'edit' ? 'border-blue-500/30' : 'border-purple-500/30'}`}>
               <button onClick={() => setEditingTemplate(null)} className="px-6 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white">Cancel</button>
-              <button
-                onClick={() => {
-                  handleApplyTemplate(editingTemplate, templateSectionSelections);
-                  setEditingTemplate(null);
-                }}
-                disabled={Object.values(templateSectionSelections).every(s => !s.title && !s.text)}
-                className="px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded text-white font-medium disabled:opacity-50"
-              >
-                Apply Selected
-              </button>
+              {templateEditMode === 'edit' ? (
+                <button
+                  onClick={() => {
+                    // Save edited template
+                    const updatedTemplates = (settings.prompt_templates || []).map(t =>
+                      t.id === editingTemplate.id
+                        ? {
+                            ...t,
+                            name: editTemplateName,
+                            description: editTemplateDesc,
+                            category: editTemplateCategory,
+                            // Filter out deselected sections
+                            sections: t.sections.filter(s => {
+                              const sel = templateSectionSelections[s.id];
+                              return sel && (sel.title || sel.text);
+                            })
+                          }
+                        : t
+                    );
+                    updateSettings({ prompt_templates: updatedTemplates });
+                    showNotification('Template updated successfully', 'success');
+                    setEditingTemplate(null);
+                  }}
+                  disabled={!editTemplateName.trim()}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white font-medium disabled:opacity-50"
+                >
+                  Save Changes
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    handleApplyTemplate(editingTemplate, templateSectionSelections);
+                    setEditingTemplate(null);
+                  }}
+                  disabled={Object.values(templateSectionSelections).every(s => !s.title && !s.text)}
+                  className="px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded text-white font-medium disabled:opacity-50"
+                >
+                  Apply Selected
+                </button>
+              )}
             </div>
           </div>
         </div>,
@@ -11887,38 +12024,64 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <h3 className="text-orange-400/70 text-xs font-medium mb-2 uppercase tracking-wide">{category}</h3>
                         <div className="space-y-2">
                           {templates.map(template => (
-                            <div key={template.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700 hover:border-orange-500/50 transition">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-orange-300 font-medium">{template.name}</span>
-                                  <span className="text-xs text-purple-400 font-mono">{template.placeholder}</span>
+                            <div key={template.id} className="bg-slate-800 rounded-lg border border-slate-700 hover:border-orange-500/50 transition">
+                              <div className="p-3">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-orange-300 font-medium">{template.name}</span>
+                                    <span className="text-xs text-purple-400 font-mono">{template.placeholder}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => {
+                                        handleApplyPlaceholderTemplate(template);
+                                        setShowPlaceholderTemplates(false);
+                                      }}
+                                      className="px-3 py-1 bg-orange-600/50 hover:bg-orange-600 rounded text-white text-xs"
+                                    >
+                                      Apply
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setEditingPlaceholderTemplate(template);
+                                        setEditPlaceholderTemplateName(template.name);
+                                        setEditPlaceholderTemplateCategory(template.category);
+                                        // Select all options by default for editing
+                                        const selections: { [key: number]: boolean } = {};
+                                        template.options.forEach(opt => { selections[opt.number] = true; });
+                                        setPlaceholderTemplateOptionSelections(selections);
+                                      }}
+                                      className="px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 rounded text-blue-300 text-xs"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        updateSettings({
+                                          placeholder_category_templates: (settings.placeholder_category_templates || []).filter(t => t.id !== template.id)
+                                        });
+                                        showNotification('Template deleted', 'success');
+                                      }}
+                                      className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 rounded text-red-300 text-xs"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => {
-                                      handleApplyPlaceholderTemplate(template);
-                                      setShowPlaceholderTemplates(false);
-                                    }}
-                                    className="px-3 py-1 bg-orange-600/50 hover:bg-orange-600 rounded text-white text-xs"
-                                  >
-                                    Apply
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      updateSettings({
-                                        placeholder_category_templates: (settings.placeholder_category_templates || []).filter(t => t.id !== template.id)
-                                      });
-                                      showNotification('Template deleted', 'success');
-                                    }}
-                                    className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 rounded text-red-300 text-xs"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="text-xs text-gray-400">
-                                {template.options.length} options: {template.options.slice(0, 3).map(o => o.text.substring(0, 30)).join(', ')}
-                                {template.options.length > 3 && '...'}
+                                {/* Expandable options preview */}
+                                <details className="text-xs">
+                                  <summary className="text-gray-400 cursor-pointer hover:text-gray-300">
+                                    {template.options.length} options (click to expand)
+                                  </summary>
+                                  <div className="mt-2 space-y-1 max-h-32 overflow-auto pl-2 border-l-2 border-orange-500/30">
+                                    {template.options.map(opt => (
+                                      <div key={opt.number} className="flex items-center gap-2">
+                                        <span className="text-orange-400/60">#{opt.number}</span>
+                                        <span className="text-gray-300">{opt.text}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </details>
                               </div>
                             </div>
                           ))}
@@ -11928,6 +12091,132 @@ Start by introducing yourself and asking about their business in a friendly way.
                   })()}
                 </div>
               )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Edit Placeholder Category Template Popup (Portal) */}
+      {editingPlaceholderTemplate && createPortal(
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[9999]">
+          <div className="bg-slate-900 rounded-xl w-[600px] max-h-[85vh] flex flex-col border border-blue-500/30">
+            <div className="flex items-center justify-between p-4 border-b border-blue-500/30">
+              <h2 className="text-lg font-semibold text-blue-400">Edit Placeholder Template</h2>
+              <button onClick={() => setEditingPlaceholderTemplate(null)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 space-y-4">
+              {/* Template Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Template Name</label>
+                  <input
+                    type="text"
+                    value={editPlaceholderTemplateName}
+                    onChange={(e) => setEditPlaceholderTemplateName(e.target.value)}
+                    className="w-full bg-slate-800 border border-blue-500/50 rounded px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Category</label>
+                  <input
+                    type="text"
+                    value={editPlaceholderTemplateCategory}
+                    onChange={(e) => setEditPlaceholderTemplateCategory(e.target.value)}
+                    className="w-full bg-slate-800 border border-blue-500/50 rounded px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Placeholder</label>
+                <div className="bg-slate-800 border border-slate-600 rounded px-3 py-2 text-purple-400 font-mono">
+                  {editingPlaceholderTemplate.placeholder}
+                </div>
+              </div>
+
+              {/* Options Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm text-gray-400">Options to Include</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        const allSelected: { [key: number]: boolean } = {};
+                        editingPlaceholderTemplate.options.forEach(opt => { allSelected[opt.number] = true; });
+                        setPlaceholderTemplateOptionSelections(allSelected);
+                      }}
+                      className="text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => setPlaceholderTemplateOptionSelections({})}
+                      className="text-xs text-gray-400 hover:text-gray-300"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2 max-h-48 overflow-auto">
+                  {editingPlaceholderTemplate.options.map(opt => (
+                    <label
+                      key={opt.number}
+                      className={`flex items-center gap-3 p-2 rounded cursor-pointer transition ${
+                        placeholderTemplateOptionSelections[opt.number]
+                          ? 'bg-blue-500/20 border border-blue-500/50'
+                          : 'bg-slate-800 border border-slate-700 opacity-60'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={placeholderTemplateOptionSelections[opt.number] || false}
+                        onChange={(e) => setPlaceholderTemplateOptionSelections({
+                          ...placeholderTemplateOptionSelections,
+                          [opt.number]: e.target.checked
+                        })}
+                        className="accent-blue-500"
+                      />
+                      <span className="text-xs text-blue-400/60 font-mono">#{opt.number}</span>
+                      <span className="text-white text-sm">{opt.text}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-blue-500/30">
+              <button
+                onClick={() => setEditingPlaceholderTemplate(null)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  // Save edited template
+                  const selectedOptions = editingPlaceholderTemplate.options.filter(
+                    opt => placeholderTemplateOptionSelections[opt.number]
+                  );
+                  const updatedTemplates = (settings.placeholder_category_templates || []).map(t =>
+                    t.id === editingPlaceholderTemplate.id
+                      ? {
+                          ...t,
+                          name: editPlaceholderTemplateName,
+                          category: editPlaceholderTemplateCategory,
+                          options: selectedOptions
+                        }
+                      : t
+                  );
+                  updateSettings({ placeholder_category_templates: updatedTemplates });
+                  showNotification('Template updated successfully', 'success');
+                  setEditingPlaceholderTemplate(null);
+                }}
+                disabled={!editPlaceholderTemplateName.trim() || !Object.values(placeholderTemplateOptionSelections).some(v => v)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white font-medium disabled:opacity-50"
+              >
+                Save Changes
+              </button>
             </div>
           </div>
         </div>,
@@ -12082,6 +12371,28 @@ Start by introducing yourself and asking about their business in a friendly way.
                         placeholder="Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
                       />
                     </div>
+
+                    {/* Template Buttons for Prompts */}
+                    <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-700">
+                      <button
+                        onClick={() => setShowPromptTemplatePopup('save')}
+                        className="px-3 py-1.5 text-xs bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/50 rounded text-emerald-300 font-medium"
+                      >
+                        Save Template
+                      </button>
+                      <button
+                        onClick={() => setShowPromptTemplatePopup('apply')}
+                        className="px-3 py-1.5 text-xs bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 rounded text-purple-300 font-medium"
+                      >
+                        Templates
+                      </button>
+                      <button
+                        onClick={() => setShowTextSnippetBank(true)}
+                        className="px-3 py-1.5 text-xs bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 font-medium"
+                      >
+                        Text Bank
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -12091,59 +12402,133 @@ Start by introducing yourself and asking about their business in a friendly way.
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-purple-400">Placeholder Categories</h3>
                   {activeAvatar && activeAvatar.placeholderMode === 'advanced' && (
-                    <button
-                      onClick={() => {
-                        const newId = `cat_${Date.now()}`;
-                        handleUpdateAvatar(activeAvatar.id, {
-                          placeholderCategories: [
-                            ...(activeAvatar.placeholderCategories || []),
-                            { id: newId, placeholder: '{New_Category}', options: [] }
-                          ]
-                        });
-                      }}
-                      className="text-purple-400 hover:text-purple-300 text-sm font-medium"
-                    >
-                      + Add Category
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowPlaceholderTemplates(true)}
+                        className="px-2 py-1 text-xs bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/50 rounded text-orange-300"
+                      >
+                        Category Templates
+                      </button>
+                      <button
+                        onClick={() => {
+                          const newId = `cat_${Date.now()}`;
+                          handleUpdateAvatar(activeAvatar.id, {
+                            placeholderCategories: [
+                              ...(activeAvatar.placeholderCategories || []),
+                              { id: newId, name: 'New Category', placeholder: '{New_Category}', options: [] }
+                            ]
+                          });
+                        }}
+                        className="text-purple-400 hover:text-purple-300 text-sm font-medium"
+                      >
+                        + Add Category
+                      </button>
+                    </div>
                   )}
                 </div>
 
                 {activeAvatar && activeAvatar.placeholderMode === 'advanced' && (
                   <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
                     {(activeAvatar.placeholderCategories || []).map((cat, catIndex) => (
-                      <div key={cat.id} className="bg-slate-800/50 rounded-lg p-3 border border-purple-500/30">
-                        <div className="flex items-center gap-2 mb-2">
-                          <input
-                            type="text"
-                            value={cat.placeholder}
-                            onChange={(e) => {
-                              const updated = [...(activeAvatar.placeholderCategories || [])];
-                              updated[catIndex] = { ...cat, placeholder: e.target.value };
-                              handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updated });
-                            }}
-                            className="flex-1 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-purple-300 text-sm font-mono"
-                          />
-                          <button
-                            onClick={() => {
-                              const updated = (activeAvatar.placeholderCategories || []).filter(c => c.id !== cat.id);
-                              handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updated });
-                            }}
-                            className="p-1 text-red-400 hover:text-red-300"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      <details key={cat.id} className="bg-slate-800/50 rounded-lg border border-purple-500/30 group">
+                        <summary className="flex items-center justify-between p-3 cursor-pointer list-none">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <svg className="w-4 h-4 text-purple-400 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
                             </svg>
-                          </button>
+                            <span className="text-purple-300 font-mono text-sm truncate">{cat.placeholder}</span>
+                            <span className="text-xs text-gray-500">({(cat.options || []).length} options)</span>
+                          </div>
+                          <div className="flex items-center gap-1 ml-2">
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                // Save as template
+                                handleSavePlaceholderCategoryTemplate(cat, companyCategory);
+                              }}
+                              className="p-1 text-orange-400 hover:text-orange-300"
+                              title="Save as template"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const updated = (activeAvatar.placeholderCategories || []).filter(c => c.id !== cat.id);
+                                handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updated });
+                              }}
+                              className="p-1 text-red-400 hover:text-red-300"
+                              title="Delete category"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </summary>
+                        <div className="p-3 pt-0 border-t border-purple-500/20">
+                          {/* Editable placeholder name */}
+                          <div className="mb-3">
+                            <label className="block text-xs text-gray-400 mb-1">Placeholder Name</label>
+                            <input
+                              type="text"
+                              value={cat.placeholder}
+                              onChange={(e) => {
+                                const updated = [...(activeAvatar.placeholderCategories || [])];
+                                updated[catIndex] = { ...cat, placeholder: e.target.value };
+                                handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updated });
+                              }}
+                              className="w-full bg-slate-900 border border-purple-500/50 rounded px-2 py-1.5 text-purple-300 text-sm font-mono"
+                            />
+                          </div>
+                          {/* Options */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs text-gray-400">Options</label>
+                              <button
+                                onClick={() => handleAddPlaceholderOption(cat.id)}
+                                className="text-xs text-purple-400 hover:text-purple-300"
+                              >
+                                + Add Option
+                              </button>
+                            </div>
+                            {(cat.options || []).map((opt, optIndex) => (
+                              <div key={opt.number} className="flex items-center gap-2 bg-slate-900/50 rounded p-2">
+                                <span className="text-xs text-purple-400/60 font-mono w-6">#{opt.number}</span>
+                                <input
+                                  type="text"
+                                  value={opt.text}
+                                  onChange={(e) => handleUpdatePlaceholderOption(cat.id, opt.number, { text: e.target.value })}
+                                  className="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white text-sm"
+                                  placeholder="Option text..."
+                                />
+                                <button
+                                  onClick={() => handleRemovePlaceholderOption(cat.id, opt.number)}
+                                  className="p-1 text-red-400/60 hover:text-red-400"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ))}
+                            {(cat.options || []).length === 0 && (
+                              <p className="text-xs text-gray-500 italic">No options yet. Add one above.</p>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-1">
-                          {(cat.options || []).map((opt, optIndex) => (
-                            <span key={optIndex} className="px-2 py-0.5 bg-purple-600/30 border border-purple-500/50 rounded text-purple-300 text-xs">
-                              {opt.primary}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+                      </details>
                     ))}
+                    {(activeAvatar.placeholderCategories || []).length === 0 && (
+                      <div className="text-center py-6 text-gray-500">
+                        <p className="text-sm">No placeholder categories yet.</p>
+                        <p className="text-xs mt-1">Add a category or apply a template to get started.</p>
+                      </div>
+                    )}
                   </div>
                 )}
 

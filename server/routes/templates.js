@@ -180,7 +180,8 @@ router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
 
     // Build template data based on selected sections
     const templateData = {};
-    const selectedIncludes = includes || { prompts: true, placeholders: true, tags: true, snippets: true, settings: true };
+    const warnings = []; // Track partial save issues
+    const selectedIncludes = includes || { prompts: true, placeholders: true, tags: true, snippets: true, settings: true, imageCreation: true, sitePlanning: true };
 
     if (selectedIncludes.prompts && state.promptTemplates) {
       templateData.promptTemplates = state.promptTemplates;
@@ -227,9 +228,14 @@ router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
             fallback_to_live: settings.fallback_to_live,
             variation_order_mode: settings.variation_order_mode
           };
+          console.log('[Template] Included image creation settings');
+        } else {
+          console.log('[Template] No image creation settings found for workflow', workflowId);
+          warnings.push('Image Creation: No settings found for this workflow');
         }
       } catch (err) {
-        console.log('[Template] No image creation settings found for workflow');
+        console.error('[Template] Failed to load image creation settings:', err.message);
+        warnings.push(`Image Creation: ${err.message}`);
       }
     }
 
@@ -266,9 +272,14 @@ router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
               parent_slug: nodes.find(p => p.id === n.parent_id)?.slug || null
             }))
           };
+          console.log('[Template] Included site planning with', nodes.length, 'nodes');
+        } else {
+          console.log('[Template] No site planning found for workflow', workflowId);
+          warnings.push('Site Planning: No site plan found for this workflow');
         }
       } catch (err) {
-        console.log('[Template] No site planning found for workflow');
+        console.error('[Template] Failed to load site planning:', err.message);
+        warnings.push(`Site Planning: ${err.message}`);
       }
     }
 
@@ -292,7 +303,14 @@ router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
       RETURNING *
     `;
 
-    res.status(201).json({ template: result[0] });
+    // Include warnings in response if any sections had issues
+    const response = { template: result[0] };
+    if (warnings.length > 0) {
+      response.warnings = warnings;
+      console.log('[Template] Saved with warnings:', warnings);
+    }
+
+    res.status(201).json(response);
   } catch (error) {
     console.error('Error creating template from workflow:', error);
     res.status(500).json({ error: error.message });

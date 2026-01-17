@@ -43,6 +43,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('browse');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   // Filters
   const [typeFilter, setTypeFilter] = useState<string>('');
@@ -142,6 +143,12 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
         setTemplates([data.template, ...templates]);
         setViewMode('browse');
         setCreateForm({ name: '', description: '', tags: '' });
+        // Show warnings if any sections had issues
+        if (data.warnings && data.warnings.length > 0) {
+          setWarnings(data.warnings);
+        } else {
+          setWarnings([]);
+        }
       } else {
         setError('Template saved but response was unexpected');
       }
@@ -352,6 +359,16 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
             <div className="absolute top-16 left-4 right-4 bg-red-500/20 text-red-400 p-3 rounded z-10">
               {error}
               <button onClick={() => setError(null)} className="ml-2 underline">Dismiss</button>
+            </div>
+          )}
+
+          {warnings.length > 0 && (
+            <div className="absolute top-16 left-4 right-4 bg-yellow-500/20 text-yellow-400 p-3 rounded z-10">
+              <div className="font-medium mb-1">Template saved with warnings:</div>
+              <ul className="list-disc list-inside text-sm">
+                {warnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+              <button onClick={() => setWarnings([])} className="ml-2 underline text-sm mt-1">Dismiss</button>
             </div>
           )}
 
