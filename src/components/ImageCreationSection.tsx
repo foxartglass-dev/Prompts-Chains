@@ -629,6 +629,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [activeVariationId, setActiveVariationId] = useState<string | null>(null);
   // Selected tag tab for multi-prompt per tag system (H, J, C, or 'global')
   const [selectedTagTab, setSelectedTagTab] = useState<string | null>(null);
+  // Delete confirmation for avatars
+  const [avatarToDelete, setAvatarToDelete] = useState<{ id: number; name: string } | null>(null);
 
   // ========== PROMPT TEMPLATE SYSTEM STATE ==========
   // 'save' = save current prompt as template, 'apply' = browse and apply templates, 'edit' = edit a template
@@ -8889,14 +8891,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                   }`}
                 >
                   <span>{avatar.name}</span>
-                  {avatarsForSelectedTag.length > 1 && (
-                    <span
-                      onClick={(e) => { e.stopPropagation(); handleRemoveAvatar(avatar.id); }}
-                      className="hover:text-red-500 cursor-pointer"
-                    >
-                      &times;
-                    </span>
-                  )}
+                  <span
+                    onClick={(e) => { e.stopPropagation(); setAvatarToDelete({ id: avatar.id, name: avatar.name }); }}
+                    className="hover:text-red-500 cursor-pointer text-current/50 hover:text-red-500"
+                    title="Delete avatar"
+                  >
+                    &times;
+                  </span>
                 </button>
               ))}
               {avatarsForSelectedTag.length === 0 && (
@@ -12267,6 +12268,38 @@ Start by introducing yourself and asking about their business in a friendly way.
         document.body
       )}
 
+      {/* Avatar Delete Confirmation Popup */}
+      {avatarToDelete && createPortal(
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[10000]">
+          <div className="bg-slate-900 rounded-xl p-6 w-[400px] border border-red-500/30">
+            <h3 className="text-lg font-semibold text-red-400 mb-4">Delete Avatar?</h3>
+            <p className="text-gray-300 mb-6">
+              Are you sure you want to delete <strong className="text-brand-gold">"{avatarToDelete.name}"</strong>?
+              <br />
+              <span className="text-sm text-gray-500">This action cannot be undone.</span>
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setAvatarToDelete(null)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleRemoveAvatar(avatarToDelete.id);
+                  setAvatarToDelete(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded text-white font-medium"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Audience Avatars Expanded View - Full-page modal (Portal) */}
       {avatarsExpandedView && createPortal(
         <div className="fixed inset-0 bg-slate-950 z-[9999] flex flex-col overflow-hidden">
@@ -12356,13 +12389,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <button
                         key={avatar.id}
                         onClick={() => setActiveAvatarId(avatar.id)}
-                        className={`px-3 py-1.5 rounded text-sm transition ${
+                        className={`px-3 py-1.5 rounded text-sm transition flex items-center gap-2 ${
                           activeAvatarId === avatar.id
                             ? 'bg-brand-gold/20 border-2 border-brand-gold text-brand-gold'
                             : 'bg-slate-800 border border-slate-600 text-slate-300 hover:border-slate-500'
                         }`}
                       >
-                        {avatar.name}
+                        <span>{avatar.name}</span>
+                        <span
+                          onClick={(e) => { e.stopPropagation(); setAvatarToDelete({ id: avatar.id, name: avatar.name }); }}
+                          className="hover:text-red-500 cursor-pointer opacity-50 hover:opacity-100"
+                          title="Delete avatar"
+                        >
+                          &times;
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -12504,8 +12544,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </div>
                   )}
 
-                  {/* Category List - Scrollable */}
-                  <div className="max-h-[50vh] overflow-y-auto space-y-2 pr-1">
+                  {/* Category List - Resizable (drag bottom edge to resize) */}
+                  <div className="min-h-[200px] max-h-[80vh] overflow-y-auto space-y-2 pr-1 resize-y" style={{ height: '50vh' }}>
                   {(activeAvatar.placeholderCategories || []).map((category) => {
                     const isCategoryCollapsed = collapsedCategoryIds.has(category.id);
                     const toggleCategoryCollapse = () => {
