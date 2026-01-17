@@ -427,6 +427,7 @@ interface ImageCreationSettings {
   consultant_model: string;
   worker_chat_history: ChatMessage[];
   worker_model: string;
+  image_prompt_model: string; // Model for Image Prompt chat (can be image or chat model)
   integration_mode: 'live' | 'bank';
   fallback_to_live: boolean;
   // When bank is empty and falls back to live, which prompt source to use
@@ -537,6 +538,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   consultant_model: 'gpt-4o', // Default to vision model for consultant
   worker_chat_history: [],
   worker_model: 'gpt-4o-mini', // Default to cheaper model for worker
+  image_prompt_model: 'gpt-image-1.5', // Default to OpenAI image model for testing prompts
   integration_mode: 'live',
   fallback_to_live: true,
   fallback_prompt_mode: 'main_prompt', // Default: use Main Prompt when falling back to live
@@ -587,6 +589,16 @@ const AVAILABLE_MODELS = [
   { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', provider: 'anthropic' },
   { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic' },
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google' }
+];
+
+// Image Prompt chat models - includes image generation models + chat models
+const IMAGE_PROMPT_MODELS = [
+  { id: 'gpt-image-1.5', name: 'GPT-Image-1.5 (Generate)', provider: 'openai', isImageModel: true },
+  { id: 'flux-kontext-pro', name: 'Flux Kontext Pro (Generate)', provider: 'bfl', isImageModel: true },
+  { id: 'flux-kontext-max', name: 'Flux Kontext Max (Generate)', provider: 'bfl', isImageModel: true },
+  { id: 'gpt-4o', name: 'GPT-4o (Chat)', provider: 'openai', isImageModel: false },
+  { id: 'gpt-5.2-2025-12-11', name: 'GPT-5.2 (Chat)', provider: 'openai', isImageModel: false },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Chat)', provider: 'openai', isImageModel: false },
 ];
 
 // Variation placeholder tag
@@ -705,6 +717,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Draft Image Bank (in-transit images for pages)
   const [isDraftBankOpen, setIsDraftBankOpen] = useState(false);
+  // Combined Draft/Used Archive tab bar state
+  const [draftUsedTabsCollapsed, setDraftUsedTabsCollapsed] = useState(true);
+  const [activeDraftUsedTab, setActiveDraftUsedTab] = useState<'draft' | 'used'>('draft');
   const [draftBankImages, setDraftBankImages] = useState<any[]>([]);
   const [draftBankStats, setDraftBankStats] = useState<{
     total: number; draft: number; sent: number; replaced: number;
@@ -1172,6 +1187,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           consultant_model: data.settings.consultant_model || 'gpt-4o',
           worker_chat_history: data.settings.worker_chat_history || [],
           worker_model: data.settings.worker_model || 'gpt-4o-mini',
+          image_prompt_model: data.settings.image_prompt_model || 'gpt-image-1.5',
           image_order: data.settings.image_order || [],
           manual_variation_order: data.settings.manual_variation_order || [],
           // Prompt Problem Areas
@@ -8372,15 +8388,15 @@ Start by introducing yourself and asking about their business in a friendly way.
               className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-800 transition-all"
             >
               <div className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                 </svg>
-                <div className="flex items-center gap-1.5 text-sm">
-                  <span className="text-orange-400 font-medium">🎯 Problem Areas</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-orange-400 font-semibold">🎯 Problem Areas</span>
                   <span className="text-slate-500">|</span>
-                  <span className="text-brand-gold font-medium">📷 Reference Images</span>
+                  <span className="text-brand-gold font-semibold">📷 Reference Images</span>
                   <span className="text-slate-500">|</span>
-                  <span className="text-pink-400 font-medium">🏷️ Logo & Action</span>
+                  <span className="text-pink-400 font-semibold">🏷️ Logo & Action</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -9591,15 +9607,22 @@ Start by introducing yourself and asking about their business in a friendly way.
                   className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-800 transition-all"
                 >
                   <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                     </svg>
-                    <div className="flex items-center gap-1.5 text-sm">
-                      <span className="text-brand-gold font-medium">💬 Image Prompt</span>
+                    {/* Chatbots label */}
+                    <span className="text-slate-400 font-semibold flex items-center gap-1.5 mr-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      Chatbots
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-brand-gold font-semibold">💬 Image Prompt</span>
                       <span className="text-slate-500">|</span>
-                      <span className="text-indigo-400 font-medium">💡 Consultant</span>
+                      <span className="text-indigo-400 font-semibold">💡 Consultant</span>
                       <span className="text-slate-500">|</span>
-                      <span className="text-emerald-400 font-medium">⚙️ Worker</span>
+                      <span className="text-emerald-400 font-semibold">⚙️ Worker</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -9623,10 +9646,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                     className="px-3 py-3 hover:bg-slate-700 transition-all border-r border-slate-700 flex items-center"
                     title="Collapse chat tabs"
                   >
-                    <svg className="w-4 h-4 text-slate-400 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-slate-400 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
+                  {/* Chatbots label */}
+                  <div className="px-3 py-3 border-r border-slate-700 flex items-center gap-1.5 text-slate-400">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    <span className="font-semibold text-sm">Chatbots</span>
+                  </div>
                   {/* Image Prompt Chat tab button */}
                   <button
                     onClick={() => setActiveChatTab('image_prompt')}
@@ -9679,6 +9709,32 @@ Start by introducing yourself and asking about their business in a friendly way.
                 {/* Image Prompt Chat Tab Content */}
                 {activeChatTab === 'image_prompt' && (
                   <div className="border-t border-brand-gold/30">
+                    {/* Model selector */}
+                    <div className="p-3 bg-brand-gold/10 border-b border-brand-gold/30 flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-brand-gold">Model:</label>
+                        <select
+                          value={settings.image_prompt_model || 'gpt-image-1.5'}
+                          onChange={(e) => updateSettings({ image_prompt_model: e.target.value })}
+                          className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs"
+                        >
+                          {IMAGE_PROMPT_MODELS.map(m => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                        {IMAGE_PROMPT_MODELS.find(m => m.id === settings.image_prompt_model)?.isImageModel && (
+                          <span className="bg-green-600/40 text-green-300 text-[10px] px-1.5 py-0.5 rounded">GENERATES IMAGES</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => updateSettings({ chat_history: [] })}
+                        className="px-2 py-1 bg-red-600/50 hover:bg-red-600 rounded text-white text-xs transition"
+                      >
+                        Clear
+                      </button>
+                    </div>
                     <div ref={chatContainerRef} className="h-64 overflow-y-auto p-4 space-y-3">
                       {settings.chat_history.length === 0 ? (
                         <p className="text-center text-brand-gold/50 py-8">Chat with AI to help craft prompts.</p>
@@ -10049,8 +10105,10 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
           </div>
 
+          {/* ========== CONNECTED: Batch Generate + Image Bank ========== */}
+          <div className="space-y-0">
           {/* Batch Generate (Collapsible) - Supports Simple and Advanced modes */}
-          <div className="bg-slate-900 rounded-lg border border-green-500/50 overflow-hidden">
+          <div className="bg-slate-900 rounded-t-lg rounded-b-none border border-b-0 border-green-500/50 overflow-hidden">
             <button onClick={() => setIsBatchOpen(!isBatchOpen)} className="w-full flex items-center justify-between p-3 text-green-400 hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
@@ -10243,7 +10301,7 @@ Start by introducing yourself and asking about their business in a friendly way.
           </div>
 
           {/* Image Bank (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-brand-cyan/50 overflow-hidden">
+          <div className="bg-slate-900 rounded-t-none rounded-b-lg border border-t-0 border-brand-cyan/50 overflow-hidden">
             <button onClick={() => setIsBankOpen(!isBankOpen)} className="w-full flex items-center justify-between p-3 text-brand-cyan hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -10512,21 +10570,87 @@ Start by introducing yourself and asking about their business in a friendly way.
               </div>
             )}
           </div>
+          </div>{/* End of connected Batch Generate + Image Bank */}
 
-          {/* Draft Image Bank (Collapsible) - In-transit images for pages */}
-          <div className="bg-slate-900 rounded-lg border border-amber-500/50 overflow-hidden">
-            <button onClick={() => setIsDraftBankOpen(!isDraftBankOpen)} className="w-full flex items-center justify-between p-3 text-amber-400 hover:bg-slate-800/50 transition">
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-                Draft Image Bank ({draftBankStats.draft} in draft)
-                {/* Stats badges */}
-                <span className="ml-2 text-[10px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">
-                  Made: {draftBankStats.totalMade} | Replaced: {draftBankStats.totalReplaced}
-                </span>
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isDraftBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {isDraftBankOpen && (
+          {/* ========== COMBINED DRAFT/USED TABS: Draft Image Bank, Used/Archive ========== */}
+          <div className="bg-slate-900 rounded-lg border border-slate-600 overflow-hidden">
+            {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 2 tab buttons */}
+            <div className="flex bg-slate-800/50">
+              {draftUsedTabsCollapsed ? (
+                /* COLLAPSED STATE: Single button that expands the whole section */
+                <button
+                  onClick={() => setDraftUsedTabsCollapsed(false)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-800 transition-all"
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <div className="flex items-center gap-2">
+                      <span className="text-amber-400 font-semibold flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                        Draft Image Bank ({draftBankStats.draft} in draft)
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">
+                        Made: {draftBankStats.totalMade} | Replaced: {draftBankStats.totalReplaced}
+                      </span>
+                      <span className="text-slate-500 mx-2">|</span>
+                      <span className="text-purple-400 font-semibold flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                        Used/Archive ({usedImages.length})
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              ) : (
+                /* EXPANDED STATE: Chevron button + 2 separate tab buttons */
+                <>
+                  {/* Chevron collapse button */}
+                  <button
+                    onClick={() => setDraftUsedTabsCollapsed(true)}
+                    className="px-3 py-3 hover:bg-slate-700 transition-all border-r border-slate-700 flex items-center"
+                    title="Collapse tabs"
+                  >
+                    <svg className="w-5 h-5 text-slate-400 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {/* Draft Image Bank tab button */}
+                  <button
+                    onClick={() => setActiveDraftUsedTab('draft')}
+                    className={`flex-1 px-4 py-3 font-medium transition-all flex items-center justify-center gap-2 ${
+                      activeDraftUsedTab === 'draft'
+                        ? 'bg-amber-500/20 text-amber-400 border-b-2 border-amber-500'
+                        : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                    Draft Image Bank ({draftBankStats.draft})
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">
+                      Made: {draftBankStats.totalMade} | Replaced: {draftBankStats.totalReplaced}
+                    </span>
+                  </button>
+                  {/* Used/Archive tab button */}
+                  <button
+                    onClick={() => setActiveDraftUsedTab('used')}
+                    className={`flex-1 px-4 py-3 font-medium transition-all flex items-center justify-center gap-2 ${
+                      activeDraftUsedTab === 'used'
+                        ? 'bg-purple-500/20 text-purple-400 border-b-2 border-purple-500'
+                        : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                    Used/Archive ({usedImages.length})
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Tab Content - only shown when expanded */}
+            {!draftUsedTabsCollapsed && (
+              <>
+                {/* Draft Image Bank Tab Content */}
+                {activeDraftUsedTab === 'draft' && (
               <div className="p-4 border-t border-amber-500/30 space-y-3">
                 {/* Stats Overview */}
                 <div className="grid grid-cols-4 gap-3">
@@ -10714,19 +10838,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
                 )}
               </div>
-            )}
-          </div>
+                )}
 
-          {/* Used/Archive (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-purple-500/50 overflow-hidden">
-            <button onClick={() => setIsUsedOpen(!isUsedOpen)} className="w-full flex items-center justify-between p-3 text-purple-400 hover:bg-slate-800/50 transition">
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-                Used/Archive ({usedImages.length})
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isUsedOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {isUsedOpen && (
+                {/* Used/Archive Tab Content */}
+                {activeDraftUsedTab === 'used' && (
               <div className="p-4 border-t border-purple-500/30 space-y-3">
                 {/* Action Buttons */}
                 {usedImages.length > 0 && (
@@ -10820,6 +10935,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <p className="text-center text-brand-gold/50 py-4">No used images.</p>
                 )}
               </div>
+                )}
+              </>
             )}
           </div>
 
