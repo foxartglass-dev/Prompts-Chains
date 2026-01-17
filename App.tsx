@@ -217,6 +217,9 @@ const App: React.FC = () => {
     const [showHistory, setShowHistory] = useState(false); // Show history panel
     const [selectedHistoryRun, setSelectedHistoryRun] = useState<ProcessingRun | null>(null); // Selected run to view details
     const [logSortOrder, setLogSortOrder] = useState<'newest' | 'oldest'>('newest'); // Sort order for logs
+    const [logSortDropdownOpen, setLogSortDropdownOpen] = useState(false); // Sorting dropdown visibility
+    const [logGroupBy, setLogGroupBy] = useState<'none' | 'article' | 'session'>('none'); // Group logs by article or session
+    const [showLogTimestamps, setShowLogTimestamps] = useState(true); // Show timestamps in logs
     const [pendingResults, setPendingResults] = useState<PendingResult[]>([]);
     const [fileName, setFileName] = useState('');
     const [openSections, setOpenSections] = useState<Set<string>>(new Set(['setup']));
@@ -3580,13 +3583,70 @@ const App: React.FC = () => {
                                 >
                                     History
                                 </button>
-                                <button
-                                    onClick={() => setLogSortOrder(prev => prev === 'newest' ? 'oldest' : 'newest')}
-                                    className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-slate-700 text-brand-cyan hover:bg-slate-600 transition"
-                                    title={`Currently showing ${logSortOrder === 'newest' ? 'newest first' : 'oldest first'}`}
-                                >
-                                    Sorting
-                                </button>
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setLogSortDropdownOpen(!logSortDropdownOpen)}
+                                        className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition flex items-center gap-1 ${logSortDropdownOpen ? 'bg-brand-cyan text-slate-900' : 'bg-slate-700 text-brand-cyan hover:bg-slate-600'}`}
+                                    >
+                                        Sorting
+                                        <svg className={`w-3 h-3 transition-transform ${logSortDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+                                    {logSortDropdownOpen && (
+                                        <div className="absolute right-0 top-full mt-1 w-56 bg-slate-800 border border-brand-cyan/30 rounded-lg shadow-xl z-50 py-1">
+                                            <div className="px-3 py-1.5 text-xs text-slate-400 font-semibold uppercase tracking-wider">Time Order</div>
+                                            <button
+                                                onClick={() => { setLogSortOrder('newest'); }}
+                                                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition flex items-center justify-between ${logSortOrder === 'newest' ? 'text-brand-cyan' : 'text-white'}`}
+                                            >
+                                                <span>Newest First</span>
+                                                {logSortOrder === 'newest' && <span className="text-brand-cyan">✓</span>}
+                                            </button>
+                                            <button
+                                                onClick={() => { setLogSortOrder('oldest'); }}
+                                                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition flex items-center justify-between ${logSortOrder === 'oldest' ? 'text-brand-cyan' : 'text-white'}`}
+                                            >
+                                                <span>Oldest First</span>
+                                                {logSortOrder === 'oldest' && <span className="text-brand-cyan">✓</span>}
+                                            </button>
+                                            <div className="border-t border-slate-700 my-1"></div>
+                                            <div className="px-3 py-1.5 text-xs text-slate-400 font-semibold uppercase tracking-wider">Group By</div>
+                                            <button
+                                                onClick={() => { setLogGroupBy('none'); }}
+                                                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition flex items-center justify-between ${logGroupBy === 'none' ? 'text-brand-cyan' : 'text-white'}`}
+                                            >
+                                                <span>No Grouping</span>
+                                                {logGroupBy === 'none' && <span className="text-brand-cyan">✓</span>}
+                                            </button>
+                                            <button
+                                                onClick={() => { setLogGroupBy('article'); }}
+                                                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition flex items-center justify-between ${logGroupBy === 'article' ? 'text-brand-cyan' : 'text-white'}`}
+                                            >
+                                                <span>By Article</span>
+                                                {logGroupBy === 'article' && <span className="text-brand-cyan">✓</span>}
+                                            </button>
+                                            <button
+                                                onClick={() => { setLogGroupBy('session'); }}
+                                                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition flex items-center justify-between ${logGroupBy === 'session' ? 'text-brand-cyan' : 'text-white'}`}
+                                            >
+                                                <span>By Session</span>
+                                                {logGroupBy === 'session' && <span className="text-brand-cyan">✓</span>}
+                                            </button>
+                                            <div className="border-t border-slate-700 my-1"></div>
+                                            <div className="px-3 py-1.5 text-xs text-slate-400 font-semibold uppercase tracking-wider">Display</div>
+                                            <button
+                                                onClick={() => { setShowLogTimestamps(!showLogTimestamps); }}
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition flex items-center justify-between text-white"
+                                            >
+                                                <span>Show Timestamps</span>
+                                                <span className={`w-4 h-4 rounded border ${showLogTimestamps ? 'bg-brand-cyan border-brand-cyan' : 'border-slate-500'} flex items-center justify-center`}>
+                                                    {showLogTimestamps && <span className="text-slate-900 text-xs">✓</span>}
+                                                </span>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         {!processingLogCollapsed && (
@@ -3698,7 +3758,94 @@ const App: React.FC = () => {
                                 )}
                             </div>
                             <div ref={logContainerRef} className="max-h-[600px] min-h-[200px] bg-slate-900 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">
-                                {(logSortOrder === 'oldest' ? logs : [...logs].reverse()).map(log => (<div key={log.id} className={`flex items-start ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400 animate-pulse'}[log.status]}`}>{{ [LogStatus.INFO]: <Icon type="info" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-4 w-4 mr-2 flex-shrink-0 animate-spin"/>}[log.status]}<span className="flex-1"><span className="text-gray-500 mr-2">{log.timestamp}</span>{log.message}</span></div>))}
+                                {(() => {
+                                    const sortedLogs = logSortOrder === 'oldest' ? logs : [...logs].reverse();
+
+                                    if (logGroupBy === 'none') {
+                                        return sortedLogs.map(log => (
+                                            <div key={log.id} className={`flex items-start ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400 animate-pulse'}[log.status]}`}>
+                                                {{ [LogStatus.INFO]: <Icon type="info" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-4 w-4 mr-2 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-4 w-4 mr-2 flex-shrink-0 animate-spin"/>}[log.status]}
+                                                <span className="flex-1">{showLogTimestamps && <span className="text-gray-500 mr-2">{log.timestamp}</span>}{log.message}</span>
+                                            </div>
+                                        ));
+                                    }
+
+                                    if (logGroupBy === 'article') {
+                                        // Group by itemId (article)
+                                        const groups: Record<string, typeof sortedLogs> = {};
+                                        sortedLogs.forEach(log => {
+                                            const key = log.itemId ? `article-${log.itemId}` : 'system';
+                                            if (!groups[key]) groups[key] = [];
+                                            groups[key].push(log);
+                                        });
+
+                                        return Object.entries(groups).map(([groupKey, groupLogs]) => {
+                                            const articleName = groupKey === 'system' ? 'System Messages' : groupLogs[0]?.message.match(/\[([^\]]+)\]/)?.[1] || `Article ${groupKey.replace('article-', '')}`;
+                                            const firstTimestamp = groupLogs[0]?.timestamp;
+                                            return (
+                                                <div key={groupKey} className="border border-slate-700 rounded-lg mb-2 overflow-hidden">
+                                                    <div className="bg-slate-800 px-3 py-2 flex items-center justify-between">
+                                                        <span className="text-brand-cyan font-semibold text-xs">{articleName}</span>
+                                                        {showLogTimestamps && <span className="text-gray-500 text-xs">Started: {firstTimestamp}</span>}
+                                                    </div>
+                                                    <div className="p-2 space-y-1">
+                                                        {groupLogs.map(log => (
+                                                            <div key={log.id} className={`flex items-start text-xs ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400 animate-pulse'}[log.status]}`}>
+                                                                {{ [LogStatus.INFO]: <Icon type="info" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-3 w-3 mr-1.5 flex-shrink-0 animate-spin"/>}[log.status]}
+                                                                <span className="flex-1">{showLogTimestamps && <span className="text-gray-600 mr-1">{log.timestamp}</span>}{log.message}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        });
+                                    }
+
+                                    if (logGroupBy === 'session') {
+                                        // Group by session (detect "Starting batch processing" or "🧪 Starting Test Sequence" as session start)
+                                        const sessions: { name: string; startTime: string; logs: typeof sortedLogs }[] = [];
+                                        let currentSession: typeof sessions[0] | null = null;
+
+                                        // Process in original order to detect session starts correctly
+                                        const originalOrder = logSortOrder === 'oldest' ? sortedLogs : [...sortedLogs].reverse();
+                                        originalOrder.forEach(log => {
+                                            if (log.message.includes('Starting batch processing') || log.message.includes('Starting Test Sequence')) {
+                                                currentSession = { name: log.message.includes('Test Sequence') ? 'Test Session' : 'Batch Session', startTime: log.timestamp, logs: [log] };
+                                                sessions.push(currentSession);
+                                            } else if (currentSession) {
+                                                currentSession.logs.push(log);
+                                            } else {
+                                                // Logs before any session
+                                                if (sessions.length === 0 || sessions[0].name !== 'Pre-Session') {
+                                                    sessions.unshift({ name: 'Pre-Session', startTime: log.timestamp, logs: [] });
+                                                }
+                                                sessions[0].logs.push(log);
+                                            }
+                                        });
+
+                                        // Reverse sessions if showing newest first
+                                        const displaySessions = logSortOrder === 'newest' ? [...sessions].reverse() : sessions;
+
+                                        return displaySessions.map((session, idx) => (
+                                            <div key={idx} className="border border-slate-700 rounded-lg mb-2 overflow-hidden">
+                                                <div className="bg-slate-800 px-3 py-2 flex items-center justify-between">
+                                                    <span className="text-brand-gold font-semibold text-xs">{session.name} ({session.logs.length} entries)</span>
+                                                    {showLogTimestamps && <span className="text-gray-500 text-xs">Started: {session.startTime}</span>}
+                                                </div>
+                                                <div className="p-2 space-y-1">
+                                                    {(logSortOrder === 'newest' ? [...session.logs].reverse() : session.logs).map(log => (
+                                                        <div key={log.id} className={`flex items-start text-xs ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400 animate-pulse'}[log.status]}`}>
+                                                            {{ [LogStatus.INFO]: <Icon type="info" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-3 w-3 mr-1.5 flex-shrink-0 animate-spin"/>}[log.status]}
+                                                            <span className="flex-1">{showLogTimestamps && <span className="text-gray-600 mr-1">{log.timestamp}</span>}{log.message}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ));
+                                    }
+
+                                    return null;
+                                })()}
                                 {logs.length === 0 && <div className="text-gray-500">Logs will appear here once processing starts.</div>}
                             </div>
 
