@@ -2021,11 +2021,15 @@ const App: React.FC = () => {
     
     const renderSection = (title: React.ReactNode, id: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen = false, rightContent?: React.ReactNode) => (
       <div className="bg-card rounded-xl shadow-glow-cyan card-3d hover:shadow-card-hover border-2 border-brand-cyan relative z-0">
-        <h2 className={`text-xl font-bold flex items-center text-brand-cyan py-2 px-4 cursor-pointer`} onClick={() => toggleCollapsible(id)}>
-          {icon}
-          <span className="ml-3 shrink-0">{title}</span>
-          {rightContent && <div className="ml-4 flex-1 flex items-center justify-end gap-3" onClick={e => e.stopPropagation()}>{rightContent}</div>}
-           <svg className={`w-5 h-5 ml-3 shrink-0 transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+        <h2 className={`text-xl font-bold flex items-center text-brand-cyan py-2 px-4`}>
+          <div className="flex items-center cursor-pointer shrink-0" onClick={() => toggleCollapsible(id)}>
+            {icon}
+            <span className="ml-3">{title}</span>
+            <svg className={`w-5 h-5 ml-2 transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+          </div>
+          {/* Clickable spacer area - click to collapse/expand */}
+          <div className="flex-1 h-8 cursor-pointer" onClick={() => toggleCollapsible(id)}></div>
+          {rightContent && <div className="flex items-center gap-3 shrink-0" onClick={e => e.stopPropagation()}>{rightContent}</div>}
         </h2>
         <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? '' : 'max-h-0 overflow-hidden'}`}>
             <div className="p-5 pt-0 border-t border-brand-cyan/30">{children}</div>
