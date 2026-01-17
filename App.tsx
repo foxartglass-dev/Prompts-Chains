@@ -3317,7 +3317,7 @@ const App: React.FC = () => {
                                     type="button"
                                     onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'off'}))}
                                     className={`px-1.5 py-0.5 text-[10px] font-medium transition-all ${
-                                        (currentProject.state.wpPublishMode || 'off') === 'off'
+                                        currentProject.state.wpPublishMode === 'off'
                                             ? 'bg-red-600 text-white'
                                             : 'bg-slate-900 text-white hover:bg-slate-800'
                                     }`}
