@@ -751,6 +751,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [avatarsExpandedView, setAvatarsExpandedView] = useState(false); // Full-page expanded view
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
   const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Set<string>>(new Set()); // Track which individual categories are collapsed
+  const [placeholderCategoriesHeight, setPlaceholderCategoriesHeight] = useState(400); // Height for resizable placeholder categories list
+  const placeholderCategoriesRef = useRef<HTMLDivElement>(null);
+  const isResizingRef = useRef(false);
 
   // Smart Matching Rules per-tag tab state
   const [selectedRulesTag, setSelectedRulesTag] = useState<string | null>(null);
@@ -976,6 +979,34 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       }, 100);
     }
   }, [avatarsCollapsed, autoResizeTextarea]);
+
+  // Placeholder Categories resize handlers
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    const startY = e.clientY;
+    const startHeight = placeholderCategoriesHeight;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const delta = moveEvent.clientY - startY;
+      const newHeight = Math.max(150, Math.min(800, startHeight + delta));
+      setPlaceholderCategoriesHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      isResizingRef.current = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [placeholderCategoriesHeight]);
 
   // Helper: Log to Processing Log
   const log = useCallback((message: string, status: LogStatus) => {
@@ -9129,6 +9160,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                     )}
 
                     {/* Category List - Each category individually collapsible */}
+                    <div
+                      className="min-h-[100px] max-h-[60vh] overflow-y-auto space-y-2 pr-1"
+                      style={{ height: `${placeholderCategoriesHeight}px` }}
+                    >
                     {(activeAvatar.placeholderCategories || []).map((category, catIndex) => {
                       const isCategoryCollapsed = collapsedCategoryIds.has(category.id);
                       const toggleCategoryCollapse = () => {
@@ -9334,6 +9369,15 @@ Start by introducing yourself and asking about their business in a friendly way.
                     {(activeAvatar.placeholderCategories || []).length === 0 && (
                       <p className="text-xs text-purple-400/50 text-center py-2">No categories yet. Add one to get started.</p>
                     )}
+                    </div>
+                    {/* Resize Handle */}
+                    <div
+                      onMouseDown={handleResizeMouseDown}
+                      className="h-2 cursor-ns-resize flex items-center justify-center group hover:bg-purple-500/20 rounded-b transition-colors"
+                      title="Drag to resize"
+                    >
+                      <div className="w-12 h-1 bg-purple-500/30 group-hover:bg-purple-500/60 rounded-full transition-colors" />
+                    </div>
 
                     {/* Generation Mode Controls */}
                     {(activeAvatar.placeholderCategories || []).length > 0 && (
@@ -12545,7 +12589,11 @@ Start by introducing yourself and asking about their business in a friendly way.
                   )}
 
                   {/* Category List - Resizable (drag bottom edge to resize) */}
-                  <div className="min-h-[200px] max-h-[80vh] overflow-y-auto space-y-2 pr-1 resize-y" style={{ height: '50vh' }}>
+                  <div
+                    ref={placeholderCategoriesRef}
+                    className="min-h-[150px] max-h-[80vh] overflow-y-auto space-y-2 pr-1"
+                    style={{ height: `${placeholderCategoriesHeight}px` }}
+                  >
                   {(activeAvatar.placeholderCategories || []).map((category) => {
                     const isCategoryCollapsed = collapsedCategoryIds.has(category.id);
                     const toggleCategoryCollapse = () => {
@@ -12727,6 +12775,15 @@ Start by introducing yourself and asking about their business in a friendly way.
                       )}
                     </div>
                   )})}
+                  </div>
+
+                  {/* Resize Handle */}
+                  <div
+                    onMouseDown={handleResizeMouseDown}
+                    className="h-2 cursor-ns-resize flex items-center justify-center group hover:bg-purple-500/20 rounded-b transition-colors"
+                    title="Drag to resize"
+                  >
+                    <div className="w-12 h-1 bg-purple-500/30 group-hover:bg-purple-500/60 rounded-full transition-colors" />
                   </div>
 
                   {(activeAvatar.placeholderCategories || []).length === 0 && (
