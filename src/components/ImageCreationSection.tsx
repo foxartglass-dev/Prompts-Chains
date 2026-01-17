@@ -8378,14 +8378,14 @@ Start by introducing yourself and asking about their business in a friendly way.
           </div>
 
       {/* ========== RESOURCE TABS: Problem Areas, Reference Images, Logo & Action Shots ========== */}
-      <div className="bg-slate-900 rounded-lg border border-slate-600 overflow-hidden">
+      <div className="bg-slate-900 rounded-lg border-2 border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
         {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 3 tab buttons */}
-        <div className="flex bg-slate-800/50">
+        <div className="flex bg-slate-700/60">
           {resourceTabsCollapsed ? (
             /* COLLAPSED STATE: Single button that expands the whole section */
             <button
               onClick={() => setResourceTabsCollapsed(false)}
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-800 transition-all"
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-600/50 transition-all"
             >
               <div className="flex items-center gap-2">
                 <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -9597,14 +9597,14 @@ Start by introducing yourself and asking about their business in a friendly way.
           </div>
 
           {/* ========== COMBINED CHAT TABS: Image Prompt, Consultant, Worker ========== */}
-          <div className="bg-slate-900 rounded-lg border border-slate-600 overflow-hidden">
+          <div className="bg-slate-900 rounded-lg border-2 border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
             {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 3 tab buttons */}
-            <div className="flex bg-slate-800/50">
+            <div className="flex bg-slate-700/60">
               {chatTabsCollapsed ? (
                 /* COLLAPSED STATE: Single button that expands the whole section */
                 <button
                   onClick={() => setChatTabsCollapsed(false)}
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-800 transition-all"
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-600/50 transition-all"
                 >
                   <div className="flex items-center gap-2">
                     <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -10106,9 +10106,9 @@ Start by introducing yourself and asking about their business in a friendly way.
           </div>
 
           {/* ========== CONNECTED: Batch Generate + Image Bank ========== */}
-          <div className="space-y-0">
+          <div className="space-y-0 shadow-[0_0_15px_rgba(34,197,94,0.25)]">
           {/* Batch Generate (Collapsible) - Supports Simple and Advanced modes */}
-          <div className="bg-slate-900 rounded-t-lg rounded-b-none border border-b-0 border-green-500/50 overflow-hidden">
+          <div className="bg-slate-900 rounded-t-lg rounded-b-none border-2 border-b-0 border-green-500/70 overflow-hidden">
             <button onClick={() => setIsBatchOpen(!isBatchOpen)} className="w-full flex items-center justify-between p-3 text-green-400 hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
@@ -10300,8 +10300,10 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
           </div>
 
+          {/* Dividing line between Batch Generate and Image Bank */}
+          <div className="h-[3px] bg-gradient-to-r from-green-500/50 via-slate-500 to-brand-cyan/50"></div>
           {/* Image Bank (Collapsible) */}
-          <div className="bg-slate-900 rounded-t-none rounded-b-lg border border-t-0 border-brand-cyan/50 overflow-hidden">
+          <div className="bg-slate-900 rounded-t-none rounded-b-lg border-2 border-t-0 border-brand-cyan/70 overflow-hidden">
             <button onClick={() => setIsBankOpen(!isBankOpen)} className="w-full flex items-center justify-between p-3 text-brand-cyan hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -10573,14 +10575,14 @@ Start by introducing yourself and asking about their business in a friendly way.
           </div>{/* End of connected Batch Generate + Image Bank */}
 
           {/* ========== COMBINED DRAFT/USED TABS: Draft Image Bank, Used/Archive ========== */}
-          <div className="bg-slate-900 rounded-lg border border-slate-600 overflow-hidden">
+          <div className="bg-slate-900 rounded-lg border-2 border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
             {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 2 tab buttons */}
-            <div className="flex bg-slate-800/50">
+            <div className="flex bg-slate-700/60">
               {draftUsedTabsCollapsed ? (
                 /* COLLAPSED STATE: Single button that expands the whole section */
                 <button
                   onClick={() => setDraftUsedTabsCollapsed(false)}
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-800 transition-all"
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-600/50 transition-all"
                 >
                   <div className="flex items-center gap-2">
                     <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
