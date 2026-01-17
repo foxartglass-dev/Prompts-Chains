@@ -805,6 +805,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Image Integration Settings - default OPEN
   const [imageIntegrationCollapsed, setImageIntegrationCollapsed] = useState(false);
 
+  // Section reorder mode - toggle to show/hide up/down buttons
+  const [isReorderMode, setIsReorderMode] = useState(false);
+
   // Guided GPT Assistant Chat state
   const [guidedAssistantOpen, setGuidedAssistantOpen] = useState(false);
   const [guidedAssistantMessages, setGuidedAssistantMessages] = useState<ChatMessage[]>([]);
@@ -1511,6 +1514,22 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             </>
           )}
         </select>
+        {/* Section Order Toggle */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setIsReorderMode(!isReorderMode); }}
+          className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition ${
+            isReorderMode
+              ? 'bg-amber-500 hover:bg-amber-600 text-slate-900'
+              : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+          }`}
+          title={isReorderMode ? "Done reordering sections" : "Reorder sections"}
+        >
+          {/* Two chevrons icon */}
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 11l5-5 5 5M7 17l5-5 5 5" />
+          </svg>
+          {isReorderMode ? 'Done' : 'Order'}
+        </button>
         {/* Prompt Guide */}
         <button
           onClick={(e) => { e.stopPropagation(); setShowPromptGuide(true); }}
@@ -1549,7 +1568,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     );
 
     onHeaderControlsReady(headerControls);
-  }, [onHeaderControlsReady, loading, settings.image_generation_model, settings.image_quality, saving, loaded, hasUnsavedChanges, forceSave, saveSettings]);
+  }, [onHeaderControlsReady, loading, settings.image_generation_model, settings.image_quality, saving, loaded, hasUnsavedChanges, forceSave, saveSettings, isReorderMode]);
 
   // Get active avatar
   const activeAvatar = settings.audience_avatars.find(a => a.id === activeAvatarId) || settings.audience_avatars[0];
@@ -5534,18 +5553,20 @@ Start by introducing yourself and asking about their business in a friendly way.
     updateSettings({ section_order: currentOrder });
   };
 
-  // Reorder button component for section headers
+  // Reorder button component for section headers - only shows in reorder mode
   const SectionReorderButtons = ({ sectionId }: { sectionId: string }) => {
+    if (!isReorderMode) return null;
+
     const idx = sectionOrder.indexOf(sectionId);
     const isFirst = idx === 0;
     const isLast = idx === sectionOrder.length - 1;
 
     return (
-      <div className="flex items-center gap-0.5 ml-auto mr-2">
+      <div className="flex items-center gap-0.5 ml-auto mr-2 animate-pulse">
         <button
           onClick={(e) => { e.stopPropagation(); moveSectionOrder(sectionId, 'up'); }}
           disabled={isFirst}
-          className={`p-1 rounded transition-all ${isFirst ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-700 text-slate-400 hover:text-white'}`}
+          className={`p-1.5 rounded transition-all ${isFirst ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-600 bg-slate-700 text-slate-300 hover:text-white'}`}
           title="Move section up"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5555,7 +5576,7 @@ Start by introducing yourself and asking about their business in a friendly way.
         <button
           onClick={(e) => { e.stopPropagation(); moveSectionOrder(sectionId, 'down'); }}
           disabled={isLast}
-          className={`p-1 rounded transition-all ${isLast ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-700 text-slate-400 hover:text-white'}`}
+          className={`p-1.5 rounded transition-all ${isLast ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-600 bg-slate-700 text-slate-300 hover:text-white'}`}
           title="Move section down"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5736,7 +5757,7 @@ Start by introducing yourself and asking about their business in a friendly way.
               UNIFIED IMAGE INTEGRATION SETTINGS DASHBOARD
               All page integration, smart matching, and ordering in ONE place
           ═══════════════════════════════════════════════════════════════════ */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/30 rounded-xl border-2 border-purple-500/50 overflow-hidden shadow-lg shadow-purple-500/10">
+          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/30 rounded-xl border-[3px] border-purple-500/50 overflow-hidden shadow-lg shadow-purple-500/10">
             {/* Dashboard Header - Clickable to collapse/expand */}
             <button
               onClick={() => setImageIntegrationCollapsed(!imageIntegrationCollapsed)}
@@ -8455,9 +8476,9 @@ Start by introducing yourself and asking about their business in a friendly way.
           {/* ═══════════════════ SECTION: resource_tabs ═══════════════════ */}
           <div style={{ order: getSectionOrder('resource_tabs') }}>
       {/* ========== RESOURCE TABS: Problem Areas, Reference Images, Logo & Action Shots ========== */}
-      <div className="bg-slate-900 rounded-lg border-2 border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
+      <div className="bg-slate-900 rounded-lg border-[3px] border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
         {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 3 tab buttons */}
-        <div className="flex bg-slate-700/60">
+        <div className="flex bg-slate-600/50">
           {resourceTabsCollapsed ? (
             /* COLLAPSED STATE: Single button that expands the whole section */
             <button
@@ -8909,7 +8930,7 @@ Start by introducing yourself and asking about their business in a friendly way.
           {/* ═══════════════════ SECTION: audience_avatars ═══════════════════ */}
           <div style={{ order: getSectionOrder('audience_avatars') }}>
           {/* Audience Avatars - Simple collapsible section */}
-          <div className="bg-slate-900 rounded-lg border border-brand-gold/50 p-4">
+          <div className="bg-slate-900 rounded-lg border-[3px] border-brand-gold/50 p-4 shadow-[0_0_12px_rgba(212,175,55,0.3)]">
             {/* Header - Always visible */}
             <div
               className="flex items-center justify-between cursor-pointer"
@@ -9682,9 +9703,9 @@ Start by introducing yourself and asking about their business in a friendly way.
           {/* ═══════════════════ SECTION: chat_tabs ═══════════════════ */}
           <div style={{ order: getSectionOrder('chat_tabs') }}>
           {/* ========== COMBINED CHAT TABS: Image Prompt, Consultant, Worker ========== */}
-          <div className="bg-slate-900 rounded-lg border-2 border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
+          <div className="bg-slate-900 rounded-lg border-[3px] border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
             {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 3 tab buttons */}
-            <div className="flex bg-slate-700/60">
+            <div className="flex bg-slate-600/50">
               {chatTabsCollapsed ? (
                 /* COLLAPSED STATE: Single button that expands the whole section */
                 <button
@@ -10197,7 +10218,7 @@ Start by introducing yourself and asking about their business in a friendly way.
           {/* ========== CONNECTED: Batch Generate + Image Bank ========== */}
           <div className="space-y-0 shadow-[0_0_15px_rgba(34,197,94,0.25)]">
           {/* Batch Generate (Collapsible) - Supports Simple and Advanced modes */}
-          <div className="bg-slate-900 rounded-t-lg rounded-b-none border-2 border-b-0 border-green-500/70 overflow-hidden">
+          <div className="bg-slate-900 rounded-t-lg rounded-b-none border-[3px] border-b-0 border-green-500/70 overflow-hidden">
             <button onClick={() => setIsBatchOpen(!isBatchOpen)} className="w-full flex items-center justify-between p-3 text-green-400 hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
@@ -10391,9 +10412,9 @@ Start by introducing yourself and asking about their business in a friendly way.
           </div>
 
           {/* Dividing line between Batch Generate and Image Bank */}
-          <div className="h-[3px] bg-gradient-to-r from-green-500/50 via-slate-500 to-brand-cyan/50"></div>
+          <div className="h-[4px] bg-gradient-to-r from-green-500/50 via-slate-500 to-brand-cyan/50"></div>
           {/* Image Bank (Collapsible) */}
-          <div className="bg-slate-900 rounded-t-none rounded-b-lg border-2 border-t-0 border-brand-cyan/70 overflow-hidden">
+          <div className="bg-slate-900 rounded-t-none rounded-b-lg border-[3px] border-t-0 border-brand-cyan/70 overflow-hidden">
             <button onClick={() => setIsBankOpen(!isBankOpen)} className="w-full flex items-center justify-between p-3 text-brand-cyan hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -10668,9 +10689,9 @@ Start by introducing yourself and asking about their business in a friendly way.
           {/* ═══════════════════ SECTION: draft_used ═══════════════════ */}
           <div style={{ order: getSectionOrder('draft_used') }}>
           {/* ========== COMBINED DRAFT/USED TABS: Draft Image Bank, Used/Archive ========== */}
-          <div className="bg-slate-900 rounded-lg border-2 border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
+          <div className="bg-slate-900 rounded-lg border-[3px] border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
             {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 2 tab buttons */}
-            <div className="flex bg-slate-700/60">
+            <div className="flex bg-slate-600/50">
               {draftUsedTabsCollapsed ? (
                 /* COLLAPSED STATE: Single button that expands the whole section */
                 <button
