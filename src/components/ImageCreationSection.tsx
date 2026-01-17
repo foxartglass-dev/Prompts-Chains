@@ -8332,29 +8332,35 @@ Start by introducing yourself and asking about their business in a friendly way.
           onClick={() => setResourceTabsCollapsed(!resourceTabsCollapsed)}
           className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/50 hover:bg-slate-800 transition-all"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <svg
               className={`w-4 h-4 text-slate-400 transition-transform ${resourceTabsCollapsed ? '' : 'rotate-180'}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
             </svg>
-            <span className="text-slate-300 font-medium text-sm">Prompt Resources</span>
+            <div className="flex items-center gap-1.5 text-sm">
+              <span className="text-orange-400 font-medium">🎯 Problem Areas</span>
+              <span className="text-slate-500">|</span>
+              <span className="text-brand-gold font-medium">📷 Reference Images</span>
+              <span className="text-slate-500">|</span>
+              <span className="text-pink-400 font-medium">🏷️ Logo & Action</span>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {settings.prompt_problem_areas.length > 0 && (
               <span className="text-xs bg-orange-500/30 text-orange-400 px-2 py-0.5 rounded">
-                🎯 {settings.prompt_problem_areas.length}
+                {settings.prompt_problem_areas.length}
               </span>
             )}
             {settings.reference_images.length > 0 && (
               <span className="text-xs bg-brand-gold/30 text-brand-gold px-2 py-0.5 rounded">
-                📷 {settings.reference_images.length}
+                {settings.reference_images.length}
               </span>
             )}
             {(logoImages.length > 0 || actionShots.length > 0) && (
               <span className="text-xs bg-pink-500/30 text-pink-400 px-2 py-0.5 rounded">
-                🏷️ {logoImages.length + actionShots.length}
+                {logoImages.length + actionShots.length}
               </span>
             )}
           </div>
@@ -12137,7 +12143,7 @@ Start by introducing yourself and asking about their business in a friendly way.
               {/* Options Selection */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm text-gray-400">Options to Include</label>
+                  <label className="text-sm text-gray-400">Options to Include (with all keywords)</label>
                   <div className="flex gap-2">
                     <button
                       onClick={() => {
@@ -12157,30 +12163,68 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </button>
                   </div>
                 </div>
-                <div className="space-y-2 max-h-48 overflow-auto">
+                <div className="space-y-2 max-h-[40vh] overflow-auto">
                   {editingPlaceholderTemplate.options.map(opt => (
-                    <label
+                    <div
                       key={opt.number}
-                      className={`flex items-center gap-3 p-2 rounded cursor-pointer transition ${
+                      className={`p-3 rounded cursor-pointer transition ${
                         placeholderTemplateOptionSelections[opt.number]
                           ? 'bg-blue-500/20 border border-blue-500/50'
                           : 'bg-slate-800 border border-slate-700 opacity-60'
                       }`}
+                      onClick={() => setPlaceholderTemplateOptionSelections({
+                        ...placeholderTemplateOptionSelections,
+                        [opt.number]: !placeholderTemplateOptionSelections[opt.number]
+                      })}
                     >
-                      <input
-                        type="checkbox"
-                        checked={placeholderTemplateOptionSelections[opt.number] || false}
-                        onChange={(e) => setPlaceholderTemplateOptionSelections({
-                          ...placeholderTemplateOptionSelections,
-                          [opt.number]: e.target.checked
-                        })}
-                        className="accent-blue-500"
-                      />
-                      <span className="text-xs text-blue-400/60 font-mono">#{opt.number}</span>
-                      <span className="text-white text-sm">{opt.text}</span>
-                    </label>
+                      <div className="flex items-center gap-3 mb-2">
+                        <input
+                          type="checkbox"
+                          checked={placeholderTemplateOptionSelections[opt.number] || false}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setPlaceholderTemplateOptionSelections({
+                              ...placeholderTemplateOptionSelections,
+                              [opt.number]: e.target.checked
+                            });
+                          }}
+                          className="accent-blue-500"
+                        />
+                        <span className="text-xs text-blue-400/60 font-mono font-bold">#{opt.number}</span>
+                        <span className="text-white text-sm flex-1">{opt.text}</span>
+                      </div>
+                      {/* Show Primary Keywords */}
+                      {(opt.primaryKeywords || []).length > 0 && (
+                        <div className="flex items-center gap-2 ml-7 mb-1">
+                          <span className="text-[10px] text-emerald-400 font-semibold uppercase">Primary:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {(opt.primaryKeywords || []).map((kw, idx) => (
+                              <span key={idx} className="px-1.5 py-0.5 bg-emerald-600/30 border border-emerald-500/50 rounded text-emerald-300 text-[10px]">
+                                {kw}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* Show Secondary Keywords */}
+                      {(opt.secondaryKeywords || []).length > 0 && (
+                        <div className="flex items-center gap-2 ml-7">
+                          <span className="text-[10px] text-amber-400 font-semibold uppercase">Secondary:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {(opt.secondaryKeywords || []).map((kw, idx) => (
+                              <span key={idx} className="px-1.5 py-0.5 bg-amber-600/30 border border-amber-500/50 rounded text-amber-300 text-[10px]">
+                                {kw}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Note: All data (text, primary keywords, secondary keywords) will be saved for selected options.
+                </p>
               </div>
             </div>
 
@@ -12366,8 +12410,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </label>
                       <textarea
                         value={activeAvatar.mainPrompt}
-                        onChange={(e) => handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value })}
-                        className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono min-h-[150px]"
+                        onChange={(e) => {
+                          handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
+                          // Auto-expand to fit content
+                          e.target.style.height = 'auto';
+                          e.target.style.height = `${Math.max(e.target.scrollHeight, 150)}px`;
+                        }}
+                        ref={(el) => {
+                          // Auto-expand on initial render
+                          if (el) {
+                            el.style.height = 'auto';
+                            el.style.height = `${Math.max(el.scrollHeight, 150)}px`;
+                          }
+                        }}
+                        className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono min-h-[150px] resize-none overflow-hidden"
                         placeholder="Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
                       />
                     </div>
@@ -12397,149 +12453,256 @@ Start by introducing yourself and asking about their business in a friendly way.
                 )}
               </div>
 
-              {/* RIGHT: Placeholder Categories */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-purple-400">Placeholder Categories</h3>
-                  {activeAvatar && activeAvatar.placeholderMode === 'advanced' && (
+              {/* RIGHT: Placeholder Categories - EXACT SAME AS COLLAPSED VIEW */}
+              {activeAvatar && activeAvatar.placeholderMode === 'advanced' && (
+                <div className="space-y-3">
+                <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 space-y-3 h-fit">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-purple-300 font-medium">Placeholder Categories</label>
+                      {(activeAvatar.placeholderCategories || []).length > 0 && (
+                        <span className="text-xs text-purple-400/70 bg-slate-800 px-2 py-0.5 rounded">
+                          {(activeAvatar.placeholderCategories || []).length} categories
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => setShowPlaceholderTemplates(true)}
-                        className="px-2 py-1 text-xs bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/50 rounded text-orange-300"
-                      >
-                        Category Templates
-                      </button>
-                      <button
-                        onClick={() => {
-                          const newId = `cat_${Date.now()}`;
-                          handleUpdateAvatar(activeAvatar.id, {
-                            placeholderCategories: [
-                              ...(activeAvatar.placeholderCategories || []),
-                              { id: newId, name: 'New Category', placeholder: '{New_Category}', options: [] }
-                            ]
-                          });
-                        }}
-                        className="text-purple-400 hover:text-purple-300 text-sm font-medium"
+                        onClick={(e) => { e.stopPropagation(); handleAddPlaceholderCategory(); }}
+                        className="px-2 py-1 bg-purple-600/50 hover:bg-purple-600 rounded text-white text-xs transition"
                       >
                         + Add Category
                       </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setShowPlaceholderTemplates(true); }}
+                        className="px-2 py-1 bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/50 rounded text-orange-300 text-xs transition"
+                        title="Apply placeholder category from template"
+                      >
+                        From Template
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Quick Category Toggles */}
+                  {(activeAvatar.placeholderCategories || []).length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 px-2 py-2 bg-slate-900/50 rounded-lg border border-purple-500/20">
+                      <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle:</span>
+                      {(activeAvatar.placeholderCategories || []).map(cat => (
+                        <button
+                          key={cat.id}
+                          onClick={() => handleUpdatePlaceholderCategory(cat.id, { enabled: cat.enabled === false ? true : false })}
+                          className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                            cat.enabled !== false
+                              ? 'bg-emerald-600/40 border border-emerald-500 text-emerald-300'
+                              : 'bg-slate-700/50 border border-slate-600 text-slate-500 line-through'
+                          }`}
+                          title={cat.enabled !== false ? `Click to disable "${cat.name}"` : `Click to enable "${cat.name}"`}
+                        >
+                          {cat.enabled !== false ? '✓' : '○'} {cat.name}
+                        </button>
+                      ))}
                     </div>
                   )}
-                </div>
 
-                {activeAvatar && activeAvatar.placeholderMode === 'advanced' && (
-                  <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-                    {(activeAvatar.placeholderCategories || []).map((cat, catIndex) => (
-                      <details key={cat.id} className="bg-slate-800/50 rounded-lg border border-purple-500/30 group">
-                        <summary className="flex items-center justify-between p-3 cursor-pointer list-none">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <svg className="w-4 h-4 text-purple-400 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                            </svg>
-                            <span className="text-purple-300 font-mono text-sm truncate">{cat.placeholder}</span>
-                            <span className="text-xs text-gray-500">({(cat.options || []).length} options)</span>
-                          </div>
-                          <div className="flex items-center gap-1 ml-2">
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                // Save as template
-                                handleSavePlaceholderCategoryTemplate(cat, companyCategory);
-                              }}
-                              className="p-1 text-orange-400 hover:text-orange-300"
-                              title="Save as template"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const updated = (activeAvatar.placeholderCategories || []).filter(c => c.id !== cat.id);
-                                handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updated });
-                              }}
-                              className="p-1 text-red-400 hover:text-red-300"
-                              title="Delete category"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-                        </summary>
-                        <div className="p-3 pt-0 border-t border-purple-500/20">
-                          {/* Editable placeholder name */}
-                          <div className="mb-3">
-                            <label className="block text-xs text-gray-400 mb-1">Placeholder Name</label>
-                            <input
-                              type="text"
-                              value={cat.placeholder}
-                              onChange={(e) => {
-                                const updated = [...(activeAvatar.placeholderCategories || [])];
-                                updated[catIndex] = { ...cat, placeholder: e.target.value };
-                                handleUpdateAvatar(activeAvatar.id, { placeholderCategories: updated });
-                              }}
-                              className="w-full bg-slate-900 border border-purple-500/50 rounded px-2 py-1.5 text-purple-300 text-sm font-mono"
-                            />
-                          </div>
-                          {/* Options */}
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <label className="text-xs text-gray-400">Options</label>
-                              <button
-                                onClick={() => handleAddPlaceholderOption(cat.id)}
-                                className="text-xs text-purple-400 hover:text-purple-300"
-                              >
-                                + Add Option
-                              </button>
-                            </div>
-                            {(cat.options || []).map((opt, optIndex) => (
-                              <div key={opt.number} className="flex items-center gap-2 bg-slate-900/50 rounded p-2">
-                                <span className="text-xs text-purple-400/60 font-mono w-6">#{opt.number}</span>
+                  {/* Category List - Scrollable */}
+                  <div className="max-h-[50vh] overflow-y-auto space-y-2 pr-1">
+                  {(activeAvatar.placeholderCategories || []).map((category) => {
+                    const isCategoryCollapsed = collapsedCategoryIds.has(category.id);
+                    const toggleCategoryCollapse = () => {
+                      setCollapsedCategoryIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(category.id)) {
+                          next.delete(category.id);
+                        } else {
+                          next.add(category.id);
+                        }
+                        return next;
+                      });
+                    };
+                    return (
+                    <div key={category.id} className={`rounded-lg overflow-hidden transition-all ${
+                      category.enabled !== false
+                        ? 'bg-slate-800/50'
+                        : 'bg-slate-900/30 opacity-50 border border-dashed border-slate-600'
+                    }`}>
+                      {/* Category Header */}
+                      <div
+                        className="flex items-center gap-2 p-3 cursor-pointer hover:bg-slate-700/30 transition"
+                        onClick={toggleCategoryCollapse}
+                      >
+                        <span className={`text-purple-400 transition-transform text-xs ${isCategoryCollapsed ? '' : 'rotate-90'}`}>▶</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false }); }}
+                          className={`w-5 h-5 rounded flex items-center justify-center text-xs transition ${
+                            category.enabled !== false
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-700 text-slate-500'
+                          }`}
+                        >
+                          {category.enabled !== false ? '✓' : '○'}
+                        </button>
+                        <input
+                          type="text"
+                          value={category.name}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => handleUpdatePlaceholderCategory(category.id, { name: e.target.value, placeholder: `{${e.target.value.replace(/\s+/g, '_')}}` })}
+                          className="flex-1 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
+                        />
+                        <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
+                        {isCategoryCollapsed && (
+                          <span className="text-xs text-slate-500">{category.options.length} options</span>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const cat = prompt('Enter company/type category (e.g., Cleaning, Construction):');
+                            if (cat) {
+                              handleSavePlaceholderCategoryTemplate(category, cat);
+                            }
+                          }}
+                          className="px-2 py-1 bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/50 rounded text-orange-300 text-[10px] transition"
+                        >
+                          Save Template
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRemovePlaceholderCategory(category.id); }}
+                          className="p-1 bg-red-600/50 hover:bg-red-600 rounded text-white transition"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {/* Category Content - Options with Primary/Secondary Keywords */}
+                      {!isCategoryCollapsed && (
+                      <div className="p-3 pt-0 space-y-2">
+                        <div className="pl-2 space-y-3">
+                          {category.options.map((option) => (
+                            <div key={option.number} className="bg-slate-900/50 rounded-lg border border-slate-700 overflow-hidden">
+                              {/* Row 1: Keywords */}
+                              <div className="p-2 bg-slate-800/50 border-b border-slate-700">
+                                <div className="flex items-start gap-4">
+                                  <span className="w-6 h-6 flex items-center justify-center bg-purple-600 rounded text-white text-xs font-bold">{option.number}</span>
+
+                                  {/* Primary Keywords */}
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wide">Primary</span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      {(option.primaryKeywords || []).map((kw, kwIdx) => (
+                                        <span
+                                          key={kwIdx}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-600/30 border border-emerald-500 rounded text-emerald-300 text-xs"
+                                        >
+                                          {kw}
+                                          <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'primary')} className="text-emerald-400 hover:text-red-400">×</button>
+                                        </span>
+                                      ))}
+                                      <input
+                                        type="text"
+                                        className="w-20 bg-slate-900 border border-emerald-500/30 rounded px-1.5 py-0.5 text-emerald-300 text-xs placeholder-emerald-700"
+                                        placeholder="+ add"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                            handleAddKeyword(category.id, option.number, e.currentTarget.value, 'primary');
+                                            e.currentTarget.value = '';
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Secondary Keywords */}
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="text-[10px] text-amber-400 font-semibold uppercase tracking-wide">Secondary</span>
+                                      <label className="flex items-center gap-1 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={option.useSecondaryKeywords !== false}
+                                          onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { useSecondaryKeywords: e.target.checked })}
+                                          className="w-3 h-3 rounded border-amber-500 text-amber-500 focus:ring-amber-500 bg-slate-900"
+                                        />
+                                        <span className="text-[9px] text-amber-400/70">ON</span>
+                                      </label>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/20 border border-amber-500/50 rounded text-amber-300/70 text-xs italic">
+                                        {category.name.toLowerCase()}
+                                        <svg className="w-2.5 h-2.5 text-amber-500/50" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                                      </span>
+                                      {(option.secondaryKeywords || []).map((kw, kwIdx) => (
+                                        <span key={kwIdx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/30 border border-amber-500 rounded text-amber-300 text-xs">
+                                          {kw}
+                                          <button onClick={() => handleRemoveKeyword(category.id, option.number, kw, 'secondary')} className="text-amber-400 hover:text-red-400">×</button>
+                                        </span>
+                                      ))}
+                                      <input
+                                        type="text"
+                                        className="w-20 bg-slate-900 border border-amber-500/30 rounded px-1.5 py-0.5 text-amber-300 text-xs placeholder-amber-700"
+                                        placeholder="+ add"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                            handleAddKeyword(category.id, option.number, e.currentTarget.value, 'secondary');
+                                            e.currentTarget.value = '';
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    onClick={() => handleRemovePlaceholderOption(category.id, option.number)}
+                                    className="p-1 text-red-400 hover:text-red-300 hover:bg-red-600/20 rounded transition"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Prompt Text */}
+                              <div className="p-2">
                                 <input
                                   type="text"
-                                  value={opt.text}
-                                  onChange={(e) => handleUpdatePlaceholderOption(cat.id, opt.number, { text: e.target.value })}
-                                  className="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white text-sm"
-                                  placeholder="Option text..."
+                                  value={option.text}
+                                  onChange={(e) => handleUpdatePlaceholderOption(category.id, option.number, { text: e.target.value })}
+                                  className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-white text-sm"
+                                  placeholder={`Prompt text for option ${option.number}...`}
                                 />
-                                <button
-                                  onClick={() => handleRemovePlaceholderOption(cat.id, opt.number)}
-                                  className="p-1 text-red-400/60 hover:text-red-400"
-                                >
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
                               </div>
-                            ))}
-                            {(cat.options || []).length === 0 && (
-                              <p className="text-xs text-gray-500 italic">No options yet. Add one above.</p>
-                            )}
-                          </div>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => handleAddPlaceholderOption(category.id)}
+                            className="w-full py-2 border-2 border-dashed border-purple-500/30 rounded-lg text-purple-400 hover:border-purple-500 hover:text-purple-300 text-xs transition"
+                          >
+                            + Add Option
+                          </button>
                         </div>
-                      </details>
-                    ))}
-                    {(activeAvatar.placeholderCategories || []).length === 0 && (
-                      <div className="text-center py-6 text-gray-500">
-                        <p className="text-sm">No placeholder categories yet.</p>
-                        <p className="text-xs mt-1">Add a category or apply a template to get started.</p>
                       </div>
-                    )}
+                      )}
+                    </div>
+                  )})}
                   </div>
-                )}
 
-                {activeAvatar && (activeAvatar.placeholderMode || 'simple') === 'simple' && (
-                  <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-600">
-                    <p className="text-slate-400 text-sm">
-                      Switch to <strong className="text-purple-400">Advanced</strong> mode to use placeholder categories with multiple options per category.
-                    </p>
-                  </div>
-                )}
-              </div>
+                  {(activeAvatar.placeholderCategories || []).length === 0 && (
+                    <p className="text-xs text-purple-400/50 text-center py-2">No categories yet. Add one to get started.</p>
+                  )}
+                </div>
+                </div>
+              )}
+
+              {activeAvatar && (activeAvatar.placeholderMode || 'simple') === 'simple' && (
+                <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-600">
+                  <p className="text-slate-400 text-sm">
+                    Switch to <strong className="text-purple-400">Advanced</strong> mode to use placeholder categories with multiple options per category.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>,
