@@ -607,6 +607,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isConsultantChatOpen, setIsConsultantChatOpen] = useState(false);
   const [isWorkerChatOpen, setIsWorkerChatOpen] = useState(false);
+  // Combined chat tabs state - collapsible tab bar pattern
+  const [chatTabsCollapsed, setChatTabsCollapsed] = useState(true);
+  const [activeChatTab, setActiveChatTab] = useState<'image_prompt' | 'consultant' | 'worker'>('image_prompt');
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false); // Collapsed by default
   const [isUsedOpen, setIsUsedOpen] = useState(false);
@@ -1026,12 +1029,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
   }, [workflowId]);
 
-  // Fetch extended context when Consultant Chat is opened
+  // Fetch extended context when Consultant Chat tab is opened
   useEffect(() => {
-    if (isConsultantChatOpen && workflowId) {
+    if (!chatTabsCollapsed && activeChatTab === 'consultant' && workflowId) {
       fetchConsultantContext();
     }
-  }, [isConsultantChatOpen, workflowId]);
+  }, [chatTabsCollapsed, activeChatTab, workflowId]);
 
   // Sync Tag Manager tags with Audience Avatars
   useEffect(() => {
@@ -8360,50 +8363,52 @@ Start by introducing yourself and asking about their business in a friendly way.
 
       {/* ========== RESOURCE TABS: Problem Areas, Reference Images, Logo & Action Shots ========== */}
       <div className="bg-slate-900 rounded-lg border border-slate-600 overflow-hidden">
-        {/* Collapsible Header */}
-        <button
-          onClick={() => setResourceTabsCollapsed(!resourceTabsCollapsed)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/50 hover:bg-slate-800 transition-all"
-        >
-          <div className="flex items-center gap-2">
-            <svg
-              className={`w-4 h-4 text-slate-400 transition-transform ${resourceTabsCollapsed ? '' : 'rotate-180'}`}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 3 tab buttons */}
+        <div className="flex bg-slate-800/50">
+          {resourceTabsCollapsed ? (
+            /* COLLAPSED STATE: Single button that expands the whole section */
+            <button
+              onClick={() => setResourceTabsCollapsed(false)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-800 transition-all"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-            </svg>
-            <div className="flex items-center gap-1.5 text-sm">
-              <span className="text-orange-400 font-medium">🎯 Problem Areas</span>
-              <span className="text-slate-500">|</span>
-              <span className="text-brand-gold font-medium">📷 Reference Images</span>
-              <span className="text-slate-500">|</span>
-              <span className="text-pink-400 font-medium">🏷️ Logo & Action</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {settings.prompt_problem_areas.length > 0 && (
-              <span className="text-xs bg-orange-500/30 text-orange-400 px-2 py-0.5 rounded">
-                {settings.prompt_problem_areas.length}
-              </span>
-            )}
-            {settings.reference_images.length > 0 && (
-              <span className="text-xs bg-brand-gold/30 text-brand-gold px-2 py-0.5 rounded">
-                {settings.reference_images.length}
-              </span>
-            )}
-            {(logoImages.length > 0 || actionShots.length > 0) && (
-              <span className="text-xs bg-pink-500/30 text-pink-400 px-2 py-0.5 rounded">
-                {logoImages.length + actionShots.length}
-              </span>
-            )}
-          </div>
-        </button>
-
-        {/* Expanded Content */}
-        {!resourceTabsCollapsed && (
-          <>
-            {/* Tab Bar */}
-            <div className="flex border-t border-b border-slate-700">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+                <div className="flex items-center gap-1.5 text-sm">
+                  <span className="text-orange-400 font-medium">🎯 Problem Areas</span>
+                  <span className="text-slate-500">|</span>
+                  <span className="text-brand-gold font-medium">📷 Reference Images</span>
+                  <span className="text-slate-500">|</span>
+                  <span className="text-pink-400 font-medium">🏷️ Logo & Action</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {settings.prompt_problem_areas.length > 0 && (
+                  <span className="text-xs bg-orange-500/30 text-orange-400 px-2 py-0.5 rounded">{settings.prompt_problem_areas.length}</span>
+                )}
+                {settings.reference_images.length > 0 && (
+                  <span className="text-xs bg-brand-gold/30 text-brand-gold px-2 py-0.5 rounded">{settings.reference_images.length}</span>
+                )}
+                {(logoImages.length > 0 || actionShots.length > 0) && (
+                  <span className="text-xs bg-pink-500/30 text-pink-400 px-2 py-0.5 rounded">{logoImages.length + actionShots.length}</span>
+                )}
+              </div>
+            </button>
+          ) : (
+            /* EXPANDED STATE: Chevron button + 3 separate tab buttons */
+            <>
+              {/* Chevron collapse button */}
+              <button
+                onClick={() => setResourceTabsCollapsed(true)}
+                className="px-3 py-3 hover:bg-slate-700 transition-all border-r border-slate-700 flex items-center"
+                title="Collapse tabs"
+              >
+                <svg className="w-4 h-4 text-slate-400 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {/* Problem Areas tab button */}
               <button
                 onClick={() => setActiveResourceTab('problem_areas')}
                 className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
@@ -8417,6 +8422,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="text-xs bg-orange-500/30 px-1.5 py-0.5 rounded">{settings.prompt_problem_areas.length}</span>
                 )}
               </button>
+              {/* Reference Images tab button */}
               <button
                 onClick={() => setActiveResourceTab('reference_images')}
                 className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
@@ -8430,6 +8436,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="text-xs bg-brand-gold/30 px-1.5 py-0.5 rounded">{settings.reference_images.length}</span>
                 )}
               </button>
+              {/* Logo & Action tab button */}
               <button
                 onClick={() => setActiveResourceTab('logo_action')}
                 className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
@@ -8443,7 +8450,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="text-xs bg-pink-500/30 px-1.5 py-0.5 rounded">{logoImages.length + actionShots.length}</span>
                 )}
               </button>
-            </div>
+            </>
+          )}
+        </div>
+
+        {/* Tab Content - only shown when expanded */}
+        {!resourceTabsCollapsed && (
+          <>
 
             {/* Tab Content */}
             {/* Prompt Problem Areas Tab */}
@@ -9567,102 +9580,157 @@ Start by introducing yourself and asking about their business in a friendly way.
             </div>}
           </div>
 
-          {/* Chat Interface (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-brand-gold/50 overflow-hidden">
-            <button
-              onClick={() => setIsChatOpen(!isChatOpen)}
-              className="w-full flex items-center justify-between p-3 text-brand-gold hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                Image Prompt Chat
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {isChatOpen && (
-              <div className="border-t border-brand-gold/30">
-                <div ref={chatContainerRef} className="h-64 overflow-y-auto p-4 space-y-3">
-                  {settings.chat_history.length === 0 ? (
-                    <p className="text-center text-brand-gold/50 py-8">Chat with AI to help craft prompts.</p>
-                  ) : (
-                    settings.chat_history.map((msg, idx) => (
-                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-brand-cyan/20 border border-brand-cyan/50' : 'bg-slate-800 border border-brand-gold/30'}`}>
-                          {msg.images && msg.images.length > 0 && (
-                            <div className="flex gap-2 mb-2">
-                              {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
-                            </div>
-                          )}
-                          <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  {chatLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-slate-800 border border-brand-gold/30 rounded-lg p-3">
-                        <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                        </div>
-                      </div>
+          {/* ========== COMBINED CHAT TABS: Image Prompt, Consultant, Worker ========== */}
+          <div className="bg-slate-900 rounded-lg border border-slate-600 overflow-hidden">
+            {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 3 tab buttons */}
+            <div className="flex bg-slate-800/50">
+              {chatTabsCollapsed ? (
+                /* COLLAPSED STATE: Single button that expands the whole section */
+                <button
+                  onClick={() => setChatTabsCollapsed(false)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-800 transition-all"
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <span className="text-brand-gold font-medium">💬 Image Prompt</span>
+                      <span className="text-slate-500">|</span>
+                      <span className="text-indigo-400 font-medium">💡 Consultant</span>
+                      <span className="text-slate-500">|</span>
+                      <span className="text-emerald-400 font-medium">⚙️ Worker</span>
                     </div>
-                  )}
-                </div>
-                {chatImages.length > 0 && (
-                  <div className="px-4 py-2 border-t border-brand-gold/30 flex gap-2">
-                    {chatImages.map((img, idx) => (
-                      <div key={idx} className="relative">
-                        <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
-                        <button onClick={() => setChatImages(chatImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {settings.chat_history.length > 0 && (
+                      <span className="text-xs bg-brand-gold/30 text-brand-gold px-2 py-0.5 rounded">{settings.chat_history.length}</span>
+                    )}
+                    {settings.consultant_chat_history.length > 0 && (
+                      <span className="text-xs bg-indigo-500/30 text-indigo-400 px-2 py-0.5 rounded">{settings.consultant_chat_history.length}</span>
+                    )}
+                    {settings.worker_chat_history.length > 0 && (
+                      <span className="text-xs bg-emerald-500/30 text-emerald-400 px-2 py-0.5 rounded">{settings.worker_chat_history.length}</span>
+                    )}
+                  </div>
+                </button>
+              ) : (
+                /* EXPANDED STATE: Chevron button + 3 separate tab buttons */
+                <>
+                  {/* Chevron collapse button */}
+                  <button
+                    onClick={() => setChatTabsCollapsed(true)}
+                    className="px-3 py-3 hover:bg-slate-700 transition-all border-r border-slate-700 flex items-center"
+                    title="Collapse chat tabs"
+                  >
+                    <svg className="w-4 h-4 text-slate-400 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {/* Image Prompt Chat tab button */}
+                  <button
+                    onClick={() => setActiveChatTab('image_prompt')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                      activeChatTab === 'image_prompt'
+                        ? 'bg-brand-gold/20 text-brand-gold border-b-2 border-brand-gold'
+                        : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    💬 Image Prompt
+                    {settings.chat_history.length > 0 && (
+                      <span className="text-xs bg-brand-gold/30 px-1.5 py-0.5 rounded">{settings.chat_history.length}</span>
+                    )}
+                  </button>
+                  {/* Consultant Chat tab button */}
+                  <button
+                    onClick={() => setActiveChatTab('consultant')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                      activeChatTab === 'consultant'
+                        ? 'bg-indigo-500/20 text-indigo-400 border-b-2 border-indigo-500'
+                        : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    💡 Consultant
+                    {settings.consultant_chat_history.length > 0 && (
+                      <span className="text-xs bg-indigo-500/30 px-1.5 py-0.5 rounded">{settings.consultant_chat_history.length}</span>
+                    )}
+                  </button>
+                  {/* Worker Chat tab button */}
+                  <button
+                    onClick={() => setActiveChatTab('worker')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                      activeChatTab === 'worker'
+                        ? 'bg-emerald-500/20 text-emerald-400 border-b-2 border-emerald-500'
+                        : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    ⚙️ Worker
+                    {settings.worker_chat_history.length > 0 && (
+                      <span className="text-xs bg-emerald-500/30 px-1.5 py-0.5 rounded">{settings.worker_chat_history.length}</span>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Tab Content - only shown when expanded */}
+            {!chatTabsCollapsed && (
+              <>
+                {/* Image Prompt Chat Tab Content */}
+                {activeChatTab === 'image_prompt' && (
+                  <div className="border-t border-brand-gold/30">
+                    <div ref={chatContainerRef} className="h-64 overflow-y-auto p-4 space-y-3">
+                      {settings.chat_history.length === 0 ? (
+                        <p className="text-center text-brand-gold/50 py-8">Chat with AI to help craft prompts.</p>
+                      ) : (
+                        settings.chat_history.map((msg, idx) => (
+                          <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-brand-cyan/20 border border-brand-cyan/50' : 'bg-slate-800 border border-brand-gold/30'}`}>
+                              {msg.images && msg.images.length > 0 && (
+                                <div className="flex gap-2 mb-2">
+                                  {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
+                                </div>
+                              )}
+                              <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      {chatLoading && (
+                        <div className="flex justify-start">
+                          <div className="bg-slate-800 border border-brand-gold/30 rounded-lg p-3">
+                            <div className="flex gap-1">
+                              <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce"></div>
+                              <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                              <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {chatImages.length > 0 && (
+                      <div className="px-4 py-2 border-t border-brand-gold/30 flex gap-2">
+                        {chatImages.map((img, idx) => (
+                          <div key={idx} className="relative">
+                            <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
+                            <button onClick={() => setChatImages(chatImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
+                    <div className="p-4 border-t border-brand-gold/30 flex gap-2">
+                      <button onClick={() => chatFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-brand-gold transition" title="Attach Image">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                      </button>
+                      <input ref={chatFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
+                      <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()} placeholder="Ask about image prompts..." className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm" />
+                      <button onClick={handleSendChat} disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 font-medium text-sm transition">Send</button>
+                    </div>
                   </div>
                 )}
-                <div className="p-4 border-t border-brand-gold/30 flex gap-2">
-                  <button onClick={() => chatFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-brand-gold transition" title="Attach Image">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                  </button>
-                  <input ref={chatFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
-                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()} placeholder="Ask about image prompts..." className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm" />
-                  <button onClick={handleSendChat} disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 font-medium text-sm transition">Send</button>
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* ========== DUAL CHAT SYSTEM ========== */}
-
-          {/* Consultant Chat - Strategic Partner with Vision */}
-          <div className="bg-slate-900 rounded-lg border-2 border-indigo-500/70 overflow-hidden">
-            <button
-              onClick={() => setIsConsultantChatOpen(!isConsultantChatOpen)}
-              className="w-full flex items-center justify-between p-3 text-indigo-400 hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-                Consultant Chat (Vision AI)
-                {IMAGE_CAPABLE_MODELS.includes(settings.consultant_model) && (
-                  <span className="bg-indigo-600/40 text-indigo-300 text-[10px] px-1.5 py-0.5 rounded">CAN SEE IMAGES</span>
-                )}
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-indigo-300/70">{settings.consultant_chat_history.length} msgs</span>
-                <svg className={`w-5 h-5 transition-transform ${isConsultantChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
-
-            {isConsultantChatOpen && (
+                {/* Consultant Chat Tab Content */}
+                {activeChatTab === 'consultant' && (
               <div className="border-t border-indigo-500/30">
                 {/* Model selector and controls */}
                 <div className="p-3 bg-indigo-900/20 border-b border-indigo-500/30 flex items-center justify-between flex-wrap gap-2">
@@ -9865,34 +9933,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </button>
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* Worker Chat - Operational Helper */}
-          <div className="bg-slate-900 rounded-lg border-2 border-emerald-500/70 overflow-hidden">
-            <button
-              onClick={() => setIsWorkerChatOpen(!isWorkerChatOpen)}
-              className="w-full flex items-center justify-between p-3 text-emerald-400 hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Worker Chat (Operations)
-                {settings.consultant_chat_history.length > 0 && (
-                  <span className="bg-emerald-600/40 text-emerald-300 text-[10px] px-1.5 py-0.5 rounded">SEES CONSULTANT</span>
                 )}
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-emerald-300/70">{settings.worker_chat_history.length} msgs</span>
-                <svg className={`w-5 h-5 transition-transform ${isWorkerChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
 
-            {isWorkerChatOpen && (
+                {/* Worker Chat Tab Content */}
+                {activeChatTab === 'worker' && (
               <div className="border-t border-emerald-500/30">
                 {/* Model selector and controls */}
                 <div className="p-3 bg-emerald-900/20 border-b border-emerald-500/30 flex items-center justify-between flex-wrap gap-2">
@@ -10000,6 +10044,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </button>
                 </div>
               </div>
+                )}
+              </>
             )}
           </div>
 
