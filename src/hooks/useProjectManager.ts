@@ -122,6 +122,7 @@ const initialTags: Tag[] = [
   { id: 1, name: 'B' },
   { id: 2, name: 'E' },
   { id: 3, name: 'G' },
+  { id: 4, name: 'H' },
 ];
 
 const initialTaggedSnippets: TaggedSnippet[] = [

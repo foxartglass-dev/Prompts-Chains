@@ -1033,7 +1033,11 @@ const App: React.FC = () => {
     };
     
     const handleManualAddItems = () => {
-        if (!currentProject || !manualItems.trim()) {
+        if (!currentProject) {
+            addLog('No workflow loaded. Please select or create a workflow first.', LogStatus.ERROR);
+            return;
+        }
+        if (!manualItems.trim()) {
             addLog('Text area is empty. Please paste items.', LogStatus.ERROR);
             return;
         }
