@@ -499,6 +499,8 @@ interface ImageCreationSettings {
   text_snippets: TextSnippet[];
   // Saved placeholder category templates
   placeholder_category_templates: PlaceholderCategoryTemplate[];
+  // Section order for reordering UI sections
+  section_order?: string[];
 }
 
 enum LogStatus {
@@ -578,7 +580,9 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   // Prompt Template System
   prompt_templates: [],
   text_snippets: [],
-  placeholder_category_templates: []
+  placeholder_category_templates: [],
+  // Section order - user-configurable order of UI sections
+  section_order: ['image_integration', 'audience_avatars', 'batch_bank', 'draft_used', 'resource_tabs', 'chat_tabs']
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -603,6 +607,16 @@ const IMAGE_PROMPT_MODELS = [
 
 // Variation placeholder tag
 const VARIATION_PLACEHOLDER = '{variation}';
+
+// Section definitions for reorderable UI sections
+const SECTION_DEFINITIONS: { [key: string]: { name: string; icon: string } } = {
+  image_integration: { name: 'Image Integration Settings', icon: '⚙️' },
+  audience_avatars: { name: 'Audience Avatars', icon: '👥' },
+  batch_bank: { name: 'Batch Generate + Image Bank', icon: '🖼️' },
+  draft_used: { name: 'Draft / Used Archive', icon: '📦' },
+  resource_tabs: { name: 'Resources', icon: '📚' },
+  chat_tabs: { name: 'Chatbots', icon: '💬' },
+};
 
 const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettingsChange, showNotification, addLog, onHeaderControlsReady }) => {
   // State
@@ -5496,6 +5510,62 @@ Start by introducing yourself and asking about their business in a friendly way.
     }
   };
 
+  // ========== SECTION REORDER HELPERS ==========
+  // Get the order of sections from settings, with fallback to default
+  const sectionOrder = settings.section_order || DEFAULT_SETTINGS.section_order || [];
+
+  // Get the CSS order value for a section (position in array)
+  const getSectionOrder = (sectionId: string): number => {
+    const idx = sectionOrder.indexOf(sectionId);
+    return idx >= 0 ? idx : 999; // Unknown sections go to end
+  };
+
+  // Move a section up or down in the order
+  const moveSectionOrder = (sectionId: string, direction: 'up' | 'down') => {
+    const currentOrder = [...sectionOrder];
+    const idx = currentOrder.indexOf(sectionId);
+    if (idx < 0) return;
+
+    const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= currentOrder.length) return;
+
+    // Swap positions
+    [currentOrder[idx], currentOrder[newIdx]] = [currentOrder[newIdx], currentOrder[idx]];
+    updateSettings({ section_order: currentOrder });
+  };
+
+  // Reorder button component for section headers
+  const SectionReorderButtons = ({ sectionId }: { sectionId: string }) => {
+    const idx = sectionOrder.indexOf(sectionId);
+    const isFirst = idx === 0;
+    const isLast = idx === sectionOrder.length - 1;
+
+    return (
+      <div className="flex items-center gap-0.5 ml-auto mr-2">
+        <button
+          onClick={(e) => { e.stopPropagation(); moveSectionOrder(sectionId, 'up'); }}
+          disabled={isFirst}
+          className={`p-1 rounded transition-all ${isFirst ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-700 text-slate-400 hover:text-white'}`}
+          title="Move section up"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+          </svg>
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); moveSectionOrder(sectionId, 'down'); }}
+          disabled={isLast}
+          className={`p-1 rounded transition-all ${isLast ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-700 text-slate-400 hover:text-white'}`}
+          title="Move section down"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -5505,7 +5575,7 @@ Start by introducing yourself and asking about their business in a friendly way.
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* Prompt Guide Modal - Shows both GPT-Image and Flux guides */}
       {showPromptGuide && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -5659,6 +5729,9 @@ Start by introducing yourself and asking about their business in a friendly way.
           <span className="text-yellow-400 text-sm">{generationProgress}</span>
         </div>
       )}
+
+          {/* ═══════════════════ SECTION: image_integration ═══════════════════ */}
+          <div style={{ order: getSectionOrder('image_integration') }}>
           {/* ═══════════════════════════════════════════════════════════════════
               UNIFIED IMAGE INTEGRATION SETTINGS DASHBOARD
               All page integration, smart matching, and ordering in ONE place
@@ -5682,6 +5755,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                     <p className="text-xs text-purple-300/70">Configure how images are selected and published to pages</p>
                   </div>
                 </div>
+                <SectionReorderButtons sectionId="image_integration" />
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-1 bg-purple-600/40 text-purple-200 text-xs rounded-full font-medium border border-purple-500/30">
                     {settings.integration_mode === 'bank' ? '📦 Bank Mode' : '⚡ Live Mode'}
@@ -8376,7 +8450,10 @@ Start by introducing yourself and asking about their business in a friendly way.
             </div>
             )}
           </div>
+          </div>{/* End SECTION: image_integration */}
 
+          {/* ═══════════════════ SECTION: resource_tabs ═══════════════════ */}
+          <div style={{ order: getSectionOrder('resource_tabs') }}>
       {/* ========== RESOURCE TABS: Problem Areas, Reference Images, Logo & Action Shots ========== */}
       <div className="bg-slate-900 rounded-lg border-2 border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
         {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 3 tab buttons */}
@@ -8399,6 +8476,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="text-pink-400 font-semibold">🏷️ Logo & Action</span>
                 </div>
               </div>
+              <SectionReorderButtons sectionId="resource_tabs" />
               <div className="flex items-center gap-2">
                 {settings.prompt_problem_areas.length > 0 && (
                   <span className="text-xs bg-orange-500/30 text-orange-400 px-2 py-0.5 rounded">{settings.prompt_problem_areas.length}</span>
@@ -8826,7 +8904,10 @@ Start by introducing yourself and asking about their business in a friendly way.
         )}
       </div>
       {/* End Resource Tabs */}
+          </div>{/* End SECTION: resource_tabs */}
 
+          {/* ═══════════════════ SECTION: audience_avatars ═══════════════════ */}
+          <div style={{ order: getSectionOrder('audience_avatars') }}>
           {/* Audience Avatars - Simple collapsible section */}
           <div className="bg-slate-900 rounded-lg border border-brand-gold/50 p-4">
             {/* Header - Always visible */}
@@ -8848,6 +8929,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </span>
                 )}
               </div>
+              <SectionReorderButtons sectionId="audience_avatars" />
               <div className="flex items-center gap-2">
                 <button
                   onClick={(e) => { e.stopPropagation(); setAvatarsExpandedView(true); }}
@@ -9595,7 +9677,10 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
             </div>}
           </div>
+          </div>{/* End SECTION: audience_avatars */}
 
+          {/* ═══════════════════ SECTION: chat_tabs ═══════════════════ */}
+          <div style={{ order: getSectionOrder('chat_tabs') }}>
           {/* ========== COMBINED CHAT TABS: Image Prompt, Consultant, Worker ========== */}
           <div className="bg-slate-900 rounded-lg border-2 border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
             {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 3 tab buttons */}
@@ -9625,6 +9710,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <span className="text-emerald-400 font-semibold">⚙️ Worker</span>
                     </div>
                   </div>
+                  <SectionReorderButtons sectionId="chat_tabs" />
                   <div className="flex items-center gap-2">
                     {settings.chat_history.length > 0 && (
                       <span className="text-xs bg-brand-gold/30 text-brand-gold px-2 py-0.5 rounded">{settings.chat_history.length}</span>
@@ -10104,7 +10190,10 @@ Start by introducing yourself and asking about their business in a friendly way.
               </>
             )}
           </div>
+          </div>{/* End SECTION: chat_tabs */}
 
+          {/* ═══════════════════ SECTION: batch_bank ═══════════════════ */}
+          <div style={{ order: getSectionOrder('batch_bank') }}>
           {/* ========== CONNECTED: Batch Generate + Image Bank ========== */}
           <div className="space-y-0 shadow-[0_0_15px_rgba(34,197,94,0.25)]">
           {/* Batch Generate (Collapsible) - Supports Simple and Advanced modes */}
@@ -10117,6 +10206,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-[10px] rounded">ADVANCED</span>
                 )}
               </span>
+              <SectionReorderButtons sectionId="batch_bank" />
               <svg className={`w-5 h-5 transition-transform ${isBatchOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
             </button>
             {isBatchOpen && (
@@ -10573,7 +10663,10 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
           </div>
           </div>{/* End of connected Batch Generate + Image Bank */}
+          </div>{/* End SECTION: batch_bank */}
 
+          {/* ═══════════════════ SECTION: draft_used ═══════════════════ */}
+          <div style={{ order: getSectionOrder('draft_used') }}>
           {/* ========== COMBINED DRAFT/USED TABS: Draft Image Bank, Used/Archive ========== */}
           <div className="bg-slate-900 rounded-lg border-2 border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
             {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 2 tab buttons */}
@@ -10603,6 +10696,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </span>
                     </div>
                   </div>
+                  <SectionReorderButtons sectionId="draft_used" />
                 </button>
               ) : (
                 /* EXPANDED STATE: Chevron button + 2 separate tab buttons */
@@ -10941,6 +11035,7 @@ Start by introducing yourself and asking about their business in a friendly way.
               </>
             )}
           </div>
+          </div>{/* End SECTION: draft_used */}
 
 
       {saving && (
