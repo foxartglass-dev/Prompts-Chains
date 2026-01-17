@@ -122,6 +122,7 @@ const initialTags: Tag[] = [
   { id: 1, name: 'B' },
   { id: 2, name: 'E' },
   { id: 3, name: 'G' },
+  { id: 4, name: 'H' },
 ];
 
 const initialTaggedSnippets: TaggedSnippet[] = [
@@ -162,7 +163,7 @@ const initialProjectState: ProjectState = {
   metaTitlePrompt: 'Based on the following article content, generate {count} compelling SEO meta titles (50-60 characters each) that will attract clicks while accurately representing the content.\n\nArticle:\n{article_content}\n\nIMPORTANT RULES:\n- Use ONLY actual text - NEVER use placeholders like [Company Name], [Brand], {city}, etc.\n- Extract real names, locations, and details from the content\n- If company name is unknown, omit it entirely\n\nFormat as a numbered list:\n1. Your title here\n2. Your title here\netc.',
   metaDescriptionPrompt: 'Based on the following article content, generate {count} engaging SEO meta descriptions (150-160 characters each) that summarize the content and encourage clicks.\n\nArticle:\n{article_content}\n\nIMPORTANT RULES:\n- Use ONLY actual text - NEVER use placeholders like [Company Name], [Brand], {city}, etc.\n- Extract real information from the content\n- End with a call-to-action\n\nFormat as a numbered list:\n1. Your description here\n2. Your description here\netc.',
   // Master publish mode (off = disabled, draft/wordpress for testing vs live)
-  wpPublishMode: 'off',
+  wpPublishMode: 'draft',
   // Publish mode defaults (draft = stop at results, wordpress = auto-publish)
   articlePublishMode: 'draft',
   metaPublishMode: 'draft',

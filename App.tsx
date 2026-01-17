@@ -1033,7 +1033,11 @@ const App: React.FC = () => {
     };
     
     const handleManualAddItems = () => {
-        if (!currentProject || !manualItems.trim()) {
+        if (!currentProject) {
+            addLog('No workflow loaded. Please select or create a workflow first.', LogStatus.ERROR);
+            return;
+        }
+        if (!manualItems.trim()) {
             addLog('Text area is empty. Please paste items.', LogStatus.ERROR);
             return;
         }
@@ -1555,9 +1559,15 @@ const App: React.FC = () => {
                                                 : r
                                         ));
 
-                                        // Auto-push SEO meta if metaPublishMode is 'wordpress' and we have meta data
-                                        // (Image toggle is independent - only controls images, not meta publishing)
-                                        if (effectiveMetaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
+                                        // Auto-push SEO meta ONLY if:
+                                        // 1. Meta toggle is 'wordpress' AND
+                                        // 2. BOTH dropdown counts are 1 (meaning auto-push, not draft/choose mode)
+                                        // If either dropdown is 2+, meta stays in draft for user selection
+                                        const metaTitleCount = currentProject?.state.metaTitleCount || 3;
+                                        const metaDescCount = currentProject?.state.metaDescriptionCount || 3;
+                                        if (effectiveMetaPublishMode === 'wordpress' &&
+                                            metaTitleCount === 1 && metaDescCount === 1 &&
+                                            metaTitles.length > 0 && metaDescriptions.length > 0) {
                                             addLog(`[${itemLabel}] Auto-pushing SEO meta...`, LogStatus.WORKING, item.id);
                                             try {
                                                 const seoResponse = await fetch('/api/seo/push-direct', {
@@ -3311,7 +3321,7 @@ const App: React.FC = () => {
                                     type="button"
                                     onClick={() => setCurrentProjectState(p => ({...p, wpPublishMode: 'off'}))}
                                     className={`px-1.5 py-0.5 text-[10px] font-medium transition-all ${
-                                        (currentProject.state.wpPublishMode || 'off') === 'off'
+                                        currentProject.state.wpPublishMode === 'off'
                                             ? 'bg-red-600 text-white'
                                             : 'bg-slate-900 text-white hover:bg-slate-800'
                                     }`}
