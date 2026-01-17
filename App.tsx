@@ -1555,9 +1555,15 @@ const App: React.FC = () => {
                                                 : r
                                         ));
 
-                                        // Auto-push SEO meta if metaPublishMode is 'wordpress' and we have meta data
-                                        // (Image toggle is independent - only controls images, not meta publishing)
-                                        if (effectiveMetaPublishMode === 'wordpress' && metaTitles.length > 0 && metaDescriptions.length > 0) {
+                                        // Auto-push SEO meta ONLY if:
+                                        // 1. Meta toggle is 'wordpress' AND
+                                        // 2. BOTH dropdown counts are 1 (meaning auto-push, not draft/choose mode)
+                                        // If either dropdown is 2+, meta stays in draft for user selection
+                                        const metaTitleCount = currentProject?.state.metaTitleCount || 3;
+                                        const metaDescCount = currentProject?.state.metaDescriptionCount || 3;
+                                        if (effectiveMetaPublishMode === 'wordpress' &&
+                                            metaTitleCount === 1 && metaDescCount === 1 &&
+                                            metaTitles.length > 0 && metaDescriptions.length > 0) {
                                             addLog(`[${itemLabel}] Auto-pushing SEO meta...`, LogStatus.WORKING, item.id);
                                             try {
                                                 const seoResponse = await fetch('/api/seo/push-direct', {
