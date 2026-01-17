@@ -8930,7 +8930,7 @@ Start by introducing yourself and asking about their business in a friendly way.
           {/* ═══════════════════ SECTION: audience_avatars ═══════════════════ */}
           <div style={{ order: getSectionOrder('audience_avatars') }}>
           {/* Audience Avatars - Simple collapsible section */}
-          <div className="bg-slate-900 rounded-lg border-[3px] border-brand-gold/50 p-4 shadow-[0_0_12px_rgba(212,175,55,0.3)]">
+          <div className="bg-slate-900 rounded-lg border-[3px] border-brand-gold/50 p-4 shadow-[0_0_20px_rgba(212,175,55,0.45)]">
             {/* Header - Always visible */}
             <div
               className="flex items-center justify-between cursor-pointer"
@@ -9717,7 +9717,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                     </svg>
                     {/* Chatbots label */}
-                    <span className="text-slate-400 font-semibold flex items-center gap-1.5 mr-2">
+                    <span className="text-emerald-400 font-semibold flex items-center gap-1.5 mr-2">
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                       </svg>
@@ -9758,7 +9758,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </svg>
                   </button>
                   {/* Chatbots label */}
-                  <div className="px-3 py-3 border-r border-slate-700 flex items-center gap-1.5 text-slate-400">
+                  <div className="px-3 py-3 border-r border-slate-700 flex items-center gap-1.5 text-emerald-400">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
@@ -10216,7 +10216,7 @@ Start by introducing yourself and asking about their business in a friendly way.
           {/* ═══════════════════ SECTION: batch_bank ═══════════════════ */}
           <div style={{ order: getSectionOrder('batch_bank') }}>
           {/* ========== CONNECTED: Batch Generate + Image Bank ========== */}
-          <div className="space-y-0 shadow-[0_0_15px_rgba(34,197,94,0.25)]">
+          <div className="space-y-0 shadow-[0_0_22px_rgba(34,197,94,0.4)]">
           {/* Batch Generate (Collapsible) - Supports Simple and Advanced modes */}
           <div className="bg-slate-900 rounded-t-lg rounded-b-none border-[3px] border-b-0 border-green-500/70 overflow-hidden">
             <button onClick={() => setIsBatchOpen(!isBatchOpen)} className="w-full flex items-center justify-between p-3 text-green-400 hover:bg-slate-800/50 transition">
