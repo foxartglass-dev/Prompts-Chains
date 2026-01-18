@@ -1479,6 +1479,54 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       saveToWebsite = false;
     }
 
+    // 🛡️ SERVER-SIDE PROTECTION: Prevent accidental erasure of audience_avatars content
+    let protectedAvatars = audience_avatars;
+    if (audience_avatars && existing.length > 0) {
+      try {
+        // Fetch current settings to compare
+        const currentSettings = saveToWebsite
+          ? await sql`SELECT audience_avatars FROM image_creation_settings WHERE website_id = ${websiteId}`
+          : await sql`SELECT audience_avatars FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
+
+        if (currentSettings.length > 0 && currentSettings[0].audience_avatars) {
+          const currentAvatars = currentSettings[0].audience_avatars;
+          protectedAvatars = audience_avatars.map(newAvatar => {
+            const currentAvatar = currentAvatars.find(a => a.id === newAvatar.id);
+            if (!currentAvatar) return newAvatar;
+
+            // Protect mainPrompt from erasure
+            const currentPromptLen = currentAvatar.mainPrompt?.length || 0;
+            const newPromptLen = newAvatar.mainPrompt?.length || 0;
+            if (currentPromptLen > 200 && newPromptLen < 100) {
+              console.error(`🛡️ SERVER PROTECTION: Preserving mainPrompt for "${newAvatar.name}" (${currentPromptLen} chars -> ${newPromptLen} chars BLOCKED)`);
+              newAvatar = { ...newAvatar, mainPrompt: currentAvatar.mainPrompt };
+            }
+
+            // Protect placeholderCategories from erasure
+            const currentCatCount = currentAvatar.placeholderCategories?.length || 0;
+            const newCatCount = newAvatar.placeholderCategories?.length || 0;
+            if (currentCatCount > 0 && newCatCount === 0) {
+              console.error(`🛡️ SERVER PROTECTION: Preserving ${currentCatCount} placeholderCategories for "${newAvatar.name}"`);
+              newAvatar = { ...newAvatar, placeholderCategories: currentAvatar.placeholderCategories };
+            }
+
+            // Protect variations from erasure
+            const currentVarCount = currentAvatar.variations?.length || 0;
+            const newVarCount = newAvatar.variations?.length || 0;
+            if (currentVarCount > 0 && newVarCount === 0) {
+              console.error(`🛡️ SERVER PROTECTION: Preserving ${currentVarCount} variations for "${newAvatar.name}"`);
+              newAvatar = { ...newAvatar, variations: currentAvatar.variations };
+            }
+
+            return newAvatar;
+          });
+          console.log('[Image Creation API] 🛡️ Protection check completed');
+        }
+      } catch (protectionErr) {
+        console.error('[Image Creation API] Protection check failed (continuing with original data):', protectionErr.message);
+      }
+    }
+
     // Helper function to save core settings
     // Uses fallback logic if newer columns (live_prompt_mode, etc.) don't exist in the database
     // IMPORTANT: Uses website_id when saveToWebsite is true, workflow_id otherwise
@@ -1529,7 +1577,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${image_quality ?? 'low'},
                 ${JSON.stringify(reference_images ?? [])},
                 ${JSON.stringify(logo_images ?? [])},
-                ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
+                ${JSON.stringify(protectedAvatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
                 ${JSON.stringify(image_bank ?? [])},
                 ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
                 ${auto_tag_enabled ?? true},
@@ -1587,7 +1635,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               ${image_quality ?? 'low'},
               ${JSON.stringify(reference_images ?? [])},
               ${JSON.stringify(logo_images ?? [])},
-              ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
+              ${JSON.stringify(protectedAvatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
               ${JSON.stringify(image_bank ?? [])},
               ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
               ${auto_tag_enabled ?? true},
@@ -1647,7 +1695,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   ${image_quality ?? 'low'},
                   ${JSON.stringify(reference_images ?? [])},
                   ${JSON.stringify(logo_images ?? [])},
-                  ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
+                  ${JSON.stringify(protectedAvatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
                   ${JSON.stringify(image_bank ?? [])},
                   ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
                   ${auto_tag_enabled ?? true},
@@ -1695,7 +1743,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${image_quality ?? 'low'},
                 ${JSON.stringify(reference_images ?? [])},
                 ${JSON.stringify(logo_images ?? [])},
-                ${JSON.stringify(audience_avatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
+                ${JSON.stringify(protectedAvatars ?? [{ id: 1, name: 'Default', mainPrompt: '', variations: [] }])},
                 ${JSON.stringify(image_bank ?? [])},
                 ${JSON.stringify(image_categories ?? ['Hero', 'Service', 'Team', 'Equipment', 'Before/After', 'Other'])},
                 ${auto_tag_enabled ?? true},
@@ -1731,7 +1779,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 image_quality = COALESCE(${image_quality}, image_quality),
                 reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
                 logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
-                audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
+                audience_avatars = COALESCE(${protectedAvatars ? JSON.stringify(protectedAvatars) : null}::jsonb, audience_avatars),
                 image_bank = ${image_bank ? JSON.stringify(image_bank) : '[]'}::jsonb,
                 image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
                 auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
@@ -1765,7 +1813,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 image_quality = COALESCE(${image_quality}, image_quality),
                 reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
                 logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
-                audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
+                audience_avatars = COALESCE(${protectedAvatars ? JSON.stringify(protectedAvatars) : null}::jsonb, audience_avatars),
                 image_bank = ${image_bank ? JSON.stringify(image_bank) : '[]'}::jsonb,
                 image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
                 auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
@@ -1805,7 +1853,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   image_quality = COALESCE(${image_quality}, image_quality),
                   reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
                   logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
-                  audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
+                  audience_avatars = COALESCE(${protectedAvatars ? JSON.stringify(protectedAvatars) : null}::jsonb, audience_avatars),
                   image_bank = ${image_bank ? JSON.stringify(image_bank) : '[]'}::jsonb,
                   image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
                   auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),
@@ -1832,7 +1880,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   image_quality = COALESCE(${image_quality}, image_quality),
                   reference_images = COALESCE(${reference_images ? JSON.stringify(reference_images) : null}::jsonb, reference_images),
                   logo_images = COALESCE(${logo_images ? JSON.stringify(logo_images) : null}::jsonb, logo_images),
-                  audience_avatars = COALESCE(${audience_avatars ? JSON.stringify(audience_avatars) : null}::jsonb, audience_avatars),
+                  audience_avatars = COALESCE(${protectedAvatars ? JSON.stringify(protectedAvatars) : null}::jsonb, audience_avatars),
                   image_bank = ${image_bank ? JSON.stringify(image_bank) : '[]'}::jsonb,
                   image_categories = COALESCE(${image_categories ? JSON.stringify(image_categories) : null}::jsonb, image_categories),
                   auto_tag_enabled = COALESCE(${auto_tag_enabled}, auto_tag_enabled),

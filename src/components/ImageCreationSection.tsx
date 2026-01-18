@@ -1550,6 +1550,42 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       return;
     }
     setSettings(current => {
+      // 🛡️ PROTECTION: Prevent accidental erasure of audience_avatars content
+      if (updates.audience_avatars) {
+        const protectedAvatars = updates.audience_avatars.map(newAvatar => {
+          const currentAvatar = current.audience_avatars.find(a => a.id === newAvatar.id);
+          if (!currentAvatar) return newAvatar;
+
+          // Protect mainPrompt
+          const currentPromptLength = currentAvatar.mainPrompt?.length || 0;
+          const newPromptLength = newAvatar.mainPrompt?.length || 0;
+          if (currentPromptLength > 200 && newPromptLength < 100) {
+            console.error(`🛡️ PROTECTION (updateSettings): Preserving mainPrompt for "${newAvatar.name}"`);
+            console.error(`   Current: ${currentPromptLength} chars, Attempted: ${newPromptLength} chars`);
+            newAvatar = { ...newAvatar, mainPrompt: currentAvatar.mainPrompt };
+          }
+
+          // Protect placeholderCategories
+          const currentCatCount = currentAvatar.placeholderCategories?.length || 0;
+          const newCatCount = newAvatar.placeholderCategories?.length || 0;
+          if (currentCatCount > 0 && newCatCount === 0) {
+            console.error(`🛡️ PROTECTION (updateSettings): Preserving ${currentCatCount} placeholderCategories for "${newAvatar.name}"`);
+            newAvatar = { ...newAvatar, placeholderCategories: currentAvatar.placeholderCategories };
+          }
+
+          // Protect variations
+          const currentVarCount = currentAvatar.variations?.length || 0;
+          const newVarCount = newAvatar.variations?.length || 0;
+          if (currentVarCount > 0 && newVarCount === 0) {
+            console.error(`🛡️ PROTECTION (updateSettings): Preserving ${currentVarCount} variations for "${newAvatar.name}"`);
+            newAvatar = { ...newAvatar, variations: currentAvatar.variations };
+          }
+
+          return newAvatar;
+        });
+        updates = { ...updates, audience_avatars: protectedAvatars };
+      }
+
       const newSettings = { ...current, ...updates };
       saveSettings(newSettings);
       return newSettings;
@@ -2504,6 +2540,25 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   };
 
   const handleUpdateAvatar = (id: number, updates: Partial<AudienceAvatar>) => {
+    // PROTECTION: Prevent mainPrompt from being accidentally erased
+    const currentAvatar = settings.audience_avatars.find(a => a.id === id);
+    if (currentAvatar && updates.mainPrompt !== undefined) {
+      const currentLength = currentAvatar.mainPrompt?.length || 0;
+      const newLength = updates.mainPrompt?.length || 0;
+
+      // If current prompt is substantial (>200 chars) and new one is much shorter, BLOCK IT
+      if (currentLength > 200 && newLength < 100) {
+        console.error(`🛡️ PROTECTION: Blocked attempt to erase mainPrompt!`);
+        console.error(`   Current: ${currentLength} chars, Attempted: ${newLength} chars`);
+        console.error(`   Current preview: "${currentAvatar.mainPrompt?.substring(0, 80)}..."`);
+        console.error(`   Attempted value: "${updates.mainPrompt}"`);
+        // Remove mainPrompt from updates to preserve existing value
+        const { mainPrompt: _blocked, ...safeUpdates } = updates;
+        if (Object.keys(safeUpdates).length === 0) return; // Nothing left to update
+        updates = safeUpdates as Partial<AudienceAvatar>;
+      }
+    }
+
     const newAvatars = settings.audience_avatars.map(a =>
       a.id === id ? { ...a, ...updates } : a
     );
