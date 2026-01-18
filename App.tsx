@@ -2855,15 +2855,63 @@ const App: React.FC = () => {
                                     <label className="block text-sm font-medium text-gray-400 text-center">Import / Export JSON</label>
                                     <div className="flex gap-1">
                                         <button
-                                            onClick={() => {
-                                                const exportData = {
-                                                    name: currentWorkflowContext.workflowName || currentProject.name,
-                                                    exportedAt: new Date().toISOString(),
-                                                    state: currentProject.state
-                                                };
-                                                const filename = `${(currentWorkflowContext.workflowName || currentProject.name).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-workflow.json`;
-                                                downloadProjectConfig(exportData, filename);
-                                                showNotification('Workflow exported!', 'success');
+                                            onClick={async () => {
+                                                try {
+                                                    // Fetch Image Creation settings
+                                                    let imageCreationSettings = null;
+                                                    if (currentWorkflowId) {
+                                                        const icRes = await fetch(`/api/image-creation/settings/${currentWorkflowId}`);
+                                                        if (icRes.ok) {
+                                                            const icData = await icRes.json();
+                                                            if (icData.success && icData.settings) {
+                                                                // Remove image_bank from export (too large, stored separately)
+                                                                const { image_bank, ...settingsWithoutBank } = icData.settings;
+                                                                imageCreationSettings = settingsWithoutBank;
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // Fetch Site Planning data (plans and nodes)
+                                                    let sitePlanningData = null;
+                                                    if (currentWorkflowId) {
+                                                        try {
+                                                            const spRes = await fetch(`/api/site-planning/export/${currentWorkflowId}`);
+                                                            if (spRes.ok) {
+                                                                const spData = await spRes.json();
+                                                                if (spData.success && spData.plans) {
+                                                                    sitePlanningData = spData.plans;
+                                                                }
+                                                            }
+                                                        } catch (spErr) {
+                                                            console.error('[Export] Failed to fetch Site Planning:', spErr);
+                                                        }
+                                                    }
+
+                                                    const exportData = {
+                                                        name: currentWorkflowContext.workflowName || currentProject.name,
+                                                        exportedAt: new Date().toISOString(),
+                                                        version: 2, // Version 2 includes image creation & site planning
+                                                        state: currentProject.state,
+                                                        imageCreationSettings,
+                                                        sitePlanningData
+                                                    };
+                                                    const filename = `${(currentWorkflowContext.workflowName || currentProject.name).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-workflow.json`;
+                                                    downloadProjectConfig(exportData, filename);
+
+                                                    const parts = ['Workflow'];
+                                                    if (imageCreationSettings) {
+                                                        const avatarCount = imageCreationSettings.audience_avatars?.length || 0;
+                                                        parts.push(`Image Creation (${avatarCount} avatars)`);
+                                                    }
+                                                    if (sitePlanningData && sitePlanningData.length > 0) {
+                                                        const totalNodes = sitePlanningData.reduce((sum: number, p: any) => sum + (p.nodes?.length || 0), 0);
+                                                        parts.push(`Site Planning (${sitePlanningData.length} plans, ${totalNodes} nodes)`);
+                                                    }
+                                                    showNotification(`Exported: ${parts.join(' + ')}!`, 'success');
+                                                } catch (error) {
+                                                    console.error('Export failed:', error);
+                                                    showNotification('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+                                                }
                                             }}
                                             className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-xs transition"
                                         >
@@ -2884,8 +2932,48 @@ const App: React.FC = () => {
                                                             const text = await file.text();
                                                             const data = JSON.parse(text);
                                                             if (data.state) {
+                                                                // Import workflow state
                                                                 setCurrentProjectState(() => data.state);
-                                                                showNotification('Workflow imported!', 'success');
+
+                                                                const importedParts = ['Workflow'];
+
+                                                                // Import Image Creation settings (version 2+)
+                                                                if (data.imageCreationSettings && currentWorkflowId) {
+                                                                    try {
+                                                                        const icRes = await fetch(`/api/image-creation/settings/${currentWorkflowId}`, {
+                                                                            method: 'PUT',
+                                                                            headers: { 'Content-Type': 'application/json' },
+                                                                            body: JSON.stringify(data.imageCreationSettings)
+                                                                        });
+                                                                        if (icRes.ok) {
+                                                                            importedParts.push('Image Creation');
+                                                                            console.log('[Import] Image Creation settings restored');
+                                                                        }
+                                                                    } catch (icErr) {
+                                                                        console.error('[Import] Failed to restore Image Creation:', icErr);
+                                                                    }
+                                                                }
+
+                                                                // Import Site Planning data (version 2+)
+                                                                if (data.sitePlanningData && currentWorkflowId && data.sitePlanningData.length > 0) {
+                                                                    try {
+                                                                        const spRes = await fetch(`/api/site-planning/import/${currentWorkflowId}`, {
+                                                                            method: 'POST',
+                                                                            headers: { 'Content-Type': 'application/json' },
+                                                                            body: JSON.stringify({ plans: data.sitePlanningData })
+                                                                        });
+                                                                        if (spRes.ok) {
+                                                                            const spResult = await spRes.json();
+                                                                            const totalNodes = spResult.plans?.reduce((sum: number, p: any) => sum + (p.nodesImported || 0), 0) || 0;
+                                                                            importedParts.push(`Site Planning (${spResult.plans?.length || 0} plans, ${totalNodes} nodes)`);
+                                                                            console.log('[Import] Site Planning data restored');
+                                                                        }
+                                                                    } catch (spErr) {
+                                                                        console.error('[Import] Failed to restore Site Planning:', spErr);
+                                                                    }
+                                                                }
+
+                                                                showNotification(`${importedParts.join(' + ')} imported! Refresh to see all settings.`, 'success');
                                                             } else {
                                                                 showNotification('Invalid format.', 'error');
                                                             }
