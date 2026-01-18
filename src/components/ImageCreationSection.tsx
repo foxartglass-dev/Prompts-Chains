@@ -8465,9 +8465,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                   SECTION 2: Smart Content Matching
                   - Bank mode: Toggle on/off
                   - Live + Main Prompt: Always ON (it's the core mechanism)
-                  - Live + Guided/Smart: OFF (GPT handles prompts)
+                  - Live + Guided/Smart: HIDDEN (GPT handles prompts, no need for this section)
               ───────────────────────────────────────────────────── */}
-              {(() => {
+              {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode === 'main_prompt')) && (
+              (() => {
                 // Determine Smart Matching state based on mode
                 const isLiveMode = settings.integration_mode === 'live';
                 const isMainPromptMode = settings.live_prompt_mode === 'main_prompt';
@@ -8904,7 +8905,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                 )}
               </div>
                 );
-              })()}
+              })()
+              )}
 
               {/* ─────────────────────────────────────────────────────
                   SECTION 3: Matching Rules - CONDITIONAL based on Smart Matching toggle
