@@ -10207,7 +10207,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                     {/* Quick Category Toggles - Compact row showing all categories with on/off */}
                     {(activeAvatar.placeholderCategories || []).length > 0 && (
                       <div className="flex flex-wrap items-center gap-2 px-2 py-2 bg-slate-900/50 rounded-lg border border-purple-500/20">
-                        <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle:</span>
+                        <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle Off:</span>
                         {(activeAvatar.placeholderCategories || []).map(cat => (
                           <button
                             key={cat.id}
@@ -10444,114 +10444,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                     >
                       <div className="w-12 h-1 bg-purple-500/30 group-hover:bg-purple-500/60 rounded-full transition-colors" />
                     </div>
-
-                    {/* Generation Mode Controls */}
-                    {(activeAvatar.placeholderCategories || []).length > 0 && (
-                      <div className="border-t border-purple-500/30 pt-3 space-y-2">
-                        <label className="text-xs text-purple-300 font-medium">Generation Mode</label>
-                        <div className="flex flex-wrap gap-2">
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'one_of_each'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'one_of_each' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">1 of Each</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'sequential'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'sequential' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">Sequential</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'random'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'random' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">Random</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'specific'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'specific' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">Specific</span>
-                          </label>
-                        </div>
-
-                        {/* Specific Combinations Table */}
-                        {activeAvatar.generationMode === 'specific' && (
-                          <div className="bg-slate-900/50 rounded p-2 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-purple-400">Specific Combinations</span>
-                              <button
-                                onClick={() => handleAddSpecificCombination()}
-                                className="text-xs text-purple-400 hover:text-purple-300"
-                              >
-                                + Add Combination
-                              </button>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {(activeAvatar.specificCombinations || []).map((combo, idx) => (
-                                <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-600/30 rounded text-xs text-white">
-                                  ({combo.join(', ')})
-                                  <button
-                                    onClick={() => handleRemoveSpecificCombination(idx)}
-                                    className="text-red-400 hover:text-red-300"
-                                  >
-                                    ×
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                            {/* Quick add input */}
-                            <input
-                              type="text"
-                              placeholder="Add combo (e.g., 3,2) and press Enter"
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const input = e.target as HTMLInputElement;
-                                  const combo = input.value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
-                                  if (combo.length > 0) {
-                                    handleAddSpecificCombination(combo);
-                                    input.value = '';
-                                  }
-                                }
-                              }}
-                              className="w-full bg-slate-900 border border-purple-500/30 rounded px-2 py-1 text-white text-xs"
-                            />
-                          </div>
-                        )}
-
-                        {/* Random count */}
-                        {activeAvatar.generationMode === 'random' && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-purple-400">Generate count:</span>
-                            <input
-                              type="number"
-                              min="1"
-                              value={activeAvatar.randomCount || 5}
-                              onChange={(e) => handleUpdateAvatar(activeAvatar.id, { randomCount: parseInt(e.target.value) || 5 })}
-                              className="w-16 bg-slate-900 border border-purple-500/30 rounded px-2 py-1 text-white text-xs"
-                            />
-                          </div>
-                        )}
-
-                        {/* Preview of combinations */}
-                        <div className="text-xs text-purple-400/70">
-                          {getAdvancedCombinationsPreview()}
-                        </div>
-                      </div>
-                    )}
                   </div>
                   </div>
                 )}
@@ -11199,9 +11091,30 @@ Start by introducing yourself and asking about their business in a friendly way.
                           </span>
                         </div>
 
-                        {/* Category filter rows */}
+                        {/* Quick Toggle Off - Same as Placeholder Categories */}
+                        <div className="flex flex-wrap items-center gap-2 px-2 py-2 bg-slate-900/50 rounded-lg border border-purple-500/20">
+                          <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle Off:</span>
+                          {activeAvatar.placeholderCategories.map(cat => (
+                            <button
+                              key={cat.id}
+                              onClick={() => handleUpdatePlaceholderCategory(cat.id, { enabled: cat.enabled === false ? true : false })}
+                              className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                                cat.enabled !== false
+                                  ? 'bg-emerald-600/40 border border-emerald-500 text-emerald-300'
+                                  : 'bg-slate-700/50 border border-slate-600 text-slate-500 line-through'
+                              }`}
+                              title={cat.enabled !== false ? `Click to disable "${cat.name}"` : `Click to enable "${cat.name}"`}
+                            >
+                              {cat.enabled !== false ? '✓' : '○'} {cat.name}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Category filter rows - Only show enabled categories */}
                         <div className="space-y-1">
-                          {activeAvatar.placeholderCategories.map((category) => (
+                          {activeAvatar.placeholderCategories
+                            .filter(category => category.enabled !== false)
+                            .map((category) => (
                             <div key={category.id} className="bg-slate-800/50 rounded border border-purple-500/30">
                               {/* Category header - clickable to expand */}
                               <button
@@ -13785,7 +13698,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   {/* Quick Category Toggles */}
                   {(activeAvatar.placeholderCategories || []).length > 0 && (
                     <div className="flex flex-wrap items-center gap-2 px-2 py-2 bg-slate-900/50 rounded-lg border border-purple-500/20">
-                      <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle:</span>
+                      <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle Off:</span>
                       {(activeAvatar.placeholderCategories || []).map(cat => (
                         <button
                           key={cat.id}
