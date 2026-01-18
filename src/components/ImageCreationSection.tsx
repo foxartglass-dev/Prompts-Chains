@@ -719,6 +719,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [legacyRulesActiveTag, setLegacyRulesActiveTag] = useState<string>('Global');
   const [legacyRulesEditingId, setLegacyRulesEditingId] = useState<string | null>(null);
 
+  // ========== PHASE 3: TAG-BASED MULTI-PROMPT SYSTEM ==========
+  // Guided GPT Prompts - per-tag multi-prompt system
+  const [guidedPromptsActiveTag, setGuidedPromptsActiveTag] = useState<string>('Global');
+  const [guidedPromptsActiveId, setGuidedPromptsActiveId] = useState<string | null>(null);
+  // Smart/Legacy Prompt Prompts - per-tag multi-prompt system
+  const [smartPromptsActiveTag, setSmartPromptsActiveTag] = useState<string>('Global');
+  const [smartPromptsActiveId, setSmartPromptsActiveId] = useState<string | null>(null);
+
   // Double opt-in confirmation for "Generate First" (save to bank) option
   const [showGenerateFirstWarning, setShowGenerateFirstWarning] = useState(false);
 
@@ -2629,6 +2637,169 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     if (legacyRulesEditingId === ruleId) {
       setLegacyRulesEditingId(null);
     }
+  };
+
+  // ========== PHASE 3: TAG-BASED MULTI-PROMPT HANDLERS ==========
+  // Helper to get prompts for a specific tag
+  const getGuidedPromptsForTag = (tag: string): GuidedGptPrompt[] => {
+    const prompts = settings.guided_gpt_prompts || [];
+    if (tag === 'Global') {
+      return prompts.filter(p => p.tag === 'Global');
+    }
+    return prompts.filter(p => p.tag === tag);
+  };
+
+  const getSmartPromptsForTag = (tag: string): SmartPromptPrompt[] => {
+    const prompts = settings.smart_prompt_prompts || [];
+    if (tag === 'Global') {
+      return prompts.filter(p => p.tag === 'Global');
+    }
+    return prompts.filter(p => p.tag === tag);
+  };
+
+  // Get active guided prompt
+  const activeGuidedPrompt = (settings.guided_gpt_prompts || []).find(p => p.id === guidedPromptsActiveId) || null;
+  // Get active smart prompt
+  const activeSmartPrompt = (settings.smart_prompt_prompts || []).find(p => p.id === smartPromptsActiveId) || null;
+
+  // Add a new Guided GPT prompt
+  const handleAddGuidedPrompt = (tag: string) => {
+    const existingPrompts = settings.guided_gpt_prompts || [];
+    const promptsForTag = getGuidedPromptsForTag(tag);
+    const newPrompt: GuidedGptPrompt = {
+      id: `gp-${Date.now()}`,
+      tag,
+      name: tag === 'Global' ? `Global ${promptsForTag.length + 1}` : `${tag}-${promptsForTag.length + 1}`,
+      model: settings.guided_model || 'gpt-4o',
+      guidance: '',
+      guardrails: {
+        instructions: '',
+        uniformDescription: '',
+        stylePreferences: '',
+        avoidList: '',
+        defaultSubject: ''
+      },
+      globalAppliesTo: tag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      guided_gpt_prompts: [...existingPrompts, newPrompt]
+    });
+    setGuidedPromptsActiveId(newPrompt.id);
+  };
+
+  // Update a Guided GPT prompt
+  const handleUpdateGuidedPrompt = (promptId: string, updates: Partial<GuidedGptPrompt>) => {
+    const existingPrompts = settings.guided_gpt_prompts || [];
+    const updatedPrompts = existingPrompts.map(p =>
+      p.id === promptId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
+    );
+    updateSettings({ guided_gpt_prompts: updatedPrompts });
+  };
+
+  // Remove a Guided GPT prompt
+  const handleRemoveGuidedPrompt = (promptId: string) => {
+    const existingPrompts = settings.guided_gpt_prompts || [];
+    if (existingPrompts.length <= 1) {
+      showNotification('Must have at least one prompt', 'error');
+      return;
+    }
+    const updatedPrompts = existingPrompts.filter(p => p.id !== promptId);
+    updateSettings({ guided_gpt_prompts: updatedPrompts });
+    if (guidedPromptsActiveId === promptId) {
+      setGuidedPromptsActiveId(updatedPrompts[0]?.id || null);
+    }
+  };
+
+  // Copy Guided GPT prompt from one tag to another
+  const handleCopyGuidedPromptFrom = (sourcePromptId: string, targetTag: string) => {
+    const existingPrompts = settings.guided_gpt_prompts || [];
+    const sourcePrompt = existingPrompts.find(p => p.id === sourcePromptId);
+    if (!sourcePrompt) return;
+
+    const promptsForTag = getGuidedPromptsForTag(targetTag);
+    const newPrompt: GuidedGptPrompt = {
+      ...sourcePrompt,
+      id: `gp-${Date.now()}`,
+      tag: targetTag,
+      name: targetTag === 'Global' ? `Global ${promptsForTag.length + 1}` : `${targetTag}-${promptsForTag.length + 1}`,
+      globalAppliesTo: targetTag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      guided_gpt_prompts: [...existingPrompts, newPrompt]
+    });
+    setGuidedPromptsActiveTag(targetTag);
+    setGuidedPromptsActiveId(newPrompt.id);
+    showNotification(`Copied prompt to ${targetTag}`, 'success');
+  };
+
+  // Add a new Smart Prompt prompt
+  const handleAddSmartPrompt = (tag: string) => {
+    const existingPrompts = settings.smart_prompt_prompts || [];
+    const promptsForTag = getSmartPromptsForTag(tag);
+    const newPrompt: SmartPromptPrompt = {
+      id: `sp-${Date.now()}`,
+      tag,
+      name: tag === 'Global' ? `Global ${promptsForTag.length + 1}` : `${tag}-${promptsForTag.length + 1}`,
+      guidance: '',
+      globalAppliesTo: tag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      smart_prompt_prompts: [...existingPrompts, newPrompt]
+    });
+    setSmartPromptsActiveId(newPrompt.id);
+  };
+
+  // Update a Smart Prompt prompt
+  const handleUpdateSmartPrompt = (promptId: string, updates: Partial<SmartPromptPrompt>) => {
+    const existingPrompts = settings.smart_prompt_prompts || [];
+    const updatedPrompts = existingPrompts.map(p =>
+      p.id === promptId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
+    );
+    updateSettings({ smart_prompt_prompts: updatedPrompts });
+  };
+
+  // Remove a Smart Prompt prompt
+  const handleRemoveSmartPrompt = (promptId: string) => {
+    const existingPrompts = settings.smart_prompt_prompts || [];
+    if (existingPrompts.length <= 1) {
+      showNotification('Must have at least one prompt', 'error');
+      return;
+    }
+    const updatedPrompts = existingPrompts.filter(p => p.id !== promptId);
+    updateSettings({ smart_prompt_prompts: updatedPrompts });
+    if (smartPromptsActiveId === promptId) {
+      setSmartPromptsActiveId(updatedPrompts[0]?.id || null);
+    }
+  };
+
+  // Copy Smart Prompt from one tag to another
+  const handleCopySmartPromptFrom = (sourcePromptId: string, targetTag: string) => {
+    const existingPrompts = settings.smart_prompt_prompts || [];
+    const sourcePrompt = existingPrompts.find(p => p.id === sourcePromptId);
+    if (!sourcePrompt) return;
+
+    const promptsForTag = getSmartPromptsForTag(targetTag);
+    const newPrompt: SmartPromptPrompt = {
+      ...sourcePrompt,
+      id: `sp-${Date.now()}`,
+      tag: targetTag,
+      name: targetTag === 'Global' ? `Global ${promptsForTag.length + 1}` : `${targetTag}-${promptsForTag.length + 1}`,
+      globalAppliesTo: targetTag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      smart_prompt_prompts: [...existingPrompts, newPrompt]
+    });
+    setSmartPromptsActiveTag(targetTag);
+    setSmartPromptsActiveId(newPrompt.id);
+    showNotification(`Copied prompt to ${targetTag}`, 'success');
   };
 
   // Chat Handlers
@@ -6060,124 +6231,246 @@ Start by introducing yourself and asking about their business in a friendly way.
                     {settings.live_prompt_mode === 'guided_gpt' && (
                       <div className="space-y-3 mt-2">
                         <p className="text-[10px] text-emerald-300/70 bg-emerald-500/10 p-2 rounded">
-                          GPT-4o reads your article and creates prompts following your guardrails. Easier to set up than Main Prompt, more control than Smart Prompt.
+                          GPT reads your article and creates prompts following your guardrails. Create different prompts per tag (H, J, C) or use Global for all.
                         </p>
-                        {/* Model selector */}
-                        <div>
-                          <label className="text-[10px] text-emerald-400 mb-1 block">AI Model:</label>
-                          <select
-                            value={settings.guided_model || 'gpt-5.2-2025-12-11'}
-                            onChange={(e) => updateSettings({ guided_model: e.target.value })}
-                            className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white"
-                          >
-                            <optgroup label="🟢 OpenAI - Best for Image Prompts">
-                              <option value="gpt-5.2-2025-12-11">GPT-5.2 (Latest & Best)</option>
-                              <option value="gpt-4o">GPT-4o (Recommended)</option>
-                              <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cheap)</option>
-                            </optgroup>
-                            <optgroup label="🟣 Anthropic - Great Writers">
-                              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Your Writer!)</option>
-                              <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                              <option value="claude-3-opus-20240229">Claude 3 Opus (Most Capable)</option>
-                              <option value="claude-3-haiku-20240307">Claude Haiku (Fastest)</option>
-                            </optgroup>
-                            <optgroup label="🔵 Google Gemini - Visual Experts">
-                              <option value="gemini-3-pro-preview">Gemini 3.0 Pro (Latest)</option>
-                              <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Thinking)</option>
-                              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast)</option>
-                              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                            </optgroup>
-                          </select>
-                        </div>
-                        {/* Guardrails */}
-                        <div className="space-y-2">
-                          <label className="text-[10px] text-emerald-400 mb-1 block">Guardrails / Instructions:</label>
-                          <textarea
-                            value={settings.guided_guardrails?.instructions || ''}
-                            onChange={(e) => updateSettings({
-                              guided_guardrails: { ...settings.guided_guardrails, instructions: e.target.value } as any
+
+                        {/* ========== PHASE 3: TAG-BASED MULTI-PROMPT SYSTEM ========== */}
+                        {/* Header Row: Tag Tabs on left, Model Selector on right */}
+                        <div className="flex items-center justify-between gap-4 border-b border-slate-700 pb-2">
+                          {/* Tag Tabs */}
+                          <div className="flex flex-wrap items-center gap-1">
+                            {/* Tag-specific tabs first */}
+                            {tags.map((tag) => {
+                              const count = getGuidedPromptsForTag(tag.name).length;
+                              const isSelected = guidedPromptsActiveTag === tag.name;
+                              return (
+                                <div key={tag.id} className="flex items-center">
+                                  <button
+                                    onClick={() => {
+                                      setGuidedPromptsActiveTag(tag.name);
+                                      const promptsForTag = getGuidedPromptsForTag(tag.name);
+                                      if (promptsForTag.length > 0) {
+                                        setGuidedPromptsActiveId(promptsForTag[0].id);
+                                      }
+                                    }}
+                                    className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                      isSelected
+                                        ? 'bg-brand-gold text-slate-900 border-b-2 border-brand-gold'
+                                        : 'bg-slate-800 text-brand-gold/70 hover:bg-slate-700 hover:text-brand-gold'
+                                    }`}
+                                  >
+                                    {tag.name}
+                                    {count > 0 && (
+                                      <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                        {count}
+                                      </span>
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleAddGuidedPrompt(tag.name); }}
+                                    className="px-1.5 py-1.5 text-brand-gold/50 hover:text-brand-gold hover:bg-slate-700/50 rounded transition text-xs"
+                                    title={`Add prompt for ${tag.name}`}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              );
                             })}
-                            placeholder="e.g., Always show professional cleaners in uniform. Focus on the specific task being discussed. Use natural lighting. Modern residential settings."
-                            className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
-                            rows={3}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-emerald-400/70 mb-1 block">Uniform/Appearance:</label>
-                            <input
-                              type="text"
-                              value={settings.guided_guardrails?.uniformDescription || ''}
-                              onChange={(e) => updateSettings({
-                                guided_guardrails: { ...settings.guided_guardrails, uniformDescription: e.target.value } as any
-                              })}
-                              placeholder="e.g., Blue polo shirt, khaki pants"
-                              className="w-full p-1.5 text-xs bg-slate-900 border border-emerald-500/20 rounded text-white placeholder-slate-500"
-                            />
+                            {/* Global tab */}
+                            <div className="flex items-center ml-2 border-l border-slate-600 pl-2">
+                              <button
+                                onClick={() => {
+                                  setGuidedPromptsActiveTag('Global');
+                                  const globalPrompts = getGuidedPromptsForTag('Global');
+                                  if (globalPrompts.length > 0) {
+                                    setGuidedPromptsActiveId(globalPrompts[0].id);
+                                  }
+                                }}
+                                className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                                  guidedPromptsActiveTag === 'Global'
+                                    ? 'bg-emerald-600 text-white border-b-2 border-emerald-500'
+                                    : 'bg-slate-800 text-emerald-400/70 hover:bg-slate-700 hover:text-emerald-400'
+                                }`}
+                              >
+                                🌐 Global
+                                {getGuidedPromptsForTag('Global').length > 0 && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${guidedPromptsActiveTag === 'Global' ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                    {getGuidedPromptsForTag('Global').length}
+                                  </span>
+                                )}
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleAddGuidedPrompt('Global'); }}
+                                className="px-1.5 py-1.5 text-emerald-400/50 hover:text-emerald-400 hover:bg-slate-700/50 rounded transition text-xs"
+                                title="Add global prompt"
+                              >
+                                +
+                              </button>
+                            </div>
                           </div>
-                          <div>
-                            <label className="text-[10px] text-emerald-400/70 mb-1 block">Default Subject:</label>
-                            <input
-                              type="text"
-                              value={settings.guided_guardrails?.defaultSubject || ''}
-                              onChange={(e) => updateSettings({
-                                guided_guardrails: { ...settings.guided_guardrails, defaultSubject: e.target.value } as any
-                              })}
-                              placeholder="e.g., Professional cleaner in their 30s"
-                              className="w-full p-1.5 text-xs bg-slate-900 border border-emerald-500/20 rounded text-white placeholder-slate-500"
-                            />
+
+                          {/* Model Selector on far right */}
+                          <div className="flex items-center gap-2">
+                            <label className="text-[10px] text-emerald-400 whitespace-nowrap">AI Model:</label>
+                            <select
+                              value={activeGuidedPrompt?.model || settings.guided_model || 'gpt-4o'}
+                              onChange={(e) => {
+                                if (activeGuidedPrompt) {
+                                  handleUpdateGuidedPrompt(activeGuidedPrompt.id, { model: e.target.value });
+                                } else {
+                                  updateSettings({ guided_model: e.target.value });
+                                }
+                              }}
+                              className="p-1.5 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white min-w-[160px]"
+                            >
+                              <optgroup label="🟢 OpenAI">
+                                <option value="gpt-5.2-2025-12-11">GPT-5.2 (Latest)</option>
+                                <option value="gpt-4o">GPT-4o</option>
+                                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                              </optgroup>
+                              <optgroup label="🟣 Anthropic">
+                                <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                              </optgroup>
+                              <optgroup label="🔵 Google">
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                              </optgroup>
+                            </select>
                           </div>
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-red-400/70 mb-1 block">Avoid (things NOT to show):</label>
-                          <input
-                            type="text"
-                            value={settings.guided_guardrails?.avoidList || ''}
-                            onChange={(e) => updateSettings({
-                              guided_guardrails: { ...settings.guided_guardrails, avoidList: e.target.value } as any
-                            })}
-                            placeholder="e.g., No cartoon style, no stock photo feel, no text"
-                            className="w-full p-1.5 text-xs bg-slate-900 border border-red-500/20 rounded text-white placeholder-slate-500"
-                          />
                         </div>
 
-                        {/* Per-Tag Conditional Descriptions (like Conditional Snippets) */}
-                        {tags.length > 0 && (
-                          <div className="mt-4 border-t border-emerald-500/30 pt-4">
-                            <label className="text-[10px] text-emerald-400 mb-2 block font-medium flex items-center gap-2">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                              </svg>
-                              Per-Tag Context (Conditional Descriptions):
-                              <span className="text-[9px] text-emerald-300/60 font-normal ml-1">
-                                Like conditional snippets - auto-selected based on article tag
-                              </span>
-                            </label>
-                            <div className={`grid grid-cols-1 gap-2 ${tags.length === 2 ? 'md:grid-cols-2' : tags.length >= 3 ? 'md:grid-cols-3' : ''}`}>
-                              {tags.map(tag => (
-                                <div key={tag.id} className="bg-slate-900/50 rounded-lg p-2 border border-emerald-500/20">
-                                  <label className="text-[10px] text-brand-gold font-semibold mb-1 block">
-                                    For Tag: {tag.name}
-                                  </label>
-                                  <textarea
-                                    value={settings.guided_guardrails_by_tag?.[tag.name] || ''}
-                                    onChange={(e) => updateSettings({
-                                      guided_guardrails_by_tag: {
-                                        ...settings.guided_guardrails_by_tag,
-                                        [tag.name]: e.target.value
-                                      }
-                                    })}
-                                    placeholder={`Description for ${tag.name} articles...`}
-                                    className="w-full p-2 text-xs bg-slate-800 border border-emerald-500/20 rounded text-white placeholder-slate-500 resize-none"
-                                    rows={3}
-                                  />
-                                </div>
-                              ))}
+                        {/* Sub-tabs: Prompts within selected tag */}
+                        {getGuidedPromptsForTag(guidedPromptsActiveTag).length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-2 mb-3">
+                            {getGuidedPromptsForTag(guidedPromptsActiveTag).map((prompt) => (
+                              <button
+                                key={prompt.id}
+                                onClick={() => setGuidedPromptsActiveId(prompt.id)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
+                                  guidedPromptsActiveId === prompt.id
+                                    ? guidedPromptsActiveTag === 'Global' ? 'bg-emerald-600 text-white' : 'bg-brand-gold text-slate-900'
+                                    : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
+                                }`}
+                              >
+                                {prompt.name}
+                              </button>
+                            ))}
+                            {/* Copy From dropdown */}
+                            {(settings.guided_gpt_prompts || []).length > 0 && (
+                              <div className="relative ml-2">
+                                <select
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleCopyGuidedPromptFrom(e.target.value, guidedPromptsActiveTag);
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                  className="px-2 py-1.5 text-xs bg-slate-700 border border-slate-600 rounded text-brand-cyan cursor-pointer"
+                                  defaultValue=""
+                                >
+                                  <option value="" disabled>📋 Copy From...</option>
+                                  {(settings.guided_gpt_prompts || [])
+                                    .filter(p => p.tag !== guidedPromptsActiveTag)
+                                    .map(p => (
+                                      <option key={p.id} value={p.id}>{p.name} ({p.tag})</option>
+                                    ))
+                                  }
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-4 text-slate-500 text-xs">
+                            <p>No prompts for {guidedPromptsActiveTag === 'Global' ? 'Global' : `tag "${guidedPromptsActiveTag}"`} yet.</p>
+                            <button
+                              onClick={() => handleAddGuidedPrompt(guidedPromptsActiveTag)}
+                              className="mt-2 px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-light text-slate-900 text-xs rounded transition font-medium"
+                            >
+                              + Add First Prompt
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Active Prompt Editor */}
+                        {activeGuidedPrompt && (
+                          <div className="bg-slate-800/50 rounded-lg p-4 border border-emerald-500/20 space-y-3">
+                            {/* Prompt Name + Delete */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={activeGuidedPrompt.name}
+                                  onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, { name: e.target.value })}
+                                  className="bg-transparent border-b border-emerald-500/30 text-emerald-300 text-sm font-medium focus:outline-none focus:border-emerald-500 px-1"
+                                  placeholder="Prompt name..."
+                                />
+                                {activeGuidedPrompt.tag === 'Global' && (
+                                  <span className="text-[10px] text-emerald-400/60 bg-emerald-900/30 px-2 py-0.5 rounded">
+                                    Applies to: {activeGuidedPrompt.globalAppliesTo?.join(', ') || 'All tags'}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleRemoveGuidedPrompt(activeGuidedPrompt.id)}
+                                className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition text-xs"
+                                title="Delete this prompt"
+                              >
+                                🗑️ Delete
+                              </button>
                             </div>
-                            <p className="text-[9px] text-emerald-300/50 mt-2">
-                              When generating images for an article with a specific tag (e.g., "H"), the GPT will receive the context description for that tag.
-                              This helps it understand the target audience and setting.
-                            </p>
+
+                            {/* Guardrails */}
+                            <div className="space-y-2">
+                              <label className="text-[10px] text-emerald-400 block">Guardrails / Instructions:</label>
+                              <textarea
+                                value={activeGuidedPrompt.guardrails.instructions}
+                                onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
+                                  guardrails: { ...activeGuidedPrompt.guardrails, instructions: e.target.value }
+                                })}
+                                placeholder="e.g., Always show professional cleaners in uniform. Focus on the specific task being discussed."
+                                className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                rows={3}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] text-emerald-400/70 mb-1 block">Uniform/Appearance:</label>
+                                <input
+                                  type="text"
+                                  value={activeGuidedPrompt.guardrails.uniformDescription}
+                                  onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
+                                    guardrails: { ...activeGuidedPrompt.guardrails, uniformDescription: e.target.value }
+                                  })}
+                                  placeholder="e.g., Blue polo shirt, khaki pants"
+                                  className="w-full p-1.5 text-xs bg-slate-900 border border-emerald-500/20 rounded text-white placeholder-slate-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-emerald-400/70 mb-1 block">Default Subject:</label>
+                                <input
+                                  type="text"
+                                  value={activeGuidedPrompt.guardrails.defaultSubject}
+                                  onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
+                                    guardrails: { ...activeGuidedPrompt.guardrails, defaultSubject: e.target.value }
+                                  })}
+                                  placeholder="e.g., Professional cleaner in their 30s"
+                                  className="w-full p-1.5 text-xs bg-slate-900 border border-emerald-500/20 rounded text-white placeholder-slate-500"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-red-400/70 mb-1 block">Avoid (things NOT to show):</label>
+                              <input
+                                type="text"
+                                value={activeGuidedPrompt.guardrails.avoidList}
+                                onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
+                                  guardrails: { ...activeGuidedPrompt.guardrails, avoidList: e.target.value }
+                                })}
+                                placeholder="e.g., No cartoon style, no stock photo feel, no text"
+                                className="w-full p-1.5 text-xs bg-slate-900 border border-red-500/20 rounded text-white placeholder-slate-500"
+                              />
+                            </div>
                           </div>
                         )}
 
@@ -7526,20 +7819,177 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     )}
                     {settings.live_prompt_mode === 'smart_prompt' && (
-                      <div className="space-y-2">
+                      <div className="space-y-3 mt-2">
                         <p className="text-[10px] text-purple-300/70 bg-purple-500/10 p-2 rounded">
-                          Legacy mode: GPT-4o-mini reads your article and creates prompts automatically. Less control than Guided GPT.
+                          Legacy mode: GPT-4o-mini creates prompts automatically. Create different guidance per tag (H, J, C) or use Global for all.
                         </p>
-                        <div>
-                          <label className="text-[10px] text-purple-400 mb-1 block">Guidance / Guardrails (optional):</label>
-                          <textarea
-                            value={settings.smart_prompt_guidance || ''}
-                            onChange={(e) => updateSettings({ smart_prompt_guidance: e.target.value })}
-                            placeholder="e.g., Always show professional cleaners in navy blue uniforms. Include cleaning supplies. Modern residential settings only. No faces."
-                            className="w-full p-2 text-xs bg-slate-900 border border-purple-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
-                            rows={3}
-                          />
+
+                        {/* ========== PHASE 3: TAG-BASED SMART PROMPT SYSTEM ========== */}
+                        {/* Tag Tabs */}
+                        <div className="flex flex-wrap items-center gap-1 border-b border-slate-700 pb-2">
+                          {/* Tag-specific tabs first */}
+                          {tags.map((tag) => {
+                            const count = getSmartPromptsForTag(tag.name).length;
+                            const isSelected = smartPromptsActiveTag === tag.name;
+                            return (
+                              <div key={tag.id} className="flex items-center">
+                                <button
+                                  onClick={() => {
+                                    setSmartPromptsActiveTag(tag.name);
+                                    const promptsForTag = getSmartPromptsForTag(tag.name);
+                                    if (promptsForTag.length > 0) {
+                                      setSmartPromptsActiveId(promptsForTag[0].id);
+                                    }
+                                  }}
+                                  className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                    isSelected
+                                      ? 'bg-purple-600 text-white border-b-2 border-purple-500'
+                                      : 'bg-slate-800 text-brand-gold/70 hover:bg-slate-700 hover:text-brand-gold'
+                                  }`}
+                                >
+                                  {tag.name}
+                                  {count > 0 && (
+                                    <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                      {count}
+                                    </span>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleAddSmartPrompt(tag.name); }}
+                                  className="px-1.5 py-1.5 text-purple-400/50 hover:text-purple-400 hover:bg-slate-700/50 rounded transition text-xs"
+                                  title={`Add prompt for ${tag.name}`}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            );
+                          })}
+                          {/* Global tab */}
+                          <div className="flex items-center ml-2 border-l border-slate-600 pl-2">
+                            <button
+                              onClick={() => {
+                                setSmartPromptsActiveTag('Global');
+                                const globalPrompts = getSmartPromptsForTag('Global');
+                                if (globalPrompts.length > 0) {
+                                  setSmartPromptsActiveId(globalPrompts[0].id);
+                                }
+                              }}
+                              className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                                smartPromptsActiveTag === 'Global'
+                                  ? 'bg-emerald-600 text-white border-b-2 border-emerald-500'
+                                  : 'bg-slate-800 text-emerald-400/70 hover:bg-slate-700 hover:text-emerald-400'
+                              }`}
+                            >
+                              🌐 Global
+                              {getSmartPromptsForTag('Global').length > 0 && (
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${smartPromptsActiveTag === 'Global' ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                  {getSmartPromptsForTag('Global').length}
+                                </span>
+                              )}
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleAddSmartPrompt('Global'); }}
+                              className="px-1.5 py-1.5 text-emerald-400/50 hover:text-emerald-400 hover:bg-slate-700/50 rounded transition text-xs"
+                              title="Add global prompt"
+                            >
+                              +
+                            </button>
+                          </div>
                         </div>
+
+                        {/* Sub-tabs: Prompts within selected tag */}
+                        {getSmartPromptsForTag(smartPromptsActiveTag).length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-2 mb-3">
+                            {getSmartPromptsForTag(smartPromptsActiveTag).map((prompt) => (
+                              <button
+                                key={prompt.id}
+                                onClick={() => setSmartPromptsActiveId(prompt.id)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
+                                  smartPromptsActiveId === prompt.id
+                                    ? smartPromptsActiveTag === 'Global' ? 'bg-emerald-600 text-white' : 'bg-purple-600 text-white'
+                                    : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
+                                }`}
+                              >
+                                {prompt.name}
+                              </button>
+                            ))}
+                            {/* Copy From dropdown */}
+                            {(settings.smart_prompt_prompts || []).length > 0 && (
+                              <div className="relative ml-2">
+                                <select
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleCopySmartPromptFrom(e.target.value, smartPromptsActiveTag);
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                  className="px-2 py-1.5 text-xs bg-slate-700 border border-slate-600 rounded text-brand-cyan cursor-pointer"
+                                  defaultValue=""
+                                >
+                                  <option value="" disabled>📋 Copy From...</option>
+                                  {(settings.smart_prompt_prompts || [])
+                                    .filter(p => p.tag !== smartPromptsActiveTag)
+                                    .map(p => (
+                                      <option key={p.id} value={p.id}>{p.name} ({p.tag})</option>
+                                    ))
+                                  }
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-4 text-slate-500 text-xs">
+                            <p>No prompts for {smartPromptsActiveTag === 'Global' ? 'Global' : `tag "${smartPromptsActiveTag}"`} yet.</p>
+                            <button
+                              onClick={() => handleAddSmartPrompt(smartPromptsActiveTag)}
+                              className="mt-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition font-medium"
+                            >
+                              + Add First Prompt
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Active Prompt Editor */}
+                        {activeSmartPrompt && (
+                          <div className="bg-slate-800/50 rounded-lg p-4 border border-purple-500/20 space-y-3">
+                            {/* Prompt Name + Delete */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={activeSmartPrompt.name}
+                                  onChange={(e) => handleUpdateSmartPrompt(activeSmartPrompt.id, { name: e.target.value })}
+                                  className="bg-transparent border-b border-purple-500/30 text-purple-300 text-sm font-medium focus:outline-none focus:border-purple-500 px-1"
+                                  placeholder="Prompt name..."
+                                />
+                                {activeSmartPrompt.tag === 'Global' && (
+                                  <span className="text-[10px] text-emerald-400/60 bg-emerald-900/30 px-2 py-0.5 rounded">
+                                    Applies to: {activeSmartPrompt.globalAppliesTo?.join(', ') || 'All tags'}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleRemoveSmartPrompt(activeSmartPrompt.id)}
+                                className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition text-xs"
+                                title="Delete this prompt"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+
+                            {/* Guidance */}
+                            <div>
+                              <label className="text-[10px] text-purple-400 mb-1 block">Guidance / Guardrails:</label>
+                              <textarea
+                                value={activeSmartPrompt.guidance}
+                                onChange={(e) => handleUpdateSmartPrompt(activeSmartPrompt.id, { guidance: e.target.value })}
+                                placeholder="e.g., Always show professional cleaners in navy blue uniforms. Include cleaning supplies. Modern residential settings only."
+                                className="w-full p-2 text-xs bg-slate-900 border border-purple-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                rows={3}
+                              />
+                            </div>
+                          </div>
+                        )}
 
                         {/* ========== LEGACY PROMPT RULES SECTION ========== */}
                         <div className="mt-4 border-t border-purple-500/30 pt-4">
