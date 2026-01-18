@@ -37,6 +37,7 @@ import promptAssistantRouter from './routes/prompt-assistant.js';
 import logsRouter from './routes/logs.js';
 import dripFeedRouter from './routes/drip-feed.js';
 import testPresetsRouter from './routes/test-presets.js';
+import reverseImageRouter from './routes/reverse-image.js';
 import { initDripFeedScheduler } from './services/drip-feed-scheduler.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
@@ -211,6 +212,7 @@ app.use('/api/prompt-assistant', promptAssistantRouter);
 app.use('/api/logs', logsRouter);
 app.use('/api/drip-feed', dripFeedRouter);
 app.use('/api/test-presets', testPresetsRouter);
+app.use('/api/reverse-image', reverseImageRouter);
 
 // Database status endpoint
 app.get('/api/db/status', async (req, res) => {
