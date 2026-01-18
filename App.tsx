@@ -3268,11 +3268,11 @@ const App: React.FC = () => {
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WordPress Username</label>
-                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials.user} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, user: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="text" placeholder="Your WP Username" value={currentProject.state.wpCredentials?.user || ''} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...(p.wpCredentials || {}), user: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-brand-gold mb-1.5">WP Application Password</label>
-                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials.password} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, password: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
+                                    <input type="password" placeholder="xxxx xxxx xxxx xxxx" value={currentProject.state.wpCredentials?.password || ''} onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...(p.wpCredentials || {}), password: e.target.value}}))} className="w-full bg-slate-900 border-2 border-brand-gold rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-brand-gold transition-all" />
                                 </div>
                             </div>
                             <p className="text-xs text-brand-gold/70">Find Application Passwords under `Users &gt; Your Profile` in your WordPress admin dashboard.</p>
@@ -3349,8 +3349,8 @@ const App: React.FC = () => {
                         <input
                             type="text"
                             placeholder="https://site.com"
-                            value={currentProject.state.wpCredentials.url}
-                            onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...p.wpCredentials, url: e.target.value}}))}
+                            value={currentProject.state.wpCredentials?.url || ''}
+                            onChange={e => setCurrentProjectState(p => ({...p, wpCredentials: {...(p.wpCredentials || {}), url: e.target.value}}))}
                             className="w-48 bg-slate-900 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs focus:ring-1 focus:ring-brand-gold"
                         />
                         {/* Article Toggle */}
