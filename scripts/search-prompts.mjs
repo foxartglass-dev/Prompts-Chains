@@ -1,5 +1,6 @@
 /**
- * Search Database for Prompts with Specific Patterns
+ * Search ENTIRE Database for Prompts with Specific Patterns
+ * Searches ALL tables, ALL JSONB columns - finds orphaned/disconnected data too
  *
  * Usage: DATABASE_URL="your-neon-url" node scripts/search-prompts.mjs "CRITICAL"
  *        DATABASE_URL="your-neon-url" node scripts/search-prompts.mjs "DSLR"
@@ -21,145 +22,118 @@ const sql = neon(connectionString);
 
 async function searchPrompts() {
   console.log('='.repeat(70));
-  console.log(`SEARCHING DATABASE FOR: "${searchTerm}"`);
+  console.log(`SEARCHING ENTIRE DATABASE FOR: "${searchTerm}"`);
   console.log('='.repeat(70));
 
-  // 1. Search in audience_avatars mainPrompt
-  console.log('\n📋 1. AUDIENCE AVATARS (mainPrompt):');
-  console.log('-'.repeat(50));
-
-  const settings = await sql`
-    SELECT
-      ics.id,
-      ics.workflow_id,
-      ics.website_id,
-      w.name as website_name,
-      ics.audience_avatars,
-      ics.updated_at
-    FROM image_creation_settings ics
-    LEFT JOIN websites w ON ics.website_id = w.id
-    ORDER BY ics.updated_at DESC
+  // Get list of ALL tables in the database
+  const tables = await sql`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+    ORDER BY table_name
   `;
 
-  let foundInAvatars = 0;
-  for (const row of settings) {
-    if (!row.audience_avatars) continue;
+  console.log(`\nFound ${tables.length} tables to search:`);
+  console.log(tables.map(t => t.table_name).join(', '));
 
-    for (const avatar of row.audience_avatars) {
-      if (avatar.mainPrompt && avatar.mainPrompt.includes(searchTerm)) {
-        foundInAvatars++;
-        console.log(`\n✅ FOUND in Avatar "${avatar.name}" (${avatar.tag || 'no tag'})`);
-        console.log(`   Website: ${row.website_name || 'Global'}`);
-        console.log(`   Updated: ${row.updated_at}`);
-        console.log(`   Prompt length: ${avatar.mainPrompt.length} chars`);
-        console.log(`   Preview:`);
-        // Show context around the match
-        const idx = avatar.mainPrompt.indexOf(searchTerm);
-        const start = Math.max(0, idx - 50);
-        const end = Math.min(avatar.mainPrompt.length, idx + searchTerm.length + 100);
-        console.log(`   ...${avatar.mainPrompt.substring(start, end)}...`);
+  let totalFound = 0;
 
-        // Ask if user wants full prompt
-        console.log(`\n   FULL PROMPT (first 1000 chars):`);
-        console.log('   ' + '-'.repeat(40));
-        console.log(avatar.mainPrompt.substring(0, 1000));
-        if (avatar.mainPrompt.length > 1000) {
-          console.log(`   ... (${avatar.mainPrompt.length - 1000} more chars)`);
+  // Search each table
+  for (const { table_name } of tables) {
+    console.log(`\n${'─'.repeat(50)}`);
+    console.log(`📋 Searching table: ${table_name}`);
+    console.log('─'.repeat(50));
+
+    try {
+      // Get column info for this table
+      const columns = await sql`
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = ${table_name}
+      `;
+
+      // Find text-like and JSONB columns to search
+      const searchableColumns = columns.filter(c =>
+        ['text', 'character varying', 'jsonb', 'json'].includes(c.data_type)
+      );
+
+      if (searchableColumns.length === 0) {
+        console.log('   (no searchable text/jsonb columns)');
+        continue;
+      }
+
+      console.log(`   Searchable columns: ${searchableColumns.map(c => c.column_name).join(', ')}`);
+
+      // Build dynamic search query
+      for (const col of searchableColumns) {
+        try {
+          let results;
+
+          if (col.data_type === 'jsonb' || col.data_type === 'json') {
+            // For JSONB, cast to text and search
+            results = await sql`
+              SELECT id, ${sql(col.column_name)}::text as content
+              FROM ${sql(table_name)}
+              WHERE ${sql(col.column_name)}::text ILIKE ${'%' + searchTerm + '%'}
+              LIMIT 10
+            `;
+          } else {
+            // For text columns
+            results = await sql`
+              SELECT id, ${sql(col.column_name)} as content
+              FROM ${sql(table_name)}
+              WHERE ${sql(col.column_name)} ILIKE ${'%' + searchTerm + '%'}
+              LIMIT 10
+            `;
+          }
+
+          if (results.length > 0) {
+            totalFound += results.length;
+            console.log(`\n   ✅ FOUND ${results.length} match(es) in column "${col.column_name}":`);
+
+            for (const row of results) {
+              console.log(`\n      Row ID: ${row.id}`);
+
+              // Show context around the match
+              const content = typeof row.content === 'string' ? row.content : JSON.stringify(row.content);
+              const lowerContent = content.toLowerCase();
+              const lowerSearch = searchTerm.toLowerCase();
+              const idx = lowerContent.indexOf(lowerSearch);
+
+              if (idx >= 0) {
+                const start = Math.max(0, idx - 100);
+                const end = Math.min(content.length, idx + searchTerm.length + 200);
+                console.log(`      Context: ...${content.substring(start, end)}...`);
+              } else {
+                console.log(`      Preview: ${content.substring(0, 300)}...`);
+              }
+            }
+          }
+        } catch (colErr) {
+          // Some columns might fail, that's OK
+          if (!colErr.message.includes('does not exist')) {
+            console.log(`   (error searching ${col.column_name}: ${colErr.message.substring(0, 50)})`);
+          }
         }
       }
+    } catch (tableErr) {
+      console.log(`   Error: ${tableErr.message.substring(0, 100)}`);
     }
-  }
-
-  if (foundInAvatars === 0) {
-    console.log('   No matches in audience_avatars mainPrompt');
-  }
-
-  // 2. Search in consultant_chat_history
-  console.log('\n\n📋 2. CHAT HISTORY (consultant_chat_history):');
-  console.log('-'.repeat(50));
-
-  let foundInChat = 0;
-  for (const row of settings) {
-    const chatHistory = row.consultant_chat_history;
-    if (!chatHistory || !Array.isArray(chatHistory)) continue;
-
-    for (const msg of chatHistory) {
-      if (msg.content && msg.content.includes(searchTerm)) {
-        foundInChat++;
-        console.log(`\n✅ FOUND in chat message (${msg.role})`);
-        console.log(`   Website: ${row.website_name || 'Global'}`);
-        console.log(`   Timestamp: ${msg.timestamp || 'unknown'}`);
-        const idx = msg.content.indexOf(searchTerm);
-        const start = Math.max(0, idx - 50);
-        const end = Math.min(msg.content.length, idx + searchTerm.length + 200);
-        console.log(`   Context: ...${msg.content.substring(start, end)}...`);
-      }
-    }
-  }
-
-  if (foundInChat === 0) {
-    console.log('   No matches in chat history');
-  }
-
-  // 3. Search in articles generated_images prompts
-  console.log('\n\n📋 3. ARTICLE GENERATED IMAGES (prompt field):');
-  console.log('-'.repeat(50));
-
-  const articles = await sql`
-    SELECT
-      a.id,
-      a.keyword,
-      a.generated_images,
-      a.image_decision_report,
-      w.name as website_name
-    FROM articles a
-    LEFT JOIN websites w ON a.website_id = w.id
-    WHERE a.generated_images IS NOT NULL
-    ORDER BY a.created_at DESC
-    LIMIT 100
-  `;
-
-  let foundInArticles = 0;
-  for (const article of articles) {
-    if (!article.generated_images) continue;
-
-    const images = Array.isArray(article.generated_images)
-      ? article.generated_images
-      : [];
-
-    for (const img of images) {
-      if (img.prompt && img.prompt.includes(searchTerm)) {
-        foundInArticles++;
-        console.log(`\n✅ FOUND in article image prompt`);
-        console.log(`   Article: "${article.keyword}"`);
-        console.log(`   Website: ${article.website_name || 'Unknown'}`);
-        console.log(`   Prompt preview: ${img.prompt.substring(0, 300)}...`);
-      }
-    }
-
-    // Also check image_decision_report
-    if (article.image_decision_report) {
-      const report = article.image_decision_report;
-      if (report.finalPrompt && report.finalPrompt.includes(searchTerm)) {
-        foundInArticles++;
-        console.log(`\n✅ FOUND in image_decision_report.finalPrompt`);
-        console.log(`   Article: "${article.keyword}"`);
-        console.log(`   Prompt preview: ${report.finalPrompt.substring(0, 300)}...`);
-      }
-    }
-  }
-
-  if (foundInArticles === 0) {
-    console.log('   No matches in article image prompts (checked last 100 articles)');
   }
 
   // Summary
   console.log('\n' + '='.repeat(70));
-  console.log('SUMMARY:');
-  console.log(`  Found "${searchTerm}" in ${foundInAvatars} avatar(s)`);
-  console.log(`  Found "${searchTerm}" in ${foundInChat} chat message(s)`);
-  console.log(`  Found "${searchTerm}" in ${foundInArticles} article image(s)`);
+  console.log('SEARCH COMPLETE');
+  console.log(`Total matches found: ${totalFound}`);
   console.log('='.repeat(70));
+
+  // Also show specific common locations
+  console.log('\n📍 COMMON PROMPT LOCATIONS:');
+  console.log('   - image_creation_settings.audience_avatars → mainPrompt field');
+  console.log('   - image_creation_settings.consultant_chat_history → message content');
+  console.log('   - articles.generated_images → prompt field per image');
+  console.log('   - articles.image_decision_report → finalPrompt field');
+  console.log('   - workflows.settings → may contain legacy prompts');
 }
 
 searchPrompts().catch(console.error);
