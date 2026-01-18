@@ -6,6 +6,7 @@ interface SaveTemplatePopupProps {
   currentState: any;
   workflowName: string;
   workflowId?: number; // For copying image creation settings
+  websiteId?: number; // Phase 4: For website-scoped templates
   onSave: (templateData: any) => Promise<void>;
 }
 
@@ -25,11 +26,13 @@ const SaveTemplatePopup: React.FC<SaveTemplatePopupProps> = ({
   currentState,
   workflowName,
   workflowId,
+  websiteId,
   onSave
 }) => {
   const [name, setName] = useState(`${workflowName} Template`);
   const [description, setDescription] = useState(`Template created from workflow: ${workflowName}`);
   const [saving, setSaving] = useState(false);
+  const [scope, setScope] = useState<'website' | 'app'>('website'); // Phase 4: Template scope
   const [includes, setIncludes] = useState({
     prompts: true,
     placeholders: true,
@@ -87,7 +90,9 @@ const SaveTemplatePopup: React.FC<SaveTemplatePopupProps> = ({
         templateData,
         includes,
         tags: [],
-        sourceWorkflowId: workflowId // For copying image creation settings
+        sourceWorkflowId: workflowId, // For copying image creation settings
+        scope, // Phase 4: Template scope
+        websiteId: scope === 'website' ? websiteId : undefined // Phase 4: Only pass websiteId for website-scoped
       });
     } finally {
       setSaving(false);
@@ -144,6 +149,43 @@ const SaveTemplatePopup: React.FC<SaveTemplatePopupProps> = ({
               rows={2}
               className="w-full bg-slate-800 border border-brand-gold/50 rounded px-3 py-2 text-white resize-none focus:ring-1 focus:ring-brand-gold"
             />
+          </div>
+
+          {/* Phase 4: Template Scope Toggle */}
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">Template Scope</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setScope('website')}
+                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition border ${
+                  scope === 'website'
+                    ? 'bg-brand-gold text-slate-900 border-brand-gold'
+                    : 'bg-slate-800 text-gray-300 border-slate-600 hover:border-brand-gold/50'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <span>🌐</span>
+                  Website Global
+                </div>
+                <div className="text-[10px] mt-0.5 opacity-70">Only for this website</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope('app')}
+                className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition border ${
+                  scope === 'app'
+                    ? 'bg-brand-cyan text-slate-900 border-brand-cyan'
+                    : 'bg-slate-800 text-gray-300 border-slate-600 hover:border-brand-cyan/50'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <span>🌍</span>
+                  App Global
+                </div>
+                <div className="text-[10px] mt-0.5 opacity-70">Available to all websites</div>
+              </button>
+            </div>
           </div>
 
           {/* Section Selection */}

@@ -8,6 +8,8 @@ interface Template {
   template_data: Record<string, any>;
   includes: Record<string, boolean>;
   tags: string[];
+  scope?: 'website' | 'app'; // Phase 4: Template scope
+  website_id?: number; // Phase 4: Associated website for website-scoped templates
   created_at: string;
   updated_at: string;
 }
@@ -53,7 +55,8 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
   const [createForm, setCreateForm] = useState({
     name: '',
     description: '',
-    tags: ''
+    tags: '',
+    scope: 'website' as 'website' | 'app' // Phase 4: Default to website-scoped
   });
   const [includes, setIncludes] = useState({
     prompts: true,
@@ -123,7 +126,9 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
           name: createForm.name,
           description: createForm.description,
           includes,
-          tags: createForm.tags.split(',').map(t => t.trim()).filter(Boolean)
+          tags: createForm.tags.split(',').map(t => t.trim()).filter(Boolean),
+          scope: createForm.scope, // Phase 4: Template scope
+          websiteId: createForm.scope === 'website' ? currentWebsiteId : undefined // Phase 4: Only pass websiteId for website-scoped
         })
       });
 
@@ -142,7 +147,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
       if (data.template) {
         setTemplates([data.template, ...templates]);
         setViewMode('browse');
-        setCreateForm({ name: '', description: '', tags: '' });
+        setCreateForm({ name: '', description: '', tags: '', scope: 'website' });
         // Show warnings if any sections had issues
         if (data.warnings && data.warnings.length > 0) {
           setWarnings(data.warnings);
@@ -175,7 +180,9 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
         body: JSON.stringify({
           name: createForm.name,
           description: createForm.description,
-          tags: createForm.tags.split(',').map(t => t.trim()).filter(Boolean)
+          tags: createForm.tags.split(',').map(t => t.trim()).filter(Boolean),
+          scope: createForm.scope, // Phase 4: Template scope
+          websiteId: createForm.scope === 'website' ? currentWebsiteId : undefined // Phase 4: Only pass websiteId for website-scoped
         })
       });
 
@@ -193,7 +200,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
       if (data.template) {
         setTemplates([data.template, ...templates]);
         setViewMode('browse');
-        setCreateForm({ name: '', description: '', tags: '' });
+        setCreateForm({ name: '', description: '', tags: '', scope: 'website' });
       } else {
         setError('Template saved but response was unexpected');
       }
@@ -419,9 +426,21 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                       >
                         <div className="flex items-start justify-between mb-2">
                           <h3 className="font-medium text-white">{template.name}</h3>
-                          <span className={`px-2 py-0.5 rounded text-xs text-white ${getTypeColor(template.template_type)}`}>
-                            {getTypeLabel(template.template_type)}
-                          </span>
+                          <div className="flex items-center gap-1">
+                            {/* Phase 4: Scope indicator */}
+                            {template.scope && (
+                              <span className={`px-2 py-0.5 rounded text-xs ${
+                                template.scope === 'website'
+                                  ? 'bg-brand-gold/20 text-brand-gold border border-brand-gold/30'
+                                  : 'bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/30'
+                              }`}>
+                                {template.scope === 'website' ? '🌐' : '🌍'}
+                              </span>
+                            )}
+                            <span className={`px-2 py-0.5 rounded text-xs text-white ${getTypeColor(template.template_type)}`}>
+                              {getTypeLabel(template.template_type)}
+                            </span>
+                          </div>
                         </div>
                         <p className="text-sm text-gray-400 mb-3 line-clamp-2">
                           {template.description || 'No description'}
@@ -517,6 +536,47 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                       placeholder="e.g., seo, single-audience, local-business"
                       className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
                     />
+                  </div>
+
+                  {/* Phase 4: Template Scope Toggle */}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Template Scope</label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setCreateForm({ ...createForm, scope: 'website' })}
+                        className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition border ${
+                          createForm.scope === 'website'
+                            ? 'bg-brand-gold text-slate-900 border-brand-gold'
+                            : 'bg-gray-800 text-gray-300 border-gray-600 hover:border-brand-gold/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                          </svg>
+                          Website Global
+                        </div>
+                        <div className="text-[10px] mt-0.5 opacity-70">Only for this website</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCreateForm({ ...createForm, scope: 'app' })}
+                        className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition border ${
+                          createForm.scope === 'app'
+                            ? 'bg-brand-cyan text-slate-900 border-brand-cyan'
+                            : 'bg-gray-800 text-gray-300 border-gray-600 hover:border-brand-cyan/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          App Global
+                        </div>
+                        <div className="text-[10px] mt-0.5 opacity-70">Available to all websites</div>
+                      </button>
+                    </div>
                   </div>
 
                   <div>
