@@ -8544,7 +8544,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </p>
                     </div>
 
-                    {/* Static Placement Rules - Still apply to Guided GPT / Smart Prompt */}
+                    {/* Static Placement Rules - HIDDEN when in Guided GPT or Smart Prompt mode (they use their own Rules sections) */}
+                    {settings.live_prompt_mode === 'main_prompt' && (
                     <div className="bg-slate-800/30 rounded-lg p-3 border border-cyan-500/30">
                       <div className="flex items-center gap-2 mb-3">
                         <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -8579,6 +8580,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                         These rules guide GPT on where to place images and what content to analyze.
                       </p>
                     </div>
+                    )}
                   </div>
                 ) : isAlwaysOnMode ? (
                   /* ALWAYS ON: Main Prompt mode in Generate Live */
@@ -8906,10 +8908,11 @@ Start by introducing yourself and asking about their business in a friendly way.
 
               {/* ─────────────────────────────────────────────────────
                   SECTION 3: Matching Rules - CONDITIONAL based on Smart Matching toggle
-                  NOTE: Shown for both Bank mode AND Generate Live (Main Prompt/Guided GPT) modes
+                  NOTE: Only shown for Bank mode AND Generate Live Main Prompt mode
+                  (Guided GPT and Smart Prompt use their own dedicated Rules sections)
               ───────────────────────────────────────────────────── */}
-              {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode !== 'smart_prompt')) && (
-              <div className={`rounded-lg p-4 border ${settings.smart_matching_enabled ? 'bg-slate-800/50 border-emerald-500/30' : 'bg-slate-800/30 border-cyan-500/30'}`}>
+              {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode === 'main_prompt')) && (
+              <div className={`rounded-lg p-4 border -mt-2 ${settings.smart_matching_enabled ? 'bg-slate-800/50 border-emerald-500/30' : 'bg-slate-800/30 border-cyan-500/30'}`}>
                 <div className="flex items-center gap-2 mb-4">
                   <svg className={`w-5 h-5 ${settings.smart_matching_enabled ? 'text-emerald-400' : 'text-cyan-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
@@ -9332,8 +9335,10 @@ Start by introducing yourself and asking about their business in a friendly way.
 
               {/* ─────────────────────────────────────────────────────
                   SECTION 4: Variation Order
+                  NOTE: Hidden when in Main Prompt mode (only shown for Bank mode or Guided GPT/Smart Prompt modes)
               ───────────────────────────────────────────────────── */}
-              <div className="bg-slate-800/50 rounded-lg border border-orange-500/30 overflow-hidden">
+              {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode !== 'main_prompt')) && (
+              <div className="bg-slate-800/50 rounded-lg border border-orange-500/30 overflow-hidden -mt-2">
                 <button onClick={() => setIsOrderOpen(!isOrderOpen)} className="w-full flex items-center justify-between p-4 text-orange-400 hover:bg-slate-800/80 transition">
                   <span className="flex items-center gap-2 font-semibold">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
@@ -9394,6 +9399,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
                 )}
               </div>
+              )}
             </div>
             )}
           </div>
