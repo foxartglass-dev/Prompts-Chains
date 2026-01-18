@@ -249,6 +249,54 @@ interface PlaceholderCategoryTemplate {
   options: PlaceholderOption[];
   isRandomized?: boolean;
   createdAt: string;
+  scope?: 'website' | 'app'; // website = current website only, app = all websites
+}
+
+// ========== TAG-BASED MULTI-PROMPT SYSTEM ==========
+// Each tag (H, J, C) can have multiple prompts, plus Global prompts that apply to selected tags
+
+// A Guided GPT prompt entry (per tag with multiple prompts per tag)
+interface GuidedGptPrompt {
+  id: string;
+  tag: string; // 'H', 'J', 'C', or 'Global'
+  name: string; // e.g., 'House Cleaning', 'House Cleaning v2'
+  model: string; // Model to use for this prompt
+  guidance: string; // Main guidance/instructions
+  guardrails: {
+    instructions: string;
+    uniformDescription: string;
+    stylePreferences: string;
+    avoidList: string;
+    defaultSubject: string;
+  };
+  globalAppliesTo?: string[]; // For Global prompts: which tags it applies to ['H', 'J'] or ['H', 'J', 'C'] for all
+  createdAt: string;
+  updatedAt: string;
+}
+
+// A Smart/Legacy Prompt entry (per tag with multiple prompts per tag)
+interface SmartPromptPrompt {
+  id: string;
+  tag: string; // 'H', 'J', 'C', or 'Global'
+  name: string; // e.g., 'House Cleaning Legacy'
+  guidance: string; // The guidance text for this prompt
+  globalAppliesTo?: string[]; // For Global prompts: which tags it applies to
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ========== TAG-BASED RULES SYSTEM ==========
+// Rules per tag for Guided GPT and Legacy/Smart Prompt modes
+
+interface TagBasedRule {
+  id: string;
+  tag: string; // 'H', 'J', 'C', or 'Global'
+  title: string; // Editable rule title
+  text: string; // Editable rule text
+  order: number; // Display order
+  globalAppliesTo?: string[]; // For Global rules: which tags they apply to
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Models that support vision/images (for chat assistants)
@@ -501,6 +549,16 @@ interface ImageCreationSettings {
   placeholder_category_templates: PlaceholderCategoryTemplate[];
   // Section order for reordering UI sections
   section_order?: string[];
+  // ========== TAG-BASED MULTI-PROMPT SYSTEM ==========
+  // Multi-prompt per tag for Guided GPT
+  guided_gpt_prompts: GuidedGptPrompt[];
+  // Multi-prompt per tag for Smart/Legacy Prompt
+  smart_prompt_prompts: SmartPromptPrompt[];
+  // ========== TAG-BASED RULES SYSTEM ==========
+  // Rules per tag for Guided GPT (replaces placement rules in Smart Matching area)
+  guided_gpt_rules: TagBasedRule[];
+  // Rules per tag for Smart/Legacy Prompt
+  legacy_prompt_rules: TagBasedRule[];
 }
 
 enum LogStatus {
@@ -582,7 +640,17 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   text_snippets: [],
   placeholder_category_templates: [],
   // Section order - user-configurable order of UI sections
-  section_order: ['image_integration', 'audience_avatars', 'batch_bank', 'draft_used', 'resource_tabs', 'chat_tabs']
+  section_order: ['image_integration', 'audience_avatars', 'batch_bank', 'draft_used', 'resource_tabs', 'chat_tabs'],
+  // ========== TAG-BASED MULTI-PROMPT SYSTEM ==========
+  // Multi-prompt per tag for Guided GPT - empty array, user creates prompts per tag
+  guided_gpt_prompts: [],
+  // Multi-prompt per tag for Smart/Legacy Prompt
+  smart_prompt_prompts: [],
+  // ========== TAG-BASED RULES SYSTEM ==========
+  // Rules per tag for Guided GPT (replaces placement rules)
+  guided_gpt_rules: [],
+  // Rules per tag for Smart/Legacy Prompt
+  legacy_prompt_rules: []
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -1212,7 +1280,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           // Prompt Template System - ensure arrays are never null
           prompt_templates: data.settings.prompt_templates || [],
           text_snippets: data.settings.text_snippets || [],
-          placeholder_category_templates: data.settings.placeholder_category_templates || []
+          placeholder_category_templates: data.settings.placeholder_category_templates || [],
+          // Tag-based multi-prompt system
+          guided_gpt_prompts: data.settings.guided_gpt_prompts || [],
+          smart_prompt_prompts: data.settings.smart_prompt_prompts || [],
+          // Tag-based rules system
+          guided_gpt_rules: data.settings.guided_gpt_rules || [],
+          legacy_prompt_rules: data.settings.legacy_prompt_rules || []
         };
         setSettings(loadedSettings);
         if (loadedSettings.audience_avatars.length > 0) {

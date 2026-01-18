@@ -20,13 +20,42 @@ const requireDb = (req, res, next) => {
 // - website_setup: Multiple workflows for a website
 // - client_setup: Full client with all websites/workflows
 
-// GET all templates (optionally filter by type or search by tag)
+// GET all templates (optionally filter by type, tag, scope, or website)
 router.get('/', requireDb, async (req, res) => {
   try {
-    const { type, tag, search } = req.query;
+    const { type, tag, search, scope, websiteId } = req.query;
 
     let templates;
-    if (type && tag) {
+
+    // Build dynamic query based on filters
+    // For websiteId filter: return templates that are either:
+    // - App global (scope = 'app')
+    // - Website specific (scope = 'website' AND website_id matches)
+    // - Legacy templates without scope (treat as app global)
+    if (websiteId) {
+      // Return app-global templates + website-specific templates for this website
+      if (type) {
+        templates = await sql`
+          SELECT * FROM templates
+          WHERE template_type = ${type}
+          AND (scope = 'app' OR scope IS NULL OR (scope = 'website' AND website_id = ${websiteId}))
+          ORDER BY scope DESC, created_at DESC
+        `;
+      } else {
+        templates = await sql`
+          SELECT * FROM templates
+          WHERE (scope = 'app' OR scope IS NULL OR (scope = 'website' AND website_id = ${websiteId}))
+          ORDER BY template_type, scope DESC, created_at DESC
+        `;
+      }
+    } else if (scope === 'app') {
+      // Only app-global templates
+      templates = await sql`
+        SELECT * FROM templates
+        WHERE scope = 'app' OR scope IS NULL
+        ORDER BY template_type, created_at DESC
+      `;
+    } else if (type && tag) {
       templates = await sql`
         SELECT * FROM templates
         WHERE template_type = ${type}
@@ -88,7 +117,7 @@ router.get('/:id', requireDb, async (req, res) => {
 // POST create template
 router.post('/', requireDb, async (req, res) => {
   try {
-    const { name, description, templateType, templateData, includes, tags, sourceWorkflowId } = req.body;
+    const { name, description, templateType, templateData, includes, tags, sourceWorkflowId, scope, websiteId } = req.body;
 
     if (!name || !templateType) {
       return res.status(400).json({ error: 'Name and template type are required' });
@@ -142,14 +171,16 @@ router.post('/', requireDb, async (req, res) => {
     }
 
     const result = await sql`
-      INSERT INTO templates (name, description, template_type, template_data, includes, tags)
+      INSERT INTO templates (name, description, template_type, template_data, includes, tags, scope, website_id)
       VALUES (
         ${name},
         ${description || ''},
         ${templateType},
         ${JSON.stringify(finalTemplateData)},
         ${JSON.stringify(finalIncludes)},
-        ${JSON.stringify(tags || [])}
+        ${JSON.stringify(tags || [])},
+        ${scope || 'website'},
+        ${websiteId || null}
       )
       RETURNING *
     `;
@@ -165,7 +196,7 @@ router.post('/', requireDb, async (req, res) => {
 router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
   try {
     const { workflowId } = req.params;
-    const { name, description, includes, tags } = req.body;
+    const { name, description, includes, tags, scope, websiteId } = req.body;
 
     // includes = { prompts: true, placeholders: true, tags: false, snippets: true, settings: false }
 
@@ -291,14 +322,16 @@ router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
     }
 
     const result = await sql`
-      INSERT INTO templates (name, description, template_type, template_data, includes, tags)
+      INSERT INTO templates (name, description, template_type, template_data, includes, tags, scope, website_id)
       VALUES (
         ${name || `${workflow.name} Template`},
         ${description || `Template created from workflow: ${workflow.name}`},
         ${templateType},
         ${JSON.stringify(templateData)},
         ${JSON.stringify(selectedIncludes)},
-        ${JSON.stringify(tags || [])}
+        ${JSON.stringify(tags || [])},
+        ${scope || 'website'},
+        ${websiteId || null}
       )
       RETURNING *
     `;
