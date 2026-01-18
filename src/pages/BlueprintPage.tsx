@@ -1375,6 +1375,129 @@ if (!settings) {
           </div>
         </div>
       </div>
+
+      {/* Rule 11 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-emerald-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-emerald-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">11</div>
+          <div>
+            <h3 className="text-lg font-bold text-emerald-400">PROTECT mainPrompt and avatar data from accidental erasure</h3>
+            <p className="text-gray-300 mt-2 text-sm">
+              User prompts are CRITICAL. They've been accidentally erased many times due to state updates, race conditions, and partial saves.
+              Add protection at BOTH frontend AND server level.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-red-400 font-medium mb-2">THE PROBLEM:</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// When updating avatar with some fields, mainPrompt can get wiped:
+updateAvatar({ name: "New Name" }) // might erase mainPrompt if state is stale!
+
+// When loading stale state from React, rich prompt data gets lost
+setSettings(current => ({ ...current, ...staleUpdates }))`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-emerald-400 font-medium mb-2">✓ FRONTEND PROTECTION (ImageCreationSection.tsx):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// In handleUpdateAvatar() - block suspicious erasure
+if (currentAvatar && updates.mainPrompt !== undefined) {
+  const currentLength = currentAvatar.mainPrompt?.length || 0;
+  const newLength = updates.mainPrompt?.length || 0;
+  // If going from 200+ chars to <100, that's erasure!
+  if (currentLength > 200 && newLength < 100) {
+    console.error('PROTECTION: Blocked attempt to erase mainPrompt!');
+    const { mainPrompt: _blocked, ...safeUpdates } = updates;
+    updates = safeUpdates; // Remove mainPrompt from updates
+  }
+}
+
+// In updateSettings() - protect entire avatars array
+if (updates.audience_avatars) {
+  const protectedAvatars = updates.audience_avatars.map(newAvatar => {
+    const currentAvatar = current.audience_avatars.find(a => a.id === newAvatar.id);
+    if (!currentAvatar) return newAvatar;
+    // Preserve mainPrompt if new is suspiciously empty
+    if (currentAvatar.mainPrompt?.length > 200 &&
+        (!newAvatar.mainPrompt || newAvatar.mainPrompt.length < 100)) {
+      return { ...newAvatar, mainPrompt: currentAvatar.mainPrompt };
+    }
+    return newAvatar;
+  });
+}`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-emerald-400 font-medium mb-2">✓ SERVER PROTECTION (image-creation.js):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// Before saving, compare with existing database values
+const currentSettings = await sql\`SELECT audience_avatars FROM ...\`;
+const existingAvatars = currentSettings[0]?.audience_avatars || [];
+
+protectedAvatars = audience_avatars.map(newAvatar => {
+  const existing = existingAvatars.find(a => a.id === newAvatar.id);
+  if (!existing) return newAvatar;
+
+  // Server-side protection: preserve existing data if new is empty
+  return {
+    ...newAvatar,
+    mainPrompt: (newAvatar.mainPrompt?.length > 50)
+      ? newAvatar.mainPrompt
+      : existing.mainPrompt || newAvatar.mainPrompt,
+    placeholderCategories: newAvatar.placeholderCategories?.length > 0
+      ? newAvatar.placeholderCategories
+      : existing.placeholderCategories || [],
+    variations: newAvatar.variations?.length > 0
+      ? newAvatar.variations
+      : existing.variations || []
+  };
+});`}</pre>
+            </div>
+            <p className="text-red-400 mt-3 text-xs">
+              <strong>CRITICAL:</strong> This protection has saved user data multiple times! Don't remove it without understanding why it exists.
+              The mainPrompt field contains the user's carefully crafted image generation prompts which can take hours to write.
+            </p>
+            <p className="text-gray-400 mt-2 text-xs">
+              <strong>Key files:</strong> ImageCreationSection.tsx (~line 1547, 2506) and server/routes/image-creation.js (~line 1482)
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Rule 12 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-teal-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-teal-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">12</div>
+          <div>
+            <h3 className="text-lg font-bold text-teal-400">Chat/message history must SYNC with database on mount</h3>
+            <p className="text-gray-300 mt-2 text-sm">
+              Local React state like <code className="bg-slate-900 px-1 rounded">useState([])</code> is ephemeral - it's gone on refresh!
+              If chat history or similar persistent data needs to survive page reloads, it MUST:
+            </p>
+            <div className="mt-3 space-y-2">
+              <div className="bg-slate-900 rounded p-3">
+                <p className="text-xs text-teal-400 font-medium mb-2">1. LOAD from database on mount:</p>
+                <pre className="text-xs text-gray-400 overflow-x-auto">{`// NOT ENOUGH: const [messages, setMessages] = useState([]);
+
+// CORRECT: Load from database when settings are available
+useEffect(() => {
+  if (loaded && settings.consultant_chat_history?.length > 0) {
+    setGuidedAssistantMessages(settings.consultant_chat_history);
+    console.log('Loaded', settings.consultant_chat_history.length, 'messages');
+  }
+}, [loaded]); // Run once when settings load`}</pre>
+              </div>
+              <div className="bg-slate-900 rounded p-3">
+                <p className="text-xs text-teal-400 font-medium mb-2">2. SAVE to database after every change:</p>
+                <pre className="text-xs text-gray-400 overflow-x-auto">{`// Every time messages change, persist immediately
+setGuidedAssistantMessages(newMessages);
+updateSettings({ consultant_chat_history: newMessages }); // PERSIST!`}</pre>
+              </div>
+            </div>
+            <p className="text-red-400 mt-3 text-xs">
+              <strong>BUG PATTERN:</strong> "Chat history keeps disappearing" = useState without database sync.
+              This was the root cause of AI Prompt Assistant losing all conversation history on every refresh.
+            </p>
+            <p className="text-gray-400 mt-2 text-xs">
+              <strong>Example fix:</strong> ImageCreationSection.tsx lines 1215-1222 (load) and 3352-3355 (save)
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
 
     {/* UI Patterns Quick Reference */}
@@ -1427,13 +1550,14 @@ if (!settings) {
     {/* File Reference */}
     <div className="max-w-3xl mx-auto mt-8 bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
       <h3 className="text-lg font-bold text-brand-cyan mb-4">Key Files Reference</h3>
-      <div className="grid md:grid-cols-2 gap-4 text-sm">
+      <div className="grid md:grid-cols-3 gap-4 text-sm">
         <div>
           <h4 className="font-semibold text-brand-gold mb-2">Frontend</h4>
           <ul className="space-y-1 text-gray-300">
             <li><code className="text-xs">src/components/articles/ArticleListView.tsx</code></li>
             <li><code className="text-xs">src/components/ImageCreationSection.tsx</code></li>
             <li><code className="text-xs">src/components/WebsitesPage.tsx</code></li>
+            <li><code className="text-xs">src/App.tsx</code> <span className="text-gray-500">(export/import)</span></li>
           </ul>
         </div>
         <div>
@@ -1442,6 +1566,15 @@ if (!settings) {
             <li><code className="text-xs">server/routes/elementor.js</code></li>
             <li><code className="text-xs">server/routes/articles.js</code></li>
             <li><code className="text-xs">server/routes/seo.js</code></li>
+            <li><code className="text-xs">server/routes/image-creation.js</code> <span className="text-gray-500">(protection)</span></li>
+            <li><code className="text-xs">server/routes/site-planning.js</code></li>
+          </ul>
+        </div>
+        <div>
+          <h4 className="font-semibold text-brand-gold mb-2">Utilities</h4>
+          <ul className="space-y-1 text-gray-300">
+            <li><code className="text-xs">scripts/search-prompts.mjs</code> <span className="text-gray-500">(DB search)</span></li>
+            <li><code className="text-xs">scripts/fix-mainprompt-direct.mjs</code> <span className="text-gray-500">(prompt fix)</span></li>
           </ul>
         </div>
       </div>
@@ -1476,6 +1609,53 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues (Jan 2026)</h3>
 
       <div className="space-y-4">
+        {/* Jan 18 - Persistence fixes */}
+        <div className="bg-slate-800 rounded-lg p-4 border border-emerald-500/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">AI Prompt Assistant chat history disappearing on refresh</span>
+            <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">Jan 18, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Every time the page refreshed, all conversation history with the AI Prompt Assistant was lost.
+            User spent hours writing prompts in chat, only to lose everything on refresh. This happened MANY times despite multiple attempted fixes.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause:</strong> <code className="bg-slate-900 px-1 rounded">useState([])</code> for messages never loaded from
+            <code className="bg-slate-900 px-1 rounded">settings.consultant_chat_history</code>. The database HAD the data, but React just ignored it.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added <code className="bg-slate-900 px-1 rounded">useEffect</code> to load messages from database on mount (lines 1215-1222).
+            Added <code className="bg-slate-900 px-1 rounded">updateSettings()</code> call after every message change (line 3352-3355).
+          </div>
+          <div className="text-sm text-emerald-400 mt-2">
+            <strong>Pattern:</strong> See Golden Rule #12 - Chat history must sync with database on mount
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-4 border border-emerald-500/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">mainPrompt getting randomly erased</span>
+            <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">Jan 18, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> User's carefully crafted mainPrompt (image generation prompt) would randomly get erased.
+            Hours of work lost. User had to copy/paste prompt from external backup constantly.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause:</strong> Race conditions, stale React state, and partial saves would overwrite the rich prompt with empty/partial data.
+            When updating just one avatar field, sometimes the whole mainPrompt got wiped.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Dual-layer protection - Frontend blocks suspicious &gt;200 to &lt;100 char drops in handleUpdateAvatar() and updateSettings().
+            Server preserves existing data in image-creation.js before any UPDATE.
+          </div>
+          <div className="text-sm text-emerald-400 mt-2">
+            <strong>Pattern:</strong> See Golden Rule #11 - PROTECT mainPrompt and avatar data from accidental erasure
+          </div>
+        </div>
+
         <div className="bg-slate-800 rounded-lg p-4 border border-brand-cyan/50">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-green-400">✓</span>
@@ -3765,9 +3945,76 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">January 2026</h3>
 
       <div className="space-y-4">
-        {/* Jan 18 */}
+        {/* Jan 18 - Persistence & Protection */}
+        <div className="border-l-4 border-emerald-500 pl-4">
+          <div className="text-sm text-emerald-400 font-semibold">Jan 18, 2026 - Persistence & Protection Fixes</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-red-400 font-bold">CRITICAL</span>
+              <div>
+                <strong>Dual-layer protection against mainPrompt erasure</strong>
+                <div className="text-xs text-gray-500">Frontend: handleUpdateAvatar() + updateSettings() block &gt;200 to &lt;100 char drops. Server: image-creation.js preserves existing data</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>AI Prompt Assistant chat persistence - FINALLY WORKING</strong>
+                <div className="text-xs text-gray-500">Root cause: useState([]) never loaded from consultant_chat_history. Added useEffect sync on mount + updateSettings() after every message</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>AI Prompt Assistant expanding textarea with image paste</strong>
+                <div className="text-xs text-gray-500">Auto-grows to 200px max. Supports Ctrl+V for images (like Claude Code). Images appear as thumbnails below input</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>AI Prompt Assistant history browser</strong>
+                <div className="text-xs text-gray-500">Search through chat history, sort by date/type, jump to specific messages. Shows role (user/assistant) and timestamps</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Workflow Export/Import includes Image Creation + Site Planning</strong>
+                <div className="text-xs text-gray-500">JSON export now includes audience_avatars, mainPrompt, variations, placeholders AND all site plans with nodes</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">API</span>
+              <div>
+                <strong>New endpoints: site-planning export/import</strong>
+                <div className="text-xs text-gray-500">GET /api/site-planning/export/:workflowId, POST /api/site-planning/import/:workflowId</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-cyan-400 font-bold">UTIL</span>
+              <div>
+                <strong>Database search script: scripts/search-prompts.mjs</strong>
+                <div className="text-xs text-gray-500">Search ALL tables for text patterns. Usage: DATABASE_URL="..." node scripts/search-prompts.mjs "CRITICAL"</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DOCS</span>
+              <div>
+                <strong>Blueprint: Golden Rules 11 & 12 added</strong>
+                <div className="text-xs text-gray-500">Rule 11: mainPrompt protection pattern. Rule 12: Chat history database sync pattern</div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-emerald-400 font-semibold">Commits:</span>
+            <span className="text-gray-400 ml-2">b604bc6, aee8898, c02343c, 6a5d6c7, 3edcca2</span>
+          </div>
+        </div>
+
+        {/* Jan 18 - Tag-Based System */}
         <div className="border-l-4 border-purple-500 pl-4">
-          <div className="text-sm text-purple-400 font-semibold">Jan 18, 2026</div>
+          <div className="text-sm text-purple-400 font-semibold">Jan 18, 2026 - Tag-Based Multi-Prompt System</div>
           <ul className="mt-2 space-y-2 text-sm text-gray-300">
             <li className="flex items-start gap-2">
               <span className="text-blue-400 font-bold">FEAT</span>
