@@ -911,6 +911,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     xl: 'h-[48rem]', // 48rem
     full: 'h-[80vh]' // 80% viewport
   };
+  // Chat History Browser state
+  const [showHistoryBrowser, setShowHistoryBrowser] = useState(false);
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
+  const [historySortOrder, setHistorySortOrder] = useState<'newest' | 'oldest'>('newest');
 
   // Loaded articles for AI context
   interface LoadedArticle {
@@ -1211,6 +1215,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       workerChatRef.current.scrollTop = workerChatRef.current.scrollHeight;
     }
   }, [settings.worker_chat_history]);
+
+  // 🛡️ SYNC guidedAssistantMessages FROM database on settings load
+  // This is the FIX for chat history persistence - loads saved chats from consultant_chat_history
+  useEffect(() => {
+    if (loaded && settings.consultant_chat_history && settings.consultant_chat_history.length > 0) {
+      setGuidedAssistantMessages(settings.consultant_chat_history);
+      console.log('[AI Prompt Assistant] Loaded', settings.consultant_chat_history.length, 'messages from database');
+    }
+  }, [loaded]); // Only run once when settings first load
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -3351,6 +3364,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
     // Update local state immediately
     setGuidedAssistantMessages(historyToSend);
+    // 🛡️ PERSIST to database immediately
+    updateSettings({ consultant_chat_history: historyToSend });
     setGuidedAssistantInput('');
     setGuidedAssistantImages([]);
     setGuidedAssistantLoading(true);
@@ -3651,7 +3666,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           content: responseContent,
           timestamp: new Date().toISOString()
         };
-        setGuidedAssistantMessages([...historyToSend, assistantMessage]);
+        const updatedHistory = [...historyToSend, assistantMessage];
+        setGuidedAssistantMessages(updatedHistory);
+        // 🛡️ PERSIST assistant response to database
+        updateSettings({ consultant_chat_history: updatedHistory });
       } else {
         showNotification(data.error || 'Chat failed', 'error');
       }
@@ -6763,7 +6781,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   guidedAssistantMessages.map((msg, idx) => (
                                     <div
                                       key={idx}
-                                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                      data-msg-index={idx}
+                                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} transition-all duration-300`}
                                     >
                                       <div
                                         className={`max-w-[85%] rounded-lg p-2.5 ${
@@ -7039,14 +7058,46 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                   </svg>
                                 </button>
-                                <input
-                                  type="text"
+                                <textarea
                                   value={guidedAssistantInput}
-                                  onChange={(e) => setGuidedAssistantInput(e.target.value)}
-                                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendGuidedAssistant())}
-                                  placeholder="Ask about guardrails, prompt techniques..."
-                                  className="flex-1 p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded-lg text-white placeholder-slate-500"
+                                  onChange={(e) => {
+                                    setGuidedAssistantInput(e.target.value);
+                                    // Auto-expand: reset height then set to scrollHeight
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      handleSendGuidedAssistant();
+                                    }
+                                  }}
+                                  onPaste={async (e) => {
+                                    // Handle image paste
+                                    const items = e.clipboardData?.items;
+                                    if (!items) return;
+
+                                    for (const item of items) {
+                                      if (item.type.startsWith('image/')) {
+                                        e.preventDefault();
+                                        const file = item.getAsFile();
+                                        if (file) {
+                                          const reader = new FileReader();
+                                          reader.onload = (event) => {
+                                            const base64 = event.target?.result as string;
+                                            setGuidedAssistantImages(prev => [...prev, base64]);
+                                            showNotification('Image pasted', 'success');
+                                          };
+                                          reader.readAsDataURL(file);
+                                        }
+                                        break;
+                                      }
+                                    }
+                                  }}
+                                  placeholder="Ask about guardrails, prompt techniques... (Paste images with Ctrl+V)"
+                                  className="flex-1 p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded-lg text-white placeholder-slate-500 resize-none overflow-hidden min-h-[38px] max-h-[200px]"
                                   disabled={guidedAssistantLoading}
+                                  rows={1}
                                 />
                                 <button
                                   onClick={handleSendGuidedAssistant}
@@ -7057,17 +7108,132 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </button>
                               </div>
 
-                              {/* Clear chat button */}
-                              {guidedAssistantMessages.length > 0 && (
+                              {/* Chat Controls - History & Clear */}
+                              <div className="flex items-center justify-between">
+                                {/* History Browser Toggle */}
                                 <button
-                                  onClick={() => {
-                                    setGuidedAssistantMessages([]);
-                                    showNotification('Chat cleared', 'success');
-                                  }}
-                                  className="w-full p-1.5 text-[10px] text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded transition"
+                                  onClick={() => setShowHistoryBrowser(!showHistoryBrowser)}
+                                  className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded transition ${
+                                    showHistoryBrowser
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'text-slate-400 hover:text-emerald-400 hover:bg-emerald-900/20'
+                                  }`}
                                 >
-                                  Clear conversation
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  History ({guidedAssistantMessages.length})
                                 </button>
+
+                                {/* Clear chat button */}
+                                {guidedAssistantMessages.length > 0 && (
+                                  <button
+                                    onClick={() => {
+                                      if (confirm('Clear all chat history? This cannot be undone.')) {
+                                        setGuidedAssistantMessages([]);
+                                        // 🛡️ PERSIST the clear to database
+                                        updateSettings({ consultant_chat_history: [] });
+                                        showNotification('Chat cleared', 'success');
+                                      }
+                                    }}
+                                    className="px-2 py-1 text-[10px] text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded transition"
+                                  >
+                                    Clear all
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* History Browser Panel */}
+                              {showHistoryBrowser && guidedAssistantMessages.length > 0 && (
+                                <div className="p-3 bg-slate-900 border border-emerald-500/30 rounded-lg space-y-2">
+                                  {/* Search & Sort Controls */}
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 relative">
+                                      <input
+                                        type="text"
+                                        value={historySearchQuery}
+                                        onChange={(e) => setHistorySearchQuery(e.target.value)}
+                                        placeholder="Search messages..."
+                                        className="w-full pl-7 pr-2 py-1.5 text-[10px] bg-slate-800 border border-slate-600 rounded text-white placeholder-slate-500"
+                                      />
+                                      <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                      </svg>
+                                    </div>
+                                    <select
+                                      value={historySortOrder}
+                                      onChange={(e) => setHistorySortOrder(e.target.value as 'newest' | 'oldest')}
+                                      className="px-2 py-1.5 text-[10px] bg-slate-800 border border-slate-600 rounded text-white"
+                                    >
+                                      <option value="newest">Newest First</option>
+                                      <option value="oldest">Oldest First</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Message List */}
+                                  <div className="max-h-60 overflow-y-auto space-y-1">
+                                    {(() => {
+                                      // Filter and sort messages
+                                      let filteredMsgs = guidedAssistantMessages
+                                        .map((msg, idx) => ({ ...msg, originalIndex: idx }))
+                                        .filter(msg =>
+                                          !historySearchQuery ||
+                                          msg.content.toLowerCase().includes(historySearchQuery.toLowerCase())
+                                        );
+
+                                      if (historySortOrder === 'newest') {
+                                        filteredMsgs = filteredMsgs.reverse();
+                                      }
+
+                                      if (filteredMsgs.length === 0) {
+                                        return (
+                                          <p className="text-[10px] text-slate-500 text-center py-2">
+                                            No messages match your search
+                                          </p>
+                                        );
+                                      }
+
+                                      return filteredMsgs.map((msg, idx) => (
+                                        <div
+                                          key={idx}
+                                          className={`p-2 rounded text-[10px] cursor-pointer hover:bg-slate-800 transition ${
+                                            msg.role === 'user' ? 'border-l-2 border-emerald-500' : 'border-l-2 border-slate-600'
+                                          }`}
+                                          onClick={() => {
+                                            // Scroll to this message in the chat
+                                            const chatEl = guidedAssistantChatRef.current;
+                                            if (chatEl) {
+                                              const msgEls = chatEl.querySelectorAll('[data-msg-index]');
+                                              const targetEl = chatEl.querySelector(`[data-msg-index="${msg.originalIndex}"]`);
+                                              if (targetEl) {
+                                                targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                // Flash highlight
+                                                targetEl.classList.add('ring-2', 'ring-emerald-500');
+                                                setTimeout(() => targetEl.classList.remove('ring-2', 'ring-emerald-500'), 2000);
+                                              }
+                                            }
+                                            setShowHistoryBrowser(false);
+                                          }}
+                                        >
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className={`font-medium ${msg.role === 'user' ? 'text-emerald-400' : 'text-slate-400'}`}>
+                                              {msg.role === 'user' ? 'You' : 'AI'}
+                                            </span>
+                                            <span className="text-slate-500">
+                                              {msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() + ' ' + new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'No date'}
+                                            </span>
+                                          </div>
+                                          <p className="text-slate-300 line-clamp-2">
+                                            {msg.content.substring(0, 150)}{msg.content.length > 150 ? '...' : ''}
+                                          </p>
+                                          {msg.images && msg.images.length > 0 && (
+                                            <span className="text-emerald-400 text-[9px]">📷 {msg.images.length} image(s)</span>
+                                          )}
+                                        </div>
+                                      ));
+                                    })()}
+                                  </div>
+                                </div>
                               )}
 
                               {/* ═══════════════════════════════════════════
