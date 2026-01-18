@@ -868,6 +868,85 @@ async function setup() {
     console.log('  ✓ drip feed indexes');
 
     console.log('');
+
+    // ================================
+    // PHASE 1: TAG-BASED MULTI-PROMPT SYSTEM
+    // ================================
+    console.log('🏷️  Adding tag-based multi-prompt fields...\n');
+
+    // Add guided_gpt_prompts column (multi-prompt per tag for Guided GPT)
+    const hasGuidedGptPrompts = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'guided_gpt_prompts'
+    `;
+    if (hasGuidedGptPrompts.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN guided_gpt_prompts JSONB DEFAULT '[]'`;
+      console.log('  ✓ Added guided_gpt_prompts column');
+    } else {
+      console.log('  - guided_gpt_prompts column already exists');
+    }
+
+    // Add smart_prompt_prompts column (multi-prompt per tag for Smart/Legacy Prompt)
+    const hasSmartPromptPrompts = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'smart_prompt_prompts'
+    `;
+    if (hasSmartPromptPrompts.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN smart_prompt_prompts JSONB DEFAULT '[]'`;
+      console.log('  ✓ Added smart_prompt_prompts column');
+    } else {
+      console.log('  - smart_prompt_prompts column already exists');
+    }
+
+    // Add guided_gpt_rules column (rules per tag for Guided GPT)
+    const hasGuidedGptRules = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'guided_gpt_rules'
+    `;
+    if (hasGuidedGptRules.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN guided_gpt_rules JSONB DEFAULT '[]'`;
+      console.log('  ✓ Added guided_gpt_rules column');
+    } else {
+      console.log('  - guided_gpt_rules column already exists');
+    }
+
+    // Add legacy_prompt_rules column (rules per tag for Smart/Legacy Prompt)
+    const hasLegacyPromptRules = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'legacy_prompt_rules'
+    `;
+    if (hasLegacyPromptRules.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN legacy_prompt_rules JSONB DEFAULT '[]'`;
+      console.log('  ✓ Added legacy_prompt_rules column');
+    } else {
+      console.log('  - legacy_prompt_rules column already exists');
+    }
+
+    // Add scope column to templates table (website or app global)
+    const hasTemplatesScope = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'templates' AND column_name = 'scope'
+    `;
+    if (hasTemplatesScope.length === 0) {
+      await sql`ALTER TABLE templates ADD COLUMN scope VARCHAR(20) DEFAULT 'website'`;
+      console.log('  ✓ Added scope column to templates');
+    } else {
+      console.log('  - templates scope column already exists');
+    }
+
+    // Add website_id column to templates table (for website-scoped templates)
+    const hasTemplatesWebsiteId = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'templates' AND column_name = 'website_id'
+    `;
+    if (hasTemplatesWebsiteId.length === 0) {
+      await sql`ALTER TABLE templates ADD COLUMN website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE`;
+      console.log('  ✓ Added website_id column to templates');
+    } else {
+      console.log('  - templates website_id column already exists');
+    }
+
+    console.log('');
     console.log('================================');
     console.log('✅ Database setup complete!');
     console.log('================================');

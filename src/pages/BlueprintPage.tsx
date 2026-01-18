@@ -3765,6 +3765,62 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">January 2026</h3>
 
       <div className="space-y-4">
+        {/* Jan 18 */}
+        <div className="border-l-4 border-purple-500 pl-4">
+          <div className="text-sm text-purple-400 font-semibold">Jan 18, 2026</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Phase 1: Tag-Based Multi-Prompt System (Database + Types)</strong>
+                <div className="text-xs text-gray-500">Foundation for Guided GPT and Smart Prompt to have multiple prompts per tag (H, J, C, Global)</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DB</span>
+              <div>
+                <strong>New JSONB fields in image_creation_settings:</strong>
+                <div className="text-xs text-gray-500">guided_gpt_prompts, smart_prompt_prompts, guided_gpt_rules, legacy_prompt_rules</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DB</span>
+              <div>
+                <strong>Templates table: scope + website_id columns</strong>
+                <div className="text-xs text-gray-500">Enables 'website' vs 'app' global templates</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">API</span>
+              <div>
+                <strong>image-creation.js updated for new fields</strong>
+                <div className="text-xs text-gray-500">INSERT/UPDATE include guided_gpt_prompts, smart_prompt_prompts, guided_gpt_rules, legacy_prompt_rules</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">API</span>
+              <div>
+                <strong>templates.js: scope + websiteId filtering</strong>
+                <div className="text-xs text-gray-500">GET supports ?websiteId to return app-global + website-specific templates</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-yellow-400 font-bold">TYPE</span>
+              <div>
+                <strong>TypeScript interfaces: GuidedGptPrompt, SmartPromptPrompt, TagBasedRule</strong>
+                <div className="text-xs text-gray-500">ImageCreationSection.tsx lines 244-305</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-gray-400 font-bold">NEXT</span>
+              <div>
+                <strong>Phases 2-4 pending: Rules UI, Tag tabs UI, Template scope toggle</strong>
+                <div className="text-xs text-gray-500">See System Archaeology → Tag-Based Multi-Prompt System for full plan</div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
         {/* Jan 15 */}
         <div className="border-l-4 border-brand-gold pl-4">
           <div className="text-sm text-brand-gold font-semibold">Jan 15, 2026</div>
@@ -4453,6 +4509,261 @@ RENAME FOR CLARITY:
           <div className="bg-slate-900 rounded p-2">
             <code className="text-brand-gold">server/db/schema.sql</code>
             <span className="text-gray-400 block text-xs">Table definition, migrations</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* INVESTIGATION 2: Tag-Based Multi-Prompt System */}
+    <div className="bg-slate-800 rounded-xl p-6 border border-purple-500/50">
+      <div className="flex items-center gap-3 mb-4">
+        <span className="bg-yellow-500 text-white px-3 py-1 rounded-full text-sm font-bold">IN PROGRESS</span>
+        <h3 className="text-xl font-bold text-white">Tag-Based Multi-Prompt System</h3>
+        <span className="text-gray-400 text-sm">Jan 18, 2026</span>
+      </div>
+
+      {/* Purpose */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Purpose</h4>
+        <p className="text-gray-300">
+          Extends <strong className="text-emerald-400">Guided GPT</strong> and <strong className="text-purple-400">Smart Prompt (Legacy)</strong> modes
+          to support <strong className="text-white">multiple prompts per tag</strong> (H, J, C) plus Global prompts.
+          Mirrors the existing <strong className="text-brand-gold">Audience Avatars</strong> tag-based system.
+          Also adds <strong className="text-white">tag-based rules</strong> to replace the current Placement Rules in Smart Matching area.
+        </p>
+      </div>
+
+      {/* Phase Status */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Implementation Status</h4>
+        <div className="grid md:grid-cols-2 gap-3">
+          <div className="bg-green-900/30 rounded-lg p-3 border border-green-500/50">
+            <span className="text-green-400 font-bold">Phase 1: COMPLETE</span>
+            <p className="text-gray-400 text-xs mt-1">Database schema, TypeScript types, backend routes</p>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3 border border-slate-600">
+            <span className="text-gray-400 font-bold">Phase 2: PENDING</span>
+            <p className="text-gray-400 text-xs mt-1">Guided GPT Rules + Legacy Prompt Rules UI sections</p>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3 border border-slate-600">
+            <span className="text-gray-400 font-bold">Phase 3: PENDING</span>
+            <p className="text-gray-400 text-xs mt-1">Tag tabs UI for Guided GPT and Smart Prompt</p>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3 border border-slate-600">
+            <span className="text-gray-400 font-bold">Phase 4: PENDING</span>
+            <p className="text-gray-400 text-xs mt-1">Template scope toggle (Website Global / App Global)</p>
+          </div>
+        </div>
+      </div>
+
+      {/* New Database Fields */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">New Database Fields (image_creation_settings)</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-600">
+                <th className="text-left py-2 text-gray-400">Column</th>
+                <th className="text-left py-2 text-gray-400">Type</th>
+                <th className="text-left py-2 text-gray-400">Structure</th>
+                <th className="text-left py-2 text-gray-400">Purpose</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-300">
+              <tr className="border-b border-slate-700">
+                <td className="py-2 text-emerald-400">guided_gpt_prompts</td>
+                <td>JSONB</td>
+                <td className="text-xs font-mono">{'{id, tag, name, guidance, guardrails, model, globalAppliesTo}'}</td>
+                <td>Multi-prompt per tag for Guided GPT</td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2 text-purple-400">smart_prompt_prompts</td>
+                <td>JSONB</td>
+                <td className="text-xs font-mono">{'{id, tag, name, guidance, globalAppliesTo}'}</td>
+                <td>Multi-prompt per tag for Legacy Prompt</td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2 text-emerald-400">guided_gpt_rules</td>
+                <td>JSONB</td>
+                <td className="text-xs font-mono">{'{id, tag, title, text, order, globalAppliesTo}'}</td>
+                <td>Rules per tag for Guided GPT mode</td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2 text-purple-400">legacy_prompt_rules</td>
+                <td>JSONB</td>
+                <td className="text-xs font-mono">{'{id, tag, title, text, order, globalAppliesTo}'}</td>
+                <td>Rules per tag for Legacy Prompt mode</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Templates Table Changes */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Templates Table Changes</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-600">
+                <th className="text-left py-2 text-gray-400">Column</th>
+                <th className="text-left py-2 text-gray-400">Type</th>
+                <th className="text-left py-2 text-gray-400">Values</th>
+                <th className="text-left py-2 text-gray-400">Purpose</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-300">
+              <tr className="border-b border-slate-700">
+                <td className="py-2 text-brand-gold">scope</td>
+                <td>VARCHAR(20)</td>
+                <td>'website' | 'app'</td>
+                <td>Website-specific vs app-wide availability</td>
+              </tr>
+              <tr className="border-b border-slate-700">
+                <td className="py-2 text-brand-gold">website_id</td>
+                <td>INTEGER FK</td>
+                <td>NULL or websites.id</td>
+                <td>For website-scoped templates</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Architecture Diagram */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Target Architecture (After Phase 3)</h4>
+        <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs text-gray-300 overflow-x-auto">
+          <pre>{`┌─────────────────────────────────────────────────────────────────────────┐
+│                    TAG-BASED MULTI-PROMPT SYSTEM                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─ Guided GPT Section ─────────────────────────────────────────────┐   │
+│  │                                                                   │   │
+│  │  [H 3] ─ [J 2] ─ [C 1] ─ [🌐 Global]    [Model: gpt-4o ▼]       │   │
+│  │   └─ H1, H2, H3    (tag tabs + multiple per tag)                 │   │
+│  │                                                                   │   │
+│  │  ┌─ Guardrails / Guidance ─────────────────────────────────────┐ │   │
+│  │  │ [Per-tag content - switches when tab changes]               │ │   │
+│  │  └─────────────────────────────────────────────────────────────┘ │   │
+│  │                                                                   │   │
+│  │  [Copy From ▼]  ← Copy prompt from another tag                   │   │
+│  │                                                                   │   │
+│  │  ▼ Guided GPT Rules (collapsible) ──────────────────────────────│   │
+│  │    • Editable rule titles and text                               │   │
+│  │    • Per-tag rules (H, J, C, Global)                            │   │
+│  │    • [+ Add Rule]                                                │   │
+│  │    • Variation Order: [Sequential ▼] (includes "Follow rules")  │   │
+│  │                                                                   │   │
+│  └───────────────────────────────────────────────────────────────────┘   │
+│                                                                          │
+│  ┌─ Smart Prompt (Legacy) Section ──────────────────────────────────┐   │
+│  │  (Same tag-based structure as Guided GPT)                        │   │
+│  │                                                                   │   │
+│  │  [H 2] ─ [J 1] ─ [C 1] ─ [🌐 Global]                            │   │
+│  │                                                                   │   │
+│  │  ┌─ Guidance Text ──────────────────────────────────────────────┐ │   │
+│  │  │ [Per-tag content]                                            │ │   │
+│  │  └──────────────────────────────────────────────────────────────┘ │   │
+│  │                                                                   │   │
+│  │  ▼ Legacy Prompt Rules (collapsible)                             │   │
+│  │                                                                   │   │
+│  └───────────────────────────────────────────────────────────────────┘   │
+│                                                                          │
+│  ┌─ Global Tab Behavior ────────────────────────────────────────────┐   │
+│  │  When "Global" is selected:                                      │   │
+│  │  ☑ Apply to H  ☑ Apply to J  ☐ Apply to C                       │   │
+│  │  (Checkboxes to specify which tags this global prompt covers)    │   │
+│  └───────────────────────────────────────────────────────────────────┘   │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘`}</pre>
+        </div>
+      </div>
+
+      {/* Reference Implementation */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Reference Implementation (Copy This Pattern)</h4>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <p className="text-gray-300 text-sm mb-2">
+            <strong className="text-white">Audience Avatars</strong> already has the exact tag-based system needed.
+            Use this as the template for Guided GPT and Smart Prompt sections:
+          </p>
+          <ul className="list-disc list-inside text-gray-400 text-sm space-y-1">
+            <li><code className="text-brand-gold">ImageCreationSection.tsx:8930-9100</code> - Tag tabs UI</li>
+            <li><code className="text-brand-gold">ImageCreationSection.tsx:244-305</code> - TypeScript interfaces</li>
+            <li><code className="text-brand-gold">ImageCreationSection.tsx:646-653</code> - Default values</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Key Wiring Points */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Key Wiring Points (Don't Break These)</h4>
+        <div className="grid md:grid-cols-2 gap-3 text-sm">
+          <div className="bg-red-900/20 rounded-lg p-3 border border-red-500/30">
+            <span className="text-red-400 font-semibold">image-creation.js INSERT</span>
+            <p className="text-gray-400 text-xs mt-1">Line ~976: New fields in INSERT VALUES</p>
+          </div>
+          <div className="bg-red-900/20 rounded-lg p-3 border border-red-500/30">
+            <span className="text-red-400 font-semibold">image-creation.js UPDATE</span>
+            <p className="text-gray-400 text-xs mt-1">Line ~1034: COALESCE for new fields</p>
+          </div>
+          <div className="bg-red-900/20 rounded-lg p-3 border border-red-500/30">
+            <span className="text-red-400 font-semibold">templates.js GET</span>
+            <p className="text-gray-400 text-xs mt-1">Lines 24-67: websiteId filtering logic</p>
+          </div>
+          <div className="bg-red-900/20 rounded-lg p-3 border border-red-500/30">
+            <span className="text-red-400 font-semibold">templates.js INSERT</span>
+            <p className="text-gray-400 text-xs mt-1">Lines 144-155: scope + website_id columns</p>
+          </div>
+        </div>
+      </div>
+
+      {/* What Remains */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">What Remains (For Next Agent)</h4>
+        <div className="space-y-3 text-sm">
+          <div className="bg-slate-900 rounded-lg p-3">
+            <span className="text-yellow-400 font-bold">Phase 2:</span>
+            <span className="text-gray-300 ml-2">Build "Guided GPT Rules" and "Legacy Prompt Rules" collapsible sections</span>
+            <p className="text-gray-500 text-xs mt-1">Position: Below guardrails, above AI Prompt Assistant. Same features as Smart Matching Rules.</p>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3">
+            <span className="text-yellow-400 font-bold">Phase 3:</span>
+            <span className="text-gray-300 ml-2">Add tag tabs to Guided GPT and Smart Prompt sections</span>
+            <p className="text-gray-500 text-xs mt-1">Copy Audience Avatars pattern. Remove "Per Tag Context" boxes. Add "Copy From" button.</p>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3">
+            <span className="text-yellow-400 font-bold">Phase 4:</span>
+            <span className="text-gray-300 ml-2">Template scope toggle UI</span>
+            <p className="text-gray-500 text-xs mt-1">Add "Website Global" | "App Global" toggle to template creation. Backend already done.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Files Touched */}
+      <div>
+        <h4 className="text-brand-cyan font-semibold mb-2">Files Touched (Phase 1)</h4>
+        <div className="grid md:grid-cols-2 gap-2 text-sm">
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/db/schema.sql</code>
+            <span className="text-gray-400 block text-xs">New JSONB columns + templates scope</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/db/setup-all.mjs</code>
+            <span className="text-gray-400 block text-xs">Migration logic for new columns</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/routes/image-creation.js</code>
+            <span className="text-gray-400 block text-xs">INSERT/UPDATE for new fields</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/routes/templates.js</code>
+            <span className="text-gray-400 block text-xs">scope + websiteId filtering</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">src/components/ImageCreationSection.tsx</code>
+            <span className="text-gray-400 block text-xs">TypeScript interfaces + defaults</span>
           </div>
         </div>
       </div>

@@ -153,6 +153,10 @@ CREATE TABLE IF NOT EXISTS templates (
   includes JSONB DEFAULT '{"prompts": true, "placeholders": true, "tags": true, "snippets": true, "settings": true}',
   -- Tags for organization/search
   tags JSONB DEFAULT '[]',
+  -- Scope: 'website' (available to workflows in same website) or 'app' (available to all websites)
+  scope VARCHAR(20) DEFAULT 'website',
+  -- For website-scoped templates, which website they belong to
+  website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -294,6 +298,18 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   matching_rule_4 TEXT DEFAULT 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).',
   -- Smart Matching Config (configurable parameters that code ACTUALLY reads)
   smart_matching_config JSONB DEFAULT '{"wordRange": 75, "primaryWeight": 10, "secondaryWeight": 1}',
+  -- Tag-based multi-prompt system for Guided GPT
+  -- Array of {id, tag, name, guidance, guardrails, model, globalAppliesTo}
+  guided_gpt_prompts JSONB DEFAULT '[]',
+  -- Tag-based multi-prompt system for Smart/Legacy Prompt
+  -- Array of {id, tag, name, guidance, globalAppliesTo}
+  smart_prompt_prompts JSONB DEFAULT '[]',
+  -- Tag-based rules for Guided GPT (similar to Smart Matching Rules)
+  -- Array of {id, tag, title, text, order, globalAppliesTo}
+  guided_gpt_rules JSONB DEFAULT '[]',
+  -- Tag-based rules for Smart/Legacy Prompt
+  -- Array of {id, tag, title, text, order, globalAppliesTo}
+  legacy_prompt_rules JSONB DEFAULT '[]',
   -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -333,6 +349,30 @@ BEGIN
   -- Smart Matching Config (configurable parameters that code ACTUALLY reads)
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'smart_matching_config') THEN
     ALTER TABLE image_creation_settings ADD COLUMN smart_matching_config JSONB DEFAULT '{"wordRange": 75, "primaryWeight": 10, "secondaryWeight": 1}';
+  END IF;
+  -- Tag-based multi-prompt system for Guided GPT
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'guided_gpt_prompts') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN guided_gpt_prompts JSONB DEFAULT '[]';
+  END IF;
+  -- Tag-based multi-prompt system for Smart/Legacy Prompt
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'smart_prompt_prompts') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN smart_prompt_prompts JSONB DEFAULT '[]';
+  END IF;
+  -- Tag-based rules for Guided GPT
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'guided_gpt_rules') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN guided_gpt_rules JSONB DEFAULT '[]';
+  END IF;
+  -- Tag-based rules for Smart/Legacy Prompt
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'legacy_prompt_rules') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN legacy_prompt_rules JSONB DEFAULT '[]';
+  END IF;
+  -- Add scope to templates (website or app global)
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'templates' AND column_name = 'scope') THEN
+    ALTER TABLE templates ADD COLUMN scope VARCHAR(20) DEFAULT 'website';
+  END IF;
+  -- Add website_id to templates for website-scoped templates
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'templates' AND column_name = 'website_id') THEN
+    ALTER TABLE templates ADD COLUMN website_id INTEGER REFERENCES websites(id) ON DELETE CASCADE;
   END IF;
 END $$;
 

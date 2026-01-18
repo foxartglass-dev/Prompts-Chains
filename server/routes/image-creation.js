@@ -998,7 +998,11 @@ router.put('/settings/website/:websiteId', requireDb, async (req, res) => {
           live_prompt_mode,
           smart_prompt_guidance,
           guided_guardrails,
-          prompt_problem_areas
+          prompt_problem_areas,
+          guided_gpt_prompts,
+          smart_prompt_prompts,
+          guided_gpt_rules,
+          legacy_prompt_rules
         ) VALUES (
           ${websiteId},
           ${settingsData.enabled ?? false},
@@ -1024,7 +1028,11 @@ router.put('/settings/website/:websiteId', requireDb, async (req, res) => {
           ${settingsData.live_prompt_mode ?? 'main_prompt'},
           ${settingsData.smart_prompt_guidance ?? ''},
           ${JSON.stringify(settingsData.guided_guardrails ?? {})},
-          ${JSON.stringify(settingsData.prompt_problem_areas ?? [])}
+          ${JSON.stringify(settingsData.prompt_problem_areas ?? [])},
+          ${JSON.stringify(settingsData.guided_gpt_prompts ?? [])},
+          ${JSON.stringify(settingsData.smart_prompt_prompts ?? [])},
+          ${JSON.stringify(settingsData.guided_gpt_rules ?? [])},
+          ${JSON.stringify(settingsData.legacy_prompt_rules ?? [])}
         )
       `;
       console.log('[Image Creation API] Created new website settings record');
@@ -1057,6 +1065,10 @@ router.put('/settings/website/:websiteId', requireDb, async (req, res) => {
           smart_prompt_guidance = COALESCE(${settingsData.smart_prompt_guidance}, smart_prompt_guidance),
           guided_guardrails = COALESCE(${settingsData.guided_guardrails ? JSON.stringify(settingsData.guided_guardrails) : null}::jsonb, guided_guardrails),
           prompt_problem_areas = COALESCE(${settingsData.prompt_problem_areas ? JSON.stringify(settingsData.prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
+          guided_gpt_prompts = COALESCE(${settingsData.guided_gpt_prompts ? JSON.stringify(settingsData.guided_gpt_prompts) : null}::jsonb, guided_gpt_prompts),
+          smart_prompt_prompts = COALESCE(${settingsData.smart_prompt_prompts ? JSON.stringify(settingsData.smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
+          guided_gpt_rules = COALESCE(${settingsData.guided_gpt_rules ? JSON.stringify(settingsData.guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
+          legacy_prompt_rules = COALESCE(${settingsData.legacy_prompt_rules ? JSON.stringify(settingsData.legacy_prompt_rules) : null}::jsonb, legacy_prompt_rules),
           updated_at = CURRENT_TIMESTAMP
         WHERE website_id = ${websiteId}
       `;

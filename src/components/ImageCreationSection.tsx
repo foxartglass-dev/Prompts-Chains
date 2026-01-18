@@ -249,6 +249,54 @@ interface PlaceholderCategoryTemplate {
   options: PlaceholderOption[];
   isRandomized?: boolean;
   createdAt: string;
+  scope?: 'website' | 'app'; // website = current website only, app = all websites
+}
+
+// ========== TAG-BASED MULTI-PROMPT SYSTEM ==========
+// Each tag (H, J, C) can have multiple prompts, plus Global prompts that apply to selected tags
+
+// A Guided GPT prompt entry (per tag with multiple prompts per tag)
+interface GuidedGptPrompt {
+  id: string;
+  tag: string; // 'H', 'J', 'C', or 'Global'
+  name: string; // e.g., 'House Cleaning', 'House Cleaning v2'
+  model: string; // Model to use for this prompt
+  guidance: string; // Main guidance/instructions
+  guardrails: {
+    instructions: string;
+    uniformDescription: string;
+    stylePreferences: string;
+    avoidList: string;
+    defaultSubject: string;
+  };
+  globalAppliesTo?: string[]; // For Global prompts: which tags it applies to ['H', 'J'] or ['H', 'J', 'C'] for all
+  createdAt: string;
+  updatedAt: string;
+}
+
+// A Smart/Legacy Prompt entry (per tag with multiple prompts per tag)
+interface SmartPromptPrompt {
+  id: string;
+  tag: string; // 'H', 'J', 'C', or 'Global'
+  name: string; // e.g., 'House Cleaning Legacy'
+  guidance: string; // The guidance text for this prompt
+  globalAppliesTo?: string[]; // For Global prompts: which tags it applies to
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ========== TAG-BASED RULES SYSTEM ==========
+// Rules per tag for Guided GPT and Legacy/Smart Prompt modes
+
+interface TagBasedRule {
+  id: string;
+  tag: string; // 'H', 'J', 'C', or 'Global'
+  title: string; // Editable rule title
+  text: string; // Editable rule text
+  order: number; // Display order
+  globalAppliesTo?: string[]; // For Global rules: which tags they apply to
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Models that support vision/images (for chat assistants)
@@ -427,6 +475,7 @@ interface ImageCreationSettings {
   consultant_model: string;
   worker_chat_history: ChatMessage[];
   worker_model: string;
+  image_prompt_model: string; // Model for Image Prompt chat (can be image or chat model)
   integration_mode: 'live' | 'bank';
   fallback_to_live: boolean;
   // When bank is empty and falls back to live, which prompt source to use
@@ -498,6 +547,18 @@ interface ImageCreationSettings {
   text_snippets: TextSnippet[];
   // Saved placeholder category templates
   placeholder_category_templates: PlaceholderCategoryTemplate[];
+  // Section order for reordering UI sections
+  section_order?: string[];
+  // ========== TAG-BASED MULTI-PROMPT SYSTEM ==========
+  // Multi-prompt per tag for Guided GPT
+  guided_gpt_prompts: GuidedGptPrompt[];
+  // Multi-prompt per tag for Smart/Legacy Prompt
+  smart_prompt_prompts: SmartPromptPrompt[];
+  // ========== TAG-BASED RULES SYSTEM ==========
+  // Rules per tag for Guided GPT (replaces placement rules in Smart Matching area)
+  guided_gpt_rules: TagBasedRule[];
+  // Rules per tag for Smart/Legacy Prompt
+  legacy_prompt_rules: TagBasedRule[];
 }
 
 enum LogStatus {
@@ -537,6 +598,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   consultant_model: 'gpt-4o', // Default to vision model for consultant
   worker_chat_history: [],
   worker_model: 'gpt-4o-mini', // Default to cheaper model for worker
+  image_prompt_model: 'gpt-image-1.5', // Default to OpenAI image model for testing prompts
   integration_mode: 'live',
   fallback_to_live: true,
   fallback_prompt_mode: 'main_prompt', // Default: use Main Prompt when falling back to live
@@ -576,7 +638,19 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   // Prompt Template System
   prompt_templates: [],
   text_snippets: [],
-  placeholder_category_templates: []
+  placeholder_category_templates: [],
+  // Section order - user-configurable order of UI sections
+  section_order: ['image_integration', 'audience_avatars', 'batch_bank', 'draft_used', 'resource_tabs', 'chat_tabs'],
+  // ========== TAG-BASED MULTI-PROMPT SYSTEM ==========
+  // Multi-prompt per tag for Guided GPT - empty array, user creates prompts per tag
+  guided_gpt_prompts: [],
+  // Multi-prompt per tag for Smart/Legacy Prompt
+  smart_prompt_prompts: [],
+  // ========== TAG-BASED RULES SYSTEM ==========
+  // Rules per tag for Guided GPT (replaces placement rules)
+  guided_gpt_rules: [],
+  // Rules per tag for Smart/Legacy Prompt
+  legacy_prompt_rules: []
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -589,8 +663,28 @@ const AVAILABLE_MODELS = [
   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google' }
 ];
 
+// Image Prompt chat models - includes image generation models + chat models
+const IMAGE_PROMPT_MODELS = [
+  { id: 'gpt-image-1.5', name: 'GPT-Image-1.5 (Generate)', provider: 'openai', isImageModel: true },
+  { id: 'flux-kontext-pro', name: 'Flux Kontext Pro (Generate)', provider: 'bfl', isImageModel: true },
+  { id: 'flux-kontext-max', name: 'Flux Kontext Max (Generate)', provider: 'bfl', isImageModel: true },
+  { id: 'gpt-4o', name: 'GPT-4o (Chat)', provider: 'openai', isImageModel: false },
+  { id: 'gpt-5.2-2025-12-11', name: 'GPT-5.2 (Chat)', provider: 'openai', isImageModel: false },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Chat)', provider: 'openai', isImageModel: false },
+];
+
 // Variation placeholder tag
 const VARIATION_PLACEHOLDER = '{variation}';
+
+// Section definitions for reorderable UI sections
+const SECTION_DEFINITIONS: { [key: string]: { name: string; icon: string } } = {
+  image_integration: { name: 'Image Integration Settings', icon: '⚙️' },
+  audience_avatars: { name: 'Audience Avatars', icon: '👥' },
+  batch_bank: { name: 'Batch Generate + Image Bank', icon: '🖼️' },
+  draft_used: { name: 'Draft / Used Archive', icon: '📦' },
+  resource_tabs: { name: 'Resources', icon: '📚' },
+  chat_tabs: { name: 'Chatbots', icon: '💬' },
+};
 
 const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettingsChange, showNotification, addLog, onHeaderControlsReady }) => {
   // State
@@ -607,6 +701,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isConsultantChatOpen, setIsConsultantChatOpen] = useState(false);
   const [isWorkerChatOpen, setIsWorkerChatOpen] = useState(false);
+  // Combined chat tabs state - collapsible tab bar pattern
+  const [chatTabsCollapsed, setChatTabsCollapsed] = useState(true);
+  const [activeChatTab, setActiveChatTab] = useState<'image_prompt' | 'consultant' | 'worker'>('image_prompt');
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [isBankOpen, setIsBankOpen] = useState(false); // Collapsed by default
   const [isUsedOpen, setIsUsedOpen] = useState(false);
@@ -702,6 +799,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Draft Image Bank (in-transit images for pages)
   const [isDraftBankOpen, setIsDraftBankOpen] = useState(false);
+  // Combined Draft/Used Archive tab bar state
+  const [draftUsedTabsCollapsed, setDraftUsedTabsCollapsed] = useState(true);
+  const [activeDraftUsedTab, setActiveDraftUsedTab] = useState<'draft' | 'used'>('draft');
   const [draftBankImages, setDraftBankImages] = useState<any[]>([]);
   const [draftBankStats, setDraftBankStats] = useState<{
     total: number; draft: number; sent: number; replaced: number;
@@ -772,6 +872,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Image Integration Settings - default OPEN
   const [imageIntegrationCollapsed, setImageIntegrationCollapsed] = useState(false);
+
+  // Section reorder mode - toggle to show/hide up/down buttons
+  const [isReorderMode, setIsReorderMode] = useState(false);
 
   // Guided GPT Assistant Chat state
   const [guidedAssistantOpen, setGuidedAssistantOpen] = useState(false);
@@ -1026,12 +1129,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
   }, [workflowId]);
 
-  // Fetch extended context when Consultant Chat is opened
+  // Fetch extended context when Consultant Chat tab is opened
   useEffect(() => {
-    if (isConsultantChatOpen && workflowId) {
+    if (!chatTabsCollapsed && activeChatTab === 'consultant' && workflowId) {
       fetchConsultantContext();
     }
-  }, [isConsultantChatOpen, workflowId]);
+  }, [chatTabsCollapsed, activeChatTab, workflowId]);
 
   // Sync Tag Manager tags with Audience Avatars
   useEffect(() => {
@@ -1169,6 +1272,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           consultant_model: data.settings.consultant_model || 'gpt-4o',
           worker_chat_history: data.settings.worker_chat_history || [],
           worker_model: data.settings.worker_model || 'gpt-4o-mini',
+          image_prompt_model: data.settings.image_prompt_model || 'gpt-image-1.5',
           image_order: data.settings.image_order || [],
           manual_variation_order: data.settings.manual_variation_order || [],
           // Prompt Problem Areas
@@ -1176,7 +1280,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           // Prompt Template System - ensure arrays are never null
           prompt_templates: data.settings.prompt_templates || [],
           text_snippets: data.settings.text_snippets || [],
-          placeholder_category_templates: data.settings.placeholder_category_templates || []
+          placeholder_category_templates: data.settings.placeholder_category_templates || [],
+          // Tag-based multi-prompt system
+          guided_gpt_prompts: data.settings.guided_gpt_prompts || [],
+          smart_prompt_prompts: data.settings.smart_prompt_prompts || [],
+          // Tag-based rules system
+          guided_gpt_rules: data.settings.guided_gpt_rules || [],
+          legacy_prompt_rules: data.settings.legacy_prompt_rules || []
         };
         setSettings(loadedSettings);
         if (loadedSettings.audience_avatars.length > 0) {
@@ -1478,6 +1588,22 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             </>
           )}
         </select>
+        {/* Section Order Toggle */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setIsReorderMode(!isReorderMode); }}
+          className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition ${
+            isReorderMode
+              ? 'bg-amber-500 hover:bg-amber-600 text-slate-900'
+              : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+          }`}
+          title={isReorderMode ? "Done reordering sections" : "Reorder sections"}
+        >
+          {/* Two chevrons icon */}
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 11l5-5 5 5M7 17l5-5 5 5" />
+          </svg>
+          {isReorderMode ? 'Done' : 'Order'}
+        </button>
         {/* Prompt Guide */}
         <button
           onClick={(e) => { e.stopPropagation(); setShowPromptGuide(true); }}
@@ -1516,7 +1642,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     );
 
     onHeaderControlsReady(headerControls);
-  }, [onHeaderControlsReady, loading, settings.image_generation_model, settings.image_quality, saving, loaded, hasUnsavedChanges, forceSave, saveSettings]);
+  }, [onHeaderControlsReady, loading, settings.image_generation_model, settings.image_quality, saving, loaded, hasUnsavedChanges, forceSave, saveSettings, isReorderMode]);
 
   // Get active avatar
   const activeAvatar = settings.audience_avatars.find(a => a.id === activeAvatarId) || settings.audience_avatars[0];
@@ -5477,6 +5603,64 @@ Start by introducing yourself and asking about their business in a friendly way.
     }
   };
 
+  // ========== SECTION REORDER HELPERS ==========
+  // Get the order of sections from settings, with fallback to default
+  const sectionOrder = settings.section_order || DEFAULT_SETTINGS.section_order || [];
+
+  // Get the CSS order value for a section (position in array)
+  const getSectionOrder = (sectionId: string): number => {
+    const idx = sectionOrder.indexOf(sectionId);
+    return idx >= 0 ? idx : 999; // Unknown sections go to end
+  };
+
+  // Move a section up or down in the order
+  const moveSectionOrder = (sectionId: string, direction: 'up' | 'down') => {
+    const currentOrder = [...sectionOrder];
+    const idx = currentOrder.indexOf(sectionId);
+    if (idx < 0) return;
+
+    const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= currentOrder.length) return;
+
+    // Swap positions
+    [currentOrder[idx], currentOrder[newIdx]] = [currentOrder[newIdx], currentOrder[idx]];
+    updateSettings({ section_order: currentOrder });
+  };
+
+  // Reorder button component for section headers - only shows in reorder mode
+  const SectionReorderButtons = ({ sectionId }: { sectionId: string }) => {
+    if (!isReorderMode) return null;
+
+    const idx = sectionOrder.indexOf(sectionId);
+    const isFirst = idx === 0;
+    const isLast = idx === sectionOrder.length - 1;
+
+    return (
+      <div className="flex items-center gap-0.5 ml-auto mr-2 animate-pulse">
+        <button
+          onClick={(e) => { e.stopPropagation(); moveSectionOrder(sectionId, 'up'); }}
+          disabled={isFirst}
+          className={`p-1.5 rounded transition-all ${isFirst ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-600 bg-slate-700 text-slate-300 hover:text-white'}`}
+          title="Move section up"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+          </svg>
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); moveSectionOrder(sectionId, 'down'); }}
+          disabled={isLast}
+          className={`p-1.5 rounded transition-all ${isLast ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-600 bg-slate-700 text-slate-300 hover:text-white'}`}
+          title="Move section down"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -5486,7 +5670,7 @@ Start by introducing yourself and asking about their business in a friendly way.
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* Prompt Guide Modal - Shows both GPT-Image and Flux guides */}
       {showPromptGuide && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -5640,11 +5824,14 @@ Start by introducing yourself and asking about their business in a friendly way.
           <span className="text-yellow-400 text-sm">{generationProgress}</span>
         </div>
       )}
+
+          {/* ═══════════════════ SECTION: image_integration ═══════════════════ */}
+          <div style={{ order: getSectionOrder('image_integration') }}>
           {/* ═══════════════════════════════════════════════════════════════════
               UNIFIED IMAGE INTEGRATION SETTINGS DASHBOARD
               All page integration, smart matching, and ordering in ONE place
           ═══════════════════════════════════════════════════════════════════ */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/30 rounded-xl border-2 border-purple-500/50 overflow-hidden shadow-lg shadow-purple-500/10">
+          <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-purple-950/30 rounded-xl border-[3px] border-purple-500/50 overflow-hidden shadow-lg shadow-purple-500/10">
             {/* Dashboard Header - Clickable to collapse/expand */}
             <button
               onClick={() => setImageIntegrationCollapsed(!imageIntegrationCollapsed)}
@@ -5663,6 +5850,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                     <p className="text-xs text-purple-300/70">Configure how images are selected and published to pages</p>
                   </div>
                 </div>
+                <SectionReorderButtons sectionId="image_integration" />
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-1 bg-purple-600/40 text-purple-200 text-xs rounded-full font-medium border border-purple-500/30">
                     {settings.integration_mode === 'bank' ? '📦 Bank Mode' : '⚡ Live Mode'}
@@ -8357,53 +8545,59 @@ Start by introducing yourself and asking about their business in a friendly way.
             </div>
             )}
           </div>
+          </div>{/* End SECTION: image_integration */}
 
+          {/* ═══════════════════ SECTION: resource_tabs ═══════════════════ */}
+          <div style={{ order: getSectionOrder('resource_tabs') }}>
       {/* ========== RESOURCE TABS: Problem Areas, Reference Images, Logo & Action Shots ========== */}
-      <div className="bg-slate-900 rounded-lg border border-slate-600 overflow-hidden">
-        {/* Collapsible Header */}
-        <button
-          onClick={() => setResourceTabsCollapsed(!resourceTabsCollapsed)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/50 hover:bg-slate-800 transition-all"
-        >
-          <div className="flex items-center gap-2">
-            <svg
-              className={`w-4 h-4 text-slate-400 transition-transform ${resourceTabsCollapsed ? '' : 'rotate-180'}`}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+      <div className="bg-slate-900 rounded-lg border-[3px] border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
+        {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 3 tab buttons */}
+        <div className="flex bg-slate-600/50">
+          {resourceTabsCollapsed ? (
+            /* COLLAPSED STATE: Single button that expands the whole section */
+            <button
+              onClick={() => setResourceTabsCollapsed(false)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-600/50 transition-all"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-            </svg>
-            <div className="flex items-center gap-1.5 text-sm">
-              <span className="text-orange-400 font-medium">🎯 Problem Areas</span>
-              <span className="text-slate-500">|</span>
-              <span className="text-brand-gold font-medium">📷 Reference Images</span>
-              <span className="text-slate-500">|</span>
-              <span className="text-pink-400 font-medium">🏷️ Logo & Action</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {settings.prompt_problem_areas.length > 0 && (
-              <span className="text-xs bg-orange-500/30 text-orange-400 px-2 py-0.5 rounded">
-                {settings.prompt_problem_areas.length}
-              </span>
-            )}
-            {settings.reference_images.length > 0 && (
-              <span className="text-xs bg-brand-gold/30 text-brand-gold px-2 py-0.5 rounded">
-                {settings.reference_images.length}
-              </span>
-            )}
-            {(logoImages.length > 0 || actionShots.length > 0) && (
-              <span className="text-xs bg-pink-500/30 text-pink-400 px-2 py-0.5 rounded">
-                {logoImages.length + actionShots.length}
-              </span>
-            )}
-          </div>
-        </button>
-
-        {/* Expanded Content */}
-        {!resourceTabsCollapsed && (
-          <>
-            {/* Tab Bar */}
-            <div className="flex border-t border-b border-slate-700">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+                <div className="flex items-center gap-2">
+                  <span className="text-orange-400 font-semibold">🎯 Problem Areas</span>
+                  <span className="text-slate-500">|</span>
+                  <span className="text-brand-gold font-semibold">📷 Reference Images</span>
+                  <span className="text-slate-500">|</span>
+                  <span className="text-pink-400 font-semibold">🏷️ Logo & Action</span>
+                </div>
+              </div>
+              <SectionReorderButtons sectionId="resource_tabs" />
+              <div className="flex items-center gap-2">
+                {settings.prompt_problem_areas.length > 0 && (
+                  <span className="text-xs bg-orange-500/30 text-orange-400 px-2 py-0.5 rounded">{settings.prompt_problem_areas.length}</span>
+                )}
+                {settings.reference_images.length > 0 && (
+                  <span className="text-xs bg-brand-gold/30 text-brand-gold px-2 py-0.5 rounded">{settings.reference_images.length}</span>
+                )}
+                {(logoImages.length > 0 || actionShots.length > 0) && (
+                  <span className="text-xs bg-pink-500/30 text-pink-400 px-2 py-0.5 rounded">{logoImages.length + actionShots.length}</span>
+                )}
+              </div>
+            </button>
+          ) : (
+            /* EXPANDED STATE: Chevron button + 3 separate tab buttons */
+            <>
+              {/* Chevron collapse button */}
+              <button
+                onClick={() => setResourceTabsCollapsed(true)}
+                className="px-3 py-3 hover:bg-slate-700 transition-all border-r border-slate-700 flex items-center"
+                title="Collapse tabs"
+              >
+                <svg className="w-4 h-4 text-slate-400 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {/* Problem Areas tab button */}
               <button
                 onClick={() => setActiveResourceTab('problem_areas')}
                 className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
@@ -8417,6 +8611,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="text-xs bg-orange-500/30 px-1.5 py-0.5 rounded">{settings.prompt_problem_areas.length}</span>
                 )}
               </button>
+              {/* Reference Images tab button */}
               <button
                 onClick={() => setActiveResourceTab('reference_images')}
                 className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
@@ -8430,6 +8625,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="text-xs bg-brand-gold/30 px-1.5 py-0.5 rounded">{settings.reference_images.length}</span>
                 )}
               </button>
+              {/* Logo & Action tab button */}
               <button
                 onClick={() => setActiveResourceTab('logo_action')}
                 className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
@@ -8443,7 +8639,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="text-xs bg-pink-500/30 px-1.5 py-0.5 rounded">{logoImages.length + actionShots.length}</span>
                 )}
               </button>
-            </div>
+            </>
+          )}
+        </div>
+
+        {/* Tab Content - only shown when expanded */}
+        {!resourceTabsCollapsed && (
+          <>
 
             {/* Tab Content */}
             {/* Prompt Problem Areas Tab */}
@@ -8797,9 +8999,12 @@ Start by introducing yourself and asking about their business in a friendly way.
         )}
       </div>
       {/* End Resource Tabs */}
+          </div>{/* End SECTION: resource_tabs */}
 
+          {/* ═══════════════════ SECTION: audience_avatars ═══════════════════ */}
+          <div style={{ order: getSectionOrder('audience_avatars') }}>
           {/* Audience Avatars - Simple collapsible section */}
-          <div className="bg-slate-900 rounded-lg border border-brand-gold/50 p-4">
+          <div className="bg-slate-900 rounded-lg border-[3px] border-brand-gold/50 p-4 shadow-[0_0_20px_rgba(212,175,55,0.45)]">
             {/* Header - Always visible */}
             <div
               className="flex items-center justify-between cursor-pointer"
@@ -8819,6 +9024,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </span>
                 )}
               </div>
+              <SectionReorderButtons sectionId="audience_avatars" />
               <div className="flex items-center gap-2">
                 <button
                   onClick={(e) => { e.stopPropagation(); setAvatarsExpandedView(true); }}
@@ -9566,103 +9772,202 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
             </div>}
           </div>
+          </div>{/* End SECTION: audience_avatars */}
 
-          {/* Chat Interface (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-brand-gold/50 overflow-hidden">
-            <button
-              onClick={() => setIsChatOpen(!isChatOpen)}
-              className="w-full flex items-center justify-between p-3 text-brand-gold hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                Image Prompt Chat
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {isChatOpen && (
-              <div className="border-t border-brand-gold/30">
-                <div ref={chatContainerRef} className="h-64 overflow-y-auto p-4 space-y-3">
-                  {settings.chat_history.length === 0 ? (
-                    <p className="text-center text-brand-gold/50 py-8">Chat with AI to help craft prompts.</p>
-                  ) : (
-                    settings.chat_history.map((msg, idx) => (
-                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-brand-cyan/20 border border-brand-cyan/50' : 'bg-slate-800 border border-brand-gold/30'}`}>
-                          {msg.images && msg.images.length > 0 && (
-                            <div className="flex gap-2 mb-2">
-                              {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
-                            </div>
-                          )}
-                          <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  {chatLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-slate-800 border border-brand-gold/30 rounded-lg p-3">
-                        <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                        </div>
-                      </div>
+          {/* ═══════════════════ SECTION: chat_tabs ═══════════════════ */}
+          <div style={{ order: getSectionOrder('chat_tabs') }}>
+          {/* ========== COMBINED CHAT TABS: Image Prompt, Consultant, Worker ========== */}
+          <div className="bg-slate-900 rounded-lg border-[3px] border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
+            {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 3 tab buttons */}
+            <div className="flex bg-slate-600/50">
+              {chatTabsCollapsed ? (
+                /* COLLAPSED STATE: Single button that expands the whole section */
+                <button
+                  onClick={() => setChatTabsCollapsed(false)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-600/50 transition-all"
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                    {/* Chatbots label */}
+                    <span className="text-emerald-400 font-semibold flex items-center gap-1.5 mr-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      Chatbots
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-brand-gold font-semibold">💬 Image Prompt</span>
+                      <span className="text-slate-500">|</span>
+                      <span className="text-indigo-400 font-semibold">💡 Consultant</span>
+                      <span className="text-slate-500">|</span>
+                      <span className="text-emerald-400 font-semibold">⚙️ Worker</span>
                     </div>
-                  )}
-                </div>
-                {chatImages.length > 0 && (
-                  <div className="px-4 py-2 border-t border-brand-gold/30 flex gap-2">
-                    {chatImages.map((img, idx) => (
-                      <div key={idx} className="relative">
-                        <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
-                        <button onClick={() => setChatImages(chatImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
+                  </div>
+                  <SectionReorderButtons sectionId="chat_tabs" />
+                  <div className="flex items-center gap-2">
+                    {settings.chat_history.length > 0 && (
+                      <span className="text-xs bg-brand-gold/30 text-brand-gold px-2 py-0.5 rounded">{settings.chat_history.length}</span>
+                    )}
+                    {settings.consultant_chat_history.length > 0 && (
+                      <span className="text-xs bg-indigo-500/30 text-indigo-400 px-2 py-0.5 rounded">{settings.consultant_chat_history.length}</span>
+                    )}
+                    {settings.worker_chat_history.length > 0 && (
+                      <span className="text-xs bg-emerald-500/30 text-emerald-400 px-2 py-0.5 rounded">{settings.worker_chat_history.length}</span>
+                    )}
+                  </div>
+                </button>
+              ) : (
+                /* EXPANDED STATE: Chevron button + 3 separate tab buttons */
+                <>
+                  {/* Chevron collapse button */}
+                  <button
+                    onClick={() => setChatTabsCollapsed(true)}
+                    className="px-3 py-3 hover:bg-slate-700 transition-all border-r border-slate-700 flex items-center"
+                    title="Collapse chat tabs"
+                  >
+                    <svg className="w-5 h-5 text-slate-400 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {/* Chatbots label */}
+                  <div className="px-3 py-3 border-r border-slate-700 flex items-center gap-1.5 text-emerald-400">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    <span className="font-semibold text-sm">Chatbots</span>
+                  </div>
+                  {/* Image Prompt Chat tab button */}
+                  <button
+                    onClick={() => setActiveChatTab('image_prompt')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                      activeChatTab === 'image_prompt'
+                        ? 'bg-brand-gold/20 text-brand-gold border-b-2 border-brand-gold'
+                        : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    💬 Image Prompt
+                    {settings.chat_history.length > 0 && (
+                      <span className="text-xs bg-brand-gold/30 px-1.5 py-0.5 rounded">{settings.chat_history.length}</span>
+                    )}
+                  </button>
+                  {/* Consultant Chat tab button */}
+                  <button
+                    onClick={() => setActiveChatTab('consultant')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                      activeChatTab === 'consultant'
+                        ? 'bg-indigo-500/20 text-indigo-400 border-b-2 border-indigo-500'
+                        : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    💡 Consultant
+                    {settings.consultant_chat_history.length > 0 && (
+                      <span className="text-xs bg-indigo-500/30 px-1.5 py-0.5 rounded">{settings.consultant_chat_history.length}</span>
+                    )}
+                  </button>
+                  {/* Worker Chat tab button */}
+                  <button
+                    onClick={() => setActiveChatTab('worker')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                      activeChatTab === 'worker'
+                        ? 'bg-emerald-500/20 text-emerald-400 border-b-2 border-emerald-500'
+                        : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    ⚙️ Worker
+                    {settings.worker_chat_history.length > 0 && (
+                      <span className="text-xs bg-emerald-500/30 px-1.5 py-0.5 rounded">{settings.worker_chat_history.length}</span>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Tab Content - only shown when expanded */}
+            {!chatTabsCollapsed && (
+              <>
+                {/* Image Prompt Chat Tab Content */}
+                {activeChatTab === 'image_prompt' && (
+                  <div className="border-t border-brand-gold/30">
+                    {/* Model selector */}
+                    <div className="p-3 bg-brand-gold/10 border-b border-brand-gold/30 flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-brand-gold">Model:</label>
+                        <select
+                          value={settings.image_prompt_model || 'gpt-image-1.5'}
+                          onChange={(e) => updateSettings({ image_prompt_model: e.target.value })}
+                          className="bg-slate-800 border border-brand-gold/50 rounded px-2 py-1 text-white text-xs"
+                        >
+                          {IMAGE_PROMPT_MODELS.map(m => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                        {IMAGE_PROMPT_MODELS.find(m => m.id === settings.image_prompt_model)?.isImageModel && (
+                          <span className="bg-green-600/40 text-green-300 text-[10px] px-1.5 py-0.5 rounded">GENERATES IMAGES</span>
+                        )}
                       </div>
-                    ))}
+                      <button
+                        onClick={() => updateSettings({ chat_history: [] })}
+                        className="px-2 py-1 bg-red-600/50 hover:bg-red-600 rounded text-white text-xs transition"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div ref={chatContainerRef} className="h-64 overflow-y-auto p-4 space-y-3">
+                      {settings.chat_history.length === 0 ? (
+                        <p className="text-center text-brand-gold/50 py-8">Chat with AI to help craft prompts.</p>
+                      ) : (
+                        settings.chat_history.map((msg, idx) => (
+                          <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[80%] rounded-lg p-3 ${msg.role === 'user' ? 'bg-brand-cyan/20 border border-brand-cyan/50' : 'bg-slate-800 border border-brand-gold/30'}`}>
+                              {msg.images && msg.images.length > 0 && (
+                                <div className="flex gap-2 mb-2">
+                                  {msg.images.map((img, i) => (<img key={i} src={img} alt="" className="w-16 h-16 object-cover rounded" />))}
+                                </div>
+                              )}
+                              <p className="text-sm text-white whitespace-pre-wrap">{msg.content}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      {chatLoading && (
+                        <div className="flex justify-start">
+                          <div className="bg-slate-800 border border-brand-gold/30 rounded-lg p-3">
+                            <div className="flex gap-1">
+                              <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce"></div>
+                              <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                              <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {chatImages.length > 0 && (
+                      <div className="px-4 py-2 border-t border-brand-gold/30 flex gap-2">
+                        {chatImages.map((img, idx) => (
+                          <div key={idx} className="relative">
+                            <img src={img} alt="" className="w-12 h-12 object-cover rounded" />
+                            <button onClick={() => setChatImages(chatImages.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full text-white text-xs">&times;</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="p-4 border-t border-brand-gold/30 flex gap-2">
+                      <button onClick={() => chatFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-brand-gold transition" title="Attach Image">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                      </button>
+                      <input ref={chatFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
+                      <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()} placeholder="Ask about image prompts..." className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm" />
+                      <button onClick={handleSendChat} disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 font-medium text-sm transition">Send</button>
+                    </div>
                   </div>
                 )}
-                <div className="p-4 border-t border-brand-gold/30 flex gap-2">
-                  <button onClick={() => chatFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-brand-gold transition" title="Attach Image">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                  </button>
-                  <input ref={chatFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
-                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()} placeholder="Ask about image prompts..." className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm" />
-                  <button onClick={handleSendChat} disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 font-medium text-sm transition">Send</button>
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* ========== DUAL CHAT SYSTEM ========== */}
-
-          {/* Consultant Chat - Strategic Partner with Vision */}
-          <div className="bg-slate-900 rounded-lg border-2 border-indigo-500/70 overflow-hidden">
-            <button
-              onClick={() => setIsConsultantChatOpen(!isConsultantChatOpen)}
-              className="w-full flex items-center justify-between p-3 text-indigo-400 hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-                Consultant Chat (Vision AI)
-                {IMAGE_CAPABLE_MODELS.includes(settings.consultant_model) && (
-                  <span className="bg-indigo-600/40 text-indigo-300 text-[10px] px-1.5 py-0.5 rounded">CAN SEE IMAGES</span>
-                )}
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-indigo-300/70">{settings.consultant_chat_history.length} msgs</span>
-                <svg className={`w-5 h-5 transition-transform ${isConsultantChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
-
-            {isConsultantChatOpen && (
+                {/* Consultant Chat Tab Content */}
+                {activeChatTab === 'consultant' && (
               <div className="border-t border-indigo-500/30">
                 {/* Model selector and controls */}
                 <div className="p-3 bg-indigo-900/20 border-b border-indigo-500/30 flex items-center justify-between flex-wrap gap-2">
@@ -9865,34 +10170,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </button>
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* Worker Chat - Operational Helper */}
-          <div className="bg-slate-900 rounded-lg border-2 border-emerald-500/70 overflow-hidden">
-            <button
-              onClick={() => setIsWorkerChatOpen(!isWorkerChatOpen)}
-              className="w-full flex items-center justify-between p-3 text-emerald-400 hover:bg-slate-800/50 transition"
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Worker Chat (Operations)
-                {settings.consultant_chat_history.length > 0 && (
-                  <span className="bg-emerald-600/40 text-emerald-300 text-[10px] px-1.5 py-0.5 rounded">SEES CONSULTANT</span>
                 )}
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-emerald-300/70">{settings.worker_chat_history.length} msgs</span>
-                <svg className={`w-5 h-5 transition-transform ${isWorkerChatOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
 
-            {isWorkerChatOpen && (
+                {/* Worker Chat Tab Content */}
+                {activeChatTab === 'worker' && (
               <div className="border-t border-emerald-500/30">
                 {/* Model selector and controls */}
                 <div className="p-3 bg-emerald-900/20 border-b border-emerald-500/30 flex items-center justify-between flex-wrap gap-2">
@@ -10000,11 +10281,18 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </button>
                 </div>
               </div>
+                )}
+              </>
             )}
           </div>
+          </div>{/* End SECTION: chat_tabs */}
 
+          {/* ═══════════════════ SECTION: batch_bank ═══════════════════ */}
+          <div style={{ order: getSectionOrder('batch_bank') }}>
+          {/* ========== CONNECTED: Batch Generate + Image Bank ========== */}
+          <div className="space-y-0 shadow-[0_0_22px_rgba(34,197,94,0.4)]">
           {/* Batch Generate (Collapsible) - Supports Simple and Advanced modes */}
-          <div className="bg-slate-900 rounded-lg border border-green-500/50 overflow-hidden">
+          <div className="bg-slate-900 rounded-t-lg rounded-b-none border-[3px] border-b-0 border-green-500/70 overflow-hidden">
             <button onClick={() => setIsBatchOpen(!isBatchOpen)} className="w-full flex items-center justify-between p-3 text-green-400 hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
@@ -10013,6 +10301,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-[10px] rounded">ADVANCED</span>
                 )}
               </span>
+              <SectionReorderButtons sectionId="batch_bank" />
               <svg className={`w-5 h-5 transition-transform ${isBatchOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
             </button>
             {isBatchOpen && (
@@ -10196,8 +10485,10 @@ Start by introducing yourself and asking about their business in a friendly way.
             )}
           </div>
 
+          {/* Dividing line between Batch Generate and Image Bank */}
+          <div className="h-[4px] bg-gradient-to-r from-green-500/50 via-slate-500 to-brand-cyan/50"></div>
           {/* Image Bank (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-brand-cyan/50 overflow-hidden">
+          <div className="bg-slate-900 rounded-t-none rounded-b-lg border-[3px] border-t-0 border-brand-cyan/70 overflow-hidden">
             <button onClick={() => setIsBankOpen(!isBankOpen)} className="w-full flex items-center justify-between p-3 text-brand-cyan hover:bg-slate-800/50 transition">
               <span className="flex items-center gap-2 font-semibold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -10466,21 +10757,91 @@ Start by introducing yourself and asking about their business in a friendly way.
               </div>
             )}
           </div>
+          </div>{/* End of connected Batch Generate + Image Bank */}
+          </div>{/* End SECTION: batch_bank */}
 
-          {/* Draft Image Bank (Collapsible) - In-transit images for pages */}
-          <div className="bg-slate-900 rounded-lg border border-amber-500/50 overflow-hidden">
-            <button onClick={() => setIsDraftBankOpen(!isDraftBankOpen)} className="w-full flex items-center justify-between p-3 text-amber-400 hover:bg-slate-800/50 transition">
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-                Draft Image Bank ({draftBankStats.draft} in draft)
-                {/* Stats badges */}
-                <span className="ml-2 text-[10px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">
-                  Made: {draftBankStats.totalMade} | Replaced: {draftBankStats.totalReplaced}
-                </span>
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isDraftBankOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {isDraftBankOpen && (
+          {/* ═══════════════════ SECTION: draft_used ═══════════════════ */}
+          <div style={{ order: getSectionOrder('draft_used') }}>
+          {/* ========== COMBINED DRAFT/USED TABS: Draft Image Bank, Used/Archive ========== */}
+          <div className="bg-slate-900 rounded-lg border-[3px] border-slate-500 overflow-hidden shadow-[0_0_12px_rgba(100,116,139,0.4)]">
+            {/* Collapsible Tab Bar - Collapsed: one big button, Expanded: chevron + 2 tab buttons */}
+            <div className="flex bg-slate-600/50">
+              {draftUsedTabsCollapsed ? (
+                /* COLLAPSED STATE: Single button that expands the whole section */
+                <button
+                  onClick={() => setDraftUsedTabsCollapsed(false)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-600/50 transition-all"
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <div className="flex items-center gap-2">
+                      <span className="text-amber-400 font-semibold flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                        Draft Image Bank ({draftBankStats.draft} in draft)
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">
+                        Made: {draftBankStats.totalMade} | Replaced: {draftBankStats.totalReplaced}
+                      </span>
+                      <span className="text-slate-500 mx-2">|</span>
+                      <span className="text-purple-400 font-semibold flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                        Used/Archive ({usedImages.length})
+                      </span>
+                    </div>
+                  </div>
+                  <SectionReorderButtons sectionId="draft_used" />
+                </button>
+              ) : (
+                /* EXPANDED STATE: Chevron button + 2 separate tab buttons */
+                <>
+                  {/* Chevron collapse button */}
+                  <button
+                    onClick={() => setDraftUsedTabsCollapsed(true)}
+                    className="px-3 py-3 hover:bg-slate-700 transition-all border-r border-slate-700 flex items-center"
+                    title="Collapse tabs"
+                  >
+                    <svg className="w-5 h-5 text-slate-400 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {/* Draft Image Bank tab button */}
+                  <button
+                    onClick={() => setActiveDraftUsedTab('draft')}
+                    className={`flex-1 px-4 py-3 font-medium transition-all flex items-center justify-center gap-2 ${
+                      activeDraftUsedTab === 'draft'
+                        ? 'bg-amber-500/20 text-amber-400 border-b-2 border-amber-500'
+                        : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                    Draft Image Bank ({draftBankStats.draft})
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-700/50 text-slate-300">
+                      Made: {draftBankStats.totalMade} | Replaced: {draftBankStats.totalReplaced}
+                    </span>
+                  </button>
+                  {/* Used/Archive tab button */}
+                  <button
+                    onClick={() => setActiveDraftUsedTab('used')}
+                    className={`flex-1 px-4 py-3 font-medium transition-all flex items-center justify-center gap-2 ${
+                      activeDraftUsedTab === 'used'
+                        ? 'bg-purple-500/20 text-purple-400 border-b-2 border-purple-500'
+                        : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
+                    Used/Archive ({usedImages.length})
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Tab Content - only shown when expanded */}
+            {!draftUsedTabsCollapsed && (
+              <>
+                {/* Draft Image Bank Tab Content */}
+                {activeDraftUsedTab === 'draft' && (
               <div className="p-4 border-t border-amber-500/30 space-y-3">
                 {/* Stats Overview */}
                 <div className="grid grid-cols-4 gap-3">
@@ -10668,19 +11029,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
                 )}
               </div>
-            )}
-          </div>
+                )}
 
-          {/* Used/Archive (Collapsible) */}
-          <div className="bg-slate-900 rounded-lg border border-purple-500/50 overflow-hidden">
-            <button onClick={() => setIsUsedOpen(!isUsedOpen)} className="w-full flex items-center justify-between p-3 text-purple-400 hover:bg-slate-800/50 transition">
-              <span className="flex items-center gap-2 font-semibold">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
-                Used/Archive ({usedImages.length})
-              </span>
-              <svg className={`w-5 h-5 transition-transform ${isUsedOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-            {isUsedOpen && (
+                {/* Used/Archive Tab Content */}
+                {activeDraftUsedTab === 'used' && (
               <div className="p-4 border-t border-purple-500/30 space-y-3">
                 {/* Action Buttons */}
                 {usedImages.length > 0 && (
@@ -10774,8 +11126,11 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <p className="text-center text-brand-gold/50 py-4">No used images.</p>
                 )}
               </div>
+                )}
+              </>
             )}
           </div>
+          </div>{/* End SECTION: draft_used */}
 
 
       {saving && (
