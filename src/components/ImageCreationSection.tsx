@@ -481,7 +481,7 @@ interface ImageCreationSettings {
   // When bank is empty and falls back to live, which prompt source to use
   fallback_prompt_mode: 'main_prompt' | 'guided_gpt' | 'smart_prompt';
   image_order: string[];
-  variation_order_mode: 'sequential' | 'random' | 'manual';
+  variation_order_mode: 'sequential' | 'random' | 'manual' | 'follow_rules';
   manual_variation_order: string[];
   // Smart Content Matching (Phase 2 feature)
   smart_matching_enabled: boolean; // Master toggle for smart content matching
@@ -708,6 +708,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [isBankOpen, setIsBankOpen] = useState(false); // Collapsed by default
   const [isUsedOpen, setIsUsedOpen] = useState(false);
   const [isOrderOpen, setIsOrderOpen] = useState(false);
+
+  // ========== TAG-BASED RULES SYSTEM STATE ==========
+  // Guided GPT Rules section (collapsible, per-tag)
+  const [guidedRulesCollapsed, setGuidedRulesCollapsed] = useState(true);
+  const [guidedRulesActiveTag, setGuidedRulesActiveTag] = useState<string>('Global');
+  const [guidedRulesEditingId, setGuidedRulesEditingId] = useState<string | null>(null);
+  // Legacy Prompt Rules section (collapsible, per-tag)
+  const [legacyRulesCollapsed, setLegacyRulesCollapsed] = useState(true);
+  const [legacyRulesActiveTag, setLegacyRulesActiveTag] = useState<string>('Global');
+  const [legacyRulesEditingId, setLegacyRulesEditingId] = useState<string | null>(null);
 
   // Double opt-in confirmation for "Generate First" (save to bank) option
   const [showGenerateFirstWarning, setShowGenerateFirstWarning] = useState(false);
@@ -2531,6 +2541,93 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     handleUpdateAvatar(activeAvatar.id, { variations: newVariations });
     if (activeVariationId === variationId) {
       setActiveVariationId(newVariations[0]?.id || null);
+    }
+  };
+
+  // ========== TAG-BASED RULES HANDLERS ==========
+  // Helper to get rules for a specific tag (or all rules if 'all' is passed)
+  const getRulesForTag = (rules: TagBasedRule[], tag: string): TagBasedRule[] => {
+    if (tag === 'Global') {
+      return rules.filter(r => r.tag === 'Global').sort((a, b) => a.order - b.order);
+    }
+    return rules.filter(r => r.tag === tag).sort((a, b) => a.order - b.order);
+  };
+
+  // Add a new Guided GPT rule
+  const handleAddGuidedRule = (tag: string) => {
+    const existingRules = settings.guided_gpt_rules || [];
+    const rulesForTag = getRulesForTag(existingRules, tag);
+    const newRule: TagBasedRule = {
+      id: `gr-${Date.now()}`,
+      tag,
+      title: `Rule ${rulesForTag.length + 1}`,
+      text: '',
+      order: rulesForTag.length,
+      globalAppliesTo: tag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      guided_gpt_rules: [...existingRules, newRule]
+    });
+    setGuidedRulesEditingId(newRule.id);
+  };
+
+  // Update a Guided GPT rule
+  const handleUpdateGuidedRule = (ruleId: string, updates: Partial<TagBasedRule>) => {
+    const existingRules = settings.guided_gpt_rules || [];
+    const updatedRules = existingRules.map(r =>
+      r.id === ruleId ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
+    );
+    updateSettings({ guided_gpt_rules: updatedRules });
+  };
+
+  // Remove a Guided GPT rule
+  const handleRemoveGuidedRule = (ruleId: string) => {
+    const existingRules = settings.guided_gpt_rules || [];
+    const updatedRules = existingRules.filter(r => r.id !== ruleId);
+    updateSettings({ guided_gpt_rules: updatedRules });
+    if (guidedRulesEditingId === ruleId) {
+      setGuidedRulesEditingId(null);
+    }
+  };
+
+  // Add a new Legacy Prompt rule
+  const handleAddLegacyRule = (tag: string) => {
+    const existingRules = settings.legacy_prompt_rules || [];
+    const rulesForTag = getRulesForTag(existingRules, tag);
+    const newRule: TagBasedRule = {
+      id: `lr-${Date.now()}`,
+      tag,
+      title: `Rule ${rulesForTag.length + 1}`,
+      text: '',
+      order: rulesForTag.length,
+      globalAppliesTo: tag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      legacy_prompt_rules: [...existingRules, newRule]
+    });
+    setLegacyRulesEditingId(newRule.id);
+  };
+
+  // Update a Legacy Prompt rule
+  const handleUpdateLegacyRule = (ruleId: string, updates: Partial<TagBasedRule>) => {
+    const existingRules = settings.legacy_prompt_rules || [];
+    const updatedRules = existingRules.map(r =>
+      r.id === ruleId ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
+    );
+    updateSettings({ legacy_prompt_rules: updatedRules });
+  };
+
+  // Remove a Legacy Prompt rule
+  const handleRemoveLegacyRule = (ruleId: string) => {
+    const existingRules = settings.legacy_prompt_rules || [];
+    const updatedRules = existingRules.filter(r => r.id !== ruleId);
+    updateSettings({ legacy_prompt_rules: updatedRules });
+    if (legacyRulesEditingId === ruleId) {
+      setLegacyRulesEditingId(null);
     }
   };
 
@@ -6084,6 +6181,158 @@ Start by introducing yourself and asking about their business in a friendly way.
                           </div>
                         )}
 
+                        {/* ========== GUIDED GPT RULES SECTION ========== */}
+                        <div className="mt-4 border-t border-emerald-500/30 pt-4">
+                          {/* Collapsible Header */}
+                          <button
+                            type="button"
+                            onClick={() => setGuidedRulesCollapsed(!guidedRulesCollapsed)}
+                            className="w-full flex items-center justify-between p-2 bg-cyan-900/30 hover:bg-cyan-900/50 rounded-lg transition"
+                          >
+                            <span className="flex items-center gap-2 text-cyan-400 font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                              </svg>
+                              Guided GPT Rules
+                              {(settings.guided_gpt_rules?.length || 0) > 0 && (
+                                <span className="px-1.5 py-0.5 bg-cyan-600 text-white text-[10px] rounded-full">
+                                  {settings.guided_gpt_rules?.length || 0}
+                                </span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-cyan-400 transition-transform ${guidedRulesCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {!guidedRulesCollapsed && (
+                            <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-cyan-500/20">
+                              <p className="text-[10px] text-cyan-300/60">
+                                Define rules per tag that guide GPT when generating image prompts. Rules replace the old placement rules.
+                              </p>
+
+                              {/* Tag Tabs */}
+                              <div className="flex flex-wrap items-center gap-1 border-b border-slate-700 pb-2">
+                                {/* Global tab first */}
+                                <button
+                                  onClick={() => setGuidedRulesActiveTag('Global')}
+                                  className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                                    guidedRulesActiveTag === 'Global'
+                                      ? 'bg-emerald-600 text-white border-b-2 border-emerald-500'
+                                      : 'bg-slate-800 text-emerald-400/70 hover:bg-slate-700 hover:text-emerald-400'
+                                  }`}
+                                >
+                                  <span>Global</span>
+                                  {getRulesForTag(settings.guided_gpt_rules || [], 'Global').length > 0 && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${guidedRulesActiveTag === 'Global' ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                      {getRulesForTag(settings.guided_gpt_rules || [], 'Global').length}
+                                    </span>
+                                  )}
+                                </button>
+                                {/* Tag-specific tabs */}
+                                {tags.map((tag) => {
+                                  const count = getRulesForTag(settings.guided_gpt_rules || [], tag.name).length;
+                                  const isSelected = guidedRulesActiveTag === tag.name;
+                                  return (
+                                    <button
+                                      key={tag.id}
+                                      onClick={() => setGuidedRulesActiveTag(tag.name)}
+                                      className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                        isSelected
+                                          ? 'bg-cyan-600 text-white border-b-2 border-cyan-500'
+                                          : 'bg-slate-800 text-brand-gold/70 hover:bg-slate-700 hover:text-brand-gold'
+                                      }`}
+                                    >
+                                      {tag.name}
+                                      {count > 0 && (
+                                        <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                          {count}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                                {/* Add Rule button */}
+                                <button
+                                  onClick={() => handleAddGuidedRule(guidedRulesActiveTag)}
+                                  className="px-2 py-1.5 text-cyan-400 hover:text-cyan-300 hover:bg-slate-700/50 rounded transition text-xs font-medium"
+                                  title="Add rule for current tag"
+                                >
+                                  + Add Rule
+                                </button>
+                              </div>
+
+                              {/* Global applies-to checkboxes */}
+                              {guidedRulesActiveTag === 'Global' && (
+                                <div className="bg-emerald-900/20 rounded-lg p-2 border border-emerald-500/30">
+                                  <span className="text-[10px] text-emerald-400 font-medium">Global rules apply to:</span>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    {tags.map(tag => (
+                                      <label key={tag.id} className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={true}
+                                          disabled
+                                          className="accent-emerald-500 w-3 h-3"
+                                        />
+                                        {tag.name}
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Rules List */}
+                              <div className="space-y-2">
+                                {getRulesForTag(settings.guided_gpt_rules || [], guidedRulesActiveTag).length === 0 ? (
+                                  <div className="text-center py-4 text-slate-500 text-xs">
+                                    <p>No rules for {guidedRulesActiveTag === 'Global' ? 'Global' : `tag "${guidedRulesActiveTag}"`} yet.</p>
+                                    <button
+                                      onClick={() => handleAddGuidedRule(guidedRulesActiveTag)}
+                                      className="mt-2 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded transition"
+                                    >
+                                      + Add First Rule
+                                    </button>
+                                  </div>
+                                ) : (
+                                  getRulesForTag(settings.guided_gpt_rules || [], guidedRulesActiveTag).map((rule, idx) => (
+                                    <div key={rule.id} className="bg-slate-800/50 rounded-lg p-3 border border-cyan-500/20">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] text-cyan-400/60 font-mono">#{idx + 1}</span>
+                                          <input
+                                            type="text"
+                                            value={rule.title}
+                                            onChange={(e) => handleUpdateGuidedRule(rule.id, { title: e.target.value })}
+                                            className="bg-transparent border-b border-cyan-500/30 text-cyan-300 text-sm font-medium focus:outline-none focus:border-cyan-500 px-1"
+                                            placeholder="Rule title..."
+                                          />
+                                        </div>
+                                        <button
+                                          onClick={() => handleRemoveGuidedRule(rule.id)}
+                                          className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
+                                          title="Remove rule"
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                      <textarea
+                                        value={rule.text}
+                                        onChange={(e) => handleUpdateGuidedRule(rule.id, { text: e.target.value })}
+                                        placeholder="Enter rule text... (e.g., 'Place image at last paragraph break under 300 words since previous image')"
+                                        className="w-full p-2 text-xs bg-slate-900 border border-cyan-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                        rows={2}
+                                      />
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
                         {/* AI Prompt Assistant Chat */}
                         <div className="mt-4 border-t border-emerald-500/30 pt-4">
                           <button
@@ -7291,6 +7540,158 @@ Start by introducing yourself and asking about their business in a friendly way.
                             rows={3}
                           />
                         </div>
+
+                        {/* ========== LEGACY PROMPT RULES SECTION ========== */}
+                        <div className="mt-4 border-t border-purple-500/30 pt-4">
+                          {/* Collapsible Header */}
+                          <button
+                            type="button"
+                            onClick={() => setLegacyRulesCollapsed(!legacyRulesCollapsed)}
+                            className="w-full flex items-center justify-between p-2 bg-purple-900/30 hover:bg-purple-900/50 rounded-lg transition"
+                          >
+                            <span className="flex items-center gap-2 text-purple-400 font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                              </svg>
+                              Legacy Prompt Rules
+                              {(settings.legacy_prompt_rules?.length || 0) > 0 && (
+                                <span className="px-1.5 py-0.5 bg-purple-600 text-white text-[10px] rounded-full">
+                                  {settings.legacy_prompt_rules?.length || 0}
+                                </span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-purple-400 transition-transform ${legacyRulesCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {!legacyRulesCollapsed && (
+                            <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-purple-500/20">
+                              <p className="text-[10px] text-purple-300/60">
+                                Define rules per tag that guide GPT when generating image prompts. Rules replace the old placement rules.
+                              </p>
+
+                              {/* Tag Tabs */}
+                              <div className="flex flex-wrap items-center gap-1 border-b border-slate-700 pb-2">
+                                {/* Global tab first */}
+                                <button
+                                  onClick={() => setLegacyRulesActiveTag('Global')}
+                                  className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                                    legacyRulesActiveTag === 'Global'
+                                      ? 'bg-emerald-600 text-white border-b-2 border-emerald-500'
+                                      : 'bg-slate-800 text-emerald-400/70 hover:bg-slate-700 hover:text-emerald-400'
+                                  }`}
+                                >
+                                  <span>Global</span>
+                                  {getRulesForTag(settings.legacy_prompt_rules || [], 'Global').length > 0 && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${legacyRulesActiveTag === 'Global' ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                      {getRulesForTag(settings.legacy_prompt_rules || [], 'Global').length}
+                                    </span>
+                                  )}
+                                </button>
+                                {/* Tag-specific tabs */}
+                                {tags.map((tag) => {
+                                  const count = getRulesForTag(settings.legacy_prompt_rules || [], tag.name).length;
+                                  const isSelected = legacyRulesActiveTag === tag.name;
+                                  return (
+                                    <button
+                                      key={tag.id}
+                                      onClick={() => setLegacyRulesActiveTag(tag.name)}
+                                      className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                        isSelected
+                                          ? 'bg-purple-600 text-white border-b-2 border-purple-500'
+                                          : 'bg-slate-800 text-brand-gold/70 hover:bg-slate-700 hover:text-brand-gold'
+                                      }`}
+                                    >
+                                      {tag.name}
+                                      {count > 0 && (
+                                        <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                          {count}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                                {/* Add Rule button */}
+                                <button
+                                  onClick={() => handleAddLegacyRule(legacyRulesActiveTag)}
+                                  className="px-2 py-1.5 text-purple-400 hover:text-purple-300 hover:bg-slate-700/50 rounded transition text-xs font-medium"
+                                  title="Add rule for current tag"
+                                >
+                                  + Add Rule
+                                </button>
+                              </div>
+
+                              {/* Global applies-to checkboxes */}
+                              {legacyRulesActiveTag === 'Global' && (
+                                <div className="bg-emerald-900/20 rounded-lg p-2 border border-emerald-500/30">
+                                  <span className="text-[10px] text-emerald-400 font-medium">Global rules apply to:</span>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    {tags.map(tag => (
+                                      <label key={tag.id} className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={true}
+                                          disabled
+                                          className="accent-emerald-500 w-3 h-3"
+                                        />
+                                        {tag.name}
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Rules List */}
+                              <div className="space-y-2">
+                                {getRulesForTag(settings.legacy_prompt_rules || [], legacyRulesActiveTag).length === 0 ? (
+                                  <div className="text-center py-4 text-slate-500 text-xs">
+                                    <p>No rules for {legacyRulesActiveTag === 'Global' ? 'Global' : `tag "${legacyRulesActiveTag}"`} yet.</p>
+                                    <button
+                                      onClick={() => handleAddLegacyRule(legacyRulesActiveTag)}
+                                      className="mt-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition"
+                                    >
+                                      + Add First Rule
+                                    </button>
+                                  </div>
+                                ) : (
+                                  getRulesForTag(settings.legacy_prompt_rules || [], legacyRulesActiveTag).map((rule, idx) => (
+                                    <div key={rule.id} className="bg-slate-800/50 rounded-lg p-3 border border-purple-500/20">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] text-purple-400/60 font-mono">#{idx + 1}</span>
+                                          <input
+                                            type="text"
+                                            value={rule.title}
+                                            onChange={(e) => handleUpdateLegacyRule(rule.id, { title: e.target.value })}
+                                            className="bg-transparent border-b border-purple-500/30 text-purple-300 text-sm font-medium focus:outline-none focus:border-purple-500 px-1"
+                                            placeholder="Rule title..."
+                                          />
+                                        </div>
+                                        <button
+                                          onClick={() => handleRemoveLegacyRule(rule.id)}
+                                          className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
+                                          title="Remove rule"
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                      <textarea
+                                        value={rule.text}
+                                        onChange={(e) => handleUpdateLegacyRule(rule.id, { text: e.target.value })}
+                                        placeholder="Enter rule text... (e.g., 'Place image at last paragraph break under 300 words since previous image')"
+                                        className="w-full p-2 text-xs bg-slate-900 border border-purple-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                        rows={2}
+                                      />
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -8488,7 +8889,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
                     Variation Order
                     <span className="text-xs text-orange-300/70 font-normal ml-2">
-                      ({settings.variation_order_mode === 'manual' ? `${settings.manual_variation_order?.length || 0} set` : settings.variation_order_mode})
+                      ({settings.variation_order_mode === 'manual' ? `${settings.manual_variation_order?.length || 0} set` : settings.variation_order_mode === 'follow_rules' ? 'follows rules' : settings.variation_order_mode})
                     </span>
                   </span>
                   <svg className={`w-5 h-5 transition-transform ${isOrderOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
@@ -8507,6 +8908,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <option value="sequential">Sequential (1, 2, 3...)</option>
                         <option value="random">Random (no duplicates)</option>
                         <option value="manual">Manual Order Below</option>
+                        <option value="follow_rules">Follow order set in rules</option>
                       </select>
                       {settings.variation_order_mode === 'manual' && (
                         <button onClick={clearVariationOrder} className="text-xs text-red-400 hover:text-red-300">Clear Order</button>
