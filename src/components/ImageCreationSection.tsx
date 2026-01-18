@@ -6187,27 +6187,27 @@ Start by introducing yourself and asking about their business in a friendly way.
                           <button
                             type="button"
                             onClick={() => setGuidedRulesCollapsed(!guidedRulesCollapsed)}
-                            className="w-full flex items-center justify-between p-2 bg-cyan-900/30 hover:bg-cyan-900/50 rounded-lg transition"
+                            className="w-full flex items-center justify-between p-2 bg-brand-gold/10 hover:bg-brand-gold/20 rounded-lg transition border border-brand-gold/30"
                           >
-                            <span className="flex items-center gap-2 text-cyan-400 font-medium text-sm">
+                            <span className="flex items-center gap-2 text-brand-gold font-medium text-sm">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                               </svg>
                               Guided GPT Rules
                               {(settings.guided_gpt_rules?.length || 0) > 0 && (
-                                <span className="px-1.5 py-0.5 bg-cyan-600 text-white text-[10px] rounded-full">
+                                <span className="px-1.5 py-0.5 bg-brand-gold text-slate-900 text-[10px] rounded-full font-bold">
                                   {settings.guided_gpt_rules?.length || 0}
                                 </span>
                               )}
                             </span>
-                            <svg className={`w-4 h-4 text-cyan-400 transition-transform ${guidedRulesCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className={`w-4 h-4 text-brand-gold transition-transform ${guidedRulesCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                             </svg>
                           </button>
 
                           {!guidedRulesCollapsed && (
-                            <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-cyan-500/20">
-                              <p className="text-[10px] text-cyan-300/60">
+                            <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-brand-gold/20">
+                              <p className="text-[10px] text-brand-gold/60">
                                 Define rules per tag that guide GPT when generating image prompts. Rules replace the old placement rules.
                               </p>
 
@@ -6239,7 +6239,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                                       onClick={() => setGuidedRulesActiveTag(tag.name)}
                                       className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
                                         isSelected
-                                          ? 'bg-cyan-600 text-white border-b-2 border-cyan-500'
+                                          ? 'bg-brand-gold text-slate-900 border-b-2 border-brand-gold'
                                           : 'bg-slate-800 text-brand-gold/70 hover:bg-slate-700 hover:text-brand-gold'
                                       }`}
                                     >
@@ -6255,7 +6255,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 {/* Add Rule button */}
                                 <button
                                   onClick={() => handleAddGuidedRule(guidedRulesActiveTag)}
-                                  className="px-2 py-1.5 text-cyan-400 hover:text-cyan-300 hover:bg-slate-700/50 rounded transition text-xs font-medium"
+                                  className="px-2 py-1.5 text-brand-gold hover:text-brand-gold-light hover:bg-slate-700/50 rounded transition text-xs font-medium"
                                   title="Add rule for current tag"
                                 >
                                   + Add Rule
@@ -6289,22 +6289,22 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     <p>No rules for {guidedRulesActiveTag === 'Global' ? 'Global' : `tag "${guidedRulesActiveTag}"`} yet.</p>
                                     <button
                                       onClick={() => handleAddGuidedRule(guidedRulesActiveTag)}
-                                      className="mt-2 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded transition"
+                                      className="mt-2 px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-light text-slate-900 text-xs rounded transition font-medium"
                                     >
                                       + Add First Rule
                                     </button>
                                   </div>
                                 ) : (
                                   getRulesForTag(settings.guided_gpt_rules || [], guidedRulesActiveTag).map((rule, idx) => (
-                                    <div key={rule.id} className="bg-slate-800/50 rounded-lg p-3 border border-cyan-500/20">
+                                    <div key={rule.id} className="bg-slate-800/50 rounded-lg p-3 border border-brand-gold/20">
                                       <div className="flex items-center justify-between mb-2">
                                         <div className="flex items-center gap-2">
-                                          <span className="text-[10px] text-cyan-400/60 font-mono">#{idx + 1}</span>
+                                          <span className="text-[10px] text-brand-gold/60 font-mono">#{idx + 1}</span>
                                           <input
                                             type="text"
                                             value={rule.title}
                                             onChange={(e) => handleUpdateGuidedRule(rule.id, { title: e.target.value })}
-                                            className="bg-transparent border-b border-cyan-500/30 text-cyan-300 text-sm font-medium focus:outline-none focus:border-cyan-500 px-1"
+                                            className="bg-transparent border-b border-brand-gold/30 text-brand-gold text-sm font-medium focus:outline-none focus:border-brand-gold px-1"
                                             placeholder="Rule title..."
                                           />
                                         </div>
@@ -6322,7 +6322,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         value={rule.text}
                                         onChange={(e) => handleUpdateGuidedRule(rule.id, { text: e.target.value })}
                                         placeholder="Enter rule text... (e.g., 'Place image at last paragraph break under 300 words since previous image')"
-                                        className="w-full p-2 text-xs bg-slate-900 border border-cyan-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                        className="w-full p-2 text-xs bg-slate-900 border border-brand-gold/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
                                         rows={2}
                                       />
                                     </div>
