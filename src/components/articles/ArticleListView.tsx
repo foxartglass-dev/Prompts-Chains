@@ -101,6 +101,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const [showImages, setShowImages] = useState(false);
   const [showImageSettings, setShowImageSettings] = useState(false);
   const [showImageReport, setShowImageReport] = useState(false);
+  const [expandedImageLogs, setExpandedImageLogs] = useState<Set<number>>(new Set());
 
   // Tab state for article modal
   const [activeTab, setActiveTab] = useState<'content' | 'preview' | 'images' | 'meta'>('preview');
@@ -1608,81 +1609,6 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     </div>
                   )}
 
-                  {/* Collapsible Processing Log */}
-                  {selectedArticle.image_decision_report && selectedArticle.image_decision_report.images?.length > 0 && (
-                    <div className="mb-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                      <button
-                        onClick={() => setShowImageReport(!showImageReport)}
-                        className="w-full flex items-center justify-between p-3 text-sm font-medium text-gray-300 hover:text-white transition"
-                      >
-                        <span className="flex items-center gap-2">
-                          <svg className="w-4 h-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                          </svg>
-                          Processing Log
-                          <span className="bg-purple-600/30 text-purple-400 px-2 py-0.5 rounded text-xs">
-                            {selectedArticle.image_decision_report.images.length} decisions
-                          </span>
-                        </span>
-                        <svg className={`w-4 h-4 transition-transform ${showImageReport ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-                      {showImageReport && (
-                        <div className="px-3 pb-3">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {selectedArticle.image_decision_report.images.map((img, idx) => (
-                              <div
-                                key={idx}
-                                className={`p-3 rounded-lg border ${
-                                  img.source === 'bank' ? 'bg-blue-900/20 border-blue-500/30' :
-                                  img.source === 'generated' ? 'bg-green-900/20 border-green-500/30' :
-                                  'bg-gray-900/20 border-gray-500/30'
-                                }`}
-                              >
-                                <div className="flex items-start gap-3">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${
-                                    img.type === 'hero' ? 'bg-brand-gold' : 'bg-slate-600'
-                                  }`}>
-                                    {img.position}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                        img.type === 'hero' ? 'bg-brand-gold/20 text-brand-gold' : 'bg-slate-600/50 text-slate-300'
-                                      }`}>
-                                        {img.type === 'hero' ? 'Hero' : 'Inline'} {img.side ? `(${img.side})` : ''}
-                                      </span>
-                                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                        img.source === 'bank' ? 'bg-blue-600/30 text-blue-400' :
-                                        img.source === 'generated' ? 'bg-green-600/30 text-green-400' :
-                                        'bg-red-600/30 text-red-400'
-                                      }`}>
-                                        {img.source === 'bank' ? 'From Bank' : img.source === 'generated' ? 'Generated' : 'Not Found'}
-                                      </span>
-                                    </div>
-                                    {img.matchedKeywords && img.matchedKeywords.length > 0 && (
-                                      <div className="flex flex-wrap gap-1 mt-2">
-                                        {img.matchedKeywords.map((kw: string, kwIdx: number) => (
-                                          <span key={kwIdx} className="text-[10px] bg-emerald-900/30 text-emerald-400 px-1.5 py-0.5 rounded">
-                                            {kw}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                  {img.url && (
-                                    <img src={img.url} alt="" className="w-12 h-12 object-cover rounded shrink-0" />
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   {selectedArticle.images && selectedArticle.images.length > 0 ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {selectedArticle.images.map((image, idx) => (
@@ -1750,6 +1676,156 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       </svg>
                       <p className="text-lg">No images generated yet</p>
                       <p className="text-sm mt-1">Generate images from the Image Creation section</p>
+                    </div>
+                  )}
+
+                  {/* ═══════════════════ IMAGE PROCESSING LOG (Below Images) ═══════════════════ */}
+                  {selectedArticle.image_decision_report && selectedArticle.image_decision_report.images?.length > 0 && (
+                    <div className="mt-6 bg-slate-800/50 rounded-lg border border-brand-cyan/30">
+                      <button
+                        onClick={() => setShowImageReport(!showImageReport)}
+                        className="w-full flex items-center justify-between p-4 text-sm font-medium text-gray-300 hover:text-white transition"
+                      >
+                        <span className="flex items-center gap-3">
+                          <svg className="w-5 h-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          <span className="text-brand-cyan font-semibold">Image Processing Log</span>
+                          <span className="bg-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded text-xs">
+                            {selectedArticle.image_decision_report.images.length} images
+                          </span>
+                          {selectedArticle.image_decision_report.mode && (
+                            <span className={`px-2 py-0.5 rounded text-xs ${
+                              selectedArticle.image_decision_report.mode === 'live' ? 'bg-green-600/30 text-green-400' :
+                              selectedArticle.image_decision_report.mode === 'bank' ? 'bg-blue-600/30 text-blue-400' :
+                              'bg-slate-600/30 text-slate-400'
+                            }`}>
+                              Mode: {selectedArticle.image_decision_report.mode}
+                            </span>
+                          )}
+                          {selectedArticle.image_decision_report.model && (
+                            <span className="bg-purple-600/30 text-purple-400 px-2 py-0.5 rounded text-xs">
+                              Model: {selectedArticle.image_decision_report.model}
+                            </span>
+                          )}
+                        </span>
+                        <svg className={`w-5 h-5 transition-transform ${showImageReport ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+
+                      {showImageReport && (
+                        <div className="px-4 pb-4 space-y-3">
+                          {selectedArticle.image_decision_report.images.map((img: any, idx: number) => {
+                            const isExpanded = expandedImageLogs?.has(idx);
+                            return (
+                              <div
+                                key={idx}
+                                className={`rounded-lg border overflow-hidden ${
+                                  img.source === 'bank' ? 'bg-blue-900/20 border-blue-500/30' :
+                                  img.source === 'generated' ? 'bg-green-900/20 border-green-500/30' :
+                                  'bg-gray-900/20 border-gray-500/30'
+                                }`}
+                              >
+                                {/* Image Header Row */}
+                                <div className="flex items-center gap-3 p-3">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${
+                                    img.type === 'hero' ? 'bg-brand-gold' : 'bg-slate-600'
+                                  }`}>
+                                    {img.position}
+                                  </div>
+
+                                  <div className="flex-1 flex items-center gap-2 flex-wrap">
+                                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                      img.type === 'hero' ? 'bg-brand-gold/20 text-brand-gold' : 'bg-slate-600/50 text-slate-300'
+                                    }`}>
+                                      {img.type === 'hero' ? 'HERO' : 'Inline'} {img.side ? `(${img.side})` : ''}
+                                    </span>
+                                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                      img.source === 'bank' ? 'bg-blue-600/30 text-blue-400' :
+                                      img.source === 'generated' ? 'bg-green-600/30 text-green-400' :
+                                      'bg-red-600/30 text-red-400'
+                                    }`}>
+                                      {img.source === 'bank' ? 'From Bank' : img.source === 'generated' ? 'Generated' : 'Not Found'}
+                                    </span>
+                                    {img.action && (
+                                      <span className="text-xs text-slate-400">Action: <span className="text-white">{img.action}</span></span>
+                                    )}
+                                    {img.mood && (
+                                      <span className="text-xs text-slate-400">Mood: <span className="text-amber-400">{img.mood}</span></span>
+                                    )}
+                                  </div>
+
+                                  {img.url && (
+                                    <img src={img.url} alt="" className="w-12 h-12 object-cover rounded shrink-0" />
+                                  )}
+
+                                  {/* Expand/Collapse button for prompt */}
+                                  {img.prompt && (
+                                    <button
+                                      onClick={() => {
+                                        setExpandedImageLogs(prev => {
+                                          const next = new Set(prev || []);
+                                          if (next.has(idx)) {
+                                            next.delete(idx);
+                                          } else {
+                                            next.add(idx);
+                                          }
+                                          return next;
+                                        });
+                                      }}
+                                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-xs text-brand-cyan transition flex items-center gap-1"
+                                    >
+                                      <svg className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                      </svg>
+                                      {isExpanded ? 'Hide Prompt' : 'View Prompt'}
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Matched Keywords */}
+                                {img.matchedKeywords && img.matchedKeywords.length > 0 && (
+                                  <div className="px-3 pb-2 flex flex-wrap gap-1">
+                                    <span className="text-[10px] text-slate-500">Matched:</span>
+                                    {img.matchedKeywords.map((kw: string, kwIdx: number) => (
+                                      <span key={kwIdx} className="text-[10px] bg-emerald-900/30 text-emerald-400 px-1.5 py-0.5 rounded">
+                                        {kw}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Expandable Prompt Section */}
+                                {isExpanded && img.prompt && (
+                                  <div className="border-t border-slate-700 bg-slate-900/50 p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-xs text-brand-cyan font-medium">Full Prompt:</span>
+                                      <button
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(img.prompt);
+                                          // Could add a toast notification here
+                                        }}
+                                        className="text-[10px] text-slate-400 hover:text-white transition"
+                                      >
+                                        Copy
+                                      </button>
+                                    </div>
+                                    <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap bg-slate-800 p-3 rounded border border-slate-700">
+                                      {img.prompt}
+                                    </p>
+                                    {img.setting && (
+                                      <p className="text-xs text-slate-500 mt-2">
+                                        Setting: <span className="text-slate-300">{img.setting}</span>
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

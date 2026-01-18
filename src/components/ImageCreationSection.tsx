@@ -481,7 +481,7 @@ interface ImageCreationSettings {
   // When bank is empty and falls back to live, which prompt source to use
   fallback_prompt_mode: 'main_prompt' | 'guided_gpt' | 'smart_prompt';
   image_order: string[];
-  variation_order_mode: 'sequential' | 'random' | 'manual';
+  variation_order_mode: 'sequential' | 'random' | 'manual' | 'follow_rules';
   manual_variation_order: string[];
   // Smart Content Matching (Phase 2 feature)
   smart_matching_enabled: boolean; // Master toggle for smart content matching
@@ -709,6 +709,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [isUsedOpen, setIsUsedOpen] = useState(false);
   const [isOrderOpen, setIsOrderOpen] = useState(false);
 
+  // ========== TAG-BASED RULES SYSTEM STATE ==========
+  // Guided GPT Rules section (collapsible, per-tag)
+  const [guidedRulesCollapsed, setGuidedRulesCollapsed] = useState(true);
+  const [guidedRulesActiveTag, setGuidedRulesActiveTag] = useState<string>('Global');
+  const [guidedRulesEditingId, setGuidedRulesEditingId] = useState<string | null>(null);
+  // Legacy Prompt Rules section (collapsible, per-tag)
+  const [legacyRulesCollapsed, setLegacyRulesCollapsed] = useState(true);
+  const [legacyRulesActiveTag, setLegacyRulesActiveTag] = useState<string>('Global');
+  const [legacyRulesEditingId, setLegacyRulesEditingId] = useState<string | null>(null);
+
+  // ========== PHASE 3: TAG-BASED MULTI-PROMPT SYSTEM ==========
+  // Guided GPT Prompts - per-tag multi-prompt system
+  const [guidedPromptsActiveTag, setGuidedPromptsActiveTag] = useState<string>('Global');
+  const [guidedPromptsActiveId, setGuidedPromptsActiveId] = useState<string | null>(null);
+  // Smart/Legacy Prompt Prompts - per-tag multi-prompt system
+  const [smartPromptsActiveTag, setSmartPromptsActiveTag] = useState<string>('Global');
+  const [smartPromptsActiveId, setSmartPromptsActiveId] = useState<string | null>(null);
+
   // Double opt-in confirmation for "Generate First" (save to bank) option
   const [showGenerateFirstWarning, setShowGenerateFirstWarning] = useState(false);
 
@@ -893,6 +911,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     xl: 'h-[48rem]', // 48rem
     full: 'h-[80vh]' // 80% viewport
   };
+  // Chat History Browser state
+  const [showHistoryBrowser, setShowHistoryBrowser] = useState(false);
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
+  const [historySortOrder, setHistorySortOrder] = useState<'newest' | 'oldest'>('newest');
 
   // Loaded articles for AI context
   interface LoadedArticle {
@@ -1193,6 +1215,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       workerChatRef.current.scrollTop = workerChatRef.current.scrollHeight;
     }
   }, [settings.worker_chat_history]);
+
+  // 🛡️ SYNC guidedAssistantMessages FROM database on settings load
+  // This is the FIX for chat history persistence - loads saved chats from consultant_chat_history
+  useEffect(() => {
+    if (loaded && settings.consultant_chat_history && settings.consultant_chat_history.length > 0) {
+      setGuidedAssistantMessages(settings.consultant_chat_history);
+      console.log('[AI Prompt Assistant] Loaded', settings.consultant_chat_history.length, 'messages from database');
+    }
+  }, [loaded]); // Only run once when settings first load
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -1532,6 +1563,42 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       return;
     }
     setSettings(current => {
+      // 🛡️ PROTECTION: Prevent accidental erasure of audience_avatars content
+      if (updates.audience_avatars) {
+        const protectedAvatars = updates.audience_avatars.map(newAvatar => {
+          const currentAvatar = current.audience_avatars.find(a => a.id === newAvatar.id);
+          if (!currentAvatar) return newAvatar;
+
+          // Protect mainPrompt
+          const currentPromptLength = currentAvatar.mainPrompt?.length || 0;
+          const newPromptLength = newAvatar.mainPrompt?.length || 0;
+          if (currentPromptLength > 200 && newPromptLength < 100) {
+            console.error(`🛡️ PROTECTION (updateSettings): Preserving mainPrompt for "${newAvatar.name}"`);
+            console.error(`   Current: ${currentPromptLength} chars, Attempted: ${newPromptLength} chars`);
+            newAvatar = { ...newAvatar, mainPrompt: currentAvatar.mainPrompt };
+          }
+
+          // Protect placeholderCategories
+          const currentCatCount = currentAvatar.placeholderCategories?.length || 0;
+          const newCatCount = newAvatar.placeholderCategories?.length || 0;
+          if (currentCatCount > 0 && newCatCount === 0) {
+            console.error(`🛡️ PROTECTION (updateSettings): Preserving ${currentCatCount} placeholderCategories for "${newAvatar.name}"`);
+            newAvatar = { ...newAvatar, placeholderCategories: currentAvatar.placeholderCategories };
+          }
+
+          // Protect variations
+          const currentVarCount = currentAvatar.variations?.length || 0;
+          const newVarCount = newAvatar.variations?.length || 0;
+          if (currentVarCount > 0 && newVarCount === 0) {
+            console.error(`🛡️ PROTECTION (updateSettings): Preserving ${currentVarCount} variations for "${newAvatar.name}"`);
+            newAvatar = { ...newAvatar, variations: currentAvatar.variations };
+          }
+
+          return newAvatar;
+        });
+        updates = { ...updates, audience_avatars: protectedAvatars };
+      }
+
       const newSettings = { ...current, ...updates };
       saveSettings(newSettings);
       return newSettings;
@@ -2486,6 +2553,25 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   };
 
   const handleUpdateAvatar = (id: number, updates: Partial<AudienceAvatar>) => {
+    // PROTECTION: Prevent mainPrompt from being accidentally erased
+    const currentAvatar = settings.audience_avatars.find(a => a.id === id);
+    if (currentAvatar && updates.mainPrompt !== undefined) {
+      const currentLength = currentAvatar.mainPrompt?.length || 0;
+      const newLength = updates.mainPrompt?.length || 0;
+
+      // If current prompt is substantial (>200 chars) and new one is much shorter, BLOCK IT
+      if (currentLength > 200 && newLength < 100) {
+        console.error(`🛡️ PROTECTION: Blocked attempt to erase mainPrompt!`);
+        console.error(`   Current: ${currentLength} chars, Attempted: ${newLength} chars`);
+        console.error(`   Current preview: "${currentAvatar.mainPrompt?.substring(0, 80)}..."`);
+        console.error(`   Attempted value: "${updates.mainPrompt}"`);
+        // Remove mainPrompt from updates to preserve existing value
+        const { mainPrompt: _blocked, ...safeUpdates } = updates;
+        if (Object.keys(safeUpdates).length === 0) return; // Nothing left to update
+        updates = safeUpdates as Partial<AudienceAvatar>;
+      }
+    }
+
     const newAvatars = settings.audience_avatars.map(a =>
       a.id === id ? { ...a, ...updates } : a
     );
@@ -2532,6 +2618,256 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     if (activeVariationId === variationId) {
       setActiveVariationId(newVariations[0]?.id || null);
     }
+  };
+
+  // ========== TAG-BASED RULES HANDLERS ==========
+  // Helper to get rules for a specific tag (or all rules if 'all' is passed)
+  const getRulesForTag = (rules: TagBasedRule[], tag: string): TagBasedRule[] => {
+    if (tag === 'Global') {
+      return rules.filter(r => r.tag === 'Global').sort((a, b) => a.order - b.order);
+    }
+    return rules.filter(r => r.tag === tag).sort((a, b) => a.order - b.order);
+  };
+
+  // Add a new Guided GPT rule
+  const handleAddGuidedRule = (tag: string) => {
+    const existingRules = settings.guided_gpt_rules || [];
+    const rulesForTag = getRulesForTag(existingRules, tag);
+    const newRule: TagBasedRule = {
+      id: `gr-${Date.now()}`,
+      tag,
+      title: `Rule ${rulesForTag.length + 1}`,
+      text: '',
+      order: rulesForTag.length,
+      globalAppliesTo: tag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      guided_gpt_rules: [...existingRules, newRule]
+    });
+    setGuidedRulesEditingId(newRule.id);
+  };
+
+  // Update a Guided GPT rule
+  const handleUpdateGuidedRule = (ruleId: string, updates: Partial<TagBasedRule>) => {
+    const existingRules = settings.guided_gpt_rules || [];
+    const updatedRules = existingRules.map(r =>
+      r.id === ruleId ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
+    );
+    updateSettings({ guided_gpt_rules: updatedRules });
+  };
+
+  // Remove a Guided GPT rule
+  const handleRemoveGuidedRule = (ruleId: string) => {
+    const existingRules = settings.guided_gpt_rules || [];
+    const updatedRules = existingRules.filter(r => r.id !== ruleId);
+    updateSettings({ guided_gpt_rules: updatedRules });
+    if (guidedRulesEditingId === ruleId) {
+      setGuidedRulesEditingId(null);
+    }
+  };
+
+  // Add a new Legacy Prompt rule
+  const handleAddLegacyRule = (tag: string) => {
+    const existingRules = settings.legacy_prompt_rules || [];
+    const rulesForTag = getRulesForTag(existingRules, tag);
+    const newRule: TagBasedRule = {
+      id: `lr-${Date.now()}`,
+      tag,
+      title: `Rule ${rulesForTag.length + 1}`,
+      text: '',
+      order: rulesForTag.length,
+      globalAppliesTo: tag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      legacy_prompt_rules: [...existingRules, newRule]
+    });
+    setLegacyRulesEditingId(newRule.id);
+  };
+
+  // Update a Legacy Prompt rule
+  const handleUpdateLegacyRule = (ruleId: string, updates: Partial<TagBasedRule>) => {
+    const existingRules = settings.legacy_prompt_rules || [];
+    const updatedRules = existingRules.map(r =>
+      r.id === ruleId ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
+    );
+    updateSettings({ legacy_prompt_rules: updatedRules });
+  };
+
+  // Remove a Legacy Prompt rule
+  const handleRemoveLegacyRule = (ruleId: string) => {
+    const existingRules = settings.legacy_prompt_rules || [];
+    const updatedRules = existingRules.filter(r => r.id !== ruleId);
+    updateSettings({ legacy_prompt_rules: updatedRules });
+    if (legacyRulesEditingId === ruleId) {
+      setLegacyRulesEditingId(null);
+    }
+  };
+
+  // ========== PHASE 3: TAG-BASED MULTI-PROMPT HANDLERS ==========
+  // Helper to get prompts for a specific tag
+  const getGuidedPromptsForTag = (tag: string): GuidedGptPrompt[] => {
+    const prompts = settings.guided_gpt_prompts || [];
+    if (tag === 'Global') {
+      return prompts.filter(p => p.tag === 'Global');
+    }
+    return prompts.filter(p => p.tag === tag);
+  };
+
+  const getSmartPromptsForTag = (tag: string): SmartPromptPrompt[] => {
+    const prompts = settings.smart_prompt_prompts || [];
+    if (tag === 'Global') {
+      return prompts.filter(p => p.tag === 'Global');
+    }
+    return prompts.filter(p => p.tag === tag);
+  };
+
+  // Get active guided prompt
+  const activeGuidedPrompt = (settings.guided_gpt_prompts || []).find(p => p.id === guidedPromptsActiveId) || null;
+  // Get active smart prompt
+  const activeSmartPrompt = (settings.smart_prompt_prompts || []).find(p => p.id === smartPromptsActiveId) || null;
+
+  // Add a new Guided GPT prompt
+  const handleAddGuidedPrompt = (tag: string) => {
+    const existingPrompts = settings.guided_gpt_prompts || [];
+    const promptsForTag = getGuidedPromptsForTag(tag);
+    const newPrompt: GuidedGptPrompt = {
+      id: `gp-${Date.now()}`,
+      tag,
+      name: tag === 'Global' ? `Global ${promptsForTag.length + 1}` : `${tag}-${promptsForTag.length + 1}`,
+      model: settings.guided_model || 'gpt-4o',
+      guidance: '',
+      guardrails: {
+        instructions: '',
+        uniformDescription: '',
+        stylePreferences: '',
+        avoidList: '',
+        defaultSubject: ''
+      },
+      globalAppliesTo: tag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      guided_gpt_prompts: [...existingPrompts, newPrompt]
+    });
+    setGuidedPromptsActiveId(newPrompt.id);
+  };
+
+  // Update a Guided GPT prompt
+  const handleUpdateGuidedPrompt = (promptId: string, updates: Partial<GuidedGptPrompt>) => {
+    const existingPrompts = settings.guided_gpt_prompts || [];
+    const updatedPrompts = existingPrompts.map(p =>
+      p.id === promptId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
+    );
+    updateSettings({ guided_gpt_prompts: updatedPrompts });
+  };
+
+  // Remove a Guided GPT prompt
+  const handleRemoveGuidedPrompt = (promptId: string) => {
+    const existingPrompts = settings.guided_gpt_prompts || [];
+    if (existingPrompts.length <= 1) {
+      showNotification('Must have at least one prompt', 'error');
+      return;
+    }
+    const updatedPrompts = existingPrompts.filter(p => p.id !== promptId);
+    updateSettings({ guided_gpt_prompts: updatedPrompts });
+    if (guidedPromptsActiveId === promptId) {
+      setGuidedPromptsActiveId(updatedPrompts[0]?.id || null);
+    }
+  };
+
+  // Copy Guided GPT prompt from one tag to another
+  const handleCopyGuidedPromptFrom = (sourcePromptId: string, targetTag: string) => {
+    const existingPrompts = settings.guided_gpt_prompts || [];
+    const sourcePrompt = existingPrompts.find(p => p.id === sourcePromptId);
+    if (!sourcePrompt) return;
+
+    const promptsForTag = getGuidedPromptsForTag(targetTag);
+    const newPrompt: GuidedGptPrompt = {
+      ...sourcePrompt,
+      id: `gp-${Date.now()}`,
+      tag: targetTag,
+      name: targetTag === 'Global' ? `Global ${promptsForTag.length + 1}` : `${targetTag}-${promptsForTag.length + 1}`,
+      globalAppliesTo: targetTag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      guided_gpt_prompts: [...existingPrompts, newPrompt]
+    });
+    setGuidedPromptsActiveTag(targetTag);
+    setGuidedPromptsActiveId(newPrompt.id);
+    showNotification(`Copied prompt to ${targetTag}`, 'success');
+  };
+
+  // Add a new Smart Prompt prompt
+  const handleAddSmartPrompt = (tag: string) => {
+    const existingPrompts = settings.smart_prompt_prompts || [];
+    const promptsForTag = getSmartPromptsForTag(tag);
+    const newPrompt: SmartPromptPrompt = {
+      id: `sp-${Date.now()}`,
+      tag,
+      name: tag === 'Global' ? `Global ${promptsForTag.length + 1}` : `${tag}-${promptsForTag.length + 1}`,
+      guidance: '',
+      globalAppliesTo: tag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      smart_prompt_prompts: [...existingPrompts, newPrompt]
+    });
+    setSmartPromptsActiveId(newPrompt.id);
+  };
+
+  // Update a Smart Prompt prompt
+  const handleUpdateSmartPrompt = (promptId: string, updates: Partial<SmartPromptPrompt>) => {
+    const existingPrompts = settings.smart_prompt_prompts || [];
+    const updatedPrompts = existingPrompts.map(p =>
+      p.id === promptId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
+    );
+    updateSettings({ smart_prompt_prompts: updatedPrompts });
+  };
+
+  // Remove a Smart Prompt prompt
+  const handleRemoveSmartPrompt = (promptId: string) => {
+    const existingPrompts = settings.smart_prompt_prompts || [];
+    if (existingPrompts.length <= 1) {
+      showNotification('Must have at least one prompt', 'error');
+      return;
+    }
+    const updatedPrompts = existingPrompts.filter(p => p.id !== promptId);
+    updateSettings({ smart_prompt_prompts: updatedPrompts });
+    if (smartPromptsActiveId === promptId) {
+      setSmartPromptsActiveId(updatedPrompts[0]?.id || null);
+    }
+  };
+
+  // Copy Smart Prompt from one tag to another
+  const handleCopySmartPromptFrom = (sourcePromptId: string, targetTag: string) => {
+    const existingPrompts = settings.smart_prompt_prompts || [];
+    const sourcePrompt = existingPrompts.find(p => p.id === sourcePromptId);
+    if (!sourcePrompt) return;
+
+    const promptsForTag = getSmartPromptsForTag(targetTag);
+    const newPrompt: SmartPromptPrompt = {
+      ...sourcePrompt,
+      id: `sp-${Date.now()}`,
+      tag: targetTag,
+      name: targetTag === 'Global' ? `Global ${promptsForTag.length + 1}` : `${targetTag}-${promptsForTag.length + 1}`,
+      globalAppliesTo: targetTag === 'Global' ? allTags : undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      smart_prompt_prompts: [...existingPrompts, newPrompt]
+    });
+    setSmartPromptsActiveTag(targetTag);
+    setSmartPromptsActiveId(newPrompt.id);
+    showNotification(`Copied prompt to ${targetTag}`, 'success');
   };
 
   // Chat Handlers
@@ -3028,6 +3364,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
     // Update local state immediately
     setGuidedAssistantMessages(historyToSend);
+    // 🛡️ PERSIST to database immediately
+    updateSettings({ consultant_chat_history: historyToSend });
     setGuidedAssistantInput('');
     setGuidedAssistantImages([]);
     setGuidedAssistantLoading(true);
@@ -3328,7 +3666,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           content: responseContent,
           timestamp: new Date().toISOString()
         };
-        setGuidedAssistantMessages([...historyToSend, assistantMessage]);
+        const updatedHistory = [...historyToSend, assistantMessage];
+        setGuidedAssistantMessages(updatedHistory);
+        // 🛡️ PERSIST assistant response to database
+        updateSettings({ consultant_chat_history: updatedHistory });
       } else {
         showNotification(data.error || 'Chat failed', 'error');
       }
@@ -5963,126 +6304,400 @@ Start by introducing yourself and asking about their business in a friendly way.
                     {settings.live_prompt_mode === 'guided_gpt' && (
                       <div className="space-y-3 mt-2">
                         <p className="text-[10px] text-emerald-300/70 bg-emerald-500/10 p-2 rounded">
-                          GPT-4o reads your article and creates prompts following your guardrails. Easier to set up than Main Prompt, more control than Smart Prompt.
+                          GPT reads your article and creates prompts following your guardrails. Create different prompts per tag (H, J, C) or use Global for all.
                         </p>
-                        {/* Model selector */}
-                        <div>
-                          <label className="text-[10px] text-emerald-400 mb-1 block">AI Model:</label>
-                          <select
-                            value={settings.guided_model || 'gpt-5.2-2025-12-11'}
-                            onChange={(e) => updateSettings({ guided_model: e.target.value })}
-                            className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white"
-                          >
-                            <optgroup label="🟢 OpenAI - Best for Image Prompts">
-                              <option value="gpt-5.2-2025-12-11">GPT-5.2 (Latest & Best)</option>
-                              <option value="gpt-4o">GPT-4o (Recommended)</option>
-                              <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cheap)</option>
-                            </optgroup>
-                            <optgroup label="🟣 Anthropic - Great Writers">
-                              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Your Writer!)</option>
-                              <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                              <option value="claude-3-opus-20240229">Claude 3 Opus (Most Capable)</option>
-                              <option value="claude-3-haiku-20240307">Claude Haiku (Fastest)</option>
-                            </optgroup>
-                            <optgroup label="🔵 Google Gemini - Visual Experts">
-                              <option value="gemini-3-pro-preview">Gemini 3.0 Pro (Latest)</option>
-                              <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep Thinking)</option>
-                              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast)</option>
-                              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                            </optgroup>
-                          </select>
-                        </div>
-                        {/* Guardrails */}
-                        <div className="space-y-2">
-                          <label className="text-[10px] text-emerald-400 mb-1 block">Guardrails / Instructions:</label>
-                          <textarea
-                            value={settings.guided_guardrails?.instructions || ''}
-                            onChange={(e) => updateSettings({
-                              guided_guardrails: { ...settings.guided_guardrails, instructions: e.target.value } as any
+
+                        {/* ========== PHASE 3: TAG-BASED MULTI-PROMPT SYSTEM ========== */}
+                        {/* Header Row: Tag Tabs on left, Model Selector on right */}
+                        <div className="flex items-center justify-between gap-4 border-b border-slate-700 pb-2">
+                          {/* Tag Tabs */}
+                          <div className="flex flex-wrap items-center gap-1">
+                            {/* Tag-specific tabs first */}
+                            {tags.map((tag) => {
+                              const count = getGuidedPromptsForTag(tag.name).length;
+                              const isSelected = guidedPromptsActiveTag === tag.name;
+                              return (
+                                <div key={tag.id} className="flex items-center">
+                                  <button
+                                    onClick={() => {
+                                      setGuidedPromptsActiveTag(tag.name);
+                                      const promptsForTag = getGuidedPromptsForTag(tag.name);
+                                      if (promptsForTag.length > 0) {
+                                        setGuidedPromptsActiveId(promptsForTag[0].id);
+                                      }
+                                    }}
+                                    className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                      isSelected
+                                        ? 'bg-brand-gold text-slate-900 border-b-2 border-brand-gold'
+                                        : 'bg-slate-800 text-brand-gold/70 hover:bg-slate-700 hover:text-brand-gold'
+                                    }`}
+                                  >
+                                    {tag.name}
+                                    {count > 0 && (
+                                      <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                        {count}
+                                      </span>
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleAddGuidedPrompt(tag.name); }}
+                                    className="px-1.5 py-1.5 text-brand-gold/50 hover:text-brand-gold hover:bg-slate-700/50 rounded transition text-xs"
+                                    title={`Add prompt for ${tag.name}`}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              );
                             })}
-                            placeholder="e.g., Always show professional cleaners in uniform. Focus on the specific task being discussed. Use natural lighting. Modern residential settings."
-                            className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
-                            rows={3}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-emerald-400/70 mb-1 block">Uniform/Appearance:</label>
-                            <input
-                              type="text"
-                              value={settings.guided_guardrails?.uniformDescription || ''}
-                              onChange={(e) => updateSettings({
-                                guided_guardrails: { ...settings.guided_guardrails, uniformDescription: e.target.value } as any
-                              })}
-                              placeholder="e.g., Blue polo shirt, khaki pants"
-                              className="w-full p-1.5 text-xs bg-slate-900 border border-emerald-500/20 rounded text-white placeholder-slate-500"
-                            />
+                            {/* Global tab */}
+                            <div className="flex items-center ml-2 border-l border-slate-600 pl-2">
+                              <button
+                                onClick={() => {
+                                  setGuidedPromptsActiveTag('Global');
+                                  const globalPrompts = getGuidedPromptsForTag('Global');
+                                  if (globalPrompts.length > 0) {
+                                    setGuidedPromptsActiveId(globalPrompts[0].id);
+                                  }
+                                }}
+                                className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                                  guidedPromptsActiveTag === 'Global'
+                                    ? 'bg-emerald-600 text-white border-b-2 border-emerald-500'
+                                    : 'bg-slate-800 text-emerald-400/70 hover:bg-slate-700 hover:text-emerald-400'
+                                }`}
+                              >
+                                🌐 Global
+                                {getGuidedPromptsForTag('Global').length > 0 && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${guidedPromptsActiveTag === 'Global' ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                    {getGuidedPromptsForTag('Global').length}
+                                  </span>
+                                )}
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleAddGuidedPrompt('Global'); }}
+                                className="px-1.5 py-1.5 text-emerald-400/50 hover:text-emerald-400 hover:bg-slate-700/50 rounded transition text-xs"
+                                title="Add global prompt"
+                              >
+                                +
+                              </button>
+                            </div>
                           </div>
-                          <div>
-                            <label className="text-[10px] text-emerald-400/70 mb-1 block">Default Subject:</label>
-                            <input
-                              type="text"
-                              value={settings.guided_guardrails?.defaultSubject || ''}
-                              onChange={(e) => updateSettings({
-                                guided_guardrails: { ...settings.guided_guardrails, defaultSubject: e.target.value } as any
-                              })}
-                              placeholder="e.g., Professional cleaner in their 30s"
-                              className="w-full p-1.5 text-xs bg-slate-900 border border-emerald-500/20 rounded text-white placeholder-slate-500"
-                            />
+
+                          {/* Model Selector on far right */}
+                          <div className="flex items-center gap-2">
+                            <label className="text-[10px] text-emerald-400 whitespace-nowrap">AI Model:</label>
+                            <select
+                              value={activeGuidedPrompt?.model || settings.guided_model || 'gpt-4o'}
+                              onChange={(e) => {
+                                if (activeGuidedPrompt) {
+                                  handleUpdateGuidedPrompt(activeGuidedPrompt.id, { model: e.target.value });
+                                } else {
+                                  updateSettings({ guided_model: e.target.value });
+                                }
+                              }}
+                              className="p-1.5 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white min-w-[160px]"
+                            >
+                              <optgroup label="🟢 OpenAI">
+                                <option value="gpt-5.2-2025-12-11">GPT-5.2 (Latest)</option>
+                                <option value="gpt-4o">GPT-4o</option>
+                                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                              </optgroup>
+                              <optgroup label="🟣 Anthropic">
+                                <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                              </optgroup>
+                              <optgroup label="🔵 Google">
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                              </optgroup>
+                            </select>
                           </div>
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-red-400/70 mb-1 block">Avoid (things NOT to show):</label>
-                          <input
-                            type="text"
-                            value={settings.guided_guardrails?.avoidList || ''}
-                            onChange={(e) => updateSettings({
-                              guided_guardrails: { ...settings.guided_guardrails, avoidList: e.target.value } as any
-                            })}
-                            placeholder="e.g., No cartoon style, no stock photo feel, no text"
-                            className="w-full p-1.5 text-xs bg-slate-900 border border-red-500/20 rounded text-white placeholder-slate-500"
-                          />
                         </div>
 
-                        {/* Per-Tag Conditional Descriptions (like Conditional Snippets) */}
-                        {tags.length > 0 && (
-                          <div className="mt-4 border-t border-emerald-500/30 pt-4">
-                            <label className="text-[10px] text-emerald-400 mb-2 block font-medium flex items-center gap-2">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                              </svg>
-                              Per-Tag Context (Conditional Descriptions):
-                              <span className="text-[9px] text-emerald-300/60 font-normal ml-1">
-                                Like conditional snippets - auto-selected based on article tag
-                              </span>
-                            </label>
-                            <div className={`grid grid-cols-1 gap-2 ${tags.length === 2 ? 'md:grid-cols-2' : tags.length >= 3 ? 'md:grid-cols-3' : ''}`}>
-                              {tags.map(tag => (
-                                <div key={tag.id} className="bg-slate-900/50 rounded-lg p-2 border border-emerald-500/20">
-                                  <label className="text-[10px] text-brand-gold font-semibold mb-1 block">
-                                    For Tag: {tag.name}
-                                  </label>
-                                  <textarea
-                                    value={settings.guided_guardrails_by_tag?.[tag.name] || ''}
-                                    onChange={(e) => updateSettings({
-                                      guided_guardrails_by_tag: {
-                                        ...settings.guided_guardrails_by_tag,
-                                        [tag.name]: e.target.value
-                                      }
-                                    })}
-                                    placeholder={`Description for ${tag.name} articles...`}
-                                    className="w-full p-2 text-xs bg-slate-800 border border-emerald-500/20 rounded text-white placeholder-slate-500 resize-none"
-                                    rows={3}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                            <p className="text-[9px] text-emerald-300/50 mt-2">
-                              When generating images for an article with a specific tag (e.g., "H"), the GPT will receive the context description for that tag.
-                              This helps it understand the target audience and setting.
-                            </p>
+                        {/* Sub-tabs: Prompts within selected tag */}
+                        {getGuidedPromptsForTag(guidedPromptsActiveTag).length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-2 mb-3">
+                            {getGuidedPromptsForTag(guidedPromptsActiveTag).map((prompt) => (
+                              <button
+                                key={prompt.id}
+                                onClick={() => setGuidedPromptsActiveId(prompt.id)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
+                                  guidedPromptsActiveId === prompt.id
+                                    ? guidedPromptsActiveTag === 'Global' ? 'bg-emerald-600 text-white' : 'bg-brand-gold text-slate-900'
+                                    : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
+                                }`}
+                              >
+                                {prompt.name}
+                              </button>
+                            ))}
+                            {/* Copy From dropdown */}
+                            {(settings.guided_gpt_prompts || []).length > 0 && (
+                              <div className="relative ml-2">
+                                <select
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleCopyGuidedPromptFrom(e.target.value, guidedPromptsActiveTag);
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                  className="px-2 py-1.5 text-xs bg-slate-700 border border-slate-600 rounded text-brand-cyan cursor-pointer"
+                                  defaultValue=""
+                                >
+                                  <option value="" disabled>📋 Copy From...</option>
+                                  {(settings.guided_gpt_prompts || [])
+                                    .filter(p => p.tag !== guidedPromptsActiveTag)
+                                    .map(p => (
+                                      <option key={p.id} value={p.id}>{p.name} ({p.tag})</option>
+                                    ))
+                                  }
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-4 text-slate-500 text-xs">
+                            <p>No prompts for {guidedPromptsActiveTag === 'Global' ? 'Global' : `tag "${guidedPromptsActiveTag}"`} yet.</p>
+                            <button
+                              onClick={() => handleAddGuidedPrompt(guidedPromptsActiveTag)}
+                              className="mt-2 px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-light text-slate-900 text-xs rounded transition font-medium"
+                            >
+                              + Add First Prompt
+                            </button>
                           </div>
                         )}
+
+                        {/* Active Prompt Editor */}
+                        {activeGuidedPrompt && (
+                          <div className="bg-slate-800/50 rounded-lg p-4 border border-emerald-500/20 space-y-3">
+                            {/* Prompt Name + Delete */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={activeGuidedPrompt.name}
+                                  onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, { name: e.target.value })}
+                                  className="bg-transparent border-b border-emerald-500/30 text-emerald-300 text-sm font-medium focus:outline-none focus:border-emerald-500 px-1"
+                                  placeholder="Prompt name..."
+                                />
+                                {activeGuidedPrompt.tag === 'Global' && (
+                                  <span className="text-[10px] text-emerald-400/60 bg-emerald-900/30 px-2 py-0.5 rounded">
+                                    Applies to: {activeGuidedPrompt.globalAppliesTo?.join(', ') || 'All tags'}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleRemoveGuidedPrompt(activeGuidedPrompt.id)}
+                                className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition text-xs"
+                                title="Delete this prompt"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+
+                            {/* Guardrails */}
+                            <div className="space-y-2">
+                              <label className="text-[10px] text-emerald-400 block">Guardrails / Instructions:</label>
+                              <textarea
+                                value={activeGuidedPrompt.guardrails.instructions}
+                                onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
+                                  guardrails: { ...activeGuidedPrompt.guardrails, instructions: e.target.value }
+                                })}
+                                placeholder="e.g., Always show professional cleaners in uniform. Focus on the specific task being discussed."
+                                className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                rows={3}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] text-emerald-400/70 mb-1 block">Uniform/Appearance:</label>
+                                <input
+                                  type="text"
+                                  value={activeGuidedPrompt.guardrails.uniformDescription}
+                                  onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
+                                    guardrails: { ...activeGuidedPrompt.guardrails, uniformDescription: e.target.value }
+                                  })}
+                                  placeholder="e.g., Blue polo shirt, khaki pants"
+                                  className="w-full p-1.5 text-xs bg-slate-900 border border-emerald-500/20 rounded text-white placeholder-slate-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-emerald-400/70 mb-1 block">Default Subject:</label>
+                                <input
+                                  type="text"
+                                  value={activeGuidedPrompt.guardrails.defaultSubject}
+                                  onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
+                                    guardrails: { ...activeGuidedPrompt.guardrails, defaultSubject: e.target.value }
+                                  })}
+                                  placeholder="e.g., Professional cleaner in their 30s"
+                                  className="w-full p-1.5 text-xs bg-slate-900 border border-emerald-500/20 rounded text-white placeholder-slate-500"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-red-400/70 mb-1 block">Avoid (things NOT to show):</label>
+                              <input
+                                type="text"
+                                value={activeGuidedPrompt.guardrails.avoidList}
+                                onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
+                                  guardrails: { ...activeGuidedPrompt.guardrails, avoidList: e.target.value }
+                                })}
+                                placeholder="e.g., No cartoon style, no stock photo feel, no text"
+                                className="w-full p-1.5 text-xs bg-slate-900 border border-red-500/20 rounded text-white placeholder-slate-500"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ========== GUIDED GPT RULES SECTION ========== */}
+                        <div className="mt-4 border-t border-emerald-500/30 pt-4">
+                          {/* Collapsible Header */}
+                          <button
+                            type="button"
+                            onClick={() => setGuidedRulesCollapsed(!guidedRulesCollapsed)}
+                            className="w-full flex items-center justify-between p-2 bg-brand-gold/10 hover:bg-brand-gold/20 rounded-lg transition border border-brand-gold/30"
+                          >
+                            <span className="flex items-center gap-2 text-brand-gold font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                              </svg>
+                              Guided GPT Rules
+                              {(settings.guided_gpt_rules?.length || 0) > 0 && (
+                                <span className="px-1.5 py-0.5 bg-brand-gold text-slate-900 text-[10px] rounded-full font-bold">
+                                  {settings.guided_gpt_rules?.length || 0}
+                                </span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-brand-gold transition-transform ${guidedRulesCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {!guidedRulesCollapsed && (
+                            <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-brand-gold/20">
+                              <p className="text-[10px] text-brand-gold/60">
+                                Define rules per tag that guide GPT when generating image prompts. Rules replace the old placement rules.
+                              </p>
+
+                              {/* Tag Tabs */}
+                              <div className="flex flex-wrap items-center gap-1 border-b border-slate-700 pb-2">
+                                {/* Global tab first */}
+                                <button
+                                  onClick={() => setGuidedRulesActiveTag('Global')}
+                                  className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                                    guidedRulesActiveTag === 'Global'
+                                      ? 'bg-emerald-600 text-white border-b-2 border-emerald-500'
+                                      : 'bg-slate-800 text-emerald-400/70 hover:bg-slate-700 hover:text-emerald-400'
+                                  }`}
+                                >
+                                  <span>Global</span>
+                                  {getRulesForTag(settings.guided_gpt_rules || [], 'Global').length > 0 && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${guidedRulesActiveTag === 'Global' ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                      {getRulesForTag(settings.guided_gpt_rules || [], 'Global').length}
+                                    </span>
+                                  )}
+                                </button>
+                                {/* Tag-specific tabs */}
+                                {tags.map((tag) => {
+                                  const count = getRulesForTag(settings.guided_gpt_rules || [], tag.name).length;
+                                  const isSelected = guidedRulesActiveTag === tag.name;
+                                  return (
+                                    <button
+                                      key={tag.id}
+                                      onClick={() => setGuidedRulesActiveTag(tag.name)}
+                                      className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                        isSelected
+                                          ? 'bg-brand-gold text-slate-900 border-b-2 border-brand-gold'
+                                          : 'bg-slate-800 text-brand-gold/70 hover:bg-slate-700 hover:text-brand-gold'
+                                      }`}
+                                    >
+                                      {tag.name}
+                                      {count > 0 && (
+                                        <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                          {count}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                                {/* Add Rule button */}
+                                <button
+                                  onClick={() => handleAddGuidedRule(guidedRulesActiveTag)}
+                                  className="px-2 py-1.5 text-brand-gold hover:text-brand-gold-light hover:bg-slate-700/50 rounded transition text-xs font-medium"
+                                  title="Add rule for current tag"
+                                >
+                                  + Add Rule
+                                </button>
+                              </div>
+
+                              {/* Global applies-to checkboxes */}
+                              {guidedRulesActiveTag === 'Global' && (
+                                <div className="bg-emerald-900/20 rounded-lg p-2 border border-emerald-500/30">
+                                  <span className="text-[10px] text-emerald-400 font-medium">Global rules apply to:</span>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    {tags.map(tag => (
+                                      <label key={tag.id} className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={true}
+                                          disabled
+                                          className="accent-emerald-500 w-3 h-3"
+                                        />
+                                        {tag.name}
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Rules List */}
+                              <div className="space-y-2">
+                                {getRulesForTag(settings.guided_gpt_rules || [], guidedRulesActiveTag).length === 0 ? (
+                                  <div className="text-center py-4 text-slate-500 text-xs">
+                                    <p>No rules for {guidedRulesActiveTag === 'Global' ? 'Global' : `tag "${guidedRulesActiveTag}"`} yet.</p>
+                                    <button
+                                      onClick={() => handleAddGuidedRule(guidedRulesActiveTag)}
+                                      className="mt-2 px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-light text-slate-900 text-xs rounded transition font-medium"
+                                    >
+                                      + Add First Rule
+                                    </button>
+                                  </div>
+                                ) : (
+                                  getRulesForTag(settings.guided_gpt_rules || [], guidedRulesActiveTag).map((rule, idx) => (
+                                    <div key={rule.id} className="bg-slate-800/50 rounded-lg p-3 border border-brand-gold/20">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] text-brand-gold/60 font-mono">#{idx + 1}</span>
+                                          <input
+                                            type="text"
+                                            value={rule.title}
+                                            onChange={(e) => handleUpdateGuidedRule(rule.id, { title: e.target.value })}
+                                            className="bg-transparent border-b border-brand-gold/30 text-brand-gold text-sm font-medium focus:outline-none focus:border-brand-gold px-1"
+                                            placeholder="Rule title..."
+                                          />
+                                        </div>
+                                        <button
+                                          onClick={() => handleRemoveGuidedRule(rule.id)}
+                                          className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
+                                          title="Remove rule"
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                      <textarea
+                                        value={rule.text}
+                                        onChange={(e) => handleUpdateGuidedRule(rule.id, { text: e.target.value })}
+                                        placeholder="Enter rule text... (e.g., 'Place image at last paragraph break under 300 words since previous image')"
+                                        className="w-full p-2 text-xs bg-slate-900 border border-brand-gold/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                        rows={2}
+                                      />
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
 
                         {/* AI Prompt Assistant Chat */}
                         <div className="mt-4 border-t border-emerald-500/30 pt-4">
@@ -6166,7 +6781,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   guidedAssistantMessages.map((msg, idx) => (
                                     <div
                                       key={idx}
-                                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                      data-msg-index={idx}
+                                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} transition-all duration-300`}
                                     >
                                       <div
                                         className={`max-w-[85%] rounded-lg p-2.5 ${
@@ -6442,14 +7058,46 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                   </svg>
                                 </button>
-                                <input
-                                  type="text"
+                                <textarea
                                   value={guidedAssistantInput}
-                                  onChange={(e) => setGuidedAssistantInput(e.target.value)}
-                                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendGuidedAssistant())}
-                                  placeholder="Ask about guardrails, prompt techniques..."
-                                  className="flex-1 p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded-lg text-white placeholder-slate-500"
+                                  onChange={(e) => {
+                                    setGuidedAssistantInput(e.target.value);
+                                    // Auto-expand: reset height then set to scrollHeight
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      handleSendGuidedAssistant();
+                                    }
+                                  }}
+                                  onPaste={async (e) => {
+                                    // Handle image paste
+                                    const items = e.clipboardData?.items;
+                                    if (!items) return;
+
+                                    for (const item of items) {
+                                      if (item.type.startsWith('image/')) {
+                                        e.preventDefault();
+                                        const file = item.getAsFile();
+                                        if (file) {
+                                          const reader = new FileReader();
+                                          reader.onload = (event) => {
+                                            const base64 = event.target?.result as string;
+                                            setGuidedAssistantImages(prev => [...prev, base64]);
+                                            showNotification('Image pasted', 'success');
+                                          };
+                                          reader.readAsDataURL(file);
+                                        }
+                                        break;
+                                      }
+                                    }
+                                  }}
+                                  placeholder="Ask about guardrails, prompt techniques... (Paste images with Ctrl+V)"
+                                  className="flex-1 p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded-lg text-white placeholder-slate-500 resize-none overflow-hidden min-h-[38px] max-h-[200px]"
                                   disabled={guidedAssistantLoading}
+                                  rows={1}
                                 />
                                 <button
                                   onClick={handleSendGuidedAssistant}
@@ -6460,17 +7108,132 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </button>
                               </div>
 
-                              {/* Clear chat button */}
-                              {guidedAssistantMessages.length > 0 && (
+                              {/* Chat Controls - History & Clear */}
+                              <div className="flex items-center justify-between">
+                                {/* History Browser Toggle */}
                                 <button
-                                  onClick={() => {
-                                    setGuidedAssistantMessages([]);
-                                    showNotification('Chat cleared', 'success');
-                                  }}
-                                  className="w-full p-1.5 text-[10px] text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded transition"
+                                  onClick={() => setShowHistoryBrowser(!showHistoryBrowser)}
+                                  className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded transition ${
+                                    showHistoryBrowser
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'text-slate-400 hover:text-emerald-400 hover:bg-emerald-900/20'
+                                  }`}
                                 >
-                                  Clear conversation
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  History ({guidedAssistantMessages.length})
                                 </button>
+
+                                {/* Clear chat button */}
+                                {guidedAssistantMessages.length > 0 && (
+                                  <button
+                                    onClick={() => {
+                                      if (confirm('Clear all chat history? This cannot be undone.')) {
+                                        setGuidedAssistantMessages([]);
+                                        // 🛡️ PERSIST the clear to database
+                                        updateSettings({ consultant_chat_history: [] });
+                                        showNotification('Chat cleared', 'success');
+                                      }
+                                    }}
+                                    className="px-2 py-1 text-[10px] text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded transition"
+                                  >
+                                    Clear all
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* History Browser Panel */}
+                              {showHistoryBrowser && guidedAssistantMessages.length > 0 && (
+                                <div className="p-3 bg-slate-900 border border-emerald-500/30 rounded-lg space-y-2">
+                                  {/* Search & Sort Controls */}
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 relative">
+                                      <input
+                                        type="text"
+                                        value={historySearchQuery}
+                                        onChange={(e) => setHistorySearchQuery(e.target.value)}
+                                        placeholder="Search messages..."
+                                        className="w-full pl-7 pr-2 py-1.5 text-[10px] bg-slate-800 border border-slate-600 rounded text-white placeholder-slate-500"
+                                      />
+                                      <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                      </svg>
+                                    </div>
+                                    <select
+                                      value={historySortOrder}
+                                      onChange={(e) => setHistorySortOrder(e.target.value as 'newest' | 'oldest')}
+                                      className="px-2 py-1.5 text-[10px] bg-slate-800 border border-slate-600 rounded text-white"
+                                    >
+                                      <option value="newest">Newest First</option>
+                                      <option value="oldest">Oldest First</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Message List */}
+                                  <div className="max-h-60 overflow-y-auto space-y-1">
+                                    {(() => {
+                                      // Filter and sort messages
+                                      let filteredMsgs = guidedAssistantMessages
+                                        .map((msg, idx) => ({ ...msg, originalIndex: idx }))
+                                        .filter(msg =>
+                                          !historySearchQuery ||
+                                          msg.content.toLowerCase().includes(historySearchQuery.toLowerCase())
+                                        );
+
+                                      if (historySortOrder === 'newest') {
+                                        filteredMsgs = filteredMsgs.reverse();
+                                      }
+
+                                      if (filteredMsgs.length === 0) {
+                                        return (
+                                          <p className="text-[10px] text-slate-500 text-center py-2">
+                                            No messages match your search
+                                          </p>
+                                        );
+                                      }
+
+                                      return filteredMsgs.map((msg, idx) => (
+                                        <div
+                                          key={idx}
+                                          className={`p-2 rounded text-[10px] cursor-pointer hover:bg-slate-800 transition ${
+                                            msg.role === 'user' ? 'border-l-2 border-emerald-500' : 'border-l-2 border-slate-600'
+                                          }`}
+                                          onClick={() => {
+                                            // Scroll to this message in the chat
+                                            const chatEl = guidedAssistantChatRef.current;
+                                            if (chatEl) {
+                                              const msgEls = chatEl.querySelectorAll('[data-msg-index]');
+                                              const targetEl = chatEl.querySelector(`[data-msg-index="${msg.originalIndex}"]`);
+                                              if (targetEl) {
+                                                targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                // Flash highlight
+                                                targetEl.classList.add('ring-2', 'ring-emerald-500');
+                                                setTimeout(() => targetEl.classList.remove('ring-2', 'ring-emerald-500'), 2000);
+                                              }
+                                            }
+                                            setShowHistoryBrowser(false);
+                                          }}
+                                        >
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className={`font-medium ${msg.role === 'user' ? 'text-emerald-400' : 'text-slate-400'}`}>
+                                              {msg.role === 'user' ? 'You' : 'AI'}
+                                            </span>
+                                            <span className="text-slate-500">
+                                              {msg.timestamp ? new Date(msg.timestamp).toLocaleDateString() + ' ' + new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'No date'}
+                                            </span>
+                                          </div>
+                                          <p className="text-slate-300 line-clamp-2">
+                                            {msg.content.substring(0, 150)}{msg.content.length > 150 ? '...' : ''}
+                                          </p>
+                                          {msg.images && msg.images.length > 0 && (
+                                            <span className="text-emerald-400 text-[9px]">📷 {msg.images.length} image(s)</span>
+                                          )}
+                                        </div>
+                                      ));
+                                    })()}
+                                  </div>
+                                </div>
                               )}
 
                               {/* ═══════════════════════════════════════════
@@ -7277,19 +8040,328 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     )}
                     {settings.live_prompt_mode === 'smart_prompt' && (
-                      <div className="space-y-2">
+                      <div className="space-y-3 mt-2">
                         <p className="text-[10px] text-purple-300/70 bg-purple-500/10 p-2 rounded">
-                          Legacy mode: GPT-4o-mini reads your article and creates prompts automatically. Less control than Guided GPT.
+                          Legacy mode: GPT-4o-mini creates prompts automatically. Create different guidance per tag (H, J, C) or use Global for all.
                         </p>
-                        <div>
-                          <label className="text-[10px] text-purple-400 mb-1 block">Guidance / Guardrails (optional):</label>
-                          <textarea
-                            value={settings.smart_prompt_guidance || ''}
-                            onChange={(e) => updateSettings({ smart_prompt_guidance: e.target.value })}
-                            placeholder="e.g., Always show professional cleaners in navy blue uniforms. Include cleaning supplies. Modern residential settings only. No faces."
-                            className="w-full p-2 text-xs bg-slate-900 border border-purple-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
-                            rows={3}
-                          />
+
+                        {/* ========== PHASE 3: TAG-BASED SMART PROMPT SYSTEM ========== */}
+                        {/* Tag Tabs */}
+                        <div className="flex flex-wrap items-center gap-1 border-b border-slate-700 pb-2">
+                          {/* Tag-specific tabs first */}
+                          {tags.map((tag) => {
+                            const count = getSmartPromptsForTag(tag.name).length;
+                            const isSelected = smartPromptsActiveTag === tag.name;
+                            return (
+                              <div key={tag.id} className="flex items-center">
+                                <button
+                                  onClick={() => {
+                                    setSmartPromptsActiveTag(tag.name);
+                                    const promptsForTag = getSmartPromptsForTag(tag.name);
+                                    if (promptsForTag.length > 0) {
+                                      setSmartPromptsActiveId(promptsForTag[0].id);
+                                    }
+                                  }}
+                                  className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                    isSelected
+                                      ? 'bg-purple-600 text-white border-b-2 border-purple-500'
+                                      : 'bg-slate-800 text-brand-gold/70 hover:bg-slate-700 hover:text-brand-gold'
+                                  }`}
+                                >
+                                  {tag.name}
+                                  {count > 0 && (
+                                    <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                      {count}
+                                    </span>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleAddSmartPrompt(tag.name); }}
+                                  className="px-1.5 py-1.5 text-purple-400/50 hover:text-purple-400 hover:bg-slate-700/50 rounded transition text-xs"
+                                  title={`Add prompt for ${tag.name}`}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            );
+                          })}
+                          {/* Global tab */}
+                          <div className="flex items-center ml-2 border-l border-slate-600 pl-2">
+                            <button
+                              onClick={() => {
+                                setSmartPromptsActiveTag('Global');
+                                const globalPrompts = getSmartPromptsForTag('Global');
+                                if (globalPrompts.length > 0) {
+                                  setSmartPromptsActiveId(globalPrompts[0].id);
+                                }
+                              }}
+                              className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                                smartPromptsActiveTag === 'Global'
+                                  ? 'bg-emerald-600 text-white border-b-2 border-emerald-500'
+                                  : 'bg-slate-800 text-emerald-400/70 hover:bg-slate-700 hover:text-emerald-400'
+                              }`}
+                            >
+                              🌐 Global
+                              {getSmartPromptsForTag('Global').length > 0 && (
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${smartPromptsActiveTag === 'Global' ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                  {getSmartPromptsForTag('Global').length}
+                                </span>
+                              )}
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleAddSmartPrompt('Global'); }}
+                              className="px-1.5 py-1.5 text-emerald-400/50 hover:text-emerald-400 hover:bg-slate-700/50 rounded transition text-xs"
+                              title="Add global prompt"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Sub-tabs: Prompts within selected tag */}
+                        {getSmartPromptsForTag(smartPromptsActiveTag).length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-2 mb-3">
+                            {getSmartPromptsForTag(smartPromptsActiveTag).map((prompt) => (
+                              <button
+                                key={prompt.id}
+                                onClick={() => setSmartPromptsActiveId(prompt.id)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
+                                  smartPromptsActiveId === prompt.id
+                                    ? smartPromptsActiveTag === 'Global' ? 'bg-emerald-600 text-white' : 'bg-purple-600 text-white'
+                                    : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
+                                }`}
+                              >
+                                {prompt.name}
+                              </button>
+                            ))}
+                            {/* Copy From dropdown */}
+                            {(settings.smart_prompt_prompts || []).length > 0 && (
+                              <div className="relative ml-2">
+                                <select
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleCopySmartPromptFrom(e.target.value, smartPromptsActiveTag);
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                  className="px-2 py-1.5 text-xs bg-slate-700 border border-slate-600 rounded text-brand-cyan cursor-pointer"
+                                  defaultValue=""
+                                >
+                                  <option value="" disabled>📋 Copy From...</option>
+                                  {(settings.smart_prompt_prompts || [])
+                                    .filter(p => p.tag !== smartPromptsActiveTag)
+                                    .map(p => (
+                                      <option key={p.id} value={p.id}>{p.name} ({p.tag})</option>
+                                    ))
+                                  }
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-4 text-slate-500 text-xs">
+                            <p>No prompts for {smartPromptsActiveTag === 'Global' ? 'Global' : `tag "${smartPromptsActiveTag}"`} yet.</p>
+                            <button
+                              onClick={() => handleAddSmartPrompt(smartPromptsActiveTag)}
+                              className="mt-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition font-medium"
+                            >
+                              + Add First Prompt
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Active Prompt Editor */}
+                        {activeSmartPrompt && (
+                          <div className="bg-slate-800/50 rounded-lg p-4 border border-purple-500/20 space-y-3">
+                            {/* Prompt Name + Delete */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={activeSmartPrompt.name}
+                                  onChange={(e) => handleUpdateSmartPrompt(activeSmartPrompt.id, { name: e.target.value })}
+                                  className="bg-transparent border-b border-purple-500/30 text-purple-300 text-sm font-medium focus:outline-none focus:border-purple-500 px-1"
+                                  placeholder="Prompt name..."
+                                />
+                                {activeSmartPrompt.tag === 'Global' && (
+                                  <span className="text-[10px] text-emerald-400/60 bg-emerald-900/30 px-2 py-0.5 rounded">
+                                    Applies to: {activeSmartPrompt.globalAppliesTo?.join(', ') || 'All tags'}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleRemoveSmartPrompt(activeSmartPrompt.id)}
+                                className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition text-xs"
+                                title="Delete this prompt"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+
+                            {/* Guidance */}
+                            <div>
+                              <label className="text-[10px] text-purple-400 mb-1 block">Guidance / Guardrails:</label>
+                              <textarea
+                                value={activeSmartPrompt.guidance}
+                                onChange={(e) => handleUpdateSmartPrompt(activeSmartPrompt.id, { guidance: e.target.value })}
+                                placeholder="e.g., Always show professional cleaners in navy blue uniforms. Include cleaning supplies. Modern residential settings only."
+                                className="w-full p-2 text-xs bg-slate-900 border border-purple-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                rows={3}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ========== LEGACY PROMPT RULES SECTION ========== */}
+                        <div className="mt-4 border-t border-purple-500/30 pt-4">
+                          {/* Collapsible Header */}
+                          <button
+                            type="button"
+                            onClick={() => setLegacyRulesCollapsed(!legacyRulesCollapsed)}
+                            className="w-full flex items-center justify-between p-2 bg-purple-900/30 hover:bg-purple-900/50 rounded-lg transition"
+                          >
+                            <span className="flex items-center gap-2 text-purple-400 font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                              </svg>
+                              Legacy Prompt Rules
+                              {(settings.legacy_prompt_rules?.length || 0) > 0 && (
+                                <span className="px-1.5 py-0.5 bg-purple-600 text-white text-[10px] rounded-full">
+                                  {settings.legacy_prompt_rules?.length || 0}
+                                </span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-purple-400 transition-transform ${legacyRulesCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {!legacyRulesCollapsed && (
+                            <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-purple-500/20">
+                              <p className="text-[10px] text-purple-300/60">
+                                Define rules per tag that guide GPT when generating image prompts. Rules replace the old placement rules.
+                              </p>
+
+                              {/* Tag Tabs */}
+                              <div className="flex flex-wrap items-center gap-1 border-b border-slate-700 pb-2">
+                                {/* Global tab first */}
+                                <button
+                                  onClick={() => setLegacyRulesActiveTag('Global')}
+                                  className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                                    legacyRulesActiveTag === 'Global'
+                                      ? 'bg-emerald-600 text-white border-b-2 border-emerald-500'
+                                      : 'bg-slate-800 text-emerald-400/70 hover:bg-slate-700 hover:text-emerald-400'
+                                  }`}
+                                >
+                                  <span>Global</span>
+                                  {getRulesForTag(settings.legacy_prompt_rules || [], 'Global').length > 0 && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${legacyRulesActiveTag === 'Global' ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                      {getRulesForTag(settings.legacy_prompt_rules || [], 'Global').length}
+                                    </span>
+                                  )}
+                                </button>
+                                {/* Tag-specific tabs */}
+                                {tags.map((tag) => {
+                                  const count = getRulesForTag(settings.legacy_prompt_rules || [], tag.name).length;
+                                  const isSelected = legacyRulesActiveTag === tag.name;
+                                  return (
+                                    <button
+                                      key={tag.id}
+                                      onClick={() => setLegacyRulesActiveTag(tag.name)}
+                                      className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                        isSelected
+                                          ? 'bg-purple-600 text-white border-b-2 border-purple-500'
+                                          : 'bg-slate-800 text-brand-gold/70 hover:bg-slate-700 hover:text-brand-gold'
+                                      }`}
+                                    >
+                                      {tag.name}
+                                      {count > 0 && (
+                                        <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-slate-900/30' : 'bg-slate-700'}`}>
+                                          {count}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                                {/* Add Rule button */}
+                                <button
+                                  onClick={() => handleAddLegacyRule(legacyRulesActiveTag)}
+                                  className="px-2 py-1.5 text-purple-400 hover:text-purple-300 hover:bg-slate-700/50 rounded transition text-xs font-medium"
+                                  title="Add rule for current tag"
+                                >
+                                  + Add Rule
+                                </button>
+                              </div>
+
+                              {/* Global applies-to checkboxes */}
+                              {legacyRulesActiveTag === 'Global' && (
+                                <div className="bg-emerald-900/20 rounded-lg p-2 border border-emerald-500/30">
+                                  <span className="text-[10px] text-emerald-400 font-medium">Global rules apply to:</span>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    {tags.map(tag => (
+                                      <label key={tag.id} className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={true}
+                                          disabled
+                                          className="accent-emerald-500 w-3 h-3"
+                                        />
+                                        {tag.name}
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Rules List */}
+                              <div className="space-y-2">
+                                {getRulesForTag(settings.legacy_prompt_rules || [], legacyRulesActiveTag).length === 0 ? (
+                                  <div className="text-center py-4 text-slate-500 text-xs">
+                                    <p>No rules for {legacyRulesActiveTag === 'Global' ? 'Global' : `tag "${legacyRulesActiveTag}"`} yet.</p>
+                                    <button
+                                      onClick={() => handleAddLegacyRule(legacyRulesActiveTag)}
+                                      className="mt-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition"
+                                    >
+                                      + Add First Rule
+                                    </button>
+                                  </div>
+                                ) : (
+                                  getRulesForTag(settings.legacy_prompt_rules || [], legacyRulesActiveTag).map((rule, idx) => (
+                                    <div key={rule.id} className="bg-slate-800/50 rounded-lg p-3 border border-purple-500/20">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] text-purple-400/60 font-mono">#{idx + 1}</span>
+                                          <input
+                                            type="text"
+                                            value={rule.title}
+                                            onChange={(e) => handleUpdateLegacyRule(rule.id, { title: e.target.value })}
+                                            className="bg-transparent border-b border-purple-500/30 text-purple-300 text-sm font-medium focus:outline-none focus:border-purple-500 px-1"
+                                            placeholder="Rule title..."
+                                          />
+                                        </div>
+                                        <button
+                                          onClick={() => handleRemoveLegacyRule(rule.id)}
+                                          className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
+                                          title="Remove rule"
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                      <textarea
+                                        value={rule.text}
+                                        onChange={(e) => handleUpdateLegacyRule(rule.id, { text: e.target.value })}
+                                        placeholder="Enter rule text... (e.g., 'Place image at last paragraph break under 300 words since previous image')"
+                                        className="w-full p-2 text-xs bg-slate-900 border border-purple-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                        rows={2}
+                                      />
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -7614,9 +8686,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                   SECTION 2: Smart Content Matching
                   - Bank mode: Toggle on/off
                   - Live + Main Prompt: Always ON (it's the core mechanism)
-                  - Live + Guided/Smart: OFF (GPT handles prompts)
+                  - Live + Guided/Smart: HIDDEN (GPT handles prompts, no need for this section)
               ───────────────────────────────────────────────────── */}
-              {(() => {
+              {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode === 'main_prompt')) && (
+              (() => {
                 // Determine Smart Matching state based on mode
                 const isLiveMode = settings.integration_mode === 'live';
                 const isMainPromptMode = settings.live_prompt_mode === 'main_prompt';
@@ -7693,7 +8766,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </p>
                     </div>
 
-                    {/* Static Placement Rules - Still apply to Guided GPT / Smart Prompt */}
+                    {/* Static Placement Rules - HIDDEN when in Guided GPT or Smart Prompt mode (they use their own Rules sections) */}
+                    {settings.live_prompt_mode === 'main_prompt' && (
                     <div className="bg-slate-800/30 rounded-lg p-3 border border-cyan-500/30">
                       <div className="flex items-center gap-2 mb-3">
                         <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -7728,6 +8802,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                         These rules guide GPT on where to place images and what content to analyze.
                       </p>
                     </div>
+                    )}
                   </div>
                 ) : isAlwaysOnMode ? (
                   /* ALWAYS ON: Main Prompt mode in Generate Live */
@@ -8051,14 +9126,16 @@ Start by introducing yourself and asking about their business in a friendly way.
                 )}
               </div>
                 );
-              })()}
+              })()
+              )}
 
               {/* ─────────────────────────────────────────────────────
                   SECTION 3: Matching Rules - CONDITIONAL based on Smart Matching toggle
-                  NOTE: Shown for both Bank mode AND Generate Live (Main Prompt/Guided GPT) modes
+                  NOTE: Only shown for Bank mode AND Generate Live Main Prompt mode
+                  (Guided GPT and Smart Prompt use their own dedicated Rules sections)
               ───────────────────────────────────────────────────── */}
-              {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode !== 'smart_prompt')) && (
-              <div className={`rounded-lg p-4 border ${settings.smart_matching_enabled ? 'bg-slate-800/50 border-emerald-500/30' : 'bg-slate-800/30 border-cyan-500/30'}`}>
+              {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode === 'main_prompt')) && (
+              <div className={`rounded-lg p-4 border -mt-2 ${settings.smart_matching_enabled ? 'bg-slate-800/50 border-emerald-500/30' : 'bg-slate-800/30 border-cyan-500/30'}`}>
                 <div className="flex items-center gap-2 mb-4">
                   <svg className={`w-5 h-5 ${settings.smart_matching_enabled ? 'text-emerald-400' : 'text-cyan-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
@@ -8481,14 +9558,16 @@ Start by introducing yourself and asking about their business in a friendly way.
 
               {/* ─────────────────────────────────────────────────────
                   SECTION 4: Variation Order
+                  NOTE: Hidden when in Main Prompt mode (only shown for Bank mode or Guided GPT/Smart Prompt modes)
               ───────────────────────────────────────────────────── */}
-              <div className="bg-slate-800/50 rounded-lg border border-orange-500/30 overflow-hidden">
+              {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode !== 'main_prompt')) && (
+              <div className="bg-slate-800/50 rounded-lg border border-orange-500/30 overflow-hidden -mt-2">
                 <button onClick={() => setIsOrderOpen(!isOrderOpen)} className="w-full flex items-center justify-between p-4 text-orange-400 hover:bg-slate-800/80 transition">
                   <span className="flex items-center gap-2 font-semibold">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
                     Variation Order
                     <span className="text-xs text-orange-300/70 font-normal ml-2">
-                      ({settings.variation_order_mode === 'manual' ? `${settings.manual_variation_order?.length || 0} set` : settings.variation_order_mode})
+                      ({settings.variation_order_mode === 'manual' ? `${settings.manual_variation_order?.length || 0} set` : settings.variation_order_mode === 'follow_rules' ? 'follows rules' : settings.variation_order_mode})
                     </span>
                   </span>
                   <svg className={`w-5 h-5 transition-transform ${isOrderOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
@@ -8507,6 +9586,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <option value="sequential">Sequential (1, 2, 3...)</option>
                         <option value="random">Random (no duplicates)</option>
                         <option value="manual">Manual Order Below</option>
+                        <option value="follow_rules">Follow order set in rules</option>
                       </select>
                       {settings.variation_order_mode === 'manual' && (
                         <button onClick={clearVariationOrder} className="text-xs text-red-400 hover:text-red-300">Clear Order</button>
@@ -8542,6 +9622,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
                 )}
               </div>
+              )}
             </div>
             )}
           </div>
@@ -9347,7 +10428,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                     {/* Quick Category Toggles - Compact row showing all categories with on/off */}
                     {(activeAvatar.placeholderCategories || []).length > 0 && (
                       <div className="flex flex-wrap items-center gap-2 px-2 py-2 bg-slate-900/50 rounded-lg border border-purple-500/20">
-                        <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle:</span>
+                        <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle Off:</span>
                         {(activeAvatar.placeholderCategories || []).map(cat => (
                           <button
                             key={cat.id}
@@ -9584,114 +10665,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                     >
                       <div className="w-12 h-1 bg-purple-500/30 group-hover:bg-purple-500/60 rounded-full transition-colors" />
                     </div>
-
-                    {/* Generation Mode Controls */}
-                    {(activeAvatar.placeholderCategories || []).length > 0 && (
-                      <div className="border-t border-purple-500/30 pt-3 space-y-2">
-                        <label className="text-xs text-purple-300 font-medium">Generation Mode</label>
-                        <div className="flex flex-wrap gap-2">
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'one_of_each'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'one_of_each' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">1 of Each</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'sequential'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'sequential' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">Sequential</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'random'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'random' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">Random</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={activeAvatar.generationMode === 'specific'}
-                              onChange={() => handleUpdateAvatar(activeAvatar.id, { generationMode: 'specific' })}
-                              className="rounded border-purple-500 text-purple-600 bg-slate-900"
-                            />
-                            <span className="text-xs text-white">Specific</span>
-                          </label>
-                        </div>
-
-                        {/* Specific Combinations Table */}
-                        {activeAvatar.generationMode === 'specific' && (
-                          <div className="bg-slate-900/50 rounded p-2 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-purple-400">Specific Combinations</span>
-                              <button
-                                onClick={() => handleAddSpecificCombination()}
-                                className="text-xs text-purple-400 hover:text-purple-300"
-                              >
-                                + Add Combination
-                              </button>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {(activeAvatar.specificCombinations || []).map((combo, idx) => (
-                                <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-600/30 rounded text-xs text-white">
-                                  ({combo.join(', ')})
-                                  <button
-                                    onClick={() => handleRemoveSpecificCombination(idx)}
-                                    className="text-red-400 hover:text-red-300"
-                                  >
-                                    ×
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                            {/* Quick add input */}
-                            <input
-                              type="text"
-                              placeholder="Add combo (e.g., 3,2) and press Enter"
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const input = e.target as HTMLInputElement;
-                                  const combo = input.value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
-                                  if (combo.length > 0) {
-                                    handleAddSpecificCombination(combo);
-                                    input.value = '';
-                                  }
-                                }
-                              }}
-                              className="w-full bg-slate-900 border border-purple-500/30 rounded px-2 py-1 text-white text-xs"
-                            />
-                          </div>
-                        )}
-
-                        {/* Random count */}
-                        {activeAvatar.generationMode === 'random' && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-purple-400">Generate count:</span>
-                            <input
-                              type="number"
-                              min="1"
-                              value={activeAvatar.randomCount || 5}
-                              onChange={(e) => handleUpdateAvatar(activeAvatar.id, { randomCount: parseInt(e.target.value) || 5 })}
-                              className="w-16 bg-slate-900 border border-purple-500/30 rounded px-2 py-1 text-white text-xs"
-                            />
-                          </div>
-                        )}
-
-                        {/* Preview of combinations */}
-                        <div className="text-xs text-purple-400/70">
-                          {getAdvancedCombinationsPreview()}
-                        </div>
-                      </div>
-                    )}
                   </div>
                   </div>
                 )}
@@ -10339,9 +11312,30 @@ Start by introducing yourself and asking about their business in a friendly way.
                           </span>
                         </div>
 
-                        {/* Category filter rows */}
+                        {/* Quick Toggle Off - Same as Placeholder Categories */}
+                        <div className="flex flex-wrap items-center gap-2 px-2 py-2 bg-slate-900/50 rounded-lg border border-purple-500/20">
+                          <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle Off:</span>
+                          {activeAvatar.placeholderCategories.map(cat => (
+                            <button
+                              key={cat.id}
+                              onClick={() => handleUpdatePlaceholderCategory(cat.id, { enabled: cat.enabled === false ? true : false })}
+                              className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                                cat.enabled !== false
+                                  ? 'bg-emerald-600/40 border border-emerald-500 text-emerald-300'
+                                  : 'bg-slate-700/50 border border-slate-600 text-slate-500 line-through'
+                              }`}
+                              title={cat.enabled !== false ? `Click to disable "${cat.name}"` : `Click to enable "${cat.name}"`}
+                            >
+                              {cat.enabled !== false ? '✓' : '○'} {cat.name}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Category filter rows - Only show enabled categories */}
                         <div className="space-y-1">
-                          {activeAvatar.placeholderCategories.map((category) => (
+                          {activeAvatar.placeholderCategories
+                            .filter(category => category.enabled !== false)
+                            .map((category) => (
                             <div key={category.id} className="bg-slate-800/50 rounded border border-purple-500/30">
                               {/* Category header - clickable to expand */}
                               <button
@@ -12925,7 +13919,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   {/* Quick Category Toggles */}
                   {(activeAvatar.placeholderCategories || []).length > 0 && (
                     <div className="flex flex-wrap items-center gap-2 px-2 py-2 bg-slate-900/50 rounded-lg border border-purple-500/20">
-                      <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle:</span>
+                      <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle Off:</span>
                       {(activeAvatar.placeholderCategories || []).map(cat => (
                         <button
                           key={cat.id}

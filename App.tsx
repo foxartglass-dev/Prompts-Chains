@@ -25,6 +25,7 @@ import BlueprintPage from './src/pages/BlueprintPage';
 import ImageCreationSection from './src/components/ImageCreationSection';
 import SitePlanningSection from './src/components/SitePlanningSection';
 import LocalVikingSection from './src/components/LocalVikingSection';
+import ReverseImageSection from './src/components/ReverseImageSection';
 import { VibeCoderToggle } from './src/components/VibeCoderNotepad';
 import HelpButton from './src/components/HelpButton';
 import LogViewer from './src/components/LogViewer';
@@ -2854,15 +2855,63 @@ const App: React.FC = () => {
                                     <label className="block text-sm font-medium text-gray-400 text-center">Import / Export JSON</label>
                                     <div className="flex gap-1">
                                         <button
-                                            onClick={() => {
-                                                const exportData = {
-                                                    name: currentWorkflowContext.workflowName || currentProject.name,
-                                                    exportedAt: new Date().toISOString(),
-                                                    state: currentProject.state
-                                                };
-                                                const filename = `${(currentWorkflowContext.workflowName || currentProject.name).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-workflow.json`;
-                                                downloadProjectConfig(exportData, filename);
-                                                showNotification('Workflow exported!', 'success');
+                                            onClick={async () => {
+                                                try {
+                                                    // Fetch Image Creation settings
+                                                    let imageCreationSettings = null;
+                                                    if (currentWorkflowId) {
+                                                        const icRes = await fetch(`/api/image-creation/settings/${currentWorkflowId}`);
+                                                        if (icRes.ok) {
+                                                            const icData = await icRes.json();
+                                                            if (icData.success && icData.settings) {
+                                                                // Remove image_bank from export (too large, stored separately)
+                                                                const { image_bank, ...settingsWithoutBank } = icData.settings;
+                                                                imageCreationSettings = settingsWithoutBank;
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // Fetch Site Planning data (plans and nodes)
+                                                    let sitePlanningData = null;
+                                                    if (currentWorkflowId) {
+                                                        try {
+                                                            const spRes = await fetch(`/api/site-planning/export/${currentWorkflowId}`);
+                                                            if (spRes.ok) {
+                                                                const spData = await spRes.json();
+                                                                if (spData.success && spData.plans) {
+                                                                    sitePlanningData = spData.plans;
+                                                                }
+                                                            }
+                                                        } catch (spErr) {
+                                                            console.error('[Export] Failed to fetch Site Planning:', spErr);
+                                                        }
+                                                    }
+
+                                                    const exportData = {
+                                                        name: currentWorkflowContext.workflowName || currentProject.name,
+                                                        exportedAt: new Date().toISOString(),
+                                                        version: 2, // Version 2 includes image creation & site planning
+                                                        state: currentProject.state,
+                                                        imageCreationSettings,
+                                                        sitePlanningData
+                                                    };
+                                                    const filename = `${(currentWorkflowContext.workflowName || currentProject.name).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-workflow.json`;
+                                                    downloadProjectConfig(exportData, filename);
+
+                                                    const parts = ['Workflow'];
+                                                    if (imageCreationSettings) {
+                                                        const avatarCount = imageCreationSettings.audience_avatars?.length || 0;
+                                                        parts.push(`Image Creation (${avatarCount} avatars)`);
+                                                    }
+                                                    if (sitePlanningData && sitePlanningData.length > 0) {
+                                                        const totalNodes = sitePlanningData.reduce((sum: number, p: any) => sum + (p.nodes?.length || 0), 0);
+                                                        parts.push(`Site Planning (${sitePlanningData.length} plans, ${totalNodes} nodes)`);
+                                                    }
+                                                    showNotification(`Exported: ${parts.join(' + ')}!`, 'success');
+                                                } catch (error) {
+                                                    console.error('Export failed:', error);
+                                                    showNotification('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+                                                }
                                             }}
                                             className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 font-medium text-xs transition"
                                         >
@@ -2883,8 +2932,48 @@ const App: React.FC = () => {
                                                             const text = await file.text();
                                                             const data = JSON.parse(text);
                                                             if (data.state) {
+                                                                // Import workflow state
                                                                 setCurrentProjectState(() => data.state);
-                                                                showNotification('Workflow imported!', 'success');
+
+                                                                const importedParts = ['Workflow'];
+
+                                                                // Import Image Creation settings (version 2+)
+                                                                if (data.imageCreationSettings && currentWorkflowId) {
+                                                                    try {
+                                                                        const icRes = await fetch(`/api/image-creation/settings/${currentWorkflowId}`, {
+                                                                            method: 'PUT',
+                                                                            headers: { 'Content-Type': 'application/json' },
+                                                                            body: JSON.stringify(data.imageCreationSettings)
+                                                                        });
+                                                                        if (icRes.ok) {
+                                                                            importedParts.push('Image Creation');
+                                                                            console.log('[Import] Image Creation settings restored');
+                                                                        }
+                                                                    } catch (icErr) {
+                                                                        console.error('[Import] Failed to restore Image Creation:', icErr);
+                                                                    }
+                                                                }
+
+                                                                // Import Site Planning data (version 2+)
+                                                                if (data.sitePlanningData && currentWorkflowId && data.sitePlanningData.length > 0) {
+                                                                    try {
+                                                                        const spRes = await fetch(`/api/site-planning/import/${currentWorkflowId}`, {
+                                                                            method: 'POST',
+                                                                            headers: { 'Content-Type': 'application/json' },
+                                                                            body: JSON.stringify({ plans: data.sitePlanningData })
+                                                                        });
+                                                                        if (spRes.ok) {
+                                                                            const spResult = await spRes.json();
+                                                                            const totalNodes = spResult.plans?.reduce((sum: number, p: any) => sum + (p.nodesImported || 0), 0) || 0;
+                                                                            importedParts.push(`Site Planning (${spResult.plans?.length || 0} plans, ${totalNodes} nodes)`);
+                                                                            console.log('[Import] Site Planning data restored');
+                                                                        }
+                                                                    } catch (spErr) {
+                                                                        console.error('[Import] Failed to restore Site Planning:', spErr);
+                                                                    }
+                                                                }
+
+                                                                showNotification(`${importedParts.join(' + ')} imported! Refresh to see all settings.`, 'success');
                                                             } else {
                                                                 showNotification('Invalid format.', 'error');
                                                             }
@@ -4136,6 +4225,17 @@ const App: React.FC = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                         </svg>,
                         <LocalVikingSection
+                            websiteId={currentProject?.website_id || undefined}
+                            showNotification={showNotification}
+                        />
+                    )}
+
+                    {/* 10. Reverse Image - Prompt Engineering from Reference Images */}
+                    {renderSection('10. Reverse Image', 'reverseImage',
+                        <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>,
+                        <ReverseImageSection
                             websiteId={currentProject?.website_id || undefined}
                             showNotification={showNotification}
                         />

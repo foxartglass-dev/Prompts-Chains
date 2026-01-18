@@ -1731,12 +1731,14 @@ router.post('/publish', async (req, res) => {
             const updateResult = await sql`
               UPDATE articles
               SET generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  image_decision_report = ${JSON.stringify(reportToSave)}::jsonb,
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${articleId}
               RETURNING id
             `;
             console.log('[SAVE] ✅ Draft mode DB update completed for article', articleId);
             console.log('[SAVE] Update result:', updateResult.length, 'rows affected');
+            console.log('[SAVE] Saved image_decision_report with', reportToSave?.images?.length || 0, 'image entries');
           } else {
             console.log('[SAVE] ✅ Draft mode - skipping image update (preserving existing)');
           }
@@ -1753,6 +1755,7 @@ router.post('/publish', async (req, res) => {
                   article_push_manual_count = COALESCE(article_push_manual_count, 0) + 1,
                   article_push_manual_dates = COALESCE(article_push_manual_dates, '[]'::jsonb) || to_jsonb(to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
                   generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  image_decision_report = ${JSON.stringify(reportToSave)}::jsonb,
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${articleId}
               RETURNING id
@@ -1787,6 +1790,7 @@ router.post('/publish', async (req, res) => {
                   status = ${status === 'publish' ? 'published' : 'draft'},
                   article_push_auto_at = COALESCE(article_push_auto_at, CURRENT_TIMESTAMP),
                   generated_images = ${JSON.stringify(generatedImagesData)}::jsonb,
+                  image_decision_report = ${JSON.stringify(reportToSave)}::jsonb,
                   updated_at = CURRENT_TIMESTAMP
               WHERE id = ${articleId}
               RETURNING id

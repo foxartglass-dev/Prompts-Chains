@@ -1808,4 +1808,169 @@ async function deleteNodeAndChildren(nodeId) {
   await sql`DELETE FROM site_plan_nodes WHERE id = ${nodeId}`;
 }
 
+// ============================================
+// EXPORT / IMPORT FOR WORKFLOW BACKUP
+// ============================================
+
+/**
+ * GET /api/site-planning/export/:workflowId
+ * Export all site plans and nodes for a workflow
+ */
+router.get('/export/:workflowId', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+    console.log('[Site Planning] Exporting plans for workflow:', workflowId);
+
+    // Get all plans for this workflow
+    const plans = await sql`
+      SELECT * FROM site_plans
+      WHERE workflow_id = ${workflowId}
+      ORDER BY created_at
+    `;
+
+    // For each plan, get its nodes
+    const plansWithNodes = [];
+    for (const plan of plans) {
+      const nodes = await sql`
+        SELECT * FROM site_plan_nodes
+        WHERE site_plan_id = ${plan.id}
+        ORDER BY depth, sort_order, title
+      `;
+      plansWithNodes.push({
+        ...plan,
+        nodes
+      });
+    }
+
+    console.log(`[Site Planning] Exported ${plans.length} plans with their nodes`);
+    res.json({ success: true, plans: plansWithNodes });
+  } catch (error) {
+    console.error('[Site Planning] Export error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-planning/import/:workflowId
+ * Import site plans and nodes for a workflow (replaces existing)
+ */
+router.post('/import/:workflowId', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+    const { plans } = req.body;
+
+    if (!plans || !Array.isArray(plans)) {
+      return res.status(400).json({ error: 'plans array required' });
+    }
+
+    console.log(`[Site Planning] Importing ${plans.length} plans for workflow:`, workflowId);
+
+    // Get the workflow's website_id
+    const workflow = await sql`SELECT website_id FROM workflows WHERE id = ${workflowId}`;
+    const websiteId = workflow.length > 0 ? workflow[0].website_id : null;
+
+    // Delete existing plans for this workflow first
+    const existingPlans = await sql`SELECT id FROM site_plans WHERE workflow_id = ${workflowId}`;
+    for (const existingPlan of existingPlans) {
+      await sql`DELETE FROM site_plan_nodes WHERE site_plan_id = ${existingPlan.id}`;
+      await sql`DELETE FROM site_plans WHERE id = ${existingPlan.id}`;
+    }
+
+    const importedPlans = [];
+
+    for (const planData of plans) {
+      const { nodes, id: _oldId, ...planFields } = planData;
+
+      // Create the plan with new workflow_id and website_id
+      const newPlan = await sql`
+        INSERT INTO site_plans (
+          workflow_id,
+          website_id,
+          name,
+          description,
+          root_structure,
+          total_pages,
+          max_depth
+        ) VALUES (
+          ${workflowId},
+          ${websiteId},
+          ${planFields.name || 'Imported Plan'},
+          ${planFields.description || ''},
+          ${planFields.root_structure || 'service'},
+          ${planFields.total_pages || 0},
+          ${planFields.max_depth || 0}
+        )
+        RETURNING *
+      `;
+
+      const newPlanId = newPlan[0].id;
+
+      // Import nodes with ID mapping for parent relationships
+      const idMap = new Map(); // old_id -> new_id
+
+      // First pass: insert all nodes without parent relationships
+      for (const node of (nodes || [])) {
+        const newNode = await sql`
+          INSERT INTO site_plan_nodes (
+            site_plan_id,
+            parent_id,
+            title,
+            slug,
+            page_type,
+            depth,
+            sort_order,
+            url_path,
+            status,
+            meta_title,
+            meta_description,
+            notes,
+            is_location,
+            location_type,
+            location_data
+          ) VALUES (
+            ${newPlanId},
+            NULL,
+            ${node.title || 'Untitled'},
+            ${node.slug || ''},
+            ${node.page_type || 'page'},
+            ${node.depth || 0},
+            ${node.sort_order || 0},
+            ${node.url_path || ''},
+            ${node.status || 'planned'},
+            ${node.meta_title || ''},
+            ${node.meta_description || ''},
+            ${node.notes || ''},
+            ${node.is_location || false},
+            ${node.location_type || null},
+            ${node.location_data ? JSON.stringify(node.location_data) : null}
+          )
+          RETURNING *
+        `;
+        idMap.set(node.id, newNode[0].id);
+      }
+
+      // Second pass: update parent relationships
+      for (const node of (nodes || [])) {
+        if (node.parent_id && idMap.has(node.parent_id)) {
+          const newNodeId = idMap.get(node.id);
+          const newParentId = idMap.get(node.parent_id);
+          await sql`
+            UPDATE site_plan_nodes
+            SET parent_id = ${newParentId}
+            WHERE id = ${newNodeId}
+          `;
+        }
+      }
+
+      importedPlans.push({ ...newPlan[0], nodesImported: (nodes || []).length });
+    }
+
+    console.log(`[Site Planning] Successfully imported ${importedPlans.length} plans`);
+    res.json({ success: true, plans: importedPlans });
+  } catch (error) {
+    console.error('[Site Planning] Import error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
