@@ -265,8 +265,9 @@ const ReverseImageSection: React.FC<Props> = ({ websiteId, showNotification }) =
           setAvatars(data.audience_avatars);
         }
       }
-    } catch (err) {
-      console.error('Failed to load avatars:', err);
+      // Silently fail - avatars are optional for import/export feature
+    } catch {
+      // Avatar loading is optional, don't show error
     }
   };
 
