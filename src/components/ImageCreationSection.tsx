@@ -178,6 +178,26 @@ interface ChatMessage {
   timestamp: string;
 }
 
+// ========== CHAT FILE SYSTEM (like Claude Projects) ==========
+// File (folder) to organize multiple chats
+interface ChatFile {
+  id: string;
+  name: string;
+  parentId?: string; // For nesting (one level deep)
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Individual chat conversation
+interface ChatConversation {
+  id: string;
+  name: string;
+  fileId?: string; // Which file it belongs to (undefined = unfiled)
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ========== PROMPT JOURNAL SYSTEM ==========
 // Save prompts, track iterations, organize with tags/files
 
@@ -472,6 +492,9 @@ interface ImageCreationSettings {
   chat_history: ChatMessage[];
   // Dual chat system
   consultant_chat_history: ChatMessage[];
+  // Chat file system (like Claude Projects)
+  consultant_chat_files: ChatFile[]; // Folders to organize chats
+  consultant_chat_conversations: ChatConversation[]; // All conversations (filed or unfiled)
   consultant_model: string;
   worker_chat_history: ChatMessage[];
   worker_model: string;
@@ -595,6 +618,9 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   chat_history: [],
   // Dual chat defaults
   consultant_chat_history: [],
+  // Chat file system (like Claude Projects)
+  consultant_chat_files: [], // Folders to organize chats
+  consultant_chat_conversations: [], // All conversations (filed or unfiled)
   consultant_model: 'gpt-4o', // Default to vision model for consultant
   worker_chat_history: [],
   worker_model: 'gpt-4o-mini', // Default to cheaper model for worker
@@ -916,6 +942,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [historySortOrder, setHistorySortOrder] = useState<'newest' | 'oldest'>('newest');
 
+  // Chat File System state (like Claude Projects)
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [expandedFileIds, setExpandedFileIds] = useState<Set<string>>(new Set());
+  const [showChatFileManager, setShowChatFileManager] = useState(false);
+  const [renamingItemId, setRenamingItemId] = useState<string | null>(null);
+  const [renamingValue, setRenamingValue] = useState('');
+
   // Loaded articles for AI context
   interface LoadedArticle {
     id: number;
@@ -1222,8 +1255,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     if (loaded && settings.consultant_chat_history && settings.consultant_chat_history.length > 0) {
       setGuidedAssistantMessages(settings.consultant_chat_history);
       console.log('[AI Prompt Assistant] Loaded', settings.consultant_chat_history.length, 'messages from database');
+      // Auto-scroll to bottom after loading messages
+      setTimeout(() => {
+        if (guidedAssistantChatRef.current) {
+          guidedAssistantChatRef.current.scrollTop = guidedAssistantChatRef.current.scrollHeight;
+        }
+      }, 100);
     }
   }, [loaded]); // Only run once when settings first load
+
+  // Auto-scroll AI Prompt Assistant chat to bottom when messages change
+  useEffect(() => {
+    if (guidedAssistantChatRef.current && guidedAssistantMessages.length > 0) {
+      guidedAssistantChatRef.current.scrollTop = guidedAssistantChatRef.current.scrollHeight;
+    }
+  }, [guidedAssistantMessages]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -3345,6 +3391,190 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setConsultantLoading(false);
   };
 
+  // ========== CHAT FILE SYSTEM FUNCTIONS ==========
+
+  /**
+   * Get the active conversation object
+   */
+  const activeConversation = (settings.consultant_chat_conversations || []).find(c => c.id === activeConversationId) || null;
+
+  /**
+   * Create a new chat file (folder)
+   */
+  const handleCreateChatFile = (parentId?: string) => {
+    const newFile: ChatFile = {
+      id: `file-${Date.now()}`,
+      name: 'New Folder',
+      parentId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      consultant_chat_files: [...(settings.consultant_chat_files || []), newFile]
+    });
+    setRenamingItemId(newFile.id);
+    setRenamingValue('New Folder');
+    showNotification('Folder created', 'success');
+  };
+
+  /**
+   * Create a new chat conversation
+   */
+  const handleCreateConversation = (fileId?: string) => {
+    const newConversation: ChatConversation = {
+      id: `conv-${Date.now()}`,
+      name: 'New Chat',
+      fileId,
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      consultant_chat_conversations: [...(settings.consultant_chat_conversations || []), newConversation]
+    });
+    setActiveConversationId(newConversation.id);
+    setGuidedAssistantMessages([]);
+    setRenamingItemId(newConversation.id);
+    setRenamingValue('New Chat');
+    showNotification('Chat created', 'success');
+  };
+
+  /**
+   * Switch to a different conversation
+   */
+  const handleSwitchConversation = (conversationId: string) => {
+    // Save current conversation first
+    if (activeConversationId && guidedAssistantMessages.length > 0) {
+      const updatedConversations = (settings.consultant_chat_conversations || []).map(c =>
+        c.id === activeConversationId
+          ? { ...c, messages: guidedAssistantMessages, updatedAt: new Date().toISOString() }
+          : c
+      );
+      updateSettings({ consultant_chat_conversations: updatedConversations });
+    }
+
+    // Load new conversation
+    const conversation = (settings.consultant_chat_conversations || []).find(c => c.id === conversationId);
+    if (conversation) {
+      setActiveConversationId(conversationId);
+      setGuidedAssistantMessages(conversation.messages);
+      // Auto-scroll to bottom
+      setTimeout(() => {
+        if (guidedAssistantChatRef.current) {
+          guidedAssistantChatRef.current.scrollTop = guidedAssistantChatRef.current.scrollHeight;
+        }
+      }, 100);
+    }
+  };
+
+  /**
+   * Rename a file or conversation
+   */
+  const handleRenameItem = (itemId: string, newName: string, isFile: boolean) => {
+    if (!newName.trim()) return;
+
+    if (isFile) {
+      const updatedFiles = (settings.consultant_chat_files || []).map(f =>
+        f.id === itemId ? { ...f, name: newName.trim(), updatedAt: new Date().toISOString() } : f
+      );
+      updateSettings({ consultant_chat_files: updatedFiles });
+    } else {
+      const updatedConversations = (settings.consultant_chat_conversations || []).map(c =>
+        c.id === itemId ? { ...c, name: newName.trim(), updatedAt: new Date().toISOString() } : c
+      );
+      updateSettings({ consultant_chat_conversations: updatedConversations });
+    }
+    setRenamingItemId(null);
+    setRenamingValue('');
+  };
+
+  /**
+   * Delete a file (and optionally its contents)
+   */
+  const handleDeleteFile = (fileId: string) => {
+    if (!window.confirm('Delete this folder and all its chats?')) return;
+
+    // Delete the file
+    const updatedFiles = (settings.consultant_chat_files || []).filter(f => f.id !== fileId && f.parentId !== fileId);
+    // Move conversations in this file to unfiled (or delete them)
+    const updatedConversations = (settings.consultant_chat_conversations || []).filter(c => c.fileId !== fileId);
+
+    updateSettings({
+      consultant_chat_files: updatedFiles,
+      consultant_chat_conversations: updatedConversations
+    });
+    showNotification('Folder deleted', 'info');
+  };
+
+  /**
+   * Delete a conversation
+   */
+  const handleDeleteConversation = (conversationId: string) => {
+    if (!window.confirm('Delete this chat?')) return;
+
+    const updatedConversations = (settings.consultant_chat_conversations || []).filter(c => c.id !== conversationId);
+    updateSettings({ consultant_chat_conversations: updatedConversations });
+
+    // If we deleted the active conversation, clear the chat
+    if (activeConversationId === conversationId) {
+      setActiveConversationId(null);
+      setGuidedAssistantMessages([]);
+    }
+    showNotification('Chat deleted', 'info');
+  };
+
+  /**
+   * Move a conversation to a different file (or unfiled)
+   */
+  const handleMoveConversation = (conversationId: string, newFileId: string | undefined) => {
+    const updatedConversations = (settings.consultant_chat_conversations || []).map(c =>
+      c.id === conversationId ? { ...c, fileId: newFileId, updatedAt: new Date().toISOString() } : c
+    );
+    updateSettings({ consultant_chat_conversations: updatedConversations });
+    showNotification(newFileId ? 'Chat moved to folder' : 'Chat moved to unfiled', 'success');
+  };
+
+  /**
+   * Get files at a certain level (root or children of a parent)
+   */
+  const getFilesAtLevel = (parentId?: string) => {
+    return (settings.consultant_chat_files || []).filter(f => f.parentId === parentId);
+  };
+
+  /**
+   * Get conversations in a file (or unfiled if fileId is undefined)
+   */
+  const getConversationsInFile = (fileId?: string) => {
+    return (settings.consultant_chat_conversations || []).filter(c => c.fileId === fileId);
+  };
+
+  /**
+   * Save current unfiled chat to the file system
+   * (Migrates consultant_chat_history to a new conversation)
+   */
+  const handleSaveCurrentChatAsConversation = (fileId?: string) => {
+    if (guidedAssistantMessages.length === 0) {
+      showNotification('No messages to save', 'error');
+      return;
+    }
+
+    const newConversation: ChatConversation = {
+      id: `conv-${Date.now()}`,
+      name: `Chat ${new Date().toLocaleDateString()}`,
+      fileId,
+      messages: guidedAssistantMessages,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    updateSettings({
+      consultant_chat_conversations: [...(settings.consultant_chat_conversations || []), newConversation],
+      consultant_chat_history: [] // Clear the unfiled history
+    });
+    setActiveConversationId(newConversation.id);
+    showNotification('Chat saved to file system', 'success');
+  };
+
   /**
    * Send message to Guided GPT Assistant Chat
    * This chat helps users refine guardrails and understand prompt techniques
@@ -3365,7 +3595,18 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     // Update local state immediately
     setGuidedAssistantMessages(historyToSend);
     // 🛡️ PERSIST to database immediately
-    updateSettings({ consultant_chat_history: historyToSend });
+    if (activeConversationId) {
+      // Save to active conversation in file system
+      const updatedConversations = (settings.consultant_chat_conversations || []).map(c =>
+        c.id === activeConversationId
+          ? { ...c, messages: historyToSend, updatedAt: new Date().toISOString() }
+          : c
+      );
+      updateSettings({ consultant_chat_conversations: updatedConversations });
+    } else {
+      // Save to unfiled chat history
+      updateSettings({ consultant_chat_history: historyToSend });
+    }
     setGuidedAssistantInput('');
     setGuidedAssistantImages([]);
     setGuidedAssistantLoading(true);
@@ -3669,7 +3910,18 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         const updatedHistory = [...historyToSend, assistantMessage];
         setGuidedAssistantMessages(updatedHistory);
         // 🛡️ PERSIST assistant response to database
-        updateSettings({ consultant_chat_history: updatedHistory });
+        if (activeConversationId) {
+          // Save to active conversation in file system
+          const updatedConversations = (settings.consultant_chat_conversations || []).map(c =>
+            c.id === activeConversationId
+              ? { ...c, messages: updatedHistory, updatedAt: new Date().toISOString() }
+              : c
+          );
+          updateSettings({ consultant_chat_conversations: updatedConversations });
+        } else {
+          // Save to unfiled chat history
+          updateSettings({ consultant_chat_history: updatedHistory });
+        }
       } else {
         showNotification(data.error || 'Chat failed', 'error');
       }
@@ -3906,15 +4158,51 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   /**
    * Save test image to the Image Bank
+   * IMPORTANT: First uploads to WordPress to convert base64 to WP URL,
+   * then saves the URL to the bank (avoiding huge base64 storage)
    */
   const handleSaveTestImageToBank = async (imageUrl: string, prompt: string, model: string) => {
     try {
-      // Add to image bank via API
+      let finalUrl = imageUrl;
+      let wpMediaId: number | undefined;
+
+      // If the image is base64, upload to WordPress first to get a proper URL
+      if (imageUrl.startsWith('data:image/')) {
+        showNotification('Uploading to WordPress...', 'info');
+
+        const uploadResponse = await fetch('/api/image-creation/upload-to-wp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: imageUrl,
+            filename: `test-${activeTestingTab.name}-${Date.now()}.png`,
+            alt: `Test image: ${prompt.substring(0, 100)}`
+          })
+        });
+
+        const uploadData = await uploadResponse.json();
+
+        if (uploadData.success && uploadData.url) {
+          finalUrl = uploadData.url;
+          wpMediaId = uploadData.wpMediaId;
+          console.log('[Save to Bank] Converted base64 to WP URL:', finalUrl);
+        } else {
+          // If staging credentials not configured, show helpful error
+          if (uploadData.code === 'NO_STAGING_CREDENTIALS') {
+            showNotification('Configure Staging WordPress in WordPress Settings first', 'error');
+            return;
+          }
+          showNotification(uploadData.error || 'Failed to upload to WordPress', 'error');
+          return;
+        }
+      }
+
+      // Now save to image bank with the WordPress URL (not base64)
       const response = await fetch(`/api/image-bank/${settings.workflow_id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: imageUrl,
+          url: finalUrl,
           title: `Test: ${activeTestingTab.name}`,
           prompt: prompt,
           model: model,
@@ -3922,13 +4210,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           variationId: `testing-${activeTestingTab.id}`,
           orientation: 'vertical',
           used: false,
-          archived: false
+          archived: false,
+          wpMediaId: wpMediaId
         })
       });
 
       const data = await response.json();
       if (data.success) {
-        showNotification('Image saved to bank!', 'success');
+        showNotification('Image uploaded to WP and saved to bank!', 'success');
       } else {
         showNotification(data.error || 'Failed to save to bank', 'error');
       }
@@ -6724,6 +7013,293 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                           {guidedAssistantOpen && (
                             <div className="mt-3 space-y-3">
+                              {/* Chat File System Controls */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {/* File/Folder Toggle */}
+                                <button
+                                  type="button"
+                                  onClick={() => setShowChatFileManager(!showChatFileManager)}
+                                  className={`px-2 py-1 rounded text-[10px] transition flex items-center gap-1 ${
+                                    showChatFileManager
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                  }`}
+                                  title="Organize chats into folders"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                  </svg>
+                                  Files
+                                </button>
+
+                                {/* Current Chat Indicator */}
+                                <div className="flex-1 flex items-center gap-2 min-w-0">
+                                  {activeConversationId ? (
+                                    <span className="text-[10px] text-emerald-400 truncate flex items-center gap-1">
+                                      <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                      </svg>
+                                      {activeConversation?.name || 'Unknown Chat'}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-500">
+                                      {guidedAssistantMessages.length > 0 ? 'Unfiled Chat' : 'Start a new chat'}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Quick Actions */}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCreateConversation()}
+                                    className="px-2 py-1 bg-emerald-700 hover:bg-emerald-600 rounded text-[10px] text-white transition"
+                                    title="New Chat"
+                                  >
+                                    + New
+                                  </button>
+                                  {guidedAssistantMessages.length > 0 && !activeConversationId && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveCurrentChatAsConversation()}
+                                      className="px-2 py-1 bg-blue-700 hover:bg-blue-600 rounded text-[10px] text-white transition"
+                                      title="Save current chat to file system"
+                                    >
+                                      Save
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* File Manager Panel */}
+                              {showChatFileManager && (
+                                <div className="bg-slate-900 border border-emerald-500/30 rounded-lg p-2 max-h-48 overflow-y-auto">
+                                  <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-700">
+                                    <span className="text-xs text-emerald-400 font-medium">Chat Files</span>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCreateChatFile()}
+                                        className="px-1.5 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[9px] text-slate-300 transition"
+                                        title="New Folder"
+                                      >
+                                        + Folder
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCreateConversation()}
+                                        className="px-1.5 py-0.5 bg-emerald-700 hover:bg-emerald-600 rounded text-[9px] text-white transition"
+                                        title="New Chat"
+                                      >
+                                        + Chat
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Unfiled Chats */}
+                                  {getConversationsInFile(undefined).length > 0 && (
+                                    <div className="mb-2">
+                                      <div className="text-[9px] text-slate-500 mb-1">Unfiled</div>
+                                      {getConversationsInFile(undefined).map(conv => (
+                                        <div
+                                          key={conv.id}
+                                          className={`flex items-center gap-1 p-1 rounded cursor-pointer text-[10px] group ${
+                                            activeConversationId === conv.id
+                                              ? 'bg-emerald-600/30 text-emerald-300'
+                                              : 'hover:bg-slate-800 text-slate-400'
+                                          }`}
+                                          onClick={() => handleSwitchConversation(conv.id)}
+                                        >
+                                          <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                          </svg>
+                                          {renamingItemId === conv.id ? (
+                                            <input
+                                              type="text"
+                                              value={renamingValue}
+                                              onChange={(e) => setRenamingValue(e.target.value)}
+                                              onBlur={() => handleRenameItem(conv.id, renamingValue, false)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleRenameItem(conv.id, renamingValue, false);
+                                                if (e.key === 'Escape') { setRenamingItemId(null); setRenamingValue(''); }
+                                              }}
+                                              className="flex-1 bg-slate-800 border border-emerald-500 rounded px-1 text-[10px] text-white"
+                                              autoFocus
+                                              onClick={(e) => e.stopPropagation()}
+                                            />
+                                          ) : (
+                                            <span className="flex-1 truncate">{conv.name}</span>
+                                          )}
+                                          <span className="text-[8px] text-slate-600">{conv.messages.length}</span>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setRenamingItemId(conv.id); setRenamingValue(conv.name); }}
+                                            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-700 rounded transition"
+                                            title="Rename"
+                                          >
+                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteConversation(conv.id); }}
+                                            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-900/50 rounded transition text-red-400"
+                                            title="Delete"
+                                          >
+                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Folders and their chats */}
+                                  {getFilesAtLevel(undefined).map(file => (
+                                    <div key={file.id} className="mb-1">
+                                      <div
+                                        className="flex items-center gap-1 p-1 rounded cursor-pointer text-[10px] hover:bg-slate-800 text-slate-300 group"
+                                        onClick={() => {
+                                          const newExpanded = new Set(expandedFileIds);
+                                          if (newExpanded.has(file.id)) {
+                                            newExpanded.delete(file.id);
+                                          } else {
+                                            newExpanded.add(file.id);
+                                          }
+                                          setExpandedFileIds(newExpanded);
+                                        }}
+                                      >
+                                        <svg className={`w-3 h-3 transition-transform ${expandedFileIds.has(file.id) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                                        </svg>
+                                        <svg className="w-3 h-3 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
+                                          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                        </svg>
+                                        {renamingItemId === file.id ? (
+                                          <input
+                                            type="text"
+                                            value={renamingValue}
+                                            onChange={(e) => setRenamingValue(e.target.value)}
+                                            onBlur={() => handleRenameItem(file.id, renamingValue, true)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') handleRenameItem(file.id, renamingValue, true);
+                                              if (e.key === 'Escape') { setRenamingItemId(null); setRenamingValue(''); }
+                                            }}
+                                            className="flex-1 bg-slate-800 border border-emerald-500 rounded px-1 text-[10px] text-white"
+                                            autoFocus
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
+                                        ) : (
+                                          <span className="flex-1 truncate">{file.name}</span>
+                                        )}
+                                        <span className="text-[8px] text-slate-600">{getConversationsInFile(file.id).length}</span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleCreateConversation(file.id); }}
+                                          className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-emerald-700 rounded transition text-emerald-400"
+                                          title="New chat in folder"
+                                        >
+                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                                          </svg>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); setRenamingItemId(file.id); setRenamingValue(file.name); }}
+                                          className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-700 rounded transition"
+                                          title="Rename folder"
+                                        >
+                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                          </svg>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.id); }}
+                                          className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-900/50 rounded transition text-red-400"
+                                          title="Delete folder"
+                                        >
+                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                      {/* Chats in this folder */}
+                                      {expandedFileIds.has(file.id) && (
+                                        <div className="ml-4 mt-1 space-y-0.5">
+                                          {getConversationsInFile(file.id).map(conv => (
+                                            <div
+                                              key={conv.id}
+                                              className={`flex items-center gap-1 p-1 rounded cursor-pointer text-[10px] group ${
+                                                activeConversationId === conv.id
+                                                  ? 'bg-emerald-600/30 text-emerald-300'
+                                                  : 'hover:bg-slate-800 text-slate-400'
+                                              }`}
+                                              onClick={() => handleSwitchConversation(conv.id)}
+                                            >
+                                              <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                              </svg>
+                                              {renamingItemId === conv.id ? (
+                                                <input
+                                                  type="text"
+                                                  value={renamingValue}
+                                                  onChange={(e) => setRenamingValue(e.target.value)}
+                                                  onBlur={() => handleRenameItem(conv.id, renamingValue, false)}
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handleRenameItem(conv.id, renamingValue, false);
+                                                    if (e.key === 'Escape') { setRenamingItemId(null); setRenamingValue(''); }
+                                                  }}
+                                                  className="flex-1 bg-slate-800 border border-emerald-500 rounded px-1 text-[10px] text-white"
+                                                  autoFocus
+                                                  onClick={(e) => e.stopPropagation()}
+                                                />
+                                              ) : (
+                                                <span className="flex-1 truncate">{conv.name}</span>
+                                              )}
+                                              <span className="text-[8px] text-slate-600">{conv.messages.length}</span>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); handleMoveConversation(conv.id, undefined); }}
+                                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-700 rounded transition"
+                                                title="Move to unfiled"
+                                              >
+                                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                                </svg>
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); handleDeleteConversation(conv.id); }}
+                                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-900/50 rounded transition text-red-400"
+                                                title="Delete"
+                                              >
+                                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                              </button>
+                                            </div>
+                                          ))}
+                                          {getConversationsInFile(file.id).length === 0 && (
+                                            <div className="text-[9px] text-slate-600 italic p-1">Empty folder</div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+
+                                  {/* Empty state */}
+                                  {getFilesAtLevel(undefined).length === 0 && getConversationsInFile(undefined).length === 0 && (
+                                    <div className="text-center py-4 text-slate-500 text-[10px]">
+                                      <p>No files or chats yet.</p>
+                                      <p className="mt-1">Create a folder to organize your chats!</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
                               <div className="flex items-center justify-between">
                                 <p className="text-[10px] text-emerald-300/60">
                                   Chat with AI to refine your guardrails and get suggestions. AI can directly edit fields above.

@@ -1094,9 +1094,29 @@ const DataSourcesDiagram: React.FC = () => (
             <code className="text-brand-gold">website_id</code>
             <span className="text-gray-400">Links to website (preferred)</span>
           </div>
-          <div className="flex justify-between items-center py-1">
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
             <code className="text-brand-gold">workflow_id</code>
             <span className="text-gray-400">Links to workflow (legacy)</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
+            <code className="text-brand-gold">prompt_templates</code>
+            <span className="text-gray-400">JSONB saved prompts</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
+            <code className="text-brand-gold">text_snippets</code>
+            <span className="text-gray-400">JSONB Text Bank items</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
+            <code className="text-brand-gold">category_templates</code>
+            <span className="text-gray-400">JSONB placeholder categories</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
+            <code className="text-brand-gold">consultant_chat_files</code>
+            <span className="text-gray-400">JSONB chat folders</span>
+          </div>
+          <div className="flex justify-between items-center py-1">
+            <code className="text-brand-gold">consultant_chat_conversations</code>
+            <span className="text-gray-400">JSONB chat sessions</span>
           </div>
         </div>
         <div className="mt-4 p-3 bg-red-900/30 rounded-lg text-xs text-red-300">
@@ -1494,6 +1514,50 @@ updateSettings({ consultant_chat_history: newMessages }); // PERSIST!`}</pre>
             </p>
             <p className="text-gray-400 mt-2 text-xs">
               <strong>Example fix:</strong> ImageCreationSection.tsx lines 1215-1222 (load) and 3352-3355 (save)
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Rule 13 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-amber-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-amber-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">13</div>
+          <div>
+            <h3 className="text-lg font-bold text-amber-400">ALL generated images MUST go through WordPress BEFORE storage</h3>
+            <p className="text-gray-300 mt-2 text-sm">
+              Base64 images are ~1MB each. WordPress URLs are ~100 bytes. Storing base64 in the database causes
+              507 errors (response too large) and massive database bloat. Images MUST be uploaded to staging WordPress first.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-red-400 font-medium mb-2">❌ BAD (stores base64 - causes 67MB+ responses):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// Generate image and save directly
+const response = await openai.images.generate(...);
+const imageUrl = \`data:image/png;base64,\${response.data[0].b64_json}\`;
+saveToBank({ url: imageUrl }); // STORES 1MB PER IMAGE!`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-green-400 font-medium mb-2">✓ GOOD (uploads to WP first):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// Generate image → Upload to WP → Save URL
+const response = await openai.images.generate(...);
+const base64Data = response.data[0].b64_json;
+
+// Upload to staging WordPress
+const wpResult = await uploadMedia(stagingCredentials, base64Data, filename);
+
+// Save WordPress URL (tiny, ~100 bytes)
+saveToBank({ url: wpResult.url, wpMediaId: wpResult.id });`}</pre>
+            </div>
+            <p className="text-gray-400 mt-3 text-xs">
+              <strong>Endpoints that do this correctly:</strong>
+            </p>
+            <ul className="text-gray-400 text-xs mt-1 space-y-1 ml-4 list-disc">
+              <li><code className="bg-slate-900 px-1 rounded">/api/image-creation/batch-generate</code> - Requires staging creds, uploads first</li>
+              <li><code className="bg-slate-900 px-1 rounded">/api/images/generate-for-article</code> - Uses pipeline with WP upload</li>
+              <li><code className="bg-slate-900 px-1 rounded">/api/image-creation/upload-to-wp</code> - Utility endpoint for single uploads</li>
+            </ul>
+            <p className="text-red-400 mt-3 text-xs">
+              <strong>KNOWN OFFENDERS (need fixing):</strong> <code className="bg-slate-900 px-1 rounded">/api/articles/:id/regenerate-image</code> stores base64 directly
             </p>
           </div>
         </div>
@@ -3945,6 +4009,65 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">January 2026</h3>
 
       <div className="space-y-4">
+        {/* Jan 19 - Image Upload & Persistence Fixes */}
+        <div className="border-l-4 border-amber-500 pl-4">
+          <div className="text-sm text-amber-400 font-semibold">Jan 19, 2026 - Image Upload & Persistence Improvements</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Template Library 507 error - excluded template_data from list queries</strong>
+                <div className="text-xs text-gray-500">templates.js SELECT now excludes template_data column which contained huge base64 blobs. Only fetched when loading single template by ID</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Testing Mode now uploads to WordPress before saving to bank</strong>
+                <div className="text-xs text-gray-500">handleSaveTestImageToBank() calls /api/image-creation/upload-to-wp first, stores WP URL (~100 bytes) instead of base64 (~1MB)</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>New endpoint: /api/image-creation/upload-to-wp</strong>
+                <div className="text-xs text-gray-500">Utility endpoint to upload base64 image to staging WordPress. Used by Testing Mode and available for other flows</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Chat File System for AI Prompt Assistant</strong>
+                <div className="text-xs text-gray-500">Claude Projects-like folders for organizing chat sessions. New columns: consultant_chat_files, consultant_chat_conversations</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DB</span>
+              <div>
+                <strong>New columns in image_creation_settings</strong>
+                <div className="text-xs text-gray-500">prompt_templates, text_snippets, category_templates (for persistence), consultant_chat_files, consultant_chat_conversations (for chat organization)</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DOCS</span>
+              <div>
+                <strong>Blueprint: Golden Rule 13 added</strong>
+                <div className="text-xs text-gray-500">All generated images MUST go through WordPress upload BEFORE database storage</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DOCS</span>
+              <div>
+                <strong>AGENT_HANDOFF.md created for remaining fixes</strong>
+                <div className="text-xs text-gray-500">Documents: placeholder_category_templates field name mismatch, regenerate-image base64 issue, testing checklist</div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-red-900/30 rounded p-2 text-xs text-red-300">
+            <strong>STILL NEEDS FIX:</strong> /api/articles/:id/regenerate-image stores base64 directly. Frontend sends placeholder_category_templates but server expects category_templates.
+          </div>
+        </div>
+
         {/* Jan 18 - Persistence & Protection */}
         <div className="border-l-4 border-emerald-500 pl-4">
           <div className="text-sm text-emerald-400 font-semibold">Jan 18, 2026 - Persistence & Protection Fixes</div>
