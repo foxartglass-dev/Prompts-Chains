@@ -4,7 +4,7 @@ import { sql, isDatabaseEnabled } from '../db/index.js';
 import { megaImageStatus, trackImagesLoaded, trackApiResponse, banner, log, warning, success, error as logError } from '../services/image-tracker.js';
 import chunkContent from '../services/content-chunker.js';
 import buildElementorPage, { getElementorMetaFields } from '../services/elementor-builder.js';
-import { updatePage, getPage, createElementorPage } from '../services/wordpress-publisher.js';
+import { updatePage, getPage, createElementorPage, uploadMedia } from '../services/wordpress-publisher.js';
 
 const router = express.Router();
 
@@ -738,10 +738,50 @@ router.post('/:articleId/regenerate-image', requireDb, async (req, res) => {
       quality: 'low'
     });
 
-    // Handle response format
+    // Handle response format - upload to WordPress instead of storing base64
     let imageUrl;
+    let wpMediaId = null;
+
     if (response.data[0].b64_json) {
-      imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
+      const base64Data = response.data[0].b64_json;
+
+      // Get staging WordPress credentials to upload the image
+      const stagingResult = await sql`
+        SELECT staging_wp_url, staging_wp_user, staging_wp_password
+        FROM global_settings WHERE id = 1
+      `;
+
+      if (stagingResult.length > 0 && stagingResult[0].staging_wp_url) {
+        const { staging_wp_url, staging_wp_user, staging_wp_password } = stagingResult[0];
+        const filename = `regenerated-${imageId}-${Date.now()}.png`;
+
+        try {
+          console.log(`[Regenerate Image] Uploading to WordPress: ${filename}`);
+          const wpResult = await uploadMedia(
+            { url: staging_wp_url, user: staging_wp_user, password: staging_wp_password },
+            base64Data,
+            filename,
+            { alt: prompt.substring(0, 100) }
+          );
+
+          if (wpResult && wpResult.url) {
+            imageUrl = wpResult.url;
+            wpMediaId = wpResult.id;
+            console.log(`[Regenerate Image] ✓ Uploaded to WP: ${wpResult.url}`);
+          } else {
+            // Fallback to base64 if upload fails
+            imageUrl = `data:image/png;base64,${base64Data}`;
+            console.log(`[Regenerate Image] ⚠️ WP upload returned no URL, using base64`);
+          }
+        } catch (uploadError) {
+          console.error(`[Regenerate Image] ⚠️ WP upload failed:`, uploadError.message);
+          imageUrl = `data:image/png;base64,${base64Data}`;
+        }
+      } else {
+        // No staging credentials - fallback to base64
+        imageUrl = `data:image/png;base64,${base64Data}`;
+        console.log(`[Regenerate Image] ⚠️ No staging credentials, using base64`);
+      }
     } else if (response.data[0].url) {
       imageUrl = response.data[0].url;
     }
@@ -756,8 +796,8 @@ router.post('/:articleId/regenerate-image', requireDb, async (req, res) => {
       ...oldImage,
       url: imageUrl,
       createdAt: new Date().toISOString(),
-      pushedToWp: false, // Reset since it's a new image
-      wpMediaId: undefined
+      pushedToWp: !!wpMediaId,
+      wpMediaId: wpMediaId || undefined
     };
 
     // Save to database
