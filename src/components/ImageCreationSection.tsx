@@ -1573,8 +1573,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           const currentPromptLength = currentAvatar.mainPrompt?.length || 0;
           const newPromptLength = newAvatar.mainPrompt?.length || 0;
           if (currentPromptLength > 200 && newPromptLength < 100) {
-            console.error(`🛡️ PROTECTION (updateSettings): Preserving mainPrompt for "${newAvatar.name}"`);
-            console.error(`   Current: ${currentPromptLength} chars, Attempted: ${newPromptLength} chars`);
+            // Use warn instead of error - protection is working as intended
+            console.warn(`🛡️ PROTECTION (updateSettings): Preserving mainPrompt for "${newAvatar.name}" (${currentPromptLength} → ${newPromptLength} chars)`);
             newAvatar = { ...newAvatar, mainPrompt: currentAvatar.mainPrompt };
           }
 
@@ -1582,7 +1582,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           const currentCatCount = currentAvatar.placeholderCategories?.length || 0;
           const newCatCount = newAvatar.placeholderCategories?.length || 0;
           if (currentCatCount > 0 && newCatCount === 0) {
-            console.error(`🛡️ PROTECTION (updateSettings): Preserving ${currentCatCount} placeholderCategories for "${newAvatar.name}"`);
+            console.warn(`🛡️ PROTECTION (updateSettings): Preserving ${currentCatCount} placeholderCategories for "${newAvatar.name}"`);
             newAvatar = { ...newAvatar, placeholderCategories: currentAvatar.placeholderCategories };
           }
 
@@ -1590,7 +1590,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           const currentVarCount = currentAvatar.variations?.length || 0;
           const newVarCount = newAvatar.variations?.length || 0;
           if (currentVarCount > 0 && newVarCount === 0) {
-            console.error(`🛡️ PROTECTION (updateSettings): Preserving ${currentVarCount} variations for "${newAvatar.name}"`);
+            console.warn(`🛡️ PROTECTION (updateSettings): Preserving ${currentVarCount} variations for "${newAvatar.name}"`);
             newAvatar = { ...newAvatar, variations: currentAvatar.variations };
           }
 
@@ -2561,10 +2561,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
       // If current prompt is substantial (>200 chars) and new one is much shorter, BLOCK IT
       if (currentLength > 200 && newLength < 100) {
-        console.error(`🛡️ PROTECTION: Blocked attempt to erase mainPrompt!`);
-        console.error(`   Current: ${currentLength} chars, Attempted: ${newLength} chars`);
-        console.error(`   Current preview: "${currentAvatar.mainPrompt?.substring(0, 80)}..."`);
-        console.error(`   Attempted value: "${updates.mainPrompt}"`);
+        // Use warn instead of error - protection is working as intended
+        console.warn(`🛡️ PROTECTION: Blocked attempt to erase mainPrompt (${currentLength} → ${newLength} chars)`);
         // Remove mainPrompt from updates to preserve existing value
         const { mainPrompt: _blocked, ...safeUpdates } = updates;
         if (Object.keys(safeUpdates).length === 0) return; // Nothing left to update
@@ -3603,10 +3601,17 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         const mainPromptMatch = responseContent.match(/```mainprompt\n?([\s\S]*?)```/);
         if (mainPromptMatch && activeAvatar) {
           const newMainPrompt = mainPromptMatch[1].trim();
-          const updatedAvatars = settings.audience_avatars.map(a =>
-            a.tag === activeAvatar.tag ? { ...a, mainPrompt: newMainPrompt } : a
-          );
-          updateSettings({ audience_avatars: updatedAvatars });
+          // IMPORTANT: Use functional update to avoid stale closure issue
+          // The activeAvatar.tag is captured here, but we use fresh settings inside setSettings
+          const targetTag = activeAvatar.tag;
+          setSettings(current => {
+            const updatedAvatars = current.audience_avatars.map(a =>
+              a.tag === targetTag ? { ...a, mainPrompt: newMainPrompt } : a
+            );
+            const newSettings = { ...current, audience_avatars: updatedAvatars };
+            saveSettings(newSettings);
+            return newSettings;
+          });
           updatedFields.push('Main Prompt');
         }
 
