@@ -4158,15 +4158,51 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   /**
    * Save test image to the Image Bank
+   * IMPORTANT: First uploads to WordPress to convert base64 to WP URL,
+   * then saves the URL to the bank (avoiding huge base64 storage)
    */
   const handleSaveTestImageToBank = async (imageUrl: string, prompt: string, model: string) => {
     try {
-      // Add to image bank via API
+      let finalUrl = imageUrl;
+      let wpMediaId: number | undefined;
+
+      // If the image is base64, upload to WordPress first to get a proper URL
+      if (imageUrl.startsWith('data:image/')) {
+        showNotification('Uploading to WordPress...', 'info');
+
+        const uploadResponse = await fetch('/api/image-creation/upload-to-wp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: imageUrl,
+            filename: `test-${activeTestingTab.name}-${Date.now()}.png`,
+            alt: `Test image: ${prompt.substring(0, 100)}`
+          })
+        });
+
+        const uploadData = await uploadResponse.json();
+
+        if (uploadData.success && uploadData.url) {
+          finalUrl = uploadData.url;
+          wpMediaId = uploadData.wpMediaId;
+          console.log('[Save to Bank] Converted base64 to WP URL:', finalUrl);
+        } else {
+          // If staging credentials not configured, show helpful error
+          if (uploadData.code === 'NO_STAGING_CREDENTIALS') {
+            showNotification('Configure Staging WordPress in WordPress Settings first', 'error');
+            return;
+          }
+          showNotification(uploadData.error || 'Failed to upload to WordPress', 'error');
+          return;
+        }
+      }
+
+      // Now save to image bank with the WordPress URL (not base64)
       const response = await fetch(`/api/image-bank/${settings.workflow_id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: imageUrl,
+          url: finalUrl,
           title: `Test: ${activeTestingTab.name}`,
           prompt: prompt,
           model: model,
@@ -4174,13 +4210,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           variationId: `testing-${activeTestingTab.id}`,
           orientation: 'vertical',
           used: false,
-          archived: false
+          archived: false,
+          wpMediaId: wpMediaId
         })
       });
 
       const data = await response.json();
       if (data.success) {
-        showNotification('Image saved to bank!', 'success');
+        showNotification('Image uploaded to WP and saved to bank!', 'success');
       } else {
         showNotification(data.error || 'Failed to save to bank', 'error');
       }

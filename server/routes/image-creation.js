@@ -295,6 +295,119 @@ Generate an image that matches the described style exactly while depicting the c
 });
 
 /**
+ * POST /api/image-creation/upload-to-wp
+ * Upload a base64 image to WordPress staging site and return the WP URL.
+ * This ensures images are stored as URLs (small) not base64 (huge).
+ *
+ * Used by: Testing Mode "Save to Bank", and any other flow that generates
+ * base64 images that need to be persisted.
+ */
+router.post('/upload-to-wp', async (req, res) => {
+  try {
+    const { imageUrl, filename, alt } = req.body;
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'imageUrl is required' });
+    }
+
+    // Get staging WordPress credentials
+    let wpUrl, wpUser, wpPassword;
+
+    if (isDatabaseEnabled()) {
+      try {
+        const stagingResult = await sql`
+          SELECT staging_wp_url, staging_wp_user, staging_wp_password
+          FROM global_settings WHERE id = 1
+        `;
+        if (stagingResult.length > 0 && stagingResult[0].staging_wp_url) {
+          wpUrl = stagingResult[0].staging_wp_url;
+          wpUser = stagingResult[0].staging_wp_user;
+          wpPassword = stagingResult[0].staging_wp_password;
+        }
+      } catch (dbError) {
+        console.error('[Upload to WP] Failed to get staging credentials:', dbError.message);
+      }
+    }
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({
+        error: 'Staging WordPress credentials not configured. Go to WordPress Settings > Staging WordPress to configure.',
+        code: 'NO_STAGING_CREDENTIALS'
+      });
+    }
+
+    // Handle base64 data URL
+    const base64Match = imageUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (base64Match) {
+      const base64Data = base64Match[2];
+      const extension = base64Match[1] || 'png';
+      const finalFilename = filename || `test-image-${Date.now()}.${extension}`;
+
+      console.log(`[Upload to WP] Uploading base64 image: ${finalFilename}`);
+
+      const wpResult = await uploadMedia(
+        { url: wpUrl, user: wpUser, password: wpPassword },
+        base64Data,
+        finalFilename,
+        { alt: alt || 'AI Generated Test Image' }
+      );
+
+      if (wpResult && wpResult.url) {
+        console.log(`[Upload to WP] ✓ Success: ${wpResult.url}`);
+        return res.json({
+          success: true,
+          url: wpResult.url,
+          wpMediaId: wpResult.id,
+          originalWasBase64: true
+        });
+      } else {
+        console.error('[Upload to WP] Upload returned but no URL:', wpResult);
+        return res.status(500).json({ error: 'WordPress upload failed - no URL returned' });
+      }
+    }
+
+    // Handle external URL (re-upload to our WP)
+    if (imageUrl.startsWith('http')) {
+      try {
+        console.log(`[Upload to WP] Fetching external URL to re-upload: ${imageUrl.substring(0, 50)}...`);
+        const imageRes = await fetch(imageUrl);
+        const arrayBuffer = await imageRes.arrayBuffer();
+        const base64Data = Buffer.from(arrayBuffer).toString('base64');
+        const finalFilename = filename || `reupload-${Date.now()}.png`;
+
+        const wpResult = await uploadMedia(
+          { url: wpUrl, user: wpUser, password: wpPassword },
+          base64Data,
+          finalFilename,
+          { alt: alt || 'AI Generated Test Image' }
+        );
+
+        if (wpResult && wpResult.url) {
+          console.log(`[Upload to WP] ✓ Re-uploaded: ${wpResult.url}`);
+          return res.json({
+            success: true,
+            url: wpResult.url,
+            wpMediaId: wpResult.id,
+            originalWasBase64: false
+          });
+        } else {
+          return res.status(500).json({ error: 'WordPress upload failed - no URL returned' });
+        }
+      } catch (fetchErr) {
+        console.error('[Upload to WP] Failed to fetch/re-upload external URL:', fetchErr.message);
+        return res.status(500).json({ error: `Failed to fetch image: ${fetchErr.message}` });
+      }
+    }
+
+    return res.status(400).json({ error: 'Invalid imageUrl format. Must be base64 data URL or HTTP URL.' });
+
+  } catch (error) {
+    console.error('[Upload to WP] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * POST /api/image-creation/batch-generate
  * Generate multiple images from prompts + variations
  *
