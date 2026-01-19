@@ -1415,7 +1415,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       // Guided GPT guardrails (instructions, uniformDescription, defaultSubject, avoidList)
       guided_guardrails,
       // Prompt Problem Areas
-      prompt_problem_areas
+      prompt_problem_areas,
+      // Templates and Text Bank (CRITICAL for persistence)
+      prompt_templates,
+      text_snippets,
+      category_templates
     } = req.body;
 
     // DEBUG: Log what Test Mode is sending
@@ -1568,7 +1572,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 fallback_prompt_mode,
                 smart_prompt_guidance,
                 guided_guardrails,
-                prompt_problem_areas
+                prompt_problem_areas,
+                prompt_templates,
+                text_snippets,
+                category_templates
               ) VALUES (
                 ${websiteId},
                 ${enabled ?? false},
@@ -1595,7 +1602,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${fallback_prompt_mode ?? 'main_prompt'},
                 ${smart_prompt_guidance ?? ''},
                 ${JSON.stringify(guided_guardrails ?? {})},
-                ${JSON.stringify(prompt_problem_areas ?? [])}
+                ${JSON.stringify(prompt_problem_areas ?? [])},
+                ${JSON.stringify(prompt_templates ?? [])},
+                ${JSON.stringify(text_snippets ?? [])},
+                ${JSON.stringify(category_templates ?? [])}
               )
               RETURNING id
             `
@@ -1626,7 +1636,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 fallback_prompt_mode,
                 smart_prompt_guidance,
                 guided_guardrails,
-                prompt_problem_areas
+                prompt_problem_areas,
+                prompt_templates,
+                text_snippets,
+                category_templates
               ) VALUES (
                 ${workflowId},
               ${enabled ?? false},
@@ -1653,7 +1666,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               ${fallback_prompt_mode ?? 'main_prompt'},
               ${smart_prompt_guidance ?? ''},
               ${JSON.stringify(guided_guardrails ?? {})},
-              ${JSON.stringify(prompt_problem_areas ?? [])}
+              ${JSON.stringify(prompt_problem_areas ?? [])},
+              ${JSON.stringify(prompt_templates ?? [])},
+              ${JSON.stringify(text_snippets ?? [])},
+              ${JSON.stringify(category_templates ?? [])}
             )
             RETURNING id
           `;
@@ -1798,6 +1814,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
                 guided_guardrails = COALESCE(${guided_guardrails ? JSON.stringify(guided_guardrails) : null}::jsonb, guided_guardrails),
                 prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
+                prompt_templates = COALESCE(${prompt_templates ? JSON.stringify(prompt_templates) : null}::jsonb, prompt_templates),
+                text_snippets = COALESCE(${text_snippets ? JSON.stringify(text_snippets) : null}::jsonb, text_snippets),
+                category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
                 updated_at = CURRENT_TIMESTAMP
               WHERE website_id = ${websiteId}
               RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
@@ -1832,6 +1851,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 smart_prompt_guidance = COALESCE(${smart_prompt_guidance}, smart_prompt_guidance),
                 guided_guardrails = COALESCE(${guided_guardrails ? JSON.stringify(guided_guardrails) : null}::jsonb, guided_guardrails),
                 prompt_problem_areas = COALESCE(${prompt_problem_areas ? JSON.stringify(prompt_problem_areas) : null}::jsonb, prompt_problem_areas),
+                prompt_templates = COALESCE(${prompt_templates ? JSON.stringify(prompt_templates) : null}::jsonb, prompt_templates),
+                text_snippets = COALESCE(${text_snippets ? JSON.stringify(text_snippets) : null}::jsonb, text_snippets),
+                category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
                 updated_at = CURRENT_TIMESTAMP
               WHERE workflow_id = ${workflowId}
               RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
