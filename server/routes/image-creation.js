@@ -1858,7 +1858,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   fallback_to_live,
                   image_order,
                   variation_order_mode,
-                  manual_variation_order
+                  manual_variation_order,
+                  prompt_templates,
+                  text_snippets,
+                  category_templates,
+                  consultant_chat_files,
+                  consultant_chat_conversations
                 ) VALUES (
                   ${websiteId},
                   ${enabled ?? false},
@@ -1880,7 +1885,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   ${fallback_to_live ?? true},
                   ${JSON.stringify(image_order ?? [])},
                   ${variation_order_mode ?? 'sequential'},
-                  ${JSON.stringify(manual_variation_order ?? [])}
+                  ${JSON.stringify(manual_variation_order ?? [])},
+                  ${JSON.stringify(prompt_templates ?? [])},
+                  ${JSON.stringify(text_snippets ?? [])},
+                  ${JSON.stringify(category_templates ?? [])},
+                  ${JSON.stringify(consultant_chat_files ?? [])},
+                  ${JSON.stringify(consultant_chat_conversations ?? [])}
                 )
                 RETURNING id
               `
@@ -1906,7 +1916,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   fallback_to_live,
                   image_order,
                   variation_order_mode,
-                  manual_variation_order
+                  manual_variation_order,
+                  prompt_templates,
+                  text_snippets,
+                  category_templates,
+                  consultant_chat_files,
+                  consultant_chat_conversations
                 ) VALUES (
                   ${workflowId},
                 ${enabled ?? false},
@@ -1928,7 +1943,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${fallback_to_live ?? true},
                 ${JSON.stringify(image_order ?? [])},
                 ${variation_order_mode ?? 'sequential'},
-                ${JSON.stringify(manual_variation_order ?? [])}
+                ${JSON.stringify(manual_variation_order ?? [])},
+                ${JSON.stringify(prompt_templates ?? [])},
+                ${JSON.stringify(text_snippets ?? [])},
+                ${JSON.stringify(category_templates ?? [])},
+                ${JSON.stringify(consultant_chat_files ?? [])},
+                ${JSON.stringify(consultant_chat_conversations ?? [])}
               )
               RETURNING id
             `;
@@ -2049,6 +2069,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
                   variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
                   manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+                  prompt_templates = COALESCE(${prompt_templates ? JSON.stringify(prompt_templates) : null}::jsonb, prompt_templates),
+                  text_snippets = COALESCE(${text_snippets ? JSON.stringify(text_snippets) : null}::jsonb, text_snippets),
+                  category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
+                  consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
+                  consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
                   updated_at = CURRENT_TIMESTAMP
                 WHERE website_id = ${websiteId}
               `;
@@ -2076,6 +2101,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
                   variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
                   manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+                  prompt_templates = COALESCE(${prompt_templates ? JSON.stringify(prompt_templates) : null}::jsonb, prompt_templates),
+                  text_snippets = COALESCE(${text_snippets ? JSON.stringify(text_snippets) : null}::jsonb, text_snippets),
+                  category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
+                  consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
+                  consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
                   updated_at = CURRENT_TIMESTAMP
                 WHERE workflow_id = ${workflowId}
               `;
