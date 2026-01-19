@@ -1366,7 +1366,16 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           fallback_prompt_mode: 'main_prompt',
           smart_prompt_guidance: '',
           // Prompt Problem Areas
-          prompt_problem_areas: []
+          prompt_problem_areas: [],
+          // Templates and Text Bank
+          prompt_templates: [],
+          text_snippets: [],
+          category_templates: [],
+          // Guided GPT guardrails
+          guided_guardrails: {},
+          // Chat Files and Conversations
+          consultant_chat_files: [],
+          consultant_chat_conversations: []
         },
         isNew: true
       });
@@ -1444,7 +1453,16 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         fallback_prompt_mode: results[0].fallback_prompt_mode || 'main_prompt',
         smart_prompt_guidance: results[0].smart_prompt_guidance || '',
         // Prompt Problem Areas
-        prompt_problem_areas: results[0].prompt_problem_areas || []
+        prompt_problem_areas: results[0].prompt_problem_areas || [],
+        // Templates and Text Bank (CRITICAL for persistence)
+        prompt_templates: results[0].prompt_templates || [],
+        text_snippets: results[0].text_snippets || [],
+        category_templates: results[0].category_templates || [],
+        // Guided GPT guardrails
+        guided_guardrails: results[0].guided_guardrails || {},
+        // Chat Files and Conversations
+        consultant_chat_files: results[0].consultant_chat_files || [],
+        consultant_chat_conversations: results[0].consultant_chat_conversations || []
       },
       imageBankMigrated  // Tell frontend to use new /api/image-bank API
     });
