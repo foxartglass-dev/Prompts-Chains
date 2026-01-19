@@ -1467,6 +1467,13 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
       imageBankMigrated  // Tell frontend to use new /api/image-bank API
     });
 
+    // DEBUG: Log template data being returned (after response)
+    console.log('[Image Creation API] GET returning TEMPLATE DATA:', {
+      prompt_templates_count: results[0].prompt_templates?.length ?? 'null/undefined in DB',
+      text_snippets_count: results[0].text_snippets?.length ?? 'null/undefined in DB',
+      category_templates_count: results[0].category_templates?.length ?? 'null/undefined in DB'
+    });
+
   } catch (error) {
     console.error('Get settings error:', error);
     res.status(500).json({ error: error.message });
@@ -1562,6 +1569,13 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       live_prompt_mode,
       smart_matching_mode,
       fallback_prompt_mode
+    });
+    // DEBUG: Log template data for persistence debugging
+    console.log('[Image Creation API] TEMPLATE DATA received:', {
+      prompt_templates_count: prompt_templates?.length ?? 'undefined',
+      prompt_templates_first: prompt_templates?.[0]?.name ?? 'none',
+      text_snippets_count: text_snippets?.length ?? 'undefined',
+      category_templates_count: category_templates?.length ?? 'undefined'
     });
     console.log('[Image Creation API] TYPE CHECK:', {
       live_prompt_mode_type: typeof live_prompt_mode,
