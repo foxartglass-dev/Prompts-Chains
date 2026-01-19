@@ -21,6 +21,8 @@ const requireDb = (req, res, next) => {
 // - client_setup: Full client with all websites/workflows
 
 // GET all templates (optionally filter by type, tag, scope, or website)
+// NOTE: Does NOT return template_data in list view to avoid huge responses.
+// Use GET /:id to fetch full template with data.
 router.get('/', requireDb, async (req, res) => {
   try {
     const { type, tag, search, scope, websiteId } = req.query;
@@ -28,6 +30,8 @@ router.get('/', requireDb, async (req, res) => {
     let templates;
 
     // Build dynamic query based on filters
+    // NOTE: Exclude template_data from list queries - it can be huge (contains image_bank with base64)
+    // Use GET /:id to fetch full template with data when applying
     // For websiteId filter: return templates that are either:
     // - App global (scope = 'app')
     // - Website specific (scope = 'website' AND website_id matches)
@@ -36,14 +40,14 @@ router.get('/', requireDb, async (req, res) => {
       // Return app-global templates + website-specific templates for this website
       if (type) {
         templates = await sql`
-          SELECT * FROM templates
+          SELECT id, name, description, template_type, includes, tags, scope, website_id, created_at, updated_at FROM templates
           WHERE template_type = ${type}
           AND (scope = 'app' OR scope IS NULL OR (scope = 'website' AND website_id = ${websiteId}))
           ORDER BY scope DESC, created_at DESC
         `;
       } else {
         templates = await sql`
-          SELECT * FROM templates
+          SELECT id, name, description, template_type, includes, tags, scope, website_id, created_at, updated_at FROM templates
           WHERE (scope = 'app' OR scope IS NULL OR (scope = 'website' AND website_id = ${websiteId}))
           ORDER BY template_type, scope DESC, created_at DESC
         `;
@@ -51,39 +55,39 @@ router.get('/', requireDb, async (req, res) => {
     } else if (scope === 'app') {
       // Only app-global templates
       templates = await sql`
-        SELECT * FROM templates
+        SELECT id, name, description, template_type, includes, tags, scope, website_id, created_at, updated_at FROM templates
         WHERE scope = 'app' OR scope IS NULL
         ORDER BY template_type, created_at DESC
       `;
     } else if (type && tag) {
       templates = await sql`
-        SELECT * FROM templates
+        SELECT id, name, description, template_type, includes, tags, scope, website_id, created_at, updated_at FROM templates
         WHERE template_type = ${type}
         AND tags @> ${JSON.stringify([tag])}
         ORDER BY created_at DESC
       `;
     } else if (type) {
       templates = await sql`
-        SELECT * FROM templates
+        SELECT id, name, description, template_type, includes, tags, scope, website_id, created_at, updated_at FROM templates
         WHERE template_type = ${type}
         ORDER BY created_at DESC
       `;
     } else if (tag) {
       templates = await sql`
-        SELECT * FROM templates
+        SELECT id, name, description, template_type, includes, tags, scope, website_id, created_at, updated_at FROM templates
         WHERE tags @> ${JSON.stringify([tag])}
         ORDER BY created_at DESC
       `;
     } else if (search) {
       templates = await sql`
-        SELECT * FROM templates
+        SELECT id, name, description, template_type, includes, tags, scope, website_id, created_at, updated_at FROM templates
         WHERE name ILIKE ${'%' + search + '%'}
         OR description ILIKE ${'%' + search + '%'}
         ORDER BY template_type, created_at DESC
       `;
     } else {
       templates = await sql`
-        SELECT * FROM templates
+        SELECT id, name, description, template_type, includes, tags, scope, website_id, created_at, updated_at FROM templates
         ORDER BY template_type, created_at DESC
       `;
     }
