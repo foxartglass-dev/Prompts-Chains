@@ -1419,7 +1419,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       // Templates and Text Bank (CRITICAL for persistence)
       prompt_templates,
       text_snippets,
-      category_templates
+      category_templates,
+      // Chat Files and Conversations (for organized chat sessions)
+      consultant_chat_files,
+      consultant_chat_conversations
     } = req.body;
 
     // DEBUG: Log what Test Mode is sending
@@ -1575,7 +1578,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 prompt_problem_areas,
                 prompt_templates,
                 text_snippets,
-                category_templates
+                category_templates,
+                consultant_chat_files,
+                consultant_chat_conversations
               ) VALUES (
                 ${websiteId},
                 ${enabled ?? false},
@@ -1605,7 +1610,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${JSON.stringify(prompt_problem_areas ?? [])},
                 ${JSON.stringify(prompt_templates ?? [])},
                 ${JSON.stringify(text_snippets ?? [])},
-                ${JSON.stringify(category_templates ?? [])}
+                ${JSON.stringify(category_templates ?? [])},
+                ${JSON.stringify(consultant_chat_files ?? [])},
+                ${JSON.stringify(consultant_chat_conversations ?? [])}
               )
               RETURNING id
             `
@@ -1639,7 +1646,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 prompt_problem_areas,
                 prompt_templates,
                 text_snippets,
-                category_templates
+                category_templates,
+                consultant_chat_files,
+                consultant_chat_conversations
               ) VALUES (
                 ${workflowId},
               ${enabled ?? false},
@@ -1669,7 +1678,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               ${JSON.stringify(prompt_problem_areas ?? [])},
               ${JSON.stringify(prompt_templates ?? [])},
               ${JSON.stringify(text_snippets ?? [])},
-              ${JSON.stringify(category_templates ?? [])}
+              ${JSON.stringify(category_templates ?? [])},
+              ${JSON.stringify(consultant_chat_files ?? [])},
+              ${JSON.stringify(consultant_chat_conversations ?? [])}
             )
             RETURNING id
           `;
@@ -1817,6 +1828,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 prompt_templates = COALESCE(${prompt_templates ? JSON.stringify(prompt_templates) : null}::jsonb, prompt_templates),
                 text_snippets = COALESCE(${text_snippets ? JSON.stringify(text_snippets) : null}::jsonb, text_snippets),
                 category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
+                consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
+                consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
                 updated_at = CURRENT_TIMESTAMP
               WHERE website_id = ${websiteId}
               RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
@@ -1854,6 +1867,8 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 prompt_templates = COALESCE(${prompt_templates ? JSON.stringify(prompt_templates) : null}::jsonb, prompt_templates),
                 text_snippets = COALESCE(${text_snippets ? JSON.stringify(text_snippets) : null}::jsonb, text_snippets),
                 category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
+                consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
+                consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
                 updated_at = CURRENT_TIMESTAMP
               WHERE workflow_id = ${workflowId}
               RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
