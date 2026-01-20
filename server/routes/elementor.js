@@ -4,8 +4,37 @@
  */
 
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import { sql, isDatabaseEnabled } from '../db/index.js';
 import chunkContent, { extractTitle, countWords } from '../services/content-chunker.js';
+
+// === SIMPLE IMAGE PATH LOG ===
+// This creates a dedicated log file just for tracking image source decisions
+// Much easier to debug than parsing Railway's verbose logs
+const IMAGE_PATH_LOG = path.join(process.cwd(), 'logs', 'image-path-decisions.log');
+
+function logImageDecision(articleId, keyword, decision) {
+  try {
+    // Ensure logs directory exists
+    const logsDir = path.dirname(IMAGE_PATH_LOG);
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] Article ${articleId} "${keyword?.substring(0, 40)}": ${decision}\n`;
+
+    // Append to log file (keeps last 1000 lines)
+    fs.appendFileSync(IMAGE_PATH_LOG, logEntry);
+
+    // Also log to console for Railway
+    console.log(`[IMAGE-PATH] ${logEntry.trim()}`);
+  } catch (err) {
+    console.error('[IMAGE-PATH] Failed to write log:', err.message);
+  }
+}
+// === END IMAGE PATH LOG ===
 import buildElementorPage, { getElementorMetaFields } from '../services/elementor-builder.js';
 import {
   createElementorPage,
@@ -424,7 +453,11 @@ router.post('/publish', async (req, res) => {
       quality: null,
       smartMatchingEnabled: false,
       matchingRules: [],
-      images: [] // Array of {position, type, heading, wordCount, side, action, prompt, matchedKeywords, score}
+      images: [], // Array of {position, type, heading, wordCount, side, action, prompt, matchedKeywords, score}
+      // NEW: Summary fields for easy UI display
+      sourceMode: 'none', // 'bank', 'bank_fallback', 'live' - more detailed than mode
+      promptMode: null, // 'main_prompt', 'guided_gpt', 'smart_prompt' - which prompt source was used
+      sourceSummary: 'None' // Human-readable summary like "Bank" or "Bank → Main Prompt" or "Live/Guided GPT"
     };
 
     // Determine which chunks should receive images (based on natural breaks under 300 words)
@@ -966,6 +999,8 @@ router.post('/publish', async (req, res) => {
 
             // Populate image decision report for frontend
             imageDecisionReport.mode = 'bank';
+            imageDecisionReport.sourceMode = 'bank'; // Pure bank, no live generation yet
+            imageDecisionReport.sourceSummary = 'Bank'; // Will be updated if fallback occurs
             imageDecisionReport.smartMatchingEnabled = true;
             imageDecisionReport.avatar = targetAvatar?.name || 'None';
             imageDecisionReport.matchPlurals = matchPlurals;
@@ -1302,13 +1337,18 @@ router.post('/publish', async (req, res) => {
           console.log('[Elementor Publish] DEBUG - effectiveUseBank:', effectiveUseBank, 'imagesFromBank:', imagesFromBank, 'isFallbackFromBank:', isFallbackFromBank);
 
           // Use fallback_prompt_mode when falling back from bank, otherwise use live_prompt_mode
+          // CRITICAL: Don't chain fallback_prompt_mode -> live_prompt_mode, they are SEPARATE settings!
+          // User explicitly sets fallback_prompt_mode for bank fallback behavior.
           if (isFallbackFromBank || (effectiveUseBank && imagesFromBank === 0)) {
             // Fallback scenario: bank was tried but empty or insufficient
-            livePromptMode = config.fallback_prompt_mode || config.live_prompt_mode || 'main_prompt';
+            // Use fallback_prompt_mode (default: main_prompt), NOT live_prompt_mode
+            livePromptMode = config.fallback_prompt_mode || 'main_prompt';
             console.log('[Elementor Publish] Using FALLBACK prompt mode:', livePromptMode);
+            console.log('[Elementor Publish] DEBUG - config.fallback_prompt_mode was:', config.fallback_prompt_mode || '(undefined)');
           } else {
-            // Direct Generate Live mode
+            // Direct Generate Live mode (integration_mode = 'live' or not using bank)
             livePromptMode = config.live_prompt_mode || 'main_prompt';
+            console.log('[Elementor Publish] Using DIRECT LIVE prompt mode:', livePromptMode);
           }
 
           smartPromptGuidance = config.smart_prompt_guidance || '';
@@ -1499,10 +1539,27 @@ router.post('/publish', async (req, res) => {
       sessionLogger.updateSummary({ imagesGenerated: liveGenCount });
 
       // Populate image decision report for frontend
+      // Determine if this is pure live or bank fallback
+      const isFallback = effectiveUseBank && imagesFromBank >= 0;
       imageDecisionReport.mode = 'live';
+      imageDecisionReport.sourceMode = isFallback ? 'bank_fallback' : 'live';
       imageDecisionReport.model = imageGenModel;
       imageDecisionReport.quality = imageQuality;
-      imageDecisionReport.livePromptMode = livePromptMode; // 'main_prompt' or 'smart_prompt'
+      imageDecisionReport.livePromptMode = livePromptMode; // 'main_prompt', 'guided_gpt', or 'smart_prompt'
+      imageDecisionReport.promptMode = livePromptMode; // NEW: standardized field
+
+      // Build human-readable summary
+      const promptModeLabel = livePromptMode === 'main_prompt' ? 'Main Prompt' :
+                              livePromptMode === 'guided_gpt' ? 'Guided GPT' :
+                              livePromptMode === 'smart_prompt' ? 'Smart Prompt' : livePromptMode;
+      if (isFallback && imagesFromBank > 0) {
+        imageDecisionReport.sourceSummary = `Bank (${imagesFromBank}) → ${promptModeLabel}`;
+      } else if (isFallback) {
+        imageDecisionReport.sourceSummary = `Bank → ${promptModeLabel}`;
+      } else {
+        imageDecisionReport.sourceSummary = `Live/${promptModeLabel}`;
+      }
+
       imageDecisionReport.smartMatchingEnabled = livePromptMode === 'main_prompt';
       if (livePromptMode === 'main_prompt' && targetAvatar) {
         imageDecisionReport.avatar = targetAvatar.name;
@@ -1693,6 +1750,20 @@ router.post('/publish', async (req, res) => {
 
         // Prepare imageDecisionReport for storage (only if images were generated)
         const reportToSave = imageDecisionReport.mode !== 'none' ? imageDecisionReport : null;
+
+        // === LOG IMAGE PATH DECISION (Simple log for debugging) ===
+        if (reportToSave) {
+          const imgCount = reportToSave.images?.length || 0;
+          const summary = reportToSave.sourceSummary || reportToSave.mode;
+          const promptMode = reportToSave.promptMode || reportToSave.livePromptMode || '-';
+          const avatar = reportToSave.avatar || '-';
+          logImageDecision(
+            articleId,
+            keyword || title,
+            `${summary} | ${imgCount} images | PromptMode: ${promptMode} | Avatar: ${avatar}`
+          );
+        }
+        // === END IMAGE PATH LOG ===
 
         // DIAGNOSTIC: What are we about to save?
         console.log('\n[SAVE] ========== ABOUT TO SAVE ==========');
@@ -2296,6 +2367,60 @@ router.post('/batch-publish', requireDb, async (req, res) => {
     });
   } catch (error) {
     console.error('Batch publish error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// === IMAGE PATH DECISION LOG API ===
+// Returns the simple log of image path decisions for debugging
+
+router.get('/image-path-log', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+
+    if (!fs.existsSync(IMAGE_PATH_LOG)) {
+      return res.json({ entries: [], total: 0 });
+    }
+
+    const content = fs.readFileSync(IMAGE_PATH_LOG, 'utf-8');
+    const lines = content.trim().split('\n').filter(Boolean);
+
+    // Parse each line into structured entry
+    const entries = lines.slice(-limit).map((line, idx) => {
+      // Format: [2026-01-20T15:30:45.123Z] Article 123 "keyword": summary
+      const match = line.match(/^\[([^\]]+)\] Article (\d+) "([^"]+)": (.+)$/);
+      if (match) {
+        return {
+          id: idx,
+          timestamp: match[1],
+          articleId: parseInt(match[2]),
+          keyword: match[3],
+          summary: match[4]
+        };
+      }
+      return { id: idx, raw: line };
+    }).reverse(); // Newest first
+
+    res.json({
+      entries,
+      total: lines.length,
+      showing: entries.length
+    });
+  } catch (error) {
+    console.error('Error reading image path log:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Clear the image path log
+router.delete('/image-path-log', async (req, res) => {
+  try {
+    if (fs.existsSync(IMAGE_PATH_LOG)) {
+      fs.writeFileSync(IMAGE_PATH_LOG, '');
+    }
+    res.json({ success: true, message: 'Image path log cleared' });
+  } catch (error) {
+    console.error('Error clearing image path log:', error);
     res.status(500).json({ error: error.message });
   }
 });

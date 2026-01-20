@@ -453,10 +453,11 @@ const ImageFlowDiagram: React.FC = () => (
             <div className="text-sm text-gray-300 space-y-1">
               <div><code className="bg-slate-800 px-1 rounded text-xs">imageDraftMode: true</code></div>
               <div className="text-xs text-gray-400 mt-2">Images go to:</div>
-              <div className="text-xs text-brand-cyan">→ articles.generated_images array</div>
+              <div className="text-xs text-brand-cyan">→ Uploaded to STAGING WP first</div>
+              <div className="text-xs text-brand-cyan">→ articles.generated_images (WP URLs)</div>
               <div className="text-xs text-brand-cyan">→ Also to Draft Image Bank</div>
-              <div className="text-xs text-green-400 mt-2">wpUrl NOT required</div>
-              <div className="text-xs text-gray-500">(May be base64 - large!)</div>
+              <div className="text-xs text-green-400 mt-2">Stores WP URLs (~100 bytes)</div>
+              <div className="text-xs text-green-400">wpMediaId preserved for final push</div>
             </div>
           </div>
 
@@ -645,6 +646,100 @@ const ImageFlowDiagram: React.FC = () => (
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    {/* PROMPT MODE ARCHITECTURE - Critical for understanding image generation */}
+    <div className="bg-teal-900/20 rounded-xl p-6 border border-teal-500">
+      <h3 className="text-lg font-bold text-teal-400 mb-4">Prompt Mode Architecture (CRITICAL)</h3>
+      <p className="text-gray-400 text-sm mb-4">
+        When generating images live, the system must choose which prompt source to use.
+        <strong className="text-teal-300"> This has TWO separate paths controlled by TWO separate settings.</strong>
+      </p>
+
+      <div className="space-y-4">
+        {/* The Two Paths */}
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="bg-slate-800 rounded-lg p-4 border-2 border-yellow-500/50">
+            <div className="text-yellow-400 font-bold mb-2">PATH A: Bank Fallback</div>
+            <div className="text-sm text-gray-300 space-y-2">
+              <div className="text-xs bg-yellow-900/30 p-2 rounded">
+                <strong>When:</strong> integration_mode='bank' BUT bank is empty
+              </div>
+              <div className="text-xs bg-slate-900 p-2 rounded">
+                <strong>Setting used:</strong> <code className="text-yellow-400">fallback_prompt_mode</code>
+              </div>
+              <div className="text-xs text-gray-500">
+                UI: "When bank is empty, generate using:" buttons
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800 rounded-lg p-4 border-2 border-cyan-500/50">
+            <div className="text-brand-cyan font-bold mb-2">PATH B: Direct Live</div>
+            <div className="text-sm text-gray-300 space-y-2">
+              <div className="text-xs bg-cyan-900/30 p-2 rounded">
+                <strong>When:</strong> integration_mode='live' (Generate Live button)
+              </div>
+              <div className="text-xs bg-slate-900 p-2 rounded">
+                <strong>Setting used:</strong> <code className="text-brand-cyan">live_prompt_mode</code>
+              </div>
+              <div className="text-xs text-gray-500">
+                UI: "Prompt Source for Generate Live:" buttons
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* The Three Prompt Sources */}
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-purple-400 font-bold mb-3">Three Prompt Source Options:</div>
+          <div className="grid md:grid-cols-3 gap-3">
+            <div className="bg-slate-900 p-3 rounded border border-purple-500/30">
+              <code className="text-purple-400 font-bold">'main_prompt'</code>
+              <div className="text-xs text-gray-400 mt-1">
+                Uses avatar's <code>mainPrompt</code> field directly.
+                <span className="text-red-400 block mt-1">Requires avatar.mainPrompt to be populated!</span>
+              </div>
+            </div>
+            <div className="bg-slate-900 p-3 rounded border border-purple-500/30">
+              <code className="text-purple-400 font-bold">'guided_gpt'</code>
+              <div className="text-xs text-gray-400 mt-1">
+                GPT reads article + guardrails to generate contextual prompt.
+                <span className="text-green-400 block mt-1">Most flexible, uses AI interpretation.</span>
+              </div>
+            </div>
+            <div className="bg-slate-900 p-3 rounded border border-purple-500/30">
+              <code className="text-purple-400 font-bold">'smart_prompt'</code>
+              <div className="text-xs text-gray-400 mt-1">
+                Legacy smart prompt system (GPT-4o-mini).
+                <span className="text-yellow-400 block mt-1">Default fallback if main_prompt has no data.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Critical Code Paths */}
+        <div className="bg-slate-800 rounded-lg p-4">
+          <div className="text-red-400 font-bold mb-2">Code Path Reference:</div>
+          <div className="text-xs text-gray-300 space-y-1">
+            <div><code className="bg-slate-900 px-1 rounded">elementor.js:1307-1317</code> - Decides which setting to use (fallback vs live)</div>
+            <div><code className="bg-slate-900 px-1 rounded">image-pipeline.js:308-320</code> - Logs prompt mode selection</div>
+            <div><code className="bg-slate-900 px-1 rounded">image-pipeline.js:553-567</code> - Warns when falling through to smart_prompt</div>
+            <div><code className="bg-slate-900 px-1 rounded">image-creation.js</code> - Saves/loads both settings (4 query locations each)</div>
+          </div>
+        </div>
+
+        {/* Warning Box */}
+        <div className="bg-red-950/50 rounded-lg p-4 border border-red-500">
+          <div className="text-red-400 font-bold mb-2">Common Bugs in This Area:</div>
+          <ul className="text-xs text-gray-300 space-y-1 list-disc list-inside">
+            <li><strong>Chaining with ||:</strong> Don't write <code className="bg-slate-900 px-1 rounded">fallback_prompt_mode || live_prompt_mode</code> - they're SEPARATE!</li>
+            <li><strong>Missing database column:</strong> Column must exist in DB via setup-all.mjs migration</li>
+            <li><strong>Empty mainPrompt:</strong> main_prompt mode requires avatar.mainPrompt to be populated</li>
+            <li><strong>Wrong settings level:</strong> Check website_id BEFORE workflow_id (Golden Rule 8)</li>
+          </ul>
+        </div>
       </div>
     </div>
 
@@ -1556,8 +1651,149 @@ saveToBank({ url: wpResult.url, wpMediaId: wpResult.id });`}</pre>
               <li><code className="bg-slate-900 px-1 rounded">/api/images/generate-for-article</code> - Uses pipeline with WP upload</li>
               <li><code className="bg-slate-900 px-1 rounded">/api/image-creation/upload-to-wp</code> - Utility endpoint for single uploads</li>
             </ul>
+            <p className="text-green-400 mt-3 text-xs">
+              <strong>ALL ENDPOINTS NOW COMPLIANT</strong> - <code className="bg-slate-900 px-1 rounded">/api/articles/:id/regenerate-image</code> was fixed Jan 20, 2026 to upload to WP first
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Rule 14 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-fuchsia-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-fuchsia-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">14</div>
+          <div>
+            <h3 className="text-lg font-bold text-fuchsia-400">Fallback INSERT/UPDATE queries MUST include ALL columns</h3>
+            <p className="text-gray-300 mt-2 text-sm">
+              When adding new JSONB columns to a table, you must update FOUR places in the code:
+              main INSERT, fallback INSERT, main UPDATE, and fallback UPDATE. Missing any will cause data loss.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-red-400 font-medium mb-2">THE TRAP:</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// Main query has the new column:
+await sql\`INSERT INTO settings (..., new_column) VALUES (..., \${newColumn})\`;
+
+// BUT FALLBACK QUERY DOESN'T:
+try { ... } catch {
+  await sql\`INSERT INTO settings (old_cols_only) VALUES (...)\`;
+  // new_column is LOST! Falls back to database default '[]'
+}`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-fuchsia-400 font-medium mb-2">✓ CHECKLIST when adding columns:</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`1. Add column to database schema (migration)
+2. Add to main INSERT query
+3. Add to FALLBACK INSERT query  ← Easy to forget!
+4. Add to main UPDATE query
+5. Add to FALLBACK UPDATE query  ← Easy to forget!
+6. Add to GET response extraction
+7. Add to TypeScript interface`}</pre>
+            </div>
             <p className="text-red-400 mt-3 text-xs">
-              <strong>KNOWN OFFENDERS (need fixing):</strong> <code className="bg-slate-900 px-1 rounded">/api/articles/:id/regenerate-image</code> stores base64 directly
+              <strong>REAL BUG:</strong> Template persistence was broken for weeks because fallback queries in
+              <code className="bg-slate-900 px-1 rounded">image-creation.js</code> were missing prompt_templates, text_snippets,
+              category_templates columns. Main queries had them, but when fallback path executed, data was lost!
+            </p>
+            <p className="text-gray-400 mt-2 text-xs">
+              <strong>Key file:</strong> server/routes/image-creation.js - search for "fallback" to find all 4 query locations
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Rule 15 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-teal-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-teal-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">15</div>
+          <div>
+            <h3 className="text-lg font-bold text-teal-400">fallback_prompt_mode and live_prompt_mode are SEPARATE settings</h3>
+            <span className="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded ml-2">CRITICAL - Jan 20, 2026</span>
+            <p className="text-gray-300 mt-2 text-sm">
+              These are TWO INDEPENDENT database columns. NEVER chain them with <code className="bg-slate-900 px-1 rounded">||</code>.
+              Each controls a different code path and must be stored/retrieved separately.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-teal-400 font-medium mb-2">THE TWO SETTINGS:</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// SEPARATE purposes - don't mix!
+fallback_prompt_mode  → Used when bank is empty, falling back to live
+live_prompt_mode      → Used when directly generating (integration_mode='live')
+
+// UI has TWO DIFFERENT button groups:
+"When bank is empty, generate using:"  → saves fallback_prompt_mode
+"Prompt Source for Generate Live:"     → saves live_prompt_mode`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-red-400 font-medium mb-2">❌ BAD (was causing bugs):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// This chains them - WRONG!
+livePromptMode = config.fallback_prompt_mode || config.live_prompt_mode || 'main_prompt';
+// If fallback_prompt_mode is undefined, falls through to live_prompt_mode!`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-green-400 font-medium mb-2">✓ GOOD (correct separation):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// elementor.js:1307-1317
+if (isFallbackFromBank) {
+  // Bank was tried but empty → use FALLBACK setting
+  livePromptMode = config.fallback_prompt_mode || 'main_prompt';
+} else {
+  // Direct Generate Live mode → use LIVE setting
+  livePromptMode = config.live_prompt_mode || 'main_prompt';
+}`}</pre>
+            </div>
+            <p className="text-red-400 mt-3 text-xs">
+              <strong>ROOT CAUSE BUG:</strong> The database column didn't exist! Code tried to save it, fell back to
+              simpler query that omitted it, then read back undefined. Migration 022 adds the column properly.
+            </p>
+            <p className="text-gray-400 mt-2 text-xs">
+              <strong>Key files:</strong> elementor.js:1307-1317, image-creation.js (4 query locations), setup-all.mjs (migration 022/023)
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Rule 16 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-sky-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-sky-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">16</div>
+          <div>
+            <h3 className="text-lg font-bold text-sky-400">Database columns MUST exist - schema.sql is NOT enough</h3>
+            <span className="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded ml-2">CRITICAL - Jan 20, 2026</span>
+            <p className="text-gray-300 mt-2 text-sm">
+              Adding a column to <code className="bg-slate-900 px-1 rounded">schema.sql</code> does NOT create it in production!
+              Migrations run via <code className="bg-slate-900 px-1 rounded">setup-all.mjs</code> on server start.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-red-400 font-medium mb-2">WHY CODE "WORKS" BUT DATA DOESN'T PERSIST:</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// Code tries to save to non-existent column:
+await sql\`UPDATE settings SET new_column = \${value}\`
+// PostgreSQL ERROR: column "new_column" does not exist
+
+// Fallback query runs WITHOUT the new column:
+await sql\`UPDATE settings SET old_column = \${value}\`
+// SUCCEEDS but new_column is never saved!
+
+// When reading back:
+const result = await sql\`SELECT * FROM settings\`
+result.new_column // undefined - column doesn't exist!`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-sky-400 font-medium mb-2">✓ CHECKLIST for new columns:</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`1. Add to schema.sql (documentation only)
+2. Add to setup-all.mjs migrations section:
+
+   const hasNewCol = await sql\`
+     SELECT column_name FROM information_schema.columns
+     WHERE table_name = 'table' AND column_name = 'new_col'
+   \`;
+   if (hasNewCol.length === 0) {
+     await sql\`ALTER TABLE table ADD COLUMN new_col TYPE DEFAULT val\`;
+   }
+
+3. Deploy/restart server to run migrations
+4. VERIFY column exists before declaring fixed!`}</pre>
+            </div>
+            <p className="text-red-400 mt-3 text-xs">
+              <strong>REAL BUG:</strong> fallback_prompt_mode was in schema.sql line 290 but never migrated.
+              The column physically didn't exist. All saves silently failed to the fallback path.
             </p>
           </div>
         </div>
@@ -1673,6 +1909,54 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues (Jan 2026)</h3>
 
       <div className="space-y-4">
+        {/* Jan 20 - Template persistence FULLY FIXED */}
+        <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Prompt Templates not persisting ("No templates saved yet")</span>
+            <span className="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded">CRITICAL - Jan 20, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Users saved templates in Prompt Templates popup, but after page refresh they saw
+            "No templates saved yet". Templates appeared to save but weren't persisting to database.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause (MULTI-LAYER):</strong>
+            <ul className="list-disc ml-4 mt-1 space-y-1">
+              <li>Frontend sent <code className="bg-slate-900 px-1 rounded">placeholder_category_templates</code> but server expected <code className="bg-slate-900 px-1 rounded">category_templates</code></li>
+              <li>GET endpoint wasn't returning template fields in response</li>
+              <li>MAIN ISSUE: Fallback INSERT/UPDATE queries were missing template columns! Main queries had them, but when fallback path executed, data was lost</li>
+            </ul>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> 1) Changed 9 occurrences in ImageCreationSection.tsx to use <code className="bg-slate-900 px-1 rounded">category_templates</code>.
+            2) Added template fields to GET response. 3) Added template columns to ALL 4 fallback queries in image-creation.js.
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Pattern:</strong> See Golden Rule #14 - Fallback INSERT/UPDATE queries MUST include ALL columns
+          </div>
+        </div>
+
+        {/* Jan 20 - Regenerate image fix */}
+        <div className="bg-slate-800 rounded-lg p-4 border border-green-500/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Regenerate Image stored base64 instead of WP URL</span>
+            <span className="text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded">Jan 20, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> <code className="bg-slate-900 px-1 rounded">/api/articles/:id/regenerate-image</code> endpoint was storing
+            raw base64 data (~1MB per image) instead of uploading to WordPress first.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added uploadMedia import and call to upload base64 to staging WordPress before storing.
+            Now stores WP URL (~100 bytes) with wpMediaId preserved for final push.
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Pattern:</strong> See Golden Rule #13 - ALL generated images MUST go through WordPress BEFORE storage
+          </div>
+        </div>
+
         {/* Jan 18 - Persistence fixes */}
         <div className="bg-slate-800 rounded-lg p-4 border border-emerald-500/50">
           <div className="flex items-center gap-2 mb-2">
@@ -4009,6 +4293,66 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">January 2026</h3>
 
       <div className="space-y-4">
+        {/* Jan 20 - Template Persistence & Image Flow Final Fixes */}
+        <div className="border-l-4 border-green-500 pl-4">
+          <div className="text-sm text-green-400 font-semibold">Jan 20, 2026 - Template Persistence FULLY FIXED + Prompt Mode Settings FIXED + Image Flow Confirmed</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-red-400 font-bold">CRITICAL</span>
+              <div>
+                <strong>fallback_prompt_mode NOT SAVING - database column didn't exist!</strong>
+                <div className="text-xs text-gray-500">Root cause: Column was defined in schema.sql but never migrated to production. Code fell back to simpler queries that omitted it. Added migrations 022 (fallback_prompt_mode) and 023 (live_prompt_mode) to setup-all.mjs</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-red-400 font-bold">CRITICAL</span>
+              <div>
+                <strong>Template persistence finally working - fallback queries were missing columns!</strong>
+                <div className="text-xs text-gray-500">Root cause: 4 fallback INSERT/UPDATE queries in image-creation.js were missing prompt_templates, text_snippets, category_templates columns. Main queries had them but fallbacks didn't.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Field name mismatch: placeholder_category_templates → category_templates</strong>
+                <div className="text-xs text-gray-500">Frontend was sending placeholder_category_templates but server expected category_templates. Fixed 9 occurrences in ImageCreationSection.tsx</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>GET /api/image-creation/settings now returns template fields</strong>
+                <div className="text-xs text-gray-500">Added prompt_templates, text_snippets, category_templates, guided_guardrails, consultant_chat_files, consultant_chat_conversations to response</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>/api/articles/:id/regenerate-image now uploads to WP first</strong>
+                <div className="text-xs text-gray-500">Uses staging WordPress credentials to upload base64 → WP URL before storing. Stores ~100 byte URL instead of ~1MB base64</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DOCS</span>
+              <div>
+                <strong>Blueprint: Golden Rule 14 added - Fallback query checklist</strong>
+                <div className="text-xs text-gray-500">When adding columns, MUST update 4 query locations: main INSERT, fallback INSERT, main UPDATE, fallback UPDATE</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DOCS</span>
+              <div>
+                <strong>Confirmed: Draft mode stores WP URLs, not base64</strong>
+                <div className="text-xs text-gray-500">Image draft flow verified correct: Generate → Upload to staging WP → Store WP URL (~100 bytes) with wpMediaId → Review → Final push uses existing wpMediaId</div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-green-400 font-semibold">Commits:</span>
+            <span className="text-gray-400 ml-2">1ee1e0e, 2a769ff, e8da445, ae7c6ec, 5780550</span>
+          </div>
+        </div>
+
         {/* Jan 19 - Image Upload & Persistence Fixes */}
         <div className="border-l-4 border-amber-500 pl-4">
           <div className="text-sm text-amber-400 font-semibold">Jan 19, 2026 - Image Upload & Persistence Improvements</div>
@@ -4063,9 +4407,6 @@ const ChangelogDiagram: React.FC = () => (
               </div>
             </li>
           </ul>
-          <div className="mt-3 bg-red-900/30 rounded p-2 text-xs text-red-300">
-            <strong>STILL NEEDS FIX:</strong> /api/articles/:id/regenerate-image stores base64 directly. Frontend sends placeholder_category_templates but server expects category_templates.
-          </div>
         </div>
 
         {/* Jan 18 - Persistence & Protection */}
@@ -4640,12 +4981,13 @@ const SystemArchaeology: React.FC = () => (
 │  ├── ~Line 460: Initial settings read (integration_mode, model, etc)     │
 │  ├── ~Line 1210: Generate Live settings read (prompt mode, avatar)       │
 │  │                                                                       │
-│  │  Decision Logic:                                                      │
+│  │  Decision Logic (FIXED Jan 20, 2026):                                 │
 │  │  if (isFallbackFromBank) {                                           │
-│  │    use fallback_prompt_mode || live_prompt_mode || 'main_prompt'     │
+│  │    use fallback_prompt_mode || 'main_prompt'  ← SEPARATE setting!    │
 │  │  } else {                                                            │
 │  │    use live_prompt_mode || 'main_prompt'   ← Direct live mode        │
 │  │  }                                                                   │
+│  │  ⚠️  CRITICAL: Do NOT chain fallback || live - they are SEPARATE!   │
 │  └── Passes mode to image-pipeline.js                                   │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -4820,6 +5162,55 @@ const SystemArchaeology: React.FC = () => (
           <div className="bg-slate-900 rounded p-3">
             <span className="text-yellow-400 font-semibold">Duplicate settings reads</span>
             <span className="text-gray-400 text-sm ml-2">- elementor.js lines 460 and 1210 both query same table</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Issues Found & Resolved - Jan 20, 2026 */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Issues Found & Resolved (Jan 20, 2026)</h4>
+        <div className="space-y-3">
+          <div className="bg-green-900/30 rounded-lg p-4 border border-green-500">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-green-400">✓ FIXED</span>
+              <span className="font-semibold text-white">Database column didn't exist</span>
+            </div>
+            <p className="text-gray-400 text-sm">
+              <strong>Problem:</strong> <code className="bg-slate-900 px-1 rounded">fallback_prompt_mode</code> was in schema.sql but never migrated.
+              Code fell back to simpler queries that omitted it. Column physically didn't exist in PostgreSQL.
+            </p>
+            <p className="text-gray-400 text-sm mt-2">
+              <strong>Fix:</strong> Added migrations 022 and 023 to <code className="bg-slate-900 px-1 rounded">setup-all.mjs</code>.
+              Runs on server restart via npm start → db:setup.
+            </p>
+          </div>
+          <div className="bg-green-900/30 rounded-lg p-4 border border-green-500">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-green-400">✓ FIXED</span>
+              <span className="font-semibold text-white">Settings were chained with ||</span>
+            </div>
+            <p className="text-gray-400 text-sm">
+              <strong>Problem:</strong> Code at elementor.js:1307 was <code className="bg-slate-900 px-1 rounded">fallback_prompt_mode || live_prompt_mode || 'main_prompt'</code>.
+              If fallback was undefined, it used live setting instead - mixing two independent configurations.
+            </p>
+            <p className="text-gray-400 text-sm mt-2">
+              <strong>Fix:</strong> Changed to <code className="bg-slate-900 px-1 rounded">fallback_prompt_mode || 'main_prompt'</code>.
+              Each path now uses its own setting exclusively.
+            </p>
+          </div>
+          <div className="bg-blue-900/30 rounded-lg p-4 border border-blue-500">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-blue-400">ℹ️ DOCUMENTED</span>
+              <span className="font-semibold text-white">main_prompt requires populated avatar.mainPrompt</span>
+            </div>
+            <p className="text-gray-400 text-sm">
+              <strong>Behavior:</strong> When main_prompt mode is selected but the matched avatar has empty mainPrompt,
+              the system falls through to smart_prompt. This is by design but logged as a warning.
+            </p>
+            <p className="text-gray-400 text-sm mt-2">
+              <strong>User action:</strong> Ensure H/J/C tagged avatars have mainPrompt templates populated.
+              See image-pipeline.js:553-567 for the warning logs.
+            </p>
           </div>
         </div>
       </div>

@@ -265,6 +265,32 @@ async function setup() {
       console.log('  - image_quality already exists');
     }
 
+    // Migration 022: fallback_prompt_mode column
+    // Controls which prompt source to use when bank is empty and falls back to live generation
+    const hasFallbackPromptMode = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'fallback_prompt_mode'
+    `;
+    if (hasFallbackPromptMode.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN fallback_prompt_mode VARCHAR(20) DEFAULT 'main_prompt'`;
+      console.log('  ✓ Added fallback_prompt_mode column');
+    } else {
+      console.log('  - fallback_prompt_mode already exists');
+    }
+
+    // Migration 023: live_prompt_mode column
+    // Controls which prompt source to use when directly generating (not using bank)
+    const hasLivePromptMode = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'live_prompt_mode'
+    `;
+    if (hasLivePromptMode.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN live_prompt_mode VARCHAR(20) DEFAULT 'main_prompt'`;
+      console.log('  ✓ Added live_prompt_mode column');
+    } else {
+      console.log('  - live_prompt_mode already exists');
+    }
+
     // Articles table additional columns
     const hasArticlePushAuto = await sql`
       SELECT column_name FROM information_schema.columns

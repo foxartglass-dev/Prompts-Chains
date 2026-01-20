@@ -30,6 +30,13 @@ interface ImageDecisionReport {
   quality?: string | null;
   smartMatchingEnabled?: boolean;
   images: ImageDecisionReportImage[];
+  // NEW: Detailed source tracking (added Jan 20, 2026)
+  sourceMode?: 'bank' | 'bank_fallback' | 'live' | 'none'; // More detailed than mode
+  promptMode?: 'main_prompt' | 'guided_gpt' | 'smart_prompt' | null; // Which prompt source was used
+  livePromptMode?: string; // Legacy field, same as promptMode
+  sourceSummary?: string; // Human-readable like "Bank → Main Prompt"
+  avatar?: string; // Avatar name used
+  mainPrompt?: string; // First 100 chars of main prompt if used
 }
 
 interface Article {
@@ -71,6 +78,18 @@ interface ArticleListViewProps {
   openArticleId?: number | null;
   onArticleModalClose?: () => void;
 }
+
+/**
+ * Strips tag suffix like "(H)", "(J)", "(C)" from keyword/title
+ * Example: "Standard Cleaning(H)" -> "Standard Cleaning"
+ * Example: "Topic (J)" -> "Topic"
+ */
+const stripTagFromKeyword = (keyword: string | null | undefined): string => {
+  if (!keyword) return '';
+  // Remove tag patterns like (H), (J), (C) etc. from end of string
+  // Also handles space before parenthesis: "Topic (H)" or "Topic(H)"
+  return keyword.replace(/\s*\([A-Za-z]\)\s*$/, '').trim();
+};
 
 const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisual, openArticleId, onArticleModalClose }) => {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -165,6 +184,32 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         if (article.generated_images && !article.images) {
           article.images = article.generated_images;
         }
+
+        // Ensure meta_titles and meta_descriptions are arrays (defensive parsing)
+        // This handles cases where data might come back as JSON string or null
+        if (article.meta_titles && typeof article.meta_titles === 'string') {
+          try {
+            article.meta_titles = JSON.parse(article.meta_titles);
+          } catch (e) {
+            article.meta_titles = [];
+          }
+        }
+        if (!Array.isArray(article.meta_titles)) {
+          article.meta_titles = [];
+        }
+        if (article.meta_descriptions && typeof article.meta_descriptions === 'string') {
+          try {
+            article.meta_descriptions = JSON.parse(article.meta_descriptions);
+          } catch (e) {
+            article.meta_descriptions = [];
+          }
+        }
+        if (!Array.isArray(article.meta_descriptions)) {
+          article.meta_descriptions = [];
+        }
+
+        // Debug: Log meta data to help diagnose display issues
+        console.log(`[ArticleDetails] Article ${id}: meta_titles=${article.meta_titles?.length || 0}, meta_descriptions=${article.meta_descriptions?.length || 0}`);
 
         setSelectedArticle(article);
         setEditContent(article.final_content || '');
@@ -336,7 +381,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           wpUrl,
           wpUser,
           wpPassword,
-          title: selectedArticle.keyword,
+          title: stripTagFromKeyword(selectedArticle.keyword),
           content: editContent || selectedArticle.final_content,
           status: 'draft',
           articleId: selectedArticle.id,
@@ -421,7 +466,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             wpUrl,
             wpUser,
             wpPassword,
-            title: selectedArticle.keyword,
+            title: stripTagFromKeyword(selectedArticle.keyword),
             content: editContent || selectedArticle.final_content,
             status: 'draft',
             articleId: selectedArticle.id,
@@ -718,7 +763,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           wpUrl,
           wpUser,
           wpPassword,
-          title: selectedArticle.keyword,
+          title: stripTagFromKeyword(selectedArticle.keyword),
           content: editContent || selectedArticle.final_content,
           status: 'draft',
           articleId: selectedArticle.id,
@@ -996,6 +1041,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                 <th className="p-2">Article</th>
                 <th className="p-2">Meta</th>
                 <th className="p-2">Image</th>
+                <th className="p-2">Source</th>
                 <th className="p-2">Bank</th>
                 <th className="p-2">Live</th>
                 <th className="p-2">AI</th>
@@ -1018,7 +1064,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     />
                   </td>
                   <td className="p-2 font-medium text-white">
-                    {article.keyword}
+                    {stripTagFromKeyword(article.keyword)}
                     {article.version && article.version > 1 && (
                       <span className="ml-2 text-xs text-gray-500">v{article.version}</span>
                     )}
@@ -1068,6 +1114,29 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                               : 'bg-amber-600/30 text-amber-400'
                         }`}>
                           {!hasImages ? 'Off' : hasPushedImages ? 'WP' : 'Draft'}
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="p-2 text-xs">
+                    {/* Source Summary - Shows path like "Bank", "Bank → Main Prompt", "Live/Guided GPT" */}
+                    {(() => {
+                      const report = article.image_decision_report;
+                      if (!report) return <span className="text-gray-500">-</span>;
+
+                      // Use the new sourceSummary field if available, otherwise build from mode/promptMode
+                      const summary = report.sourceSummary ||
+                        (report.mode === 'bank' ? 'Bank' :
+                         report.mode === 'live' ? `Live/${report.livePromptMode || 'smart'}` : '-');
+
+                      // Color based on source mode
+                      const colorClass = report.sourceMode === 'bank' ? 'text-brand-gold' :
+                                         report.sourceMode === 'bank_fallback' ? 'text-amber-400' :
+                                         report.mode === 'live' ? 'text-brand-cyan' : 'text-gray-400';
+
+                      return (
+                        <span className={`${colorClass} truncate max-w-[100px]`} title={summary}>
+                          {summary}
                         </span>
                       );
                     })()}
@@ -1159,7 +1228,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
               <div className="flex items-center gap-4">
                 <div>
                   <div className="flex items-center gap-3">
-                    <h3 className="text-xl font-bold text-brand-gold">{selectedArticle.keyword}</h3>
+                    <h3 className="text-xl font-bold text-brand-gold">{stripTagFromKeyword(selectedArticle.keyword)}</h3>
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(selectedArticle.status)}`}>
                       {selectedArticle.status}
                     </span>
@@ -1182,6 +1251,20 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                         })} {new Date(selectedArticle.created_at).toLocaleTimeString('en-US', {
                           hour: 'numeric', minute: '2-digit', hour12: true
                         })}
+                      </span>
+                    )}
+                    {/* IMAGE SOURCE BADGE - Shows path like "Bank → Main Prompt" */}
+                    {selectedArticle.image_decision_report && (
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ml-2 ${
+                        selectedArticle.image_decision_report.sourceMode === 'bank' ? 'bg-brand-gold/20 text-brand-gold' :
+                        selectedArticle.image_decision_report.sourceMode === 'bank_fallback' ? 'bg-amber-500/20 text-amber-400' :
+                        selectedArticle.image_decision_report.mode === 'live' ? 'bg-brand-cyan/20 text-brand-cyan' :
+                        'bg-gray-600/20 text-gray-400'
+                      }`}>
+                        {selectedArticle.image_decision_report.sourceSummary ||
+                         (selectedArticle.image_decision_report.mode === 'bank' ? 'Bank' :
+                          selectedArticle.image_decision_report.mode === 'live' ?
+                            `Live/${selectedArticle.image_decision_report.livePromptMode || 'smart'}` : '-')}
                       </span>
                     )}
                   </div>
@@ -1460,7 +1543,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                   <div className="max-w-5xl mx-auto shadow-2xl">
                     <ElementorPreview
                       content={selectedArticle.final_content || ''}
-                      title={selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0] || selectedArticle.keyword}
+                      title={selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0] || stripTagFromKeyword(selectedArticle.keyword)}
                       images={selectedArticle.images}
                       heroImageSide="right"
                     />
@@ -2034,10 +2117,10 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                             ? customMetaTitle
                             : (selectedTitleIndex !== null && selectedArticle.meta_titles
                               ? selectedArticle.meta_titles[selectedTitleIndex]
-                              : selectedArticle.keyword)}
+                              : stripTagFromKeyword(selectedArticle.keyword))}
                         </div>
                         <div className="text-green-700 text-sm truncate mt-1">
-                          {selectedArticle.wp_post_url || 'https://example.com/' + selectedArticle.keyword.toLowerCase().replace(/\s+/g, '-')}
+                          {selectedArticle.wp_post_url || 'https://example.com/' + stripTagFromKeyword(selectedArticle.keyword).toLowerCase().replace(/\s+/g, '-')}
                         </div>
                         <div className="text-gray-600 text-sm mt-1 line-clamp-2">
                           {useCustomDesc && customMetaDesc
