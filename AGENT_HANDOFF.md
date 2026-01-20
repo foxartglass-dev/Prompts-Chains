@@ -1,236 +1,93 @@
 # Agent Handoff: Persistence & Image Upload Fixes
 
-## Summary
-Three issues need to be fixed to ensure data persists correctly and images don't bloat the database with base64 data.
+## STATUS: ALL ISSUES FIXED (Jan 20, 2026)
+
+All three issues documented here have been resolved. This file is kept for historical reference and to help future agents understand the patterns that caused these bugs.
 
 ---
 
-## Issue 1: Prompt Templates / Placeholder Categories Not Persisting (CRITICAL)
+## Issue 1: Prompt Templates / Placeholder Categories Not Persisting (CRITICAL) - FIXED
 
-### Problem
-The frontend sends fields to the server that don't match what the server expects:
-- Frontend sends: `placeholder_category_templates`
-- Server expects: `category_templates`
+### What Was Wrong
+The frontend sent `placeholder_category_templates` but server expected `category_templates`. Additionally, the fallback INSERT/UPDATE queries in image-creation.js were missing template columns entirely.
 
-This causes the data to be silently ignored and not saved.
+### How It Was Fixed
+1. Changed 9 occurrences of `placeholder_category_templates` to `category_templates` in `src/components/ImageCreationSection.tsx`
+2. Added template fields to GET response in image-creation.js
+3. Added template columns to ALL 4 fallback INSERT/UPDATE queries in image-creation.js
 
-### Evidence from Logs
-```
-[21:54:46.336] REQUEST BODY KEYS: [
-  ...
-  "prompt_templates",
-  "text_snippets",
-  "placeholder_category_templates",  // <-- WRONG NAME
-  ...
-]
-```
-
-### Files to Fix
-
-**Option A: Fix the Frontend** (Recommended)
-- File: `src/components/ImageCreationSection.tsx`
-- Search for: `placeholder_category_templates`
-- Change to: `category_templates`
-
-**Option B: Fix the Server**
-- File: `server/routes/image-creation.js`
-- Around line 1420, in the req.body destructuring, add:
+### The Hidden Bug Pattern
+The MAIN issue was that fallback queries were missing columns:
 ```javascript
-placeholder_category_templates, // Frontend sends this name
-```
-- Then map it: `const category_templates = placeholder_category_templates;`
+// Main query had the columns:
+INSERT INTO settings (..., prompt_templates, text_snippets) VALUES (...)
 
-### Database Columns Required
-Run this SQL if columns don't exist:
-```sql
-ALTER TABLE image_creation_settings ADD COLUMN IF NOT EXISTS prompt_templates JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE image_creation_settings ADD COLUMN IF NOT EXISTS text_snippets JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE image_creation_settings ADD COLUMN IF NOT EXISTS category_templates JSONB DEFAULT '[]'::jsonb;
-```
-
-### Verification
-1. Add a prompt template in the UI
-2. Check server logs for `prompt_templates` in the PUT request
-3. Refresh the page - templates should still be there
-4. Run SQL: `SELECT prompt_templates, text_snippets, category_templates FROM image_creation_settings WHERE website_id = 3;`
-
----
-
-## Issue 2: Regenerate Article Image Stores Base64 (MEDIUM)
-
-### Problem
-When regenerating an article image, the endpoint returns base64 and stores it directly without uploading to WordPress first.
-
-### Evidence from Logs
-```
-[21:57:33.420] [Regenerate Image] Generating with gpt-image-1.5: A professional cleaner...
-[21:57:33.773] [Image Generation] Got base64 image, converted to data URL
-...
-│   ID: img-1768707708997-section-1
-│   URL Type: BASE64  // <-- PROBLEM: Should be HTTP (WordPress URL)
-│   URL Preview: data:image/png;base64,iVBORw0KGgo...
-```
-
-### File to Fix
-`server/routes/articles.js` - lines 691-769
-
-### Current Broken Code (around line 740)
-```javascript
-// Handle response format
-let imageUrl;
-if (response.data[0].b64_json) {
-  imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;  // STORES BASE64!
-} else if (response.data[0].url) {
-  imageUrl = response.data[0].url;
+// BUT fallback query didn't:
+try { mainQuery() } catch {
+  INSERT INTO settings (...) // prompt_templates, text_snippets MISSING!
 }
 ```
 
-### Fix Required
-After generating the image, upload to WordPress before saving:
+### Golden Rule Added
+**Golden Rule #14**: When adding columns, MUST update 4 query locations:
+1. Main INSERT
+2. Fallback INSERT
+3. Main UPDATE
+4. Fallback UPDATE
 
+---
+
+## Issue 2: Regenerate Article Image Stores Base64 (MEDIUM) - FIXED
+
+### What Was Wrong
+`/api/articles/:id/regenerate-image` endpoint stored raw base64 (~1MB per image) instead of uploading to WordPress first.
+
+### How It Was Fixed
+Added uploadMedia import and call in `server/routes/articles.js` to upload base64 to staging WordPress before storing.
+
+### Key Code Change (articles.js ~line 740)
 ```javascript
-const { uploadMedia } = await import('../services/wordpress-publisher.js');
-
-// Handle response format
-let imageUrl;
-let wpMediaId = null;
-
 if (response.data[0].b64_json) {
   const base64Data = response.data[0].b64_json;
 
-  // Get staging WordPress credentials
-  const stagingResult = await sql`
-    SELECT staging_wp_url, staging_wp_user, staging_wp_password
-    FROM global_settings WHERE id = 1
-  `;
+  // Upload to staging WordPress FIRST
+  const wpResult = await uploadMedia(stagingCredentials, base64Data, filename);
 
-  if (stagingResult.length > 0 && stagingResult[0].staging_wp_url) {
-    const { staging_wp_url, staging_wp_user, staging_wp_password } = stagingResult[0];
-    const filename = `regenerated-${imageId}-${Date.now()}.png`;
-
-    const wpResult = await uploadMedia(
-      { url: staging_wp_url, user: staging_wp_user, password: staging_wp_password },
-      base64Data,
-      filename,
-      { alt: prompt.substring(0, 100) }
-    );
-
-    if (wpResult && wpResult.url) {
-      imageUrl = wpResult.url;
-      wpMediaId = wpResult.id;
-      console.log(`[Regenerate Image] ✓ Uploaded to WP: ${wpResult.url}`);
-    } else {
-      // Fallback to base64 if upload fails
-      imageUrl = `data:image/png;base64,${base64Data}`;
-      console.log(`[Regenerate Image] ⚠️ WP upload failed, using base64`);
-    }
-  } else {
-    imageUrl = `data:image/png;base64,${base64Data}`;
-    console.log(`[Regenerate Image] ⚠️ No staging credentials, using base64`);
+  if (wpResult && wpResult.url) {
+    imageUrl = wpResult.url;      // ~100 bytes
+    wpMediaId = wpResult.id;
   }
-} else if (response.data[0].url) {
-  imageUrl = response.data[0].url;
 }
 ```
 
-Also update the saved object to include wpMediaId:
-```javascript
-currentImages[imageIndex] = {
-  ...oldImage,
-  url: imageUrl,
-  wpMediaId: wpMediaId,  // ADD THIS
-  createdAt: new Date().toISOString(),
-  pushedToWp: !!wpMediaId,  // True if we got a WP media ID
-};
-```
+---
+
+## Issue 3: Template Library May Still Have Issues (LOW) - WAS ALREADY FIXED
+
+The 507 error issue was already fixed by excluding `template_data` from list queries in templates.js.
 
 ---
 
-## Issue 3: Template Library May Still Have Issues (LOW)
+## Commits That Fixed These Issues
 
-### Problem
-The Template Library was returning 507 errors because `template_data` column contains huge base64 blobs from old templates.
-
-### Already Fixed
-The GET /api/templates endpoint was modified to exclude `template_data` from list queries (only fetched when loading a single template by ID).
-
-### If Still Broken
-Check `server/routes/templates.js` - the SELECT queries should NOT include `template_data`:
-```javascript
-// CORRECT - excludes template_data
-SELECT id, name, description, template_type, includes, tags, scope, website_id, created_at, updated_at FROM templates
-
-// WRONG - includes everything (causes 507)
-SELECT * FROM templates
-```
-
-### Database Cleanup (Optional)
-To find bloated templates:
-```sql
-SELECT id, name, pg_size_pretty(length(template_data::text)::bigint) as size
-FROM templates
-ORDER BY length(template_data::text) DESC
-LIMIT 10;
-```
-
-To delete a bloated template:
-```sql
-DELETE FROM templates WHERE id = <id>;
-```
+| Commit | Description |
+|--------|-------------|
+| 1ee1e0e | Fix field name mismatch + regenerate image base64 |
+| 2a769ff | Add template fields to GET response |
+| e8da445 | Add database migration for missing columns |
+| ae7c6ec | Add debug logging for templates |
+| 5780550 | Add template columns to ALL fallback queries |
 
 ---
 
-## Quick Reference: All Database Columns Needed
+## Key Lessons for Future Agents
 
-```sql
--- For prompt templates (Issue 1)
-ALTER TABLE image_creation_settings ADD COLUMN IF NOT EXISTS prompt_templates JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE image_creation_settings ADD COLUMN IF NOT EXISTS text_snippets JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE image_creation_settings ADD COLUMN IF NOT EXISTS category_templates JSONB DEFAULT '[]'::jsonb;
+1. **Field name mismatches are silent** - Server just ignores unknown fields. Check logs for what the server actually receives.
 
--- For chat files (separate feature, already added)
-ALTER TABLE image_creation_settings ADD COLUMN IF NOT EXISTS consultant_chat_files JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE image_creation_settings ADD COLUMN IF NOT EXISTS consultant_chat_conversations JSONB DEFAULT '[]'::jsonb;
-```
+2. **Fallback queries are easy to forget** - When adding new columns, grep for "fallback" to find all query locations.
 
----
+3. **Base64 images are HUGE** - ~1MB each vs ~100 bytes for a URL. Always upload to WordPress first.
 
-## Testing Checklist
+4. **GET endpoints may not return new fields** - Just because a column exists doesn't mean the API returns it.
 
-### Issue 1 (Prompt Templates)
-- [ ] Create a prompt template in AI Prompt Assistant
-- [ ] Create a text snippet
-- [ ] Create a placeholder category template
-- [ ] Refresh the page
-- [ ] All three should still be there
-
-### Issue 2 (Regenerate Image)
-- [ ] Go to an article with images
-- [ ] Click regenerate on one image
-- [ ] Check server logs - should see "Uploaded to WP"
-- [ ] Check database - URL should start with `https://`, not `data:image`
-
-### Issue 3 (Template Library)
-- [ ] Open Template Library modal
-- [ ] Should load without 507 error
-- [ ] Should show "No templates found" or list of templates
-
----
-
-## Key Files Summary
-
-| Issue | File | Line Numbers |
-|-------|------|--------------|
-| 1. Field name mismatch | `src/components/ImageCreationSection.tsx` | Search `placeholder_category_templates` |
-| 1. Server handling | `server/routes/image-creation.js` | ~1420 (req.body destructuring) |
-| 2. Regenerate image | `server/routes/articles.js` | 691-769 |
-| 3. Template list | `server/routes/templates.js` | 26-93 (already fixed) |
-
----
-
-## Context
-- The app is a full-stack React/TypeScript frontend + Express/Node.js backend
-- Database is PostgreSQL via Neon
-- Images should ALWAYS be uploaded to WordPress staging site first, then only the URL stored
-- Base64 images are ~1MB each, WordPress URLs are ~100 bytes
-- Storing base64 caused 67MB+ responses and 507 errors
+5. **The Blueprint page has more details** - See Golden Rules #13 and #14, and the Changelog for Jan 20, 2026.

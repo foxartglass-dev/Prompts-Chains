@@ -453,10 +453,11 @@ const ImageFlowDiagram: React.FC = () => (
             <div className="text-sm text-gray-300 space-y-1">
               <div><code className="bg-slate-800 px-1 rounded text-xs">imageDraftMode: true</code></div>
               <div className="text-xs text-gray-400 mt-2">Images go to:</div>
-              <div className="text-xs text-brand-cyan">→ articles.generated_images array</div>
+              <div className="text-xs text-brand-cyan">→ Uploaded to STAGING WP first</div>
+              <div className="text-xs text-brand-cyan">→ articles.generated_images (WP URLs)</div>
               <div className="text-xs text-brand-cyan">→ Also to Draft Image Bank</div>
-              <div className="text-xs text-green-400 mt-2">wpUrl NOT required</div>
-              <div className="text-xs text-gray-500">(May be base64 - large!)</div>
+              <div className="text-xs text-green-400 mt-2">Stores WP URLs (~100 bytes)</div>
+              <div className="text-xs text-green-400">wpMediaId preserved for final push</div>
             </div>
           </div>
 
@@ -1556,8 +1557,51 @@ saveToBank({ url: wpResult.url, wpMediaId: wpResult.id });`}</pre>
               <li><code className="bg-slate-900 px-1 rounded">/api/images/generate-for-article</code> - Uses pipeline with WP upload</li>
               <li><code className="bg-slate-900 px-1 rounded">/api/image-creation/upload-to-wp</code> - Utility endpoint for single uploads</li>
             </ul>
+            <p className="text-green-400 mt-3 text-xs">
+              <strong>ALL ENDPOINTS NOW COMPLIANT</strong> - <code className="bg-slate-900 px-1 rounded">/api/articles/:id/regenerate-image</code> was fixed Jan 20, 2026 to upload to WP first
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Rule 14 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-fuchsia-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-fuchsia-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">14</div>
+          <div>
+            <h3 className="text-lg font-bold text-fuchsia-400">Fallback INSERT/UPDATE queries MUST include ALL columns</h3>
+            <p className="text-gray-300 mt-2 text-sm">
+              When adding new JSONB columns to a table, you must update FOUR places in the code:
+              main INSERT, fallback INSERT, main UPDATE, and fallback UPDATE. Missing any will cause data loss.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-red-400 font-medium mb-2">THE TRAP:</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// Main query has the new column:
+await sql\`INSERT INTO settings (..., new_column) VALUES (..., \${newColumn})\`;
+
+// BUT FALLBACK QUERY DOESN'T:
+try { ... } catch {
+  await sql\`INSERT INTO settings (old_cols_only) VALUES (...)\`;
+  // new_column is LOST! Falls back to database default '[]'
+}`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-fuchsia-400 font-medium mb-2">✓ CHECKLIST when adding columns:</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`1. Add column to database schema (migration)
+2. Add to main INSERT query
+3. Add to FALLBACK INSERT query  ← Easy to forget!
+4. Add to main UPDATE query
+5. Add to FALLBACK UPDATE query  ← Easy to forget!
+6. Add to GET response extraction
+7. Add to TypeScript interface`}</pre>
+            </div>
             <p className="text-red-400 mt-3 text-xs">
-              <strong>KNOWN OFFENDERS (need fixing):</strong> <code className="bg-slate-900 px-1 rounded">/api/articles/:id/regenerate-image</code> stores base64 directly
+              <strong>REAL BUG:</strong> Template persistence was broken for weeks because fallback queries in
+              <code className="bg-slate-900 px-1 rounded">image-creation.js</code> were missing prompt_templates, text_snippets,
+              category_templates columns. Main queries had them, but when fallback path executed, data was lost!
+            </p>
+            <p className="text-gray-400 mt-2 text-xs">
+              <strong>Key file:</strong> server/routes/image-creation.js - search for "fallback" to find all 4 query locations
             </p>
           </div>
         </div>
@@ -1673,6 +1717,54 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues (Jan 2026)</h3>
 
       <div className="space-y-4">
+        {/* Jan 20 - Template persistence FULLY FIXED */}
+        <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Prompt Templates not persisting ("No templates saved yet")</span>
+            <span className="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded">CRITICAL - Jan 20, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Users saved templates in Prompt Templates popup, but after page refresh they saw
+            "No templates saved yet". Templates appeared to save but weren't persisting to database.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause (MULTI-LAYER):</strong>
+            <ul className="list-disc ml-4 mt-1 space-y-1">
+              <li>Frontend sent <code className="bg-slate-900 px-1 rounded">placeholder_category_templates</code> but server expected <code className="bg-slate-900 px-1 rounded">category_templates</code></li>
+              <li>GET endpoint wasn't returning template fields in response</li>
+              <li>MAIN ISSUE: Fallback INSERT/UPDATE queries were missing template columns! Main queries had them, but when fallback path executed, data was lost</li>
+            </ul>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> 1) Changed 9 occurrences in ImageCreationSection.tsx to use <code className="bg-slate-900 px-1 rounded">category_templates</code>.
+            2) Added template fields to GET response. 3) Added template columns to ALL 4 fallback queries in image-creation.js.
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Pattern:</strong> See Golden Rule #14 - Fallback INSERT/UPDATE queries MUST include ALL columns
+          </div>
+        </div>
+
+        {/* Jan 20 - Regenerate image fix */}
+        <div className="bg-slate-800 rounded-lg p-4 border border-green-500/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Regenerate Image stored base64 instead of WP URL</span>
+            <span className="text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded">Jan 20, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> <code className="bg-slate-900 px-1 rounded">/api/articles/:id/regenerate-image</code> endpoint was storing
+            raw base64 data (~1MB per image) instead of uploading to WordPress first.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added uploadMedia import and call to upload base64 to staging WordPress before storing.
+            Now stores WP URL (~100 bytes) with wpMediaId preserved for final push.
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Pattern:</strong> See Golden Rule #13 - ALL generated images MUST go through WordPress BEFORE storage
+          </div>
+        </div>
+
         {/* Jan 18 - Persistence fixes */}
         <div className="bg-slate-800 rounded-lg p-4 border border-emerald-500/50">
           <div className="flex items-center gap-2 mb-2">
@@ -4009,6 +4101,59 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">January 2026</h3>
 
       <div className="space-y-4">
+        {/* Jan 20 - Template Persistence & Image Flow Final Fixes */}
+        <div className="border-l-4 border-green-500 pl-4">
+          <div className="text-sm text-green-400 font-semibold">Jan 20, 2026 - Template Persistence FULLY FIXED + Image Flow Confirmed</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-red-400 font-bold">CRITICAL</span>
+              <div>
+                <strong>Template persistence finally working - fallback queries were missing columns!</strong>
+                <div className="text-xs text-gray-500">Root cause: 4 fallback INSERT/UPDATE queries in image-creation.js were missing prompt_templates, text_snippets, category_templates columns. Main queries had them but fallbacks didn't.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Field name mismatch: placeholder_category_templates → category_templates</strong>
+                <div className="text-xs text-gray-500">Frontend was sending placeholder_category_templates but server expected category_templates. Fixed 9 occurrences in ImageCreationSection.tsx</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>GET /api/image-creation/settings now returns template fields</strong>
+                <div className="text-xs text-gray-500">Added prompt_templates, text_snippets, category_templates, guided_guardrails, consultant_chat_files, consultant_chat_conversations to response</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>/api/articles/:id/regenerate-image now uploads to WP first</strong>
+                <div className="text-xs text-gray-500">Uses staging WordPress credentials to upload base64 → WP URL before storing. Stores ~100 byte URL instead of ~1MB base64</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DOCS</span>
+              <div>
+                <strong>Blueprint: Golden Rule 14 added - Fallback query checklist</strong>
+                <div className="text-xs text-gray-500">When adding columns, MUST update 4 query locations: main INSERT, fallback INSERT, main UPDATE, fallback UPDATE</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DOCS</span>
+              <div>
+                <strong>Confirmed: Draft mode stores WP URLs, not base64</strong>
+                <div className="text-xs text-gray-500">Image draft flow verified correct: Generate → Upload to staging WP → Store WP URL (~100 bytes) with wpMediaId → Review → Final push uses existing wpMediaId</div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-green-400 font-semibold">Commits:</span>
+            <span className="text-gray-400 ml-2">1ee1e0e, 2a769ff, e8da445, ae7c6ec, 5780550</span>
+          </div>
+        </div>
+
         {/* Jan 19 - Image Upload & Persistence Fixes */}
         <div className="border-l-4 border-amber-500 pl-4">
           <div className="text-sm text-amber-400 font-semibold">Jan 19, 2026 - Image Upload & Persistence Improvements</div>
@@ -4063,9 +4208,6 @@ const ChangelogDiagram: React.FC = () => (
               </div>
             </li>
           </ul>
-          <div className="mt-3 bg-red-900/30 rounded p-2 text-xs text-red-300">
-            <strong>STILL NEEDS FIX:</strong> /api/articles/:id/regenerate-image stores base64 directly. Frontend sends placeholder_category_templates but server expects category_templates.
-          </div>
         </div>
 
         {/* Jan 18 - Persistence & Protection */}
