@@ -79,6 +79,18 @@ interface ArticleListViewProps {
   onArticleModalClose?: () => void;
 }
 
+/**
+ * Strips tag suffix like "(H)", "(J)", "(C)" from keyword/title
+ * Example: "Standard Cleaning(H)" -> "Standard Cleaning"
+ * Example: "Topic (J)" -> "Topic"
+ */
+const stripTagFromKeyword = (keyword: string | null | undefined): string => {
+  if (!keyword) return '';
+  // Remove tag patterns like (H), (J), (C) etc. from end of string
+  // Also handles space before parenthesis: "Topic (H)" or "Topic(H)"
+  return keyword.replace(/\s*\([A-Za-z]\)\s*$/, '').trim();
+};
+
 const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisual, openArticleId, onArticleModalClose }) => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
@@ -343,7 +355,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           wpUrl,
           wpUser,
           wpPassword,
-          title: selectedArticle.keyword,
+          title: stripTagFromKeyword(selectedArticle.keyword),
           content: editContent || selectedArticle.final_content,
           status: 'draft',
           articleId: selectedArticle.id,
@@ -428,7 +440,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             wpUrl,
             wpUser,
             wpPassword,
-            title: selectedArticle.keyword,
+            title: stripTagFromKeyword(selectedArticle.keyword),
             content: editContent || selectedArticle.final_content,
             status: 'draft',
             articleId: selectedArticle.id,
@@ -725,7 +737,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           wpUrl,
           wpUser,
           wpPassword,
-          title: selectedArticle.keyword,
+          title: stripTagFromKeyword(selectedArticle.keyword),
           content: editContent || selectedArticle.final_content,
           status: 'draft',
           articleId: selectedArticle.id,
@@ -1026,7 +1038,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     />
                   </td>
                   <td className="p-2 font-medium text-white">
-                    {article.keyword}
+                    {stripTagFromKeyword(article.keyword)}
                     {article.version && article.version > 1 && (
                       <span className="ml-2 text-xs text-gray-500">v{article.version}</span>
                     )}
@@ -1190,7 +1202,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
               <div className="flex items-center gap-4">
                 <div>
                   <div className="flex items-center gap-3">
-                    <h3 className="text-xl font-bold text-brand-gold">{selectedArticle.keyword}</h3>
+                    <h3 className="text-xl font-bold text-brand-gold">{stripTagFromKeyword(selectedArticle.keyword)}</h3>
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(selectedArticle.status)}`}>
                       {selectedArticle.status}
                     </span>
@@ -1505,7 +1517,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                   <div className="max-w-5xl mx-auto shadow-2xl">
                     <ElementorPreview
                       content={selectedArticle.final_content || ''}
-                      title={selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0] || selectedArticle.keyword}
+                      title={selectedArticle.selected_meta_title || selectedArticle.meta_titles?.[0] || stripTagFromKeyword(selectedArticle.keyword)}
                       images={selectedArticle.images}
                       heroImageSide="right"
                     />
