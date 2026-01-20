@@ -791,6 +791,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [promptLibrarySaveDesc, setPromptLibrarySaveDesc] = useState('');
   const [promptLibrarySaveGlobal, setPromptLibrarySaveGlobal] = useState(false);
   const [promptLibrarySaveTags, setPromptLibrarySaveTags] = useState<Set<string>>(new Set());
+  // Prompt Library Edit state
+  const [promptLibraryEditItem, setPromptLibraryEditItem] = useState<any>(null);
+  const [promptLibraryEditName, setPromptLibraryEditName] = useState('');
+  const [promptLibraryEditDesc, setPromptLibraryEditDesc] = useState('');
+  const [promptLibraryEditContent, setPromptLibraryEditContent] = useState('');
   // Version History panel state
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryType, setVersionHistoryType] = useState<'avatar' | 'placeholder' | 'guided_gpt_prompt' | 'guided_gpt_rule' | 'smart_prompt_prompt' | 'smart_prompt_rule'>('avatar');
@@ -3158,6 +3163,58 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       }
     } catch (error) {
       showNotification('Failed to delete', 'error');
+    }
+  };
+
+  // Start editing a library item
+  const startEditLibraryItem = (item: any) => {
+    setPromptLibraryEditItem(item);
+    setPromptLibraryEditName(item.name);
+    setPromptLibraryEditDesc(item.description || '');
+    setPromptLibraryEditContent(item.content);
+  };
+
+  // Cancel editing
+  const cancelEditLibraryItem = () => {
+    setPromptLibraryEditItem(null);
+    setPromptLibraryEditName('');
+    setPromptLibraryEditDesc('');
+    setPromptLibraryEditContent('');
+  };
+
+  // Save edits to library item
+  const saveEditLibraryItem = async () => {
+    if (!promptLibraryEditItem) return;
+    if (!promptLibraryEditName.trim() || !promptLibraryEditContent.trim()) {
+      showNotification('Name and content are required', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/image-creation/prompt-library/${promptLibraryEditItem.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: promptLibraryEditName,
+          description: promptLibraryEditDesc,
+          content: promptLibraryEditContent
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification('Updated successfully', 'success');
+        // Update the item in the list
+        setPromptLibraryItems(promptLibraryItems.map(i =>
+          i.id === promptLibraryEditItem.id
+            ? { ...i, name: promptLibraryEditName, description: promptLibraryEditDesc, content: promptLibraryEditContent }
+            : i
+        ));
+        cancelEditLibraryItem();
+      } else {
+        showNotification(data.error || 'Failed to update', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to update', 'error');
     }
   };
 
@@ -15736,7 +15793,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                 </p>
               </div>
               <button
-                onClick={() => setShowPromptLibrary(false)}
+                onClick={() => {
+                  setShowPromptLibrary(false);
+                  cancelEditLibraryItem();
+                }}
                 className="text-gray-400 hover:text-white text-3xl leading-none"
               >
                 &times;
@@ -15894,42 +15954,100 @@ Start by introducing yourself and asking about their business in a friendly way.
                           key={item.id}
                           className="bg-slate-800 rounded-lg p-4 border border-slate-700 hover:border-purple-500/50 transition"
                         >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <h3 className="font-medium text-white">{item.name}</h3>
-                                {item.is_global && (
-                                  <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded">
-                                    GLOBAL
-                                  </span>
-                                )}
-                                {item.tag && (
-                                  <span className="text-[10px] bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded">
-                                    {item.tag}
-                                  </span>
-                                )}
+                          {/* Edit Mode */}
+                          {promptLibraryEditItem?.id === item.id ? (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-xs text-gray-400 mb-1">Name *</label>
+                                <input
+                                  type="text"
+                                  value={promptLibraryEditName}
+                                  onChange={(e) => setPromptLibraryEditName(e.target.value)}
+                                  className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-sm focus:border-purple-500 focus:outline-none"
+                                  placeholder="Name..."
+                                />
                               </div>
-                              {item.description && (
-                                <p className="text-sm text-slate-400 mt-1">{item.description}</p>
-                              )}
-                              <p className="text-xs text-slate-500 mt-2 line-clamp-2">{item.content}</p>
+                              <div>
+                                <label className="block text-xs text-gray-400 mb-1">Description</label>
+                                <input
+                                  type="text"
+                                  value={promptLibraryEditDesc}
+                                  onChange={(e) => setPromptLibraryEditDesc(e.target.value)}
+                                  className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-sm focus:border-purple-500 focus:outline-none"
+                                  placeholder="Optional description..."
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-400 mb-1">Content *</label>
+                                <textarea
+                                  value={promptLibraryEditContent}
+                                  onChange={(e) => setPromptLibraryEditContent(e.target.value)}
+                                  className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-sm focus:border-purple-500 focus:outline-none resize-y min-h-[120px]"
+                                  placeholder="Prompt/rule content..."
+                                  rows={5}
+                                />
+                              </div>
+                              <div className="flex items-center justify-end gap-2 pt-2">
+                                <button
+                                  onClick={cancelEditLibraryItem}
+                                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={saveEditLibraryItem}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded transition"
+                                >
+                                  💾 Save Changes
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2 ml-4">
-                              <button
-                                onClick={() => applyFromPromptLibrary(item)}
-                                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition"
-                              >
-                                Apply
-                              </button>
-                              <button
-                                onClick={() => deleteFromPromptLibrary(item.id)}
-                                className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition"
-                                title="Delete"
-                              >
-                                🗑️
-                              </button>
+                          ) : (
+                            /* View Mode */
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h3 className="font-medium text-white">{item.name}</h3>
+                                  {item.is_global && (
+                                    <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded">
+                                      GLOBAL
+                                    </span>
+                                  )}
+                                  {item.tag && (
+                                    <span className="text-[10px] bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded">
+                                      {item.tag}
+                                    </span>
+                                  )}
+                                </div>
+                                {item.description && (
+                                  <p className="text-sm text-slate-400 mt-1">{item.description}</p>
+                                )}
+                                <p className="text-xs text-slate-500 mt-2 line-clamp-2">{item.content}</p>
+                              </div>
+                              <div className="flex items-center gap-2 ml-4">
+                                <button
+                                  onClick={() => startEditLibraryItem(item)}
+                                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded transition"
+                                  title="Edit"
+                                >
+                                  ✏️ Edit
+                                </button>
+                                <button
+                                  onClick={() => applyFromPromptLibrary(item)}
+                                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition"
+                                >
+                                  Apply
+                                </button>
+                                <button
+                                  onClick={() => deleteFromPromptLibrary(item.id)}
+                                  className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition"
+                                  title="Delete"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       ))}
                     </div>
