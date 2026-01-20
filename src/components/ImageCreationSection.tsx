@@ -1006,6 +1006,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     website_name?: string;
     client_name?: string;
     content?: string;
+    created_at?: string;
+    source?: string;
+    has_article?: boolean;
+    has_meta?: boolean;
+    has_images?: boolean;
   }>>([]);
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<number>>(new Set());
   const [articleSelectorSearch, setArticleSelectorSearch] = useState('');
@@ -4455,17 +4460,32 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   /**
    * Fetch all available articles for selection
+   * Uses website_id from workflow to get articles for the current website
    */
   const fetchSelectableArticleList = async () => {
-    if (!workflowId) return;
+    const websiteId = workflow?.website_id;
+    if (!websiteId && !workflowId) return;
     setFetchingSelectableList(true);
     try {
-      const res = await fetch(`/api/articles?workflowId=${workflowId}&limit=200`);
+      // Try website_id first (articles are associated with websites), fall back to workflowId
+      const params = new URLSearchParams();
+      if (websiteId) {
+        params.append('websiteId', websiteId.toString());
+      } else if (workflowId) {
+        params.append('workflowId', workflowId.toString());
+      }
+      params.append('limit', '200');
+
+      const res = await fetch(`/api/articles?${params.toString()}`);
       const data = await res.json();
-      if (data.success && data.articles) {
+      // Note: /api/articles returns { articles, total } not { success, articles }
+      if (data.articles && Array.isArray(data.articles)) {
         setSelectableArticlesList(data.articles);
+      } else if (data.error) {
+        showNotification(data.error, 'error');
+        setSelectableArticlesList([]);
       } else {
-        showNotification('Failed to fetch articles', 'error');
+        setSelectableArticlesList([]);
       }
     } catch (error) {
       console.error('Failed to fetch articles:', error);
@@ -15943,71 +15963,107 @@ Start by introducing yourself and asking about their business in a friendly way.
               </button>
             </div>
 
-            {/* Article List */}
-            <div className="flex-1 overflow-auto p-4">
+            {/* Article Table */}
+            <div className="flex-1 overflow-auto">
               {fetchingSelectableList ? (
                 <div className="text-center py-8 text-slate-400">
                   Loading articles...
                 </div>
               ) : selectableArticlesList.length === 0 ? (
                 <div className="text-center py-8 text-slate-400">
-                  <p>No articles found for this workflow.</p>
+                  <p>No articles found for this website.</p>
                   <p className="text-sm mt-2">Create articles in the Articles page first.</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {getFilteredSelectableArticles().map((article) => (
-                    <div
-                      key={article.id}
-                      onClick={() => toggleArticleSelection(article.id)}
-                      className={`p-3 rounded-lg cursor-pointer transition ${
-                        selectedArticleIds.has(article.id)
-                          ? 'bg-blue-600/30 border border-blue-500'
-                          : 'bg-slate-800 border border-slate-700 hover:border-blue-500/50'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-800 border-b border-blue-500/30">
+                    <tr className="text-left text-slate-400 text-xs">
+                      <th className="p-3 w-10">
                         <input
                           type="checkbox"
-                          checked={selectedArticleIds.has(article.id)}
-                          onChange={() => toggleArticleSelection(article.id)}
-                          className="mt-1 w-4 h-4 rounded border-blue-500 text-blue-600 focus:ring-blue-500 bg-slate-900"
-                          onClick={(e) => e.stopPropagation()}
+                          checked={selectedArticleIds.size === getFilteredSelectableArticles().length && getFilteredSelectableArticles().length > 0}
+                          onChange={(e) => e.target.checked ? selectAllFilteredArticles() : deselectAllArticles()}
+                          className="w-4 h-4 rounded border-blue-500 text-blue-600 focus:ring-blue-500 bg-slate-900"
                         />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-medium text-white truncate">
-                              {article.keyword}
-                            </h3>
-                            {article.tag && (
-                              <span className="text-[10px] bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded">
-                                {article.tag}
-                              </span>
-                            )}
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                              article.status === 'published'
-                                ? 'bg-emerald-600/50 text-emerald-300'
-                                : article.status === 'draft'
-                                ? 'bg-yellow-600/50 text-yellow-300'
-                                : 'bg-slate-600 text-slate-400'
-                            }`}>
-                              {article.status}
+                      </th>
+                      <th className="p-3">Keyword</th>
+                      <th className="p-3 w-24">Status</th>
+                      <th className="p-3 w-20">Tag</th>
+                      <th className="p-3 w-36">Created</th>
+                      <th className="p-3 w-32">Source</th>
+                      <th className="p-3 w-20 text-right">Words</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getFilteredSelectableArticles().map((article) => (
+                      <tr
+                        key={article.id}
+                        onClick={() => toggleArticleSelection(article.id)}
+                        className={`cursor-pointer border-b border-slate-700/50 transition ${
+                          selectedArticleIds.has(article.id)
+                            ? 'bg-blue-600/20'
+                            : 'hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedArticleIds.has(article.id)}
+                            onChange={() => toggleArticleSelection(article.id)}
+                            className="w-4 h-4 rounded border-blue-500 text-blue-600 focus:ring-blue-500 bg-slate-900"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </td>
+                        <td className="p-3">
+                          <span className="text-white font-medium">{article.keyword}</span>
+                        </td>
+                        <td className="p-3">
+                          <span className={`text-[10px] px-2 py-1 rounded ${
+                            article.status === 'published'
+                              ? 'bg-emerald-600/50 text-emerald-300'
+                              : article.status === 'draft'
+                              ? 'bg-yellow-600/50 text-yellow-300'
+                              : article.status === 'generated'
+                              ? 'bg-cyan-600/50 text-cyan-300'
+                              : 'bg-slate-600 text-slate-400'
+                          }`}>
+                            {article.status}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          {article.tag && (
+                            <span className="text-[10px] bg-purple-600/50 text-purple-300 px-2 py-1 rounded">
+                              {article.tag}
                             </span>
-                          </div>
-                          <p className="text-xs text-slate-400 mt-1">
-                            {article.website_name || 'Unknown website'}
-                            {article.client_name && ` · ${article.client_name}`}
-                            {article.word_count && ` · ${article.word_count} words`}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {getFilteredSelectableArticles().length === 0 && articleSelectorSearch && (
-                    <div className="text-center py-4 text-slate-400">
-                      No articles match "{articleSelectorSearch}"
-                    </div>
-                  )}
+                          )}
+                        </td>
+                        <td className="p-3 text-slate-400 text-xs">
+                          {article.created_at ? new Date(article.created_at).toLocaleString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                          }) : '-'}
+                        </td>
+                        <td className="p-3">
+                          {article.source && (
+                            <span className="text-[10px] text-cyan-400">
+                              {article.source}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right text-slate-400">
+                          {article.word_count || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {getFilteredSelectableArticles().length === 0 && articleSelectorSearch && selectableArticlesList.length > 0 && (
+                <div className="text-center py-4 text-slate-400">
+                  No articles match "{articleSelectorSearch}"
                 </div>
               )}
             </div>
