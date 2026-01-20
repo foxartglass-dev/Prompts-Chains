@@ -3681,11 +3681,11 @@ router.get('/prompt-library', requireDb, async (req, res) => {
         `;
       }
     } else {
-      // Get only global items
+      // Get global items + any orphaned items (website_id IS NULL)
       if (type && mode) {
         items = await sql`
           SELECT * FROM prompt_library
-          WHERE is_global = true
+          WHERE (is_global = true OR website_id IS NULL)
             AND type = ${type}
             AND mode = ${mode}
           ORDER BY updated_at DESC
@@ -3693,21 +3693,21 @@ router.get('/prompt-library', requireDb, async (req, res) => {
       } else if (type) {
         items = await sql`
           SELECT * FROM prompt_library
-          WHERE is_global = true
+          WHERE (is_global = true OR website_id IS NULL)
             AND type = ${type}
           ORDER BY updated_at DESC
         `;
       } else if (mode) {
         items = await sql`
           SELECT * FROM prompt_library
-          WHERE is_global = true
+          WHERE (is_global = true OR website_id IS NULL)
             AND mode = ${mode}
           ORDER BY updated_at DESC
         `;
       } else {
         items = await sql`
           SELECT * FROM prompt_library
-          WHERE is_global = true
+          WHERE (is_global = true OR website_id IS NULL)
           ORDER BY updated_at DESC
         `;
       }
@@ -3747,17 +3747,21 @@ router.post('/prompt-library', requireDb, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: type, mode, name, content' });
     }
 
+    // If no websiteId provided and not marked as global, treat as global
+    // This prevents orphaned items that can't be fetched
+    const effectiveIsGlobal = isGlobal || !websiteId;
+
     // Convert tags array to PostgreSQL array format
     const tagsArray = Array.isArray(tags) && tags.length > 0 ? tags : null;
 
-    console.log('[Prompt Library] Saving:', { name, type, mode, isGlobal, tag, tags: tagsArray });
+    console.log('[Prompt Library] Saving:', { name, type, mode, isGlobal: effectiveIsGlobal, websiteId, tag, tags: tagsArray });
 
     const result = await sql`
       INSERT INTO prompt_library (
         website_id, is_global, type, mode, name, description, content, tag, tags
       ) VALUES (
-        ${isGlobal ? null : websiteId},
-        ${isGlobal},
+        ${effectiveIsGlobal ? null : websiteId},
+        ${effectiveIsGlobal},
         ${type},
         ${mode},
         ${name},

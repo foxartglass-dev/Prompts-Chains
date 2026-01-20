@@ -791,6 +791,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [promptLibrarySaveDesc, setPromptLibrarySaveDesc] = useState('');
   const [promptLibrarySaveGlobal, setPromptLibrarySaveGlobal] = useState(false);
   const [promptLibrarySaveTags, setPromptLibrarySaveTags] = useState<Set<string>>(new Set());
+  // Prompt Library Edit state
+  const [promptLibraryEditItem, setPromptLibraryEditItem] = useState<any>(null);
+  const [promptLibraryEditName, setPromptLibraryEditName] = useState('');
+  const [promptLibraryEditDesc, setPromptLibraryEditDesc] = useState('');
+  const [promptLibraryEditContent, setPromptLibraryEditContent] = useState('');
   // Version History panel state
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryType, setVersionHistoryType] = useState<'avatar' | 'placeholder' | 'guided_gpt_prompt' | 'guided_gpt_rule' | 'smart_prompt_prompt' | 'smart_prompt_rule'>('avatar');
@@ -2979,15 +2984,26 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         ...(websiteId && { websiteId: String(websiteId) })
       });
       const res = await fetch(`/api/image-creation/prompt-library?${params}`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('[Prompt Library] Fetch failed:', res.status, errorText);
+        showNotification(`Failed to fetch library (${res.status})`, 'error');
+        setPromptLibraryLoading(false);
+        return;
+      }
       const data = await res.json();
       if (data.success) {
         setPromptLibraryItems(data.items || []);
+        if (data.message) {
+          console.log('[Prompt Library]', data.message);
+        }
       } else {
+        console.error('[Prompt Library] API error:', data);
         showNotification(data.error || 'Failed to fetch library', 'error');
       }
-    } catch (error) {
-      console.error('Prompt library fetch error:', error);
-      showNotification('Failed to load prompt library', 'error');
+    } catch (error: any) {
+      console.error('[Prompt Library] Fetch error:', error?.message || error);
+      showNotification('Failed to load prompt library - check console', 'error');
     }
     setPromptLibraryLoading(false);
   };
@@ -3012,24 +3028,49 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       showNotification('Please enter a name', 'error');
       return;
     }
+
+    const payload = {
+      websiteId: consultantContext.workflow?.website_id,
+      isGlobal: promptLibrarySaveGlobal,
+      type: promptLibraryMode,
+      mode: promptLibraryTarget,
+      name: promptLibrarySaveName,
+      description: promptLibrarySaveDesc,
+      content,
+      tag,
+      // Include which tags this global applies to (empty if not global)
+      tags: promptLibrarySaveGlobal ? Array.from(promptLibrarySaveTags) : []
+    };
+
+    console.log('[Prompt Library] Saving:', payload);
+
     try {
       const res = await fetch('/api/image-creation/prompt-library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          websiteId: consultantContext.workflow?.website_id,
-          isGlobal: promptLibrarySaveGlobal,
-          type: promptLibraryMode,
-          mode: promptLibraryTarget,
-          name: promptLibrarySaveName,
-          description: promptLibrarySaveDesc,
-          content,
-          tag,
-          // Include which tags this global applies to (empty if not global)
-          tags: promptLibrarySaveGlobal ? Array.from(promptLibrarySaveTags) : []
-        })
+        body: JSON.stringify(payload)
       });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('[Prompt Library] Save failed:', res.status, errorText);
+        // Try to parse as JSON for better error message
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.needsMigration) {
+            showNotification('Database migration needed - run migration 024', 'error');
+          } else {
+            showNotification(errorData.error || `Save failed (${res.status})`, 'error');
+          }
+        } catch {
+          showNotification(`Save failed (${res.status}): ${errorText.substring(0, 100)}`, 'error');
+        }
+        return;
+      }
+
       const data = await res.json();
+      console.log('[Prompt Library] Save response:', data);
+
       if (data.success) {
         showNotification('Saved to library!', 'success');
         setShowPromptLibrary(false);
@@ -3038,9 +3079,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       } else {
         showNotification(data.error || 'Failed to save', 'error');
       }
-    } catch (error) {
-      console.error('Save to library error:', error);
-      showNotification('Failed to save to library', 'error');
+    } catch (error: any) {
+      console.error('[Prompt Library] Save error:', error?.message || error);
+      showNotification('Failed to save to library - check console', 'error');
     }
   };
 
@@ -3122,6 +3163,58 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       }
     } catch (error) {
       showNotification('Failed to delete', 'error');
+    }
+  };
+
+  // Start editing a library item
+  const startEditLibraryItem = (item: any) => {
+    setPromptLibraryEditItem(item);
+    setPromptLibraryEditName(item.name);
+    setPromptLibraryEditDesc(item.description || '');
+    setPromptLibraryEditContent(item.content);
+  };
+
+  // Cancel editing
+  const cancelEditLibraryItem = () => {
+    setPromptLibraryEditItem(null);
+    setPromptLibraryEditName('');
+    setPromptLibraryEditDesc('');
+    setPromptLibraryEditContent('');
+  };
+
+  // Save edits to library item
+  const saveEditLibraryItem = async () => {
+    if (!promptLibraryEditItem) return;
+    if (!promptLibraryEditName.trim() || !promptLibraryEditContent.trim()) {
+      showNotification('Name and content are required', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/image-creation/prompt-library/${promptLibraryEditItem.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: promptLibraryEditName,
+          description: promptLibraryEditDesc,
+          content: promptLibraryEditContent
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification('Updated successfully', 'success');
+        // Update the item in the list
+        setPromptLibraryItems(promptLibraryItems.map(i =>
+          i.id === promptLibraryEditItem.id
+            ? { ...i, name: promptLibraryEditName, description: promptLibraryEditDesc, content: promptLibraryEditContent }
+            : i
+        ));
+        cancelEditLibraryItem();
+      } else {
+        showNotification(data.error || 'Failed to update', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to update', 'error');
     }
   };
 
@@ -7418,9 +7511,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   placeholder="Prompt name..."
                                 />
                                 {activeGuidedPrompt.tag === 'Global' && (
-                                  <span className="text-[10px] text-emerald-400/60 bg-emerald-900/30 px-2 py-0.5 rounded">
-                                    Applies to: {activeGuidedPrompt.globalAppliesTo?.join(', ') || 'All tags'}
-                                  </span>
+                                  <div className="flex items-center gap-2 bg-emerald-900/30 px-2 py-1 rounded">
+                                    <span className="text-[10px] text-emerald-400 font-medium">Applies to:</span>
+                                    {tags.map(tag => {
+                                      const currentAppliesTo = activeGuidedPrompt.globalAppliesTo || tags.map(t => t.name);
+                                      const isChecked = currentAppliesTo.includes(tag.name);
+                                      return (
+                                        <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={(e) => {
+                                              const newAppliesTo = e.target.checked
+                                                ? [...currentAppliesTo, tag.name]
+                                                : currentAppliesTo.filter(t => t !== tag.name);
+                                              handleUpdateGuidedPrompt(activeGuidedPrompt.id, { globalAppliesTo: newAppliesTo });
+                                            }}
+                                            className="accent-emerald-500 w-3 h-3"
+                                          />
+                                          {tag.name}
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
                                 )}
                               </div>
                               <div className="flex items-center gap-2">
@@ -7586,26 +7699,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </button>
                               </div>
 
-                              {/* Global applies-to checkboxes */}
-                              {guidedRulesActiveTag === 'Global' && (
-                                <div className="bg-emerald-900/20 rounded-lg p-2 border border-emerald-500/30">
-                                  <span className="text-[10px] text-emerald-400 font-medium">Global rules apply to:</span>
-                                  <div className="flex items-center gap-3 mt-1">
-                                    {tags.map(tag => (
-                                      <label key={tag.id} className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          checked={true}
-                                          disabled
-                                          className="accent-emerald-500 w-3 h-3"
-                                        />
-                                        {tag.name}
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
                               {/* Rules List */}
                               <div className="space-y-2">
                                 {getRulesForTag(settings.guided_gpt_rules || [], guidedRulesActiveTag).length === 0 ? (
@@ -7649,6 +7742,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                                             History
                                           </button>
                                           <button
+                                            onClick={() => {
+                                              setGuidedRulesEditingId(rule.id);
+                                              setPromptLibrarySaveName(rule.title);
+                                              openPromptLibrary('rule', 'guided_gpt', true);
+                                            }}
+                                            className="text-purple-400 hover:text-purple-300 p-1 rounded hover:bg-purple-900/30 transition text-xs"
+                                            title="Save to library for reuse"
+                                          >
+                                            💾 Save
+                                          </button>
+                                          <button
                                             onClick={() => handleRemoveGuidedRule(rule.id)}
                                             className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
                                             title="Remove rule"
@@ -7666,6 +7770,32 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         className="w-full p-2 text-xs bg-slate-900 border border-brand-gold/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
                                         rows={2}
                                       />
+                                      {/* Global rule applies-to checkboxes */}
+                                      {rule.tag === 'Global' && (
+                                        <div className="flex items-center gap-2 mt-2 bg-emerald-900/20 px-2 py-1.5 rounded border border-emerald-500/20">
+                                          <span className="text-[10px] text-emerald-400 font-medium">Applies to:</span>
+                                          {tags.map(tag => {
+                                            const currentAppliesTo = rule.globalAppliesTo || tags.map(t => t.name);
+                                            const isChecked = currentAppliesTo.includes(tag.name);
+                                            return (
+                                              <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isChecked}
+                                                  onChange={(e) => {
+                                                    const newAppliesTo = e.target.checked
+                                                      ? [...currentAppliesTo, tag.name]
+                                                      : currentAppliesTo.filter(t => t !== tag.name);
+                                                    handleUpdateGuidedRule(rule.id, { globalAppliesTo: newAppliesTo });
+                                                  }}
+                                                  className="accent-emerald-500 w-3 h-3"
+                                                />
+                                                {tag.name}
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </div>
                                   ))
                                 )}
@@ -9582,9 +9712,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   placeholder="Prompt name..."
                                 />
                                 {activeSmartPrompt.tag === 'Global' && (
-                                  <span className="text-[10px] text-emerald-400/60 bg-emerald-900/30 px-2 py-0.5 rounded">
-                                    Applies to: {activeSmartPrompt.globalAppliesTo?.join(', ') || 'All tags'}
-                                  </span>
+                                  <div className="flex items-center gap-2 bg-purple-900/30 px-2 py-1 rounded">
+                                    <span className="text-[10px] text-purple-400 font-medium">Applies to:</span>
+                                    {tags.map(tag => {
+                                      const currentAppliesTo = activeSmartPrompt.globalAppliesTo || tags.map(t => t.name);
+                                      const isChecked = currentAppliesTo.includes(tag.name);
+                                      return (
+                                        <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={(e) => {
+                                              const newAppliesTo = e.target.checked
+                                                ? [...currentAppliesTo, tag.name]
+                                                : currentAppliesTo.filter(t => t !== tag.name);
+                                              handleUpdateSmartPrompt(activeSmartPrompt.id, { globalAppliesTo: newAppliesTo });
+                                            }}
+                                            className="accent-purple-500 w-3 h-3"
+                                          />
+                                          {tag.name}
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
                                 )}
                               </div>
                               <div className="flex items-center gap-2">
@@ -9710,26 +9860,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </button>
                               </div>
 
-                              {/* Global applies-to checkboxes */}
-                              {legacyRulesActiveTag === 'Global' && (
-                                <div className="bg-emerald-900/20 rounded-lg p-2 border border-emerald-500/30">
-                                  <span className="text-[10px] text-emerald-400 font-medium">Global rules apply to:</span>
-                                  <div className="flex items-center gap-3 mt-1">
-                                    {tags.map(tag => (
-                                      <label key={tag.id} className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          checked={true}
-                                          disabled
-                                          className="accent-emerald-500 w-3 h-3"
-                                        />
-                                        {tag.name}
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
                               {/* Rules List */}
                               <div className="space-y-2">
                                 {getRulesForTag(settings.legacy_prompt_rules || [], legacyRulesActiveTag).length === 0 ? (
@@ -9773,6 +9903,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                                             History
                                           </button>
                                           <button
+                                            onClick={() => {
+                                              setLegacyRulesEditingId(rule.id);
+                                              setPromptLibrarySaveName(rule.title);
+                                              openPromptLibrary('rule', 'smart_prompt', true);
+                                            }}
+                                            className="text-purple-400 hover:text-purple-300 p-1 rounded hover:bg-purple-900/30 transition text-xs"
+                                            title="Save to library for reuse"
+                                          >
+                                            💾 Save
+                                          </button>
+                                          <button
                                             onClick={() => handleRemoveLegacyRule(rule.id)}
                                             className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
                                             title="Remove rule"
@@ -9790,6 +9931,32 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         className="w-full p-2 text-xs bg-slate-900 border border-purple-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
                                         rows={2}
                                       />
+                                      {/* Global rule applies-to checkboxes */}
+                                      {rule.tag === 'Global' && (
+                                        <div className="flex items-center gap-2 mt-2 bg-purple-900/20 px-2 py-1.5 rounded border border-purple-500/20">
+                                          <span className="text-[10px] text-purple-400 font-medium">Applies to:</span>
+                                          {tags.map(tag => {
+                                            const currentAppliesTo = rule.globalAppliesTo || tags.map(t => t.name);
+                                            const isChecked = currentAppliesTo.includes(tag.name);
+                                            return (
+                                              <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isChecked}
+                                                  onChange={(e) => {
+                                                    const newAppliesTo = e.target.checked
+                                                      ? [...currentAppliesTo, tag.name]
+                                                      : currentAppliesTo.filter(t => t !== tag.name);
+                                                    handleUpdateLegacyRule(rule.id, { globalAppliesTo: newAppliesTo });
+                                                  }}
+                                                  className="accent-purple-500 w-3 h-3"
+                                                />
+                                                {tag.name}
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </div>
                                   ))
                                 )}
@@ -15626,7 +15793,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                 </p>
               </div>
               <button
-                onClick={() => setShowPromptLibrary(false)}
+                onClick={() => {
+                  setShowPromptLibrary(false);
+                  cancelEditLibraryItem();
+                }}
                 className="text-gray-400 hover:text-white text-3xl leading-none"
               >
                 &times;
@@ -15732,7 +15902,31 @@ Start by introducing yourself and asking about their business in a friendly way.
                             content = activeSmartPrompt.guidance;
                             tag = activeSmartPrompt.tag;
                           }
+                        } else if (promptLibraryMode === 'rule') {
+                          // Get rule content from active rule
+                          if (promptLibraryTarget === 'guided_gpt') {
+                            const rules = settings.guided_gpt_rules || [];
+                            const activeRule = rules.find(r => r.id === guidedRulesEditingId);
+                            if (activeRule) {
+                              content = activeRule.text;
+                              tag = activeRule.tag;
+                            }
+                          } else if (promptLibraryTarget === 'smart_prompt') {
+                            const rules = settings.legacy_prompt_rules || [];
+                            const activeRule = rules.find(r => r.id === legacyRulesEditingId);
+                            if (activeRule) {
+                              content = activeRule.text;
+                              tag = activeRule.tag;
+                            }
+                          }
                         }
+
+                        // Validate content exists
+                        if (!content.trim()) {
+                          showNotification(`No active ${promptLibraryMode} selected or content is empty`, 'error');
+                          return;
+                        }
+
                         saveToPromptLibrary(content, tag);
                       }}
                       className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded transition font-medium"
@@ -15760,42 +15954,100 @@ Start by introducing yourself and asking about their business in a friendly way.
                           key={item.id}
                           className="bg-slate-800 rounded-lg p-4 border border-slate-700 hover:border-purple-500/50 transition"
                         >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <h3 className="font-medium text-white">{item.name}</h3>
-                                {item.is_global && (
-                                  <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded">
-                                    GLOBAL
-                                  </span>
-                                )}
-                                {item.tag && (
-                                  <span className="text-[10px] bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded">
-                                    {item.tag}
-                                  </span>
-                                )}
+                          {/* Edit Mode */}
+                          {promptLibraryEditItem?.id === item.id ? (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-xs text-gray-400 mb-1">Name *</label>
+                                <input
+                                  type="text"
+                                  value={promptLibraryEditName}
+                                  onChange={(e) => setPromptLibraryEditName(e.target.value)}
+                                  className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-sm focus:border-purple-500 focus:outline-none"
+                                  placeholder="Name..."
+                                />
                               </div>
-                              {item.description && (
-                                <p className="text-sm text-slate-400 mt-1">{item.description}</p>
-                              )}
-                              <p className="text-xs text-slate-500 mt-2 line-clamp-2">{item.content}</p>
+                              <div>
+                                <label className="block text-xs text-gray-400 mb-1">Description</label>
+                                <input
+                                  type="text"
+                                  value={promptLibraryEditDesc}
+                                  onChange={(e) => setPromptLibraryEditDesc(e.target.value)}
+                                  className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-sm focus:border-purple-500 focus:outline-none"
+                                  placeholder="Optional description..."
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-400 mb-1">Content *</label>
+                                <textarea
+                                  value={promptLibraryEditContent}
+                                  onChange={(e) => setPromptLibraryEditContent(e.target.value)}
+                                  className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-sm focus:border-purple-500 focus:outline-none resize-y min-h-[120px]"
+                                  placeholder="Prompt/rule content..."
+                                  rows={5}
+                                />
+                              </div>
+                              <div className="flex items-center justify-end gap-2 pt-2">
+                                <button
+                                  onClick={cancelEditLibraryItem}
+                                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={saveEditLibraryItem}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded transition"
+                                >
+                                  💾 Save Changes
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2 ml-4">
-                              <button
-                                onClick={() => applyFromPromptLibrary(item)}
-                                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition"
-                              >
-                                Apply
-                              </button>
-                              <button
-                                onClick={() => deleteFromPromptLibrary(item.id)}
-                                className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition"
-                                title="Delete"
-                              >
-                                🗑️
-                              </button>
+                          ) : (
+                            /* View Mode */
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h3 className="font-medium text-white">{item.name}</h3>
+                                  {item.is_global && (
+                                    <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded">
+                                      GLOBAL
+                                    </span>
+                                  )}
+                                  {item.tag && (
+                                    <span className="text-[10px] bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded">
+                                      {item.tag}
+                                    </span>
+                                  )}
+                                </div>
+                                {item.description && (
+                                  <p className="text-sm text-slate-400 mt-1">{item.description}</p>
+                                )}
+                                <p className="text-xs text-slate-500 mt-2 line-clamp-2">{item.content}</p>
+                              </div>
+                              <div className="flex items-center gap-2 ml-4">
+                                <button
+                                  onClick={() => startEditLibraryItem(item)}
+                                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded transition"
+                                  title="Edit"
+                                >
+                                  ✏️ Edit
+                                </button>
+                                <button
+                                  onClick={() => applyFromPromptLibrary(item)}
+                                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition"
+                                >
+                                  Apply
+                                </button>
+                                <button
+                                  onClick={() => deleteFromPromptLibrary(item.id)}
+                                  className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition"
+                                  title="Delete"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       ))}
                     </div>
