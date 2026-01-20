@@ -3845,4 +3845,186 @@ router.delete('/prompt-library/:id', requireDb, async (req, res) => {
   }
 });
 
+// =====================================
+// VERSION HISTORY ENDPOINTS
+// =====================================
+
+/**
+ * GET /api/image-creation/version-history
+ * Get version history for a specific entity type
+ * Query params: websiteId, workflowId, entityType, entityId
+ */
+router.get('/version-history', requireDb, async (req, res) => {
+  try {
+    const { websiteId, workflowId, entityType, entityId, limit = 50 } = req.query;
+
+    console.log('[Version History] GET:', { websiteId, workflowId, entityType, entityId });
+
+    let result;
+    if (entityId && entityType) {
+      // Get history for a specific entity
+      if (workflowId) {
+        result = await sql`
+          SELECT * FROM version_history
+          WHERE workflow_id = ${workflowId}
+            AND entity_type = ${entityType}
+            AND entity_id = ${entityId}
+          ORDER BY created_at DESC
+          LIMIT ${parseInt(limit)}
+        `;
+      } else if (websiteId) {
+        result = await sql`
+          SELECT * FROM version_history
+          WHERE website_id = ${websiteId}
+            AND entity_type = ${entityType}
+            AND entity_id = ${entityId}
+          ORDER BY created_at DESC
+          LIMIT ${parseInt(limit)}
+        `;
+      }
+    } else if (entityType) {
+      // Get all history for an entity type
+      if (workflowId) {
+        result = await sql`
+          SELECT * FROM version_history
+          WHERE workflow_id = ${workflowId}
+            AND entity_type = ${entityType}
+          ORDER BY created_at DESC
+          LIMIT ${parseInt(limit)}
+        `;
+      } else if (websiteId) {
+        result = await sql`
+          SELECT * FROM version_history
+          WHERE website_id = ${websiteId}
+            AND entity_type = ${entityType}
+          ORDER BY created_at DESC
+          LIMIT ${parseInt(limit)}
+        `;
+      }
+    } else {
+      // Get all history
+      if (workflowId) {
+        result = await sql`
+          SELECT * FROM version_history
+          WHERE workflow_id = ${workflowId}
+          ORDER BY created_at DESC
+          LIMIT ${parseInt(limit)}
+        `;
+      } else if (websiteId) {
+        result = await sql`
+          SELECT * FROM version_history
+          WHERE website_id = ${websiteId}
+          ORDER BY created_at DESC
+          LIMIT ${parseInt(limit)}
+        `;
+      } else {
+        return res.status(400).json({ error: 'Either websiteId or workflowId is required' });
+      }
+    }
+
+    console.log('[Version History] Found:', result?.length || 0, 'entries');
+    res.json({ success: true, versions: result || [] });
+
+  } catch (error) {
+    // Handle missing table gracefully
+    if (error.message?.includes('version_history') && error.message?.includes('does not exist')) {
+      console.log('[Version History] Table not created yet - run migration 025');
+      return res.json({ success: true, versions: [], message: 'Table not yet created - run migration 025' });
+    }
+    console.error('[Version History] GET error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/image-creation/version-history
+ * Save a new version to history
+ */
+router.post('/version-history', requireDb, async (req, res) => {
+  try {
+    const {
+      websiteId,
+      workflowId,
+      entityType,
+      entityId,
+      versionName,
+      content,
+      notes,
+      createdBy = 'manual'
+    } = req.body;
+
+    console.log('[Version History] POST:', { websiteId, workflowId, entityType, entityId, versionName, createdBy });
+
+    if (!entityType || !entityId || !content) {
+      return res.status(400).json({ error: 'entityType, entityId, and content are required' });
+    }
+
+    if (!websiteId && !workflowId) {
+      return res.status(400).json({ error: 'Either websiteId or workflowId is required' });
+    }
+
+    const result = await sql`
+      INSERT INTO version_history (
+        website_id,
+        workflow_id,
+        entity_type,
+        entity_id,
+        version_name,
+        content,
+        notes,
+        created_by
+      ) VALUES (
+        ${websiteId || null},
+        ${workflowId || null},
+        ${entityType},
+        ${entityId},
+        ${versionName || null},
+        ${JSON.stringify(content)},
+        ${notes || null},
+        ${createdBy}
+      )
+      RETURNING *
+    `;
+
+    console.log('[Version History] Created version:', result[0]?.id);
+    res.json({ success: true, version: result[0] });
+
+  } catch (error) {
+    // Handle missing table gracefully
+    if (error.message?.includes('version_history') && error.message?.includes('does not exist')) {
+      console.log('[Version History] Table not created yet - run migration 025');
+      return res.status(503).json({ error: 'Version history table not created - run migration 025' });
+    }
+    console.error('[Version History] POST error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/image-creation/version-history/:id
+ * Delete a specific version from history
+ */
+router.delete('/version-history/:id', requireDb, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await sql`
+      DELETE FROM version_history
+      WHERE id = ${id}
+      RETURNING id, entity_type, entity_id, version_name
+    `;
+
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Version not found' });
+    }
+
+    console.log('[Version History] Deleted version:', id);
+    res.json({ success: true, deleted: result[0] });
+
+  } catch (error) {
+    console.error('[Version History] DELETE error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

@@ -790,6 +790,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [promptLibrarySaveName, setPromptLibrarySaveName] = useState('');
   const [promptLibrarySaveDesc, setPromptLibrarySaveDesc] = useState('');
   const [promptLibrarySaveGlobal, setPromptLibrarySaveGlobal] = useState(false);
+  // Version History panel state
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [versionHistoryType, setVersionHistoryType] = useState<'avatar' | 'placeholder' | 'guided_gpt_prompt' | 'guided_gpt_rule' | 'smart_prompt_prompt' | 'smart_prompt_rule'>('avatar');
+  const [versionHistoryEntityId, setVersionHistoryEntityId] = useState<string>('');
+  const [versionHistoryEntityName, setVersionHistoryEntityName] = useState<string>('');
+  const [versionHistoryItems, setVersionHistoryItems] = useState<any[]>([]);
+  const [versionHistoryLoading, setVersionHistoryLoading] = useState(false);
+  const [versionHistorySaveMode, setVersionHistorySaveMode] = useState(false);
+  const [versionHistorySaveName, setVersionHistorySaveName] = useState('');
+  const [versionHistorySaveNotes, setVersionHistorySaveNotes] = useState('');
   // Placeholder template editing state
   const [editingPlaceholderTemplate, setEditingPlaceholderTemplate] = useState<PlaceholderCategoryTemplate | null>(null);
   const [editPlaceholderTemplateName, setEditPlaceholderTemplateName] = useState('');
@@ -813,6 +823,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [newSnippetText, setNewSnippetText] = useState('');
   const [newSnippetCategory, setNewSnippetCategory] = useState('');
   const [showSnippetAddForm, setShowSnippetAddForm] = useState(false);
+  // Save Chat dialog state
+  const [showSaveChatDialog, setShowSaveChatDialog] = useState(false);
+  const [saveChatTitle, setSaveChatTitle] = useState('');
+  const [saveChatFileId, setSaveChatFileId] = useState<string | undefined>(undefined);
+  // Chat search state
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [chatSearchResults, setChatSearchResults] = useState<Array<{conversationId: string; messageIndex: number; snippet: string}>>([]);
 
   // Legacy Chat (keeping for backwards compatibility)
   const [chatInput, setChatInput] = useState('');
@@ -935,6 +952,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [guidedAssistantMessages, setGuidedAssistantMessages] = useState<ChatMessage[]>([]);
   const [guidedAssistantInput, setGuidedAssistantInput] = useState('');
   const [guidedAssistantImages, setGuidedAssistantImages] = useState<string[]>([]);
+  const [guidedAssistantDocument, setGuidedAssistantDocument] = useState<{name: string; content: string} | null>(null);
+  const guidedAssistantDocInputRef = useRef<HTMLInputElement>(null);
   const [guidedAssistantLoading, setGuidedAssistantLoading] = useState(false);
   const guidedAssistantChatRef = useRef<HTMLDivElement>(null);
   const guidedAssistantFileInputRef = useRef<HTMLInputElement>(null);
@@ -976,6 +995,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     recentArticles: Array<{ id: number; keyword: string; tag: string; word_count: number; status: string }>;
   } | null>(null);
   const [showArticleLoader, setShowArticleLoader] = useState(false);
+  // Article selection panel state
+  const [showArticleSelector, setShowArticleSelector] = useState(false);
+  const [selectableArticlesList, setSelectableArticlesList] = useState<Array<{
+    id: number;
+    keyword: string;
+    tag?: string;
+    word_count?: number;
+    status: string;
+    website_name?: string;
+    client_name?: string;
+    content?: string;
+  }>>([]);
+  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<number>>(new Set());
+  const [articleSelectorSearch, setArticleSelectorSearch] = useState('');
+  const [fetchingSelectableList, setFetchingSelectableList] = useState(false);
 
   // Testing Mode state - sandbox for generating test images with MULTIPLE TABS
   const [testingModeOpen, setTestingModeOpen] = useState(false);
@@ -3081,6 +3115,208 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
   };
 
+  // ========== VERSION HISTORY FUNCTIONS ==========
+
+  // Fetch version history for an entity
+  const fetchVersionHistory = async (
+    entityType: 'avatar' | 'placeholder' | 'guided_gpt_prompt' | 'guided_gpt_rule' | 'smart_prompt_prompt' | 'smart_prompt_rule',
+    entityId: string
+  ) => {
+    setVersionHistoryLoading(true);
+    try {
+      const websiteId = workflow?.website_id;
+      const workflowId = workflow?.id;
+      const params = new URLSearchParams({
+        entityType,
+        entityId,
+        ...(websiteId && { websiteId: String(websiteId) }),
+        ...(workflowId && { workflowId: String(workflowId) })
+      });
+      const res = await fetch(`/api/image-creation/version-history?${params}`);
+      const data = await res.json();
+      if (data.success) {
+        setVersionHistoryItems(data.versions || []);
+      } else {
+        showNotification(data.error || 'Failed to fetch history', 'error');
+      }
+    } catch (error) {
+      console.error('Version history fetch error:', error);
+      showNotification('Failed to load version history', 'error');
+    }
+    setVersionHistoryLoading(false);
+  };
+
+  // Open version history panel
+  const openVersionHistory = (
+    entityType: 'avatar' | 'placeholder' | 'guided_gpt_prompt' | 'guided_gpt_rule' | 'smart_prompt_prompt' | 'smart_prompt_rule',
+    entityId: string,
+    entityName: string
+  ) => {
+    setVersionHistoryType(entityType);
+    setVersionHistoryEntityId(entityId);
+    setVersionHistoryEntityName(entityName);
+    setVersionHistorySaveMode(false);
+    setVersionHistorySaveName('');
+    setVersionHistorySaveNotes('');
+    setShowVersionHistory(true);
+    fetchVersionHistory(entityType, entityId);
+  };
+
+  // Get the current content for an entity (to save as a version)
+  const getCurrentEntityContent = (
+    entityType: 'avatar' | 'placeholder' | 'guided_gpt_prompt' | 'guided_gpt_rule' | 'smart_prompt_prompt' | 'smart_prompt_rule',
+    entityId: string
+  ): any => {
+    switch (entityType) {
+      case 'avatar': {
+        const avatar = settings.audience_avatars.find(a => String(a.id) === entityId);
+        return avatar ? {
+          name: avatar.name,
+          tag: avatar.tag,
+          mainPrompt: avatar.mainPrompt,
+          placeholderCategories: avatar.placeholderCategories
+        } : null;
+      }
+      case 'placeholder': {
+        const avatar = settings.audience_avatars.find(a => String(a.id) === activeAvatarId);
+        const category = avatar?.placeholderCategories?.find(c => c.letter === entityId);
+        return category ? { ...category } : null;
+      }
+      case 'guided_gpt_prompt': {
+        const prompt = (settings.guided_gpt_prompts || []).find((p: GuidedGptPrompt) => p.id === entityId);
+        return prompt ? { ...prompt } : null;
+      }
+      case 'guided_gpt_rule': {
+        const rule = (settings.guided_gpt_rules || []).find((r: TagBasedRule) => r.id === entityId);
+        return rule ? { ...rule } : null;
+      }
+      case 'smart_prompt_prompt': {
+        const prompt = (settings.smart_prompt_prompts || []).find((p: SmartPromptPrompt) => p.id === entityId);
+        return prompt ? { ...prompt } : null;
+      }
+      case 'smart_prompt_rule': {
+        const rule = (settings.legacy_prompt_rules || []).find((r: TagBasedRule) => r.id === entityId);
+        return rule ? { ...rule } : null;
+      }
+      default:
+        return null;
+    }
+  };
+
+  // Save current state as a new version
+  const saveVersionHistory = async () => {
+    const content = getCurrentEntityContent(versionHistoryType, versionHistoryEntityId);
+    if (!content) {
+      showNotification('Could not find entity content to save', 'error');
+      return;
+    }
+    try {
+      const res = await fetch('/api/image-creation/version-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          websiteId: workflow?.website_id,
+          workflowId: workflow?.id,
+          entityType: versionHistoryType,
+          entityId: versionHistoryEntityId,
+          versionName: versionHistorySaveName || `v${Date.now()}`,
+          content,
+          notes: versionHistorySaveNotes,
+          createdBy: 'manual'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification('Version saved!', 'success');
+        setVersionHistorySaveMode(false);
+        setVersionHistorySaveName('');
+        setVersionHistorySaveNotes('');
+        fetchVersionHistory(versionHistoryType, versionHistoryEntityId);
+      } else {
+        showNotification(data.error || 'Failed to save version', 'error');
+      }
+    } catch (error) {
+      console.error('Save version error:', error);
+      showNotification('Failed to save version', 'error');
+    }
+  };
+
+  // Restore a version
+  const restoreVersion = (version: any) => {
+    if (!confirm(`Restore "${version.version_name || 'this version'}"? This will overwrite the current content.`)) return;
+
+    const content = typeof version.content === 'string' ? JSON.parse(version.content) : version.content;
+
+    switch (versionHistoryType) {
+      case 'avatar': {
+        const updatedAvatars = settings.audience_avatars.map(a =>
+          String(a.id) === versionHistoryEntityId ? { ...a, ...content, id: a.id } : a
+        );
+        updateSettings({ audience_avatars: updatedAvatars });
+        break;
+      }
+      case 'placeholder': {
+        const avatar = settings.audience_avatars.find(a => String(a.id) === activeAvatarId);
+        if (avatar?.placeholderCategories) {
+          const updatedCategories = avatar.placeholderCategories.map(c =>
+            c.letter === versionHistoryEntityId ? { ...c, ...content, letter: c.letter } : c
+          );
+          handleUpdateAvatar(activeAvatarId, { placeholderCategories: updatedCategories });
+        }
+        break;
+      }
+      case 'guided_gpt_prompt': {
+        const updatedPrompts = (settings.guided_gpt_prompts || []).map((p: GuidedGptPrompt) =>
+          p.id === versionHistoryEntityId ? { ...p, ...content, id: p.id } : p
+        );
+        updateSettings({ guided_gpt_prompts: updatedPrompts });
+        break;
+      }
+      case 'guided_gpt_rule': {
+        const updatedRules = (settings.guided_gpt_rules || []).map((r: TagBasedRule) =>
+          r.id === versionHistoryEntityId ? { ...r, ...content, id: r.id } : r
+        );
+        updateSettings({ guided_gpt_rules: updatedRules });
+        break;
+      }
+      case 'smart_prompt_prompt': {
+        const updatedPrompts = (settings.smart_prompt_prompts || []).map((p: SmartPromptPrompt) =>
+          p.id === versionHistoryEntityId ? { ...p, ...content, id: p.id } : p
+        );
+        updateSettings({ smart_prompt_prompts: updatedPrompts });
+        break;
+      }
+      case 'smart_prompt_rule': {
+        const updatedRules = (settings.legacy_prompt_rules || []).map((r: TagBasedRule) =>
+          r.id === versionHistoryEntityId ? { ...r, ...content, id: r.id } : r
+        );
+        updateSettings({ legacy_prompt_rules: updatedRules });
+        break;
+      }
+    }
+    showNotification('Version restored!', 'success');
+    setShowVersionHistory(false);
+  };
+
+  // Delete a version
+  const deleteVersion = async (versionId: number) => {
+    if (!confirm('Delete this version from history?')) return;
+    try {
+      const res = await fetch(`/api/image-creation/version-history/${versionId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification('Version deleted', 'success');
+        setVersionHistoryItems(versionHistoryItems.filter(v => v.id !== versionId));
+      } else {
+        showNotification(data.error || 'Failed to delete', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to delete version', 'error');
+    }
+  };
+
   // Chat Handlers
   const handleSendChat = async () => {
     if (!chatInput.trim() && chatImages.length === 0) return;
@@ -3714,10 +3950,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   };
 
   /**
-   * Save current unfiled chat to the file system
+   * Open save chat dialog with title prompt
+   */
+  const openSaveChatDialog = (fileId?: string) => {
+    if (guidedAssistantMessages.length === 0) {
+      showNotification('No messages to save', 'error');
+      return;
+    }
+    // Pre-fill with date-based name
+    setSaveChatTitle(`Chat ${new Date().toLocaleDateString()}`);
+    setSaveChatFileId(fileId);
+    setShowSaveChatDialog(true);
+  };
+
+  /**
+   * Save current unfiled chat to the file system with custom title
    * (Migrates consultant_chat_history to a new conversation)
    */
-  const handleSaveCurrentChatAsConversation = (fileId?: string) => {
+  const handleSaveCurrentChatAsConversation = (title: string, fileId?: string) => {
     if (guidedAssistantMessages.length === 0) {
       showNotification('No messages to save', 'error');
       return;
@@ -3725,7 +3975,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
     const newConversation: ChatConversation = {
       id: `conv-${Date.now()}`,
-      name: `Chat ${new Date().toLocaleDateString()}`,
+      name: title || `Chat ${new Date().toLocaleDateString()}`,
       fileId,
       messages: guidedAssistantMessages,
       createdAt: new Date().toISOString(),
@@ -3737,7 +3987,44 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       consultant_chat_history: [] // Clear the unfiled history
     });
     setActiveConversationId(newConversation.id);
-    showNotification('Chat saved to file system', 'success');
+    setShowSaveChatDialog(false);
+    setSaveChatTitle('');
+    showNotification('Chat saved!', 'success');
+  };
+
+  /**
+   * Search through saved conversations
+   */
+  const handleChatSearch = (query: string) => {
+    setChatSearchQuery(query);
+    if (!query.trim()) {
+      setChatSearchResults([]);
+      return;
+    }
+
+    const results: Array<{conversationId: string; conversationName: string; messageIndex: number; snippet: string}> = [];
+    const lowerQuery = query.toLowerCase();
+
+    (settings.consultant_chat_conversations || []).forEach(conv => {
+      conv.messages.forEach((msg, idx) => {
+        if (msg.content.toLowerCase().includes(lowerQuery)) {
+          // Get snippet around the match
+          const matchIndex = msg.content.toLowerCase().indexOf(lowerQuery);
+          const start = Math.max(0, matchIndex - 30);
+          const end = Math.min(msg.content.length, matchIndex + query.length + 30);
+          const snippet = (start > 0 ? '...' : '') + msg.content.slice(start, end) + (end < msg.content.length ? '...' : '');
+
+          results.push({
+            conversationId: conv.id,
+            conversationName: conv.name,
+            messageIndex: idx,
+            snippet
+          });
+        }
+      });
+    });
+
+    setChatSearchResults(results);
   };
 
   /**
@@ -3745,11 +4032,17 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
    * This chat helps users refine guardrails and understand prompt techniques
    */
   const handleSendGuidedAssistant = async () => {
-    if (!guidedAssistantInput.trim() && guidedAssistantImages.length === 0) return;
+    if (!guidedAssistantInput.trim() && guidedAssistantImages.length === 0 && !guidedAssistantDocument) return;
+
+    // Build message content including document if attached
+    let messageContent = guidedAssistantInput;
+    if (guidedAssistantDocument) {
+      messageContent = `${guidedAssistantInput}\n\n📄 **Attached Document: ${guidedAssistantDocument.name}**\n\`\`\`\n${guidedAssistantDocument.content}\n\`\`\``;
+    }
 
     const newMessage: ChatMessage = {
       role: 'user',
-      content: guidedAssistantInput,
+      content: messageContent,
       images: guidedAssistantImages.length > 0 ? guidedAssistantImages : undefined,
       timestamp: new Date().toISOString()
     };
@@ -3774,6 +4067,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
     setGuidedAssistantInput('');
     setGuidedAssistantImages([]);
+    setGuidedAssistantDocument(null); // Clear document after sending
     setGuidedAssistantLoading(true);
 
     try {
@@ -3887,8 +4181,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           activeTab: activeTestingTab.name,
           currentPrompt: activeTestingTab.prompt,
           // Send ALL history - no limit, AI should see the full iteration journey
+          // Include imageUrl so AI can see the generated test images
           fullHistory: activeTestingTab.history.map(h => ({
             prompt: h.prompt,
+            imageUrl: h.url,  // history entry uses 'url' property
             model: h.model,
             timestamp: h.timestamp
           })),
@@ -4158,6 +4454,119 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   };
 
   /**
+   * Fetch all available articles for selection
+   */
+  const fetchSelectableArticleList = async () => {
+    if (!workflowId) return;
+    setFetchingSelectableList(true);
+    try {
+      const res = await fetch(`/api/articles?workflowId=${workflowId}&limit=200`);
+      const data = await res.json();
+      if (data.success && data.articles) {
+        setSelectableArticlesList(data.articles);
+      } else {
+        showNotification('Failed to fetch articles', 'error');
+      }
+    } catch (error) {
+      console.error('Failed to fetch articles:', error);
+      showNotification('Failed to fetch article list', 'error');
+    }
+    setFetchingSelectableList(false);
+  };
+
+  /**
+   * Open article selector panel
+   */
+  const openArticleSelector = () => {
+    setShowArticleSelector(true);
+    setArticleSelectorSearch('');
+    // Pre-select already loaded articles
+    setSelectedArticleIds(new Set(loadedArticles.map(a => a.id)));
+    fetchSelectableArticleList();
+  };
+
+  /**
+   * Toggle article selection
+   */
+  const toggleArticleSelection = (articleId: number) => {
+    setSelectedArticleIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(articleId)) {
+        newSet.delete(articleId);
+      } else {
+        newSet.add(articleId);
+      }
+      return newSet;
+    });
+  };
+
+  /**
+   * Select all filtered articles
+   */
+  const selectAllFilteredArticles = () => {
+    const filtered = getFilteredSelectableArticles();
+    setSelectedArticleIds(prev => {
+      const newSet = new Set(prev);
+      filtered.forEach(a => newSet.add(a.id));
+      return newSet;
+    });
+  };
+
+  /**
+   * Deselect all articles
+   */
+  const deselectAllArticles = () => {
+    setSelectedArticleIds(new Set());
+  };
+
+  /**
+   * Get filtered articles based on search query
+   */
+  const getFilteredSelectableArticles = () => {
+    if (!articleSelectorSearch.trim()) return selectableArticlesList;
+    const query = articleSelectorSearch.toLowerCase();
+    return selectableArticlesList.filter(a =>
+      a.keyword.toLowerCase().includes(query) ||
+      a.tag?.toLowerCase().includes(query) ||
+      a.website_name?.toLowerCase().includes(query) ||
+      a.client_name?.toLowerCase().includes(query)
+    );
+  };
+
+  /**
+   * Load selected articles as AI context
+   */
+  const loadSelectedArticles = async () => {
+    if (selectedArticleIds.size === 0) {
+      showNotification('No articles selected', 'error');
+      return;
+    }
+    setLoadingArticles(true);
+    try {
+      // Fetch full content for selected articles
+      const articleIds = Array.from(selectedArticleIds);
+      const params = new URLSearchParams();
+      params.append('workflowId', workflowId!.toString());
+      params.append('ids', articleIds.join(','));
+
+      const res = await fetch(`/api/prompt-assistant/articles?${params.toString()}`);
+      const data = await res.json();
+
+      if (data.success) {
+        setLoadedArticles(data.articles);
+        showNotification(`Loaded ${data.articles.length} articles for AI context`, 'success');
+        setShowArticleSelector(false);
+      } else {
+        showNotification(data.error || 'Failed to load articles', 'error');
+      }
+    } catch (error) {
+      console.error('Failed to load selected articles:', error);
+      showNotification('Failed to load articles', 'error');
+    }
+    setLoadingArticles(false);
+  };
+
+  /**
    * Handle image upload for Guided Assistant Chat
    */
   const handleGuidedAssistantImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4172,6 +4581,41 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       };
       reader.readAsDataURL(file);
     });
+
+    // Reset input
+    if (e.target) e.target.value = '';
+  };
+
+  /**
+   * Handle document upload for Guided Assistant Chat
+   * Supports: .txt, .md, .json, .csv, .html, .xml, .js, .ts, .py, .css
+   */
+  const handleGuidedAssistantDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const supportedExtensions = ['.txt', '.md', '.json', '.csv', '.html', '.xml', '.js', '.ts', '.jsx', '.tsx', '.py', '.css', '.scss', '.yaml', '.yml'];
+    const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+
+    if (!supportedExtensions.includes(ext)) {
+      showNotification(`Unsupported file type: ${ext}. Supported: ${supportedExtensions.join(', ')}`, 'error');
+      if (e.target) e.target.value = '';
+      return;
+    }
+
+    try {
+      const content = await file.text();
+      if (content.length > 100000) {
+        showNotification('File too large (max 100KB of text). Content will be truncated.', 'warning');
+        setGuidedAssistantDocument({ name: file.name, content: content.substring(0, 100000) + '\n\n[Content truncated...]' });
+      } else {
+        setGuidedAssistantDocument({ name: file.name, content });
+      }
+      showNotification(`Document "${file.name}" loaded`, 'success');
+    } catch (error) {
+      console.error('Error reading document:', error);
+      showNotification('Failed to read document', 'error');
+    }
 
     // Reset input
     if (e.target) e.target.value = '';
@@ -6956,6 +7400,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                               </div>
                               <div className="flex items-center gap-2">
                                 <button
+                                  onClick={() => openVersionHistory('guided_gpt_prompt', activeGuidedPrompt.id, activeGuidedPrompt.name)}
+                                  className="text-blue-400 hover:text-blue-300 p-1 rounded hover:bg-blue-900/30 transition text-xs"
+                                  title="View and restore previous versions"
+                                >
+                                  History
+                                </button>
+                                <button
                                   onClick={() => {
                                     setPromptLibrarySaveName(activeGuidedPrompt.name);
                                     openPromptLibrary('prompt', 'guided_gpt', true);
@@ -7164,15 +7615,24 @@ Start by introducing yourself and asking about their business in a friendly way.
                                             placeholder="Rule title..."
                                           />
                                         </div>
-                                        <button
-                                          onClick={() => handleRemoveGuidedRule(rule.id)}
-                                          className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
-                                          title="Remove rule"
-                                        >
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                          </svg>
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            onClick={() => openVersionHistory('guided_gpt_rule', rule.id, rule.title)}
+                                            className="text-blue-400 hover:text-blue-300 p-1 rounded hover:bg-blue-900/30 transition text-xs"
+                                            title="View version history"
+                                          >
+                                            History
+                                          </button>
+                                          <button
+                                            onClick={() => handleRemoveGuidedRule(rule.id)}
+                                            className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
+                                            title="Remove rule"
+                                          >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                          </button>
+                                        </div>
                                       </div>
                                       <textarea
                                         value={rule.text}
@@ -7262,9 +7722,9 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   {guidedAssistantMessages.length > 0 && !activeConversationId && (
                                     <button
                                       type="button"
-                                      onClick={() => handleSaveCurrentChatAsConversation()}
+                                      onClick={() => openSaveChatDialog()}
                                       className="px-2 py-1 bg-blue-700 hover:bg-blue-600 rounded text-[10px] text-white transition"
-                                      title="Save current chat to file system"
+                                      title="Save current chat with title"
                                     >
                                       Save
                                     </button>
@@ -7272,9 +7732,44 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               </div>
 
+                              {/* Save Chat Dialog */}
+                              {showSaveChatDialog && (
+                                <div className="bg-slate-900 border border-blue-500/50 rounded-lg p-3 mb-2">
+                                  <div className="text-xs text-blue-400 font-medium mb-2">Save Chat</div>
+                                  <input
+                                    type="text"
+                                    value={saveChatTitle}
+                                    onChange={(e) => setSaveChatTitle(e.target.value)}
+                                    placeholder="Enter chat title..."
+                                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-white placeholder-slate-500 mb-2"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveCurrentChatAsConversation(saveChatTitle, saveChatFileId);
+                                      if (e.key === 'Escape') { setShowSaveChatDialog(false); setSaveChatTitle(''); }
+                                    }}
+                                  />
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => { setShowSaveChatDialog(false); setSaveChatTitle(''); }}
+                                      className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-[10px] text-slate-300 transition"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveCurrentChatAsConversation(saveChatTitle, saveChatFileId)}
+                                      className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-[10px] text-white transition"
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
                               {/* File Manager Panel */}
                               {showChatFileManager && (
-                                <div className="bg-slate-900 border border-emerald-500/30 rounded-lg p-2 max-h-48 overflow-y-auto">
+                                <div className="bg-slate-900 border border-emerald-500/30 rounded-lg p-2 max-h-64 overflow-y-auto">
                                   <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-700">
                                     <span className="text-xs text-emerald-400 font-medium">Chat Files</span>
                                     <div className="flex items-center gap-1">
@@ -7296,6 +7791,57 @@ Start by introducing yourself and asking about their business in a friendly way.
                                       </button>
                                     </div>
                                   </div>
+
+                                  {/* Search Bar */}
+                                  <div className="mb-2">
+                                    <div className="relative">
+                                      <input
+                                        type="text"
+                                        value={chatSearchQuery}
+                                        onChange={(e) => handleChatSearch(e.target.value)}
+                                        placeholder="Search chats..."
+                                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 pl-7 text-[10px] text-white placeholder-slate-500"
+                                      />
+                                      <svg className="w-3 h-3 absolute left-2 top-1.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                      </svg>
+                                      {chatSearchQuery && (
+                                        <button
+                                          type="button"
+                                          onClick={() => { setChatSearchQuery(''); setChatSearchResults([]); }}
+                                          className="absolute right-1.5 top-1 text-slate-500 hover:text-slate-300"
+                                        >
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                          </svg>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Search Results */}
+                                  {chatSearchResults.length > 0 && (
+                                    <div className="mb-2 pb-2 border-b border-slate-700">
+                                      <div className="text-[9px] text-yellow-500 mb-1">Search Results ({chatSearchResults.length})</div>
+                                      {chatSearchResults.slice(0, 10).map((result, idx) => (
+                                        <div
+                                          key={`${result.conversationId}-${result.messageIndex}-${idx}`}
+                                          className="p-1.5 rounded cursor-pointer text-[10px] hover:bg-slate-800 text-slate-400 mb-1"
+                                          onClick={() => {
+                                            handleSwitchConversation(result.conversationId);
+                                            setChatSearchQuery('');
+                                            setChatSearchResults([]);
+                                          }}
+                                        >
+                                          <div className="font-medium text-yellow-400 truncate">{result.conversationName}</div>
+                                          <div className="text-slate-500 truncate">{result.snippet}</div>
+                                        </div>
+                                      ))}
+                                      {chatSearchResults.length > 10 && (
+                                        <div className="text-[9px] text-slate-500 text-center">...and {chatSearchResults.length - 10} more results</div>
+                                      )}
+                                    </div>
+                                  )}
 
                                   {/* Unfiled Chats */}
                                   {getConversationsInFile(undefined).length > 0 && (
@@ -7781,8 +8327,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               )}
 
-                              {/* Image attachments preview */}
-                              {guidedAssistantImages.length > 0 && (
+                              {/* Image and document attachments preview */}
+                              {(guidedAssistantImages.length > 0 || guidedAssistantDocument) && (
                                 <div className="flex flex-wrap gap-2 p-2 bg-slate-900 rounded-lg">
                                   {guidedAssistantImages.map((img, idx) => (
                                     <div key={idx} className="relative group">
@@ -7797,6 +8343,23 @@ Start by introducing yourself and asking about their business in a friendly way.
                                       </button>
                                     </div>
                                   ))}
+                                  {guidedAssistantDocument && (
+                                    <div className="relative group flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded">
+                                      <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                      <span className="text-xs text-slate-300">{guidedAssistantDocument.name}</span>
+                                      <span className="text-[10px] text-slate-500">({(guidedAssistantDocument.content.length / 1000).toFixed(1)}KB)</span>
+                                      <button
+                                        onClick={() => setGuidedAssistantDocument(null)}
+                                        className="w-4 h-4 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                      >
+                                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               )}
 
@@ -7810,6 +8373,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   onChange={handleGuidedAssistantImageUpload}
                                   className="hidden"
                                 />
+                                <input
+                                  ref={guidedAssistantDocInputRef}
+                                  type="file"
+                                  accept=".txt,.md,.json,.csv,.html,.xml,.js,.ts,.jsx,.tsx,.py,.css,.scss,.yaml,.yml"
+                                  onChange={handleGuidedAssistantDocUpload}
+                                  className="hidden"
+                                />
                                 <button
                                   onClick={() => guidedAssistantFileInputRef.current?.click()}
                                   className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition"
@@ -7820,16 +8390,26 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   </svg>
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    setShowArticleLoader(!showArticleLoader);
-                                    if (!articleSummary) fetchArticleSummary();
-                                  }}
+                                  onClick={() => guidedAssistantDocInputRef.current?.click()}
+                                  className={`p-2 rounded-lg transition ${
+                                    guidedAssistantDocument
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white'
+                                  }`}
+                                  title="Attach document (.txt, .md, .json, etc.)"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={openArticleSelector}
                                   className={`p-2 rounded-lg transition ${
                                     loadedArticles.length > 0
                                       ? 'bg-blue-600 text-white'
                                       : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white'
                                   }`}
-                                  title={loadedArticles.length > 0 ? `${loadedArticles.length} articles loaded` : 'Load articles for AI to read'}
+                                  title={loadedArticles.length > 0 ? `${loadedArticles.length} articles loaded - click to select more` : 'Select articles for AI to read'}
                                 >
                                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -8984,6 +9564,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                               </div>
                               <div className="flex items-center gap-2">
                                 <button
+                                  onClick={() => openVersionHistory('smart_prompt_prompt', activeSmartPrompt.id, activeSmartPrompt.name)}
+                                  className="text-blue-400 hover:text-blue-300 p-1 rounded hover:bg-blue-900/30 transition text-xs"
+                                  title="View and restore previous versions"
+                                >
+                                  History
+                                </button>
+                                <button
                                   onClick={() => {
                                     setPromptLibrarySaveName(activeSmartPrompt.name);
                                     openPromptLibrary('prompt', 'smart_prompt', true);
@@ -9152,15 +9739,24 @@ Start by introducing yourself and asking about their business in a friendly way.
                                             placeholder="Rule title..."
                                           />
                                         </div>
-                                        <button
-                                          onClick={() => handleRemoveLegacyRule(rule.id)}
-                                          className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
-                                          title="Remove rule"
-                                        >
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                          </svg>
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            onClick={() => openVersionHistory('smart_prompt_rule', rule.id, rule.title)}
+                                            className="text-blue-400 hover:text-blue-300 p-1 rounded hover:bg-blue-900/30 transition text-xs"
+                                            title="View version history"
+                                          >
+                                            History
+                                          </button>
+                                          <button
+                                            onClick={() => handleRemoveLegacyRule(rule.id)}
+                                            className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
+                                            title="Remove rule"
+                                          >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                          </button>
+                                        </div>
                                       </div>
                                       <textarea
                                         value={rule.text}
@@ -11070,6 +11666,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                   {/* Prompt Template Buttons */}
                   <div className="flex items-center gap-2 ml-auto">
                     <button
+                      onClick={() => openVersionHistory('avatar', String(activeAvatar.id), activeAvatar.name)}
+                      className="px-3 py-1.5 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-xs font-medium transition"
+                      title="View and restore previous versions of this avatar"
+                    >
+                      History
+                    </button>
+                    <button
                       onClick={() => setShowPromptTemplatePopup('save')}
                       className="px-3 py-1.5 bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/50 rounded text-emerald-300 text-xs font-medium transition"
                       title="Save current prompt as template"
@@ -11314,6 +11917,16 @@ Start by introducing yourself and asking about their business in a friendly way.
                           {isCategoryCollapsed && (
                             <span className="text-xs text-slate-500">{category.options.length} options</span>
                           )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openVersionHistory('placeholder', category.letter, `${category.name} (${category.letter})`);
+                            }}
+                            className="px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-[10px] transition"
+                            title="View and restore previous versions of this category"
+                          >
+                            History
+                          </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -15122,6 +15735,303 @@ Start by introducing yourself and asking about their business in a friendly way.
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========== VERSION HISTORY MODAL ========== */}
+      {showVersionHistory && createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[800px] max-h-[80vh] flex flex-col border border-blue-500/30">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-blue-500/30 shrink-0">
+              <div>
+                <h2 className="text-xl font-semibold text-blue-400">
+                  Version History
+                  <span className="text-sm font-normal text-slate-400 ml-2">
+                    {versionHistoryEntityName}
+                  </span>
+                </h2>
+                <p className="text-sm text-gray-400 mt-1">
+                  {versionHistorySaveMode
+                    ? 'Save the current state as a named version'
+                    : 'View and restore previous versions'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowVersionHistory(false)}
+                className="text-gray-400 hover:text-white text-3xl leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto p-4">
+              {versionHistorySaveMode ? (
+                /* Save Version Mode */
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Version Name</label>
+                    <input
+                      type="text"
+                      value={versionHistorySaveName}
+                      onChange={(e) => setVersionHistorySaveName(e.target.value)}
+                      placeholder="e.g., Before major rewrite"
+                      className="w-full bg-slate-800 border border-blue-500/50 rounded px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Notes (optional)</label>
+                    <textarea
+                      value={versionHistorySaveNotes}
+                      onChange={(e) => setVersionHistorySaveNotes(e.target.value)}
+                      placeholder="Why are you saving this version?"
+                      className="w-full bg-slate-800 border border-blue-500/50 rounded px-3 py-2 text-white resize-none"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-4">
+                    <button
+                      onClick={() => setVersionHistorySaveMode(false)}
+                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveVersionHistory}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded transition font-medium"
+                    >
+                      Save Version
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Browse History Mode */
+                <div className="space-y-4">
+                  {/* Save Version Button */}
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => setVersionHistorySaveMode(true)}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition"
+                    >
+                      + Save Current as Version
+                    </button>
+                  </div>
+
+                  {versionHistoryLoading ? (
+                    <div className="text-center py-8 text-slate-400">
+                      Loading history...
+                    </div>
+                  ) : versionHistoryItems.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400">
+                      <p>No version history yet.</p>
+                      <p className="text-sm mt-2">Save your first version to start tracking changes!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {versionHistoryItems.map((version) => (
+                        <div
+                          key={version.id}
+                          className="bg-slate-800 rounded-lg p-4 border border-slate-700 hover:border-blue-500/50 transition"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-medium text-white">
+                                  {version.version_name || `Version ${version.id}`}
+                                </h3>
+                                <span className="text-[10px] bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded">
+                                  {version.created_by}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 mt-1">
+                                {new Date(version.created_at).toLocaleString()}
+                              </p>
+                              {version.notes && (
+                                <p className="text-sm text-slate-400 mt-2">{version.notes}</p>
+                              )}
+                              {/* Content Preview */}
+                              <details className="mt-2">
+                                <summary className="text-xs text-blue-400 cursor-pointer hover:text-blue-300">
+                                  View content
+                                </summary>
+                                <pre className="text-xs text-slate-500 mt-2 p-2 bg-slate-900 rounded overflow-auto max-h-32">
+                                  {JSON.stringify(
+                                    typeof version.content === 'string'
+                                      ? JSON.parse(version.content)
+                                      : version.content,
+                                    null,
+                                    2
+                                  )}
+                                </pre>
+                              </details>
+                            </div>
+                            <div className="flex items-center gap-2 ml-4">
+                              <button
+                                onClick={() => restoreVersion(version)}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded transition"
+                              >
+                                Restore
+                              </button>
+                              <button
+                                onClick={() => deleteVersion(version.id)}
+                                className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition"
+                                title="Delete"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========== ARTICLE SELECTOR MODAL ========== */}
+      {showArticleSelector && createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[900px] max-h-[85vh] flex flex-col border border-blue-500/30">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-blue-500/30 shrink-0">
+              <div>
+                <h2 className="text-xl font-semibold text-blue-400">
+                  Select Articles for AI Context
+                </h2>
+                <p className="text-sm text-gray-400 mt-1">
+                  {selectedArticleIds.size} articles selected
+                  {selectableArticlesList.length > 0 && ` (${selectableArticlesList.length} available)`}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowArticleSelector(false)}
+                className="text-gray-400 hover:text-white text-3xl leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Search and Actions */}
+            <div className="p-4 border-b border-blue-500/20 flex items-center gap-3 flex-wrap">
+              <input
+                type="text"
+                value={articleSelectorSearch}
+                onChange={(e) => setArticleSelectorSearch(e.target.value)}
+                placeholder="Search by keyword, tag, website..."
+                className="flex-1 min-w-[200px] bg-slate-800 border border-blue-500/50 rounded px-3 py-2 text-white text-sm"
+              />
+              <button
+                onClick={selectAllFilteredArticles}
+                className="px-3 py-2 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-sm transition"
+              >
+                Select All
+              </button>
+              <button
+                onClick={deselectAllArticles}
+                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 text-sm transition"
+              >
+                Clear Selection
+              </button>
+            </div>
+
+            {/* Article List */}
+            <div className="flex-1 overflow-auto p-4">
+              {fetchingSelectableList ? (
+                <div className="text-center py-8 text-slate-400">
+                  Loading articles...
+                </div>
+              ) : selectableArticlesList.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <p>No articles found for this workflow.</p>
+                  <p className="text-sm mt-2">Create articles in the Articles page first.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {getFilteredSelectableArticles().map((article) => (
+                    <div
+                      key={article.id}
+                      onClick={() => toggleArticleSelection(article.id)}
+                      className={`p-3 rounded-lg cursor-pointer transition ${
+                        selectedArticleIds.has(article.id)
+                          ? 'bg-blue-600/30 border border-blue-500'
+                          : 'bg-slate-800 border border-slate-700 hover:border-blue-500/50'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedArticleIds.has(article.id)}
+                          onChange={() => toggleArticleSelection(article.id)}
+                          className="mt-1 w-4 h-4 rounded border-blue-500 text-blue-600 focus:ring-blue-500 bg-slate-900"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-medium text-white truncate">
+                              {article.keyword}
+                            </h3>
+                            {article.tag && (
+                              <span className="text-[10px] bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded">
+                                {article.tag}
+                              </span>
+                            )}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                              article.status === 'published'
+                                ? 'bg-emerald-600/50 text-emerald-300'
+                                : article.status === 'draft'
+                                ? 'bg-yellow-600/50 text-yellow-300'
+                                : 'bg-slate-600 text-slate-400'
+                            }`}>
+                              {article.status}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {article.website_name || 'Unknown website'}
+                            {article.client_name && ` · ${article.client_name}`}
+                            {article.word_count && ` · ${article.word_count} words`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {getFilteredSelectableArticles().length === 0 && articleSelectorSearch && (
+                    <div className="text-center py-4 text-slate-400">
+                      No articles match "{articleSelectorSearch}"
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between p-4 border-t border-blue-500/30 shrink-0">
+              <span className="text-sm text-slate-400">
+                Selected articles will be sent to the AI as context
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowArticleSelector(false)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={loadSelectedArticles}
+                  disabled={selectedArticleIds.size === 0 || loadingArticles}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded transition font-medium"
+                >
+                  {loadingArticles ? 'Loading...' : `Load ${selectedArticleIds.size} Article${selectedArticleIds.size !== 1 ? 's' : ''}`}
+                </button>
+              </div>
             </div>
           </div>
         </div>,

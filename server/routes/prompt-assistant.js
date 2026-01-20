@@ -484,7 +484,10 @@ router.post('/chat', async (req, res) => {
           context.testingMode.fullHistory.forEach((h, idx) => {
             const iterNum = context.testingMode.fullHistory.length - idx; // Newest first, so count backwards
             parts.push(`\n[Iteration ${iterNum}] (${h.model}, ${new Date(h.timestamp).toLocaleTimeString()}):`);
-            parts.push(`"${h.prompt}"`);
+            parts.push(`Prompt: "${h.prompt}"`);
+            if (h.imageUrl) {
+              parts.push(`Generated Image: ${h.imageUrl}`);
+            }
           });
         }
         parts.push('\n**IMPORTANT: You can directly edit the Testing Mode prompt!**');
@@ -750,12 +753,29 @@ router.get('/articles', async (req, res) => {
   }
 
   try {
-    const { workflowId, websiteId, clientId, limit = 20 } = req.query;
+    const { workflowId, websiteId, clientId, ids, limit = 20 } = req.query;
     const parsedLimit = Math.min(parseInt(limit) || 20, 50); // Max 50 articles
 
     let articles;
 
-    if (workflowId) {
+    // If specific IDs are provided, fetch those articles
+    if (ids) {
+      const articleIds = ids.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      if (articleIds.length > 0) {
+        articles = await sql`
+          SELECT a.id, a.keyword, a.tag, a.final_content, a.meta_titles, a.meta_descriptions,
+                 a.chain_outputs, a.word_count, a.status,
+                 ws.name as website_name, c.name as client_name
+          FROM articles a
+          LEFT JOIN websites ws ON a.website_id = ws.id
+          LEFT JOIN clients c ON a.client_id = c.id
+          WHERE a.id = ANY(${articleIds})
+          ORDER BY a.created_at DESC
+        `;
+      } else {
+        articles = [];
+      }
+    } else if (workflowId) {
       articles = await sql`
         SELECT a.id, a.keyword, a.tag, a.final_content, a.meta_titles, a.meta_descriptions,
                a.chain_outputs, a.word_count, a.status,
