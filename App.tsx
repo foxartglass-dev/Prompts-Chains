@@ -211,6 +211,7 @@ const App: React.FC = () => {
     // UI State
     const [isProcessing, setIsProcessing] = useState(false);
     const [logs, setLogs] = useState<LogEntry[]>([]);
+    const logsRef = useRef<LogEntry[]>([]); // Ref to always have current logs (for history saving)
     const [processingLogCollapsed, setProcessingLogCollapsed] = useState(true);
     const [resultsCollapsed, setResultsCollapsed] = useState(true); // Results section collapsed inside Processing Log
     const [results, setResults] = useState<Result[]>([]);
@@ -221,6 +222,18 @@ const App: React.FC = () => {
     const [logSortDropdownOpen, setLogSortDropdownOpen] = useState(false); // Sorting dropdown visibility
     const [logGroupBy, setLogGroupBy] = useState<'none' | 'article' | 'session'>('none'); // Group logs by article or session
     const [showLogTimestamps, setShowLogTimestamps] = useState(true); // Show timestamps in logs
+
+    // Image Path Log state (simple decision log)
+    const [imagePathLog, setImagePathLog] = useState<Array<{
+      id: number;
+      timestamp?: string;
+      articleId?: number;
+      keyword?: string;
+      summary?: string;
+      raw?: string;
+    }>>([]);
+    const [imagePathLogLoading, setImagePathLogLoading] = useState(false);
+
     const [pendingResults, setPendingResults] = useState<PendingResult[]>([]);
     const [fileName, setFileName] = useState('');
     const [openSections, setOpenSections] = useState<Set<string>>(new Set(['setup']));
@@ -393,6 +406,11 @@ const App: React.FC = () => {
         }
     }, [processingHistory]);
 
+    // Keep logsRef in sync with logs state (for capturing in history)
+    useEffect(() => {
+        logsRef.current = logs;
+    }, [logs]);
+
     // Click-away detection for variable context menu
     useEffect(() => {
         const handleClickAway = (e: MouseEvent) => {
@@ -467,6 +485,37 @@ const App: React.FC = () => {
 
       fetchImageSettings();
     }, [currentWorkflowId]);
+
+    // Fetch image path decision log
+    const fetchImagePathLog = async () => {
+      setImagePathLogLoading(true);
+      try {
+        const res = await fetch('/api/elementor/image-path-log?limit=50');
+        const data = await res.json();
+        setImagePathLog(data.entries || []);
+      } catch (error) {
+        console.error('Error fetching image path log:', error);
+      } finally {
+        setImagePathLogLoading(false);
+      }
+    };
+
+    // Clear image path log
+    const clearImagePathLog = async () => {
+      try {
+        await fetch('/api/elementor/image-path-log', { method: 'DELETE' });
+        setImagePathLog([]);
+      } catch (error) {
+        console.error('Error clearing image path log:', error);
+      }
+    };
+
+    // Refresh image path log when processing completes or log is expanded
+    useEffect(() => {
+      if (!processingLogCollapsed) {
+        fetchImagePathLog();
+      }
+    }, [processingLogCollapsed, isProcessing]);
 
     // Auto-load default workflow on startup
     const hasAutoLoadedRef = useRef(false);
@@ -1620,8 +1669,10 @@ const App: React.FC = () => {
         addLog(`Batch processing complete in ${duration} minutes.`, LogStatus.SUCCESS);
         setIsProcessing(false);
 
-        // Save run to processing history
+        // Save run to processing history (use logsRef.current to get actual current logs)
         const now = new Date();
+        const completionLog = { id: Date.now(), message: `Batch processing complete in ${duration} minutes.`, status: LogStatus.SUCCESS, timestamp: now.toLocaleTimeString() };
+        const currentLogs = [...logsRef.current, completionLog];
         const historyRun: ProcessingRun = {
             id: `run-${Date.now()}`,
             projectName: currentProject?.state?.name || 'Unnamed Project',
@@ -1629,7 +1680,7 @@ const App: React.FC = () => {
             time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
             itemCount: itemsToProcess.length,
             itemNames: itemsToProcess.map(i => i.name),
-            logs: [...logs, { id: Date.now(), message: `Batch processing complete in ${duration} minutes.`, status: LogStatus.SUCCESS, timestamp: now.toLocaleTimeString() }],
+            logs: currentLogs, // Use logsRef.current to capture actual logs at this moment
             results: [] // Results will be updated via setResults, we capture current state
         };
         setProcessingHistory(prev => [...prev, historyRun]);
@@ -3940,6 +3991,64 @@ const App: React.FC = () => {
                                     return null;
                                 })()}
                                 {logs.length === 0 && <div className="text-gray-500">Logs will appear here once processing starts.</div>}
+                            </div>
+
+                            {/* Image Path Decision Log - Simple log for tracking image source */}
+                            <div className="mt-4 bg-slate-800/50 rounded-lg border border-teal-500/30">
+                                <div className="flex items-center justify-between p-3 border-b border-teal-500/20">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-teal-400">📷</span>
+                                        <span className="text-sm font-semibold text-teal-400">Image Path Log</span>
+                                        <span className="text-xs text-slate-400">({imagePathLog.length} entries)</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={fetchImagePathLog}
+                                            className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 text-teal-400 rounded transition"
+                                            disabled={imagePathLogLoading}
+                                        >
+                                            {imagePathLogLoading ? '...' : 'Refresh'}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (confirm('Clear image path log?')) {
+                                                    clearImagePathLog();
+                                                }
+                                            }}
+                                            className="text-xs px-2 py-1 bg-slate-700 hover:bg-red-900/50 text-red-400 rounded transition"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="max-h-[200px] overflow-y-auto p-3 font-mono text-xs space-y-1">
+                                    {imagePathLog.length === 0 ? (
+                                        <div className="text-gray-500">No image decisions logged yet. Run an article to see paths here.</div>
+                                    ) : (
+                                        imagePathLog.map(entry => (
+                                            <div key={entry.id} className="flex items-start text-gray-300 border-b border-slate-700/50 pb-1">
+                                                {entry.timestamp ? (
+                                                    <>
+                                                        <span className="text-slate-500 w-24 flex-shrink-0">
+                                                            {new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                                                        </span>
+                                                        <span className="text-brand-gold w-12 flex-shrink-0">#{entry.articleId}</span>
+                                                        <span className="text-white truncate w-40 flex-shrink-0" title={entry.keyword}>{entry.keyword}</span>
+                                                        <span className={`flex-1 ${
+                                                            entry.summary?.includes('Bank →') ? 'text-amber-400' :
+                                                            entry.summary?.includes('Bank') ? 'text-brand-gold' :
+                                                            entry.summary?.includes('Live/') ? 'text-brand-cyan' : 'text-gray-400'
+                                                        }`}>
+                                                            {entry.summary}
+                                                        </span>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-gray-500">{entry.raw}</span>
+                                                )}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
                             </div>
 
                             {/* Results Section - Nested inside Processing Log */}

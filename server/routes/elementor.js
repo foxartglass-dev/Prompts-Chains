@@ -2371,4 +2371,58 @@ router.post('/batch-publish', requireDb, async (req, res) => {
   }
 });
 
+// === IMAGE PATH DECISION LOG API ===
+// Returns the simple log of image path decisions for debugging
+
+router.get('/image-path-log', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+
+    if (!fs.existsSync(IMAGE_PATH_LOG)) {
+      return res.json({ entries: [], total: 0 });
+    }
+
+    const content = fs.readFileSync(IMAGE_PATH_LOG, 'utf-8');
+    const lines = content.trim().split('\n').filter(Boolean);
+
+    // Parse each line into structured entry
+    const entries = lines.slice(-limit).map((line, idx) => {
+      // Format: [2026-01-20T15:30:45.123Z] Article 123 "keyword": summary
+      const match = line.match(/^\[([^\]]+)\] Article (\d+) "([^"]+)": (.+)$/);
+      if (match) {
+        return {
+          id: idx,
+          timestamp: match[1],
+          articleId: parseInt(match[2]),
+          keyword: match[3],
+          summary: match[4]
+        };
+      }
+      return { id: idx, raw: line };
+    }).reverse(); // Newest first
+
+    res.json({
+      entries,
+      total: lines.length,
+      showing: entries.length
+    });
+  } catch (error) {
+    console.error('Error reading image path log:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Clear the image path log
+router.delete('/image-path-log', async (req, res) => {
+  try {
+    if (fs.existsSync(IMAGE_PATH_LOG)) {
+      fs.writeFileSync(IMAGE_PATH_LOG, '');
+    }
+    res.json({ success: true, message: 'Image path log cleared' });
+  } catch (error) {
+    console.error('Error clearing image path log:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
