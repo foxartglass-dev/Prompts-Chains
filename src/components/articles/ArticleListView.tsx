@@ -2091,10 +2091,10 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                             ? customMetaTitle
                             : (selectedTitleIndex !== null && selectedArticle.meta_titles
                               ? selectedArticle.meta_titles[selectedTitleIndex]
-                              : selectedArticle.keyword)}
+                              : stripTagFromKeyword(selectedArticle.keyword))}
                         </div>
                         <div className="text-green-700 text-sm truncate mt-1">
-                          {selectedArticle.wp_post_url || 'https://example.com/' + selectedArticle.keyword.toLowerCase().replace(/\s+/g, '-')}
+                          {selectedArticle.wp_post_url || 'https://example.com/' + stripTagFromKeyword(selectedArticle.keyword).toLowerCase().replace(/\s+/g, '-')}
                         </div>
                         <div className="text-gray-600 text-sm mt-1 line-clamp-2">
                           {useCustomDesc && customMetaDesc
