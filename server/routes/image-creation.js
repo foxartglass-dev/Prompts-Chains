@@ -1366,7 +1366,16 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           fallback_prompt_mode: 'main_prompt',
           smart_prompt_guidance: '',
           // Prompt Problem Areas
-          prompt_problem_areas: []
+          prompt_problem_areas: [],
+          // Templates and Text Bank
+          prompt_templates: [],
+          text_snippets: [],
+          category_templates: [],
+          // Guided GPT guardrails
+          guided_guardrails: {},
+          // Chat Files and Conversations
+          consultant_chat_files: [],
+          consultant_chat_conversations: []
         },
         isNew: true
       });
@@ -1444,9 +1453,25 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         fallback_prompt_mode: results[0].fallback_prompt_mode || 'main_prompt',
         smart_prompt_guidance: results[0].smart_prompt_guidance || '',
         // Prompt Problem Areas
-        prompt_problem_areas: results[0].prompt_problem_areas || []
+        prompt_problem_areas: results[0].prompt_problem_areas || [],
+        // Templates and Text Bank (CRITICAL for persistence)
+        prompt_templates: results[0].prompt_templates || [],
+        text_snippets: results[0].text_snippets || [],
+        category_templates: results[0].category_templates || [],
+        // Guided GPT guardrails
+        guided_guardrails: results[0].guided_guardrails || {},
+        // Chat Files and Conversations
+        consultant_chat_files: results[0].consultant_chat_files || [],
+        consultant_chat_conversations: results[0].consultant_chat_conversations || []
       },
       imageBankMigrated  // Tell frontend to use new /api/image-bank API
+    });
+
+    // DEBUG: Log template data being returned (after response)
+    console.log('[Image Creation API] GET returning TEMPLATE DATA:', {
+      prompt_templates_count: results[0].prompt_templates?.length ?? 'null/undefined in DB',
+      text_snippets_count: results[0].text_snippets?.length ?? 'null/undefined in DB',
+      category_templates_count: results[0].category_templates?.length ?? 'null/undefined in DB'
     });
 
   } catch (error) {
@@ -1544,6 +1569,13 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       live_prompt_mode,
       smart_matching_mode,
       fallback_prompt_mode
+    });
+    // DEBUG: Log template data for persistence debugging
+    console.log('[Image Creation API] TEMPLATE DATA received:', {
+      prompt_templates_count: prompt_templates?.length ?? 'undefined',
+      prompt_templates_first: prompt_templates?.[0]?.name ?? 'none',
+      text_snippets_count: text_snippets?.length ?? 'undefined',
+      category_templates_count: category_templates?.length ?? 'undefined'
     });
     console.log('[Image Creation API] TYPE CHECK:', {
       live_prompt_mode_type: typeof live_prompt_mode,
@@ -1826,7 +1858,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   fallback_to_live,
                   image_order,
                   variation_order_mode,
-                  manual_variation_order
+                  manual_variation_order,
+                  prompt_templates,
+                  text_snippets,
+                  category_templates,
+                  consultant_chat_files,
+                  consultant_chat_conversations
                 ) VALUES (
                   ${websiteId},
                   ${enabled ?? false},
@@ -1848,7 +1885,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   ${fallback_to_live ?? true},
                   ${JSON.stringify(image_order ?? [])},
                   ${variation_order_mode ?? 'sequential'},
-                  ${JSON.stringify(manual_variation_order ?? [])}
+                  ${JSON.stringify(manual_variation_order ?? [])},
+                  ${JSON.stringify(prompt_templates ?? [])},
+                  ${JSON.stringify(text_snippets ?? [])},
+                  ${JSON.stringify(category_templates ?? [])},
+                  ${JSON.stringify(consultant_chat_files ?? [])},
+                  ${JSON.stringify(consultant_chat_conversations ?? [])}
                 )
                 RETURNING id
               `
@@ -1874,7 +1916,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   fallback_to_live,
                   image_order,
                   variation_order_mode,
-                  manual_variation_order
+                  manual_variation_order,
+                  prompt_templates,
+                  text_snippets,
+                  category_templates,
+                  consultant_chat_files,
+                  consultant_chat_conversations
                 ) VALUES (
                   ${workflowId},
                 ${enabled ?? false},
@@ -1896,7 +1943,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${fallback_to_live ?? true},
                 ${JSON.stringify(image_order ?? [])},
                 ${variation_order_mode ?? 'sequential'},
-                ${JSON.stringify(manual_variation_order ?? [])}
+                ${JSON.stringify(manual_variation_order ?? [])},
+                ${JSON.stringify(prompt_templates ?? [])},
+                ${JSON.stringify(text_snippets ?? [])},
+                ${JSON.stringify(category_templates ?? [])},
+                ${JSON.stringify(consultant_chat_files ?? [])},
+                ${JSON.stringify(consultant_chat_conversations ?? [])}
               )
               RETURNING id
             `;
@@ -2017,6 +2069,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
                   variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
                   manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+                  prompt_templates = COALESCE(${prompt_templates ? JSON.stringify(prompt_templates) : null}::jsonb, prompt_templates),
+                  text_snippets = COALESCE(${text_snippets ? JSON.stringify(text_snippets) : null}::jsonb, text_snippets),
+                  category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
+                  consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
+                  consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
                   updated_at = CURRENT_TIMESTAMP
                 WHERE website_id = ${websiteId}
               `;
@@ -2044,6 +2101,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   image_order = COALESCE(${image_order ? JSON.stringify(image_order) : null}::jsonb, image_order),
                   variation_order_mode = COALESCE(${variation_order_mode}, variation_order_mode),
                   manual_variation_order = COALESCE(${manual_variation_order ? JSON.stringify(manual_variation_order) : null}::jsonb, manual_variation_order),
+                  prompt_templates = COALESCE(${prompt_templates ? JSON.stringify(prompt_templates) : null}::jsonb, prompt_templates),
+                  text_snippets = COALESCE(${text_snippets ? JSON.stringify(text_snippets) : null}::jsonb, text_snippets),
+                  category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
+                  consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
+                  consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
                   updated_at = CURRENT_TIMESTAMP
                 WHERE workflow_id = ${workflowId}
               `;

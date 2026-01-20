@@ -569,7 +569,7 @@ interface ImageCreationSettings {
   // Text snippet bank organized by category
   text_snippets: TextSnippet[];
   // Saved placeholder category templates
-  placeholder_category_templates: PlaceholderCategoryTemplate[];
+  category_templates: PlaceholderCategoryTemplate[];
   // Section order for reordering UI sections
   section_order?: string[];
   // ========== TAG-BASED MULTI-PROMPT SYSTEM ==========
@@ -664,7 +664,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   // Prompt Template System
   prompt_templates: [],
   text_snippets: [],
-  placeholder_category_templates: [],
+  category_templates: [],
   // Section order - user-configurable order of UI sections
   section_order: ['image_integration', 'audience_avatars', 'batch_bank', 'draft_used', 'resource_tabs', 'chat_tabs'],
   // ========== TAG-BASED MULTI-PROMPT SYSTEM ==========
@@ -1357,7 +1357,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           // Prompt Template System - ensure arrays are never null
           prompt_templates: data.settings.prompt_templates || [],
           text_snippets: data.settings.text_snippets || [],
-          placeholder_category_templates: data.settings.placeholder_category_templates || [],
+          category_templates: data.settings.category_templates || [],
           // Tag-based multi-prompt system
           guided_gpt_prompts: data.settings.guided_gpt_prompts || [],
           smart_prompt_prompts: data.settings.smart_prompt_prompts || [],
@@ -2041,7 +2041,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     };
 
     updateSettings({
-      placeholder_category_templates: [...settings.placeholder_category_templates, newTemplate]
+      category_templates: [...settings.category_templates, newTemplate]
     });
     showNotification(`Placeholder category "${category.name}" saved as template`, 'success');
   };
@@ -13979,7 +13979,7 @@ Start by introducing yourself and asking about their business in a friendly way.
               <button onClick={() => setShowPlaceholderTemplates(false)} className="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
             <div className="flex-1 overflow-auto p-4">
-              {(settings.placeholder_category_templates || []).length === 0 ? (
+              {(settings.category_templates || []).length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <p className="mb-2">No placeholder templates saved yet</p>
                   <p className="text-sm">Save a placeholder category from any avatar to create a template</p>
@@ -13988,7 +13988,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                 <div className="space-y-3">
                   {/* Group by category */}
                   {(() => {
-                    const grouped = (settings.placeholder_category_templates || []).reduce((acc, t) => {
+                    const grouped = (settings.category_templates || []).reduce((acc, t) => {
                       const cat = t.category || 'Uncategorized';
                       if (!acc[cat]) acc[cat] = [];
                       acc[cat].push(t);
@@ -14034,7 +14034,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     <button
                                       onClick={() => {
                                         updateSettings({
-                                          placeholder_category_templates: (settings.placeholder_category_templates || []).filter(t => t.id !== template.id)
+                                          category_templates: (settings.category_templates || []).filter(t => t.id !== template.id)
                                         });
                                         showNotification('Template deleted', 'success');
                                       }}
@@ -14212,7 +14212,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   const selectedOptions = editingPlaceholderTemplate.options.filter(
                     opt => placeholderTemplateOptionSelections[opt.number]
                   );
-                  const updatedTemplates = (settings.placeholder_category_templates || []).map(t =>
+                  const updatedTemplates = (settings.category_templates || []).map(t =>
                     t.id === editingPlaceholderTemplate.id
                       ? {
                           ...t,
@@ -14222,7 +14222,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                         }
                       : t
                   );
-                  updateSettings({ placeholder_category_templates: updatedTemplates });
+                  updateSettings({ category_templates: updatedTemplates });
                   showNotification('Template updated successfully', 'success');
                   setEditingPlaceholderTemplate(null);
                 }}

@@ -366,6 +366,26 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'legacy_prompt_rules') THEN
     ALTER TABLE image_creation_settings ADD COLUMN legacy_prompt_rules JSONB DEFAULT '[]';
   END IF;
+  -- Prompt Templates for Template Library
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'prompt_templates') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN prompt_templates JSONB DEFAULT '[]';
+  END IF;
+  -- Text Snippets for Text Bank
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'text_snippets') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN text_snippets JSONB DEFAULT '[]';
+  END IF;
+  -- Category Templates for Placeholder Categories
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'category_templates') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN category_templates JSONB DEFAULT '[]';
+  END IF;
+  -- Prompt Problem Areas
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'prompt_problem_areas') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN prompt_problem_areas JSONB DEFAULT '[]';
+  END IF;
+  -- Image Quality setting
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'image_creation_settings' AND column_name = 'image_quality') THEN
+    ALTER TABLE image_creation_settings ADD COLUMN image_quality VARCHAR(20) DEFAULT 'low';
+  END IF;
   -- Add scope to templates (website or app global)
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'templates' AND column_name = 'scope') THEN
     ALTER TABLE templates ADD COLUMN scope VARCHAR(20) DEFAULT 'website';
