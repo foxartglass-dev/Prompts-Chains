@@ -185,6 +185,32 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           article.images = article.generated_images;
         }
 
+        // Ensure meta_titles and meta_descriptions are arrays (defensive parsing)
+        // This handles cases where data might come back as JSON string or null
+        if (article.meta_titles && typeof article.meta_titles === 'string') {
+          try {
+            article.meta_titles = JSON.parse(article.meta_titles);
+          } catch (e) {
+            article.meta_titles = [];
+          }
+        }
+        if (!Array.isArray(article.meta_titles)) {
+          article.meta_titles = [];
+        }
+        if (article.meta_descriptions && typeof article.meta_descriptions === 'string') {
+          try {
+            article.meta_descriptions = JSON.parse(article.meta_descriptions);
+          } catch (e) {
+            article.meta_descriptions = [];
+          }
+        }
+        if (!Array.isArray(article.meta_descriptions)) {
+          article.meta_descriptions = [];
+        }
+
+        // Debug: Log meta data to help diagnose display issues
+        console.log(`[ArticleDetails] Article ${id}: meta_titles=${article.meta_titles?.length || 0}, meta_descriptions=${article.meta_descriptions?.length || 0}`);
+
         setSelectedArticle(article);
         setEditContent(article.final_content || '');
 
