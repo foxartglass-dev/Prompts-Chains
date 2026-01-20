@@ -2979,15 +2979,26 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         ...(websiteId && { websiteId: String(websiteId) })
       });
       const res = await fetch(`/api/image-creation/prompt-library?${params}`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('[Prompt Library] Fetch failed:', res.status, errorText);
+        showNotification(`Failed to fetch library (${res.status})`, 'error');
+        setPromptLibraryLoading(false);
+        return;
+      }
       const data = await res.json();
       if (data.success) {
         setPromptLibraryItems(data.items || []);
+        if (data.message) {
+          console.log('[Prompt Library]', data.message);
+        }
       } else {
+        console.error('[Prompt Library] API error:', data);
         showNotification(data.error || 'Failed to fetch library', 'error');
       }
-    } catch (error) {
-      console.error('Prompt library fetch error:', error);
-      showNotification('Failed to load prompt library', 'error');
+    } catch (error: any) {
+      console.error('[Prompt Library] Fetch error:', error?.message || error);
+      showNotification('Failed to load prompt library - check console', 'error');
     }
     setPromptLibraryLoading(false);
   };
@@ -3012,24 +3023,49 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       showNotification('Please enter a name', 'error');
       return;
     }
+
+    const payload = {
+      websiteId: consultantContext.workflow?.website_id,
+      isGlobal: promptLibrarySaveGlobal,
+      type: promptLibraryMode,
+      mode: promptLibraryTarget,
+      name: promptLibrarySaveName,
+      description: promptLibrarySaveDesc,
+      content,
+      tag,
+      // Include which tags this global applies to (empty if not global)
+      tags: promptLibrarySaveGlobal ? Array.from(promptLibrarySaveTags) : []
+    };
+
+    console.log('[Prompt Library] Saving:', payload);
+
     try {
       const res = await fetch('/api/image-creation/prompt-library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          websiteId: consultantContext.workflow?.website_id,
-          isGlobal: promptLibrarySaveGlobal,
-          type: promptLibraryMode,
-          mode: promptLibraryTarget,
-          name: promptLibrarySaveName,
-          description: promptLibrarySaveDesc,
-          content,
-          tag,
-          // Include which tags this global applies to (empty if not global)
-          tags: promptLibrarySaveGlobal ? Array.from(promptLibrarySaveTags) : []
-        })
+        body: JSON.stringify(payload)
       });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('[Prompt Library] Save failed:', res.status, errorText);
+        // Try to parse as JSON for better error message
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.needsMigration) {
+            showNotification('Database migration needed - run migration 024', 'error');
+          } else {
+            showNotification(errorData.error || `Save failed (${res.status})`, 'error');
+          }
+        } catch {
+          showNotification(`Save failed (${res.status}): ${errorText.substring(0, 100)}`, 'error');
+        }
+        return;
+      }
+
       const data = await res.json();
+      console.log('[Prompt Library] Save response:', data);
+
       if (data.success) {
         showNotification('Saved to library!', 'success');
         setShowPromptLibrary(false);
@@ -3038,9 +3074,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       } else {
         showNotification(data.error || 'Failed to save', 'error');
       }
-    } catch (error) {
-      console.error('Save to library error:', error);
-      showNotification('Failed to save to library', 'error');
+    } catch (error: any) {
+      console.error('[Prompt Library] Save error:', error?.message || error);
+      showNotification('Failed to save to library - check console', 'error');
     }
   };
 
@@ -7418,9 +7454,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   placeholder="Prompt name..."
                                 />
                                 {activeGuidedPrompt.tag === 'Global' && (
-                                  <span className="text-[10px] text-emerald-400/60 bg-emerald-900/30 px-2 py-0.5 rounded">
-                                    Applies to: {activeGuidedPrompt.globalAppliesTo?.join(', ') || 'All tags'}
-                                  </span>
+                                  <div className="flex items-center gap-2 bg-emerald-900/30 px-2 py-1 rounded">
+                                    <span className="text-[10px] text-emerald-400 font-medium">Applies to:</span>
+                                    {tags.map(tag => {
+                                      const currentAppliesTo = activeGuidedPrompt.globalAppliesTo || tags.map(t => t.name);
+                                      const isChecked = currentAppliesTo.includes(tag.name);
+                                      return (
+                                        <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={(e) => {
+                                              const newAppliesTo = e.target.checked
+                                                ? [...currentAppliesTo, tag.name]
+                                                : currentAppliesTo.filter(t => t !== tag.name);
+                                              handleUpdateGuidedPrompt(activeGuidedPrompt.id, { globalAppliesTo: newAppliesTo });
+                                            }}
+                                            className="accent-emerald-500 w-3 h-3"
+                                          />
+                                          {tag.name}
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
                                 )}
                               </div>
                               <div className="flex items-center gap-2">
@@ -7586,26 +7642,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </button>
                               </div>
 
-                              {/* Global applies-to checkboxes */}
-                              {guidedRulesActiveTag === 'Global' && (
-                                <div className="bg-emerald-900/20 rounded-lg p-2 border border-emerald-500/30">
-                                  <span className="text-[10px] text-emerald-400 font-medium">Global rules apply to:</span>
-                                  <div className="flex items-center gap-3 mt-1">
-                                    {tags.map(tag => (
-                                      <label key={tag.id} className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          checked={true}
-                                          disabled
-                                          className="accent-emerald-500 w-3 h-3"
-                                        />
-                                        {tag.name}
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
                               {/* Rules List */}
                               <div className="space-y-2">
                                 {getRulesForTag(settings.guided_gpt_rules || [], guidedRulesActiveTag).length === 0 ? (
@@ -7649,6 +7685,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                                             History
                                           </button>
                                           <button
+                                            onClick={() => {
+                                              setGuidedRulesEditingId(rule.id);
+                                              setPromptLibrarySaveName(rule.title);
+                                              openPromptLibrary('rule', 'guided_gpt', true);
+                                            }}
+                                            className="text-purple-400 hover:text-purple-300 p-1 rounded hover:bg-purple-900/30 transition text-xs"
+                                            title="Save to library for reuse"
+                                          >
+                                            💾 Save
+                                          </button>
+                                          <button
                                             onClick={() => handleRemoveGuidedRule(rule.id)}
                                             className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
                                             title="Remove rule"
@@ -7666,6 +7713,32 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         className="w-full p-2 text-xs bg-slate-900 border border-brand-gold/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
                                         rows={2}
                                       />
+                                      {/* Global rule applies-to checkboxes */}
+                                      {rule.tag === 'Global' && (
+                                        <div className="flex items-center gap-2 mt-2 bg-emerald-900/20 px-2 py-1.5 rounded border border-emerald-500/20">
+                                          <span className="text-[10px] text-emerald-400 font-medium">Applies to:</span>
+                                          {tags.map(tag => {
+                                            const currentAppliesTo = rule.globalAppliesTo || tags.map(t => t.name);
+                                            const isChecked = currentAppliesTo.includes(tag.name);
+                                            return (
+                                              <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isChecked}
+                                                  onChange={(e) => {
+                                                    const newAppliesTo = e.target.checked
+                                                      ? [...currentAppliesTo, tag.name]
+                                                      : currentAppliesTo.filter(t => t !== tag.name);
+                                                    handleUpdateGuidedRule(rule.id, { globalAppliesTo: newAppliesTo });
+                                                  }}
+                                                  className="accent-emerald-500 w-3 h-3"
+                                                />
+                                                {tag.name}
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </div>
                                   ))
                                 )}
@@ -9582,9 +9655,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   placeholder="Prompt name..."
                                 />
                                 {activeSmartPrompt.tag === 'Global' && (
-                                  <span className="text-[10px] text-emerald-400/60 bg-emerald-900/30 px-2 py-0.5 rounded">
-                                    Applies to: {activeSmartPrompt.globalAppliesTo?.join(', ') || 'All tags'}
-                                  </span>
+                                  <div className="flex items-center gap-2 bg-purple-900/30 px-2 py-1 rounded">
+                                    <span className="text-[10px] text-purple-400 font-medium">Applies to:</span>
+                                    {tags.map(tag => {
+                                      const currentAppliesTo = activeSmartPrompt.globalAppliesTo || tags.map(t => t.name);
+                                      const isChecked = currentAppliesTo.includes(tag.name);
+                                      return (
+                                        <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={(e) => {
+                                              const newAppliesTo = e.target.checked
+                                                ? [...currentAppliesTo, tag.name]
+                                                : currentAppliesTo.filter(t => t !== tag.name);
+                                              handleUpdateSmartPrompt(activeSmartPrompt.id, { globalAppliesTo: newAppliesTo });
+                                            }}
+                                            className="accent-purple-500 w-3 h-3"
+                                          />
+                                          {tag.name}
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
                                 )}
                               </div>
                               <div className="flex items-center gap-2">
@@ -9710,26 +9803,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </button>
                               </div>
 
-                              {/* Global applies-to checkboxes */}
-                              {legacyRulesActiveTag === 'Global' && (
-                                <div className="bg-emerald-900/20 rounded-lg p-2 border border-emerald-500/30">
-                                  <span className="text-[10px] text-emerald-400 font-medium">Global rules apply to:</span>
-                                  <div className="flex items-center gap-3 mt-1">
-                                    {tags.map(tag => (
-                                      <label key={tag.id} className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          checked={true}
-                                          disabled
-                                          className="accent-emerald-500 w-3 h-3"
-                                        />
-                                        {tag.name}
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
                               {/* Rules List */}
                               <div className="space-y-2">
                                 {getRulesForTag(settings.legacy_prompt_rules || [], legacyRulesActiveTag).length === 0 ? (
@@ -9773,6 +9846,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                                             History
                                           </button>
                                           <button
+                                            onClick={() => {
+                                              setLegacyRulesEditingId(rule.id);
+                                              setPromptLibrarySaveName(rule.title);
+                                              openPromptLibrary('rule', 'smart_prompt', true);
+                                            }}
+                                            className="text-purple-400 hover:text-purple-300 p-1 rounded hover:bg-purple-900/30 transition text-xs"
+                                            title="Save to library for reuse"
+                                          >
+                                            💾 Save
+                                          </button>
+                                          <button
                                             onClick={() => handleRemoveLegacyRule(rule.id)}
                                             className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition"
                                             title="Remove rule"
@@ -9790,6 +9874,32 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         className="w-full p-2 text-xs bg-slate-900 border border-purple-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
                                         rows={2}
                                       />
+                                      {/* Global rule applies-to checkboxes */}
+                                      {rule.tag === 'Global' && (
+                                        <div className="flex items-center gap-2 mt-2 bg-purple-900/20 px-2 py-1.5 rounded border border-purple-500/20">
+                                          <span className="text-[10px] text-purple-400 font-medium">Applies to:</span>
+                                          {tags.map(tag => {
+                                            const currentAppliesTo = rule.globalAppliesTo || tags.map(t => t.name);
+                                            const isChecked = currentAppliesTo.includes(tag.name);
+                                            return (
+                                              <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isChecked}
+                                                  onChange={(e) => {
+                                                    const newAppliesTo = e.target.checked
+                                                      ? [...currentAppliesTo, tag.name]
+                                                      : currentAppliesTo.filter(t => t !== tag.name);
+                                                    handleUpdateLegacyRule(rule.id, { globalAppliesTo: newAppliesTo });
+                                                  }}
+                                                  className="accent-purple-500 w-3 h-3"
+                                                />
+                                                {tag.name}
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </div>
                                   ))
                                 )}
@@ -15732,7 +15842,31 @@ Start by introducing yourself and asking about their business in a friendly way.
                             content = activeSmartPrompt.guidance;
                             tag = activeSmartPrompt.tag;
                           }
+                        } else if (promptLibraryMode === 'rule') {
+                          // Get rule content from active rule
+                          if (promptLibraryTarget === 'guided_gpt') {
+                            const rules = settings.guided_gpt_rules || [];
+                            const activeRule = rules.find(r => r.id === guidedRulesEditingId);
+                            if (activeRule) {
+                              content = activeRule.text;
+                              tag = activeRule.tag;
+                            }
+                          } else if (promptLibraryTarget === 'smart_prompt') {
+                            const rules = settings.legacy_prompt_rules || [];
+                            const activeRule = rules.find(r => r.id === legacyRulesEditingId);
+                            if (activeRule) {
+                              content = activeRule.text;
+                              tag = activeRule.tag;
+                            }
+                          }
                         }
+
+                        // Validate content exists
+                        if (!content.trim()) {
+                          showNotification(`No active ${promptLibraryMode} selected or content is empty`, 'error');
+                          return;
+                        }
+
                         saveToPromptLibrary(content, tag);
                       }}
                       className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded transition font-medium"
