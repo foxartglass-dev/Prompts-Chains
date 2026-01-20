@@ -790,6 +790,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [promptLibrarySaveName, setPromptLibrarySaveName] = useState('');
   const [promptLibrarySaveDesc, setPromptLibrarySaveDesc] = useState('');
   const [promptLibrarySaveGlobal, setPromptLibrarySaveGlobal] = useState(false);
+  const [promptLibrarySaveTags, setPromptLibrarySaveTags] = useState<Set<string>>(new Set());
   // Version History panel state
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryType, setVersionHistoryType] = useState<'avatar' | 'placeholder' | 'guided_gpt_prompt' | 'guided_gpt_rule' | 'smart_prompt_prompt' | 'smart_prompt_rule'>('avatar');
@@ -2999,6 +3000,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setPromptLibrarySaveName('');
     setPromptLibrarySaveDesc('');
     setPromptLibrarySaveGlobal(false);
+    // Default to all tags selected when opening save mode
+    setPromptLibrarySaveTags(new Set(tags.map(t => t.name)));
     setShowPromptLibrary(true);
     fetchPromptLibrary(type, mode);
   };
@@ -3021,7 +3024,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           name: promptLibrarySaveName,
           description: promptLibrarySaveDesc,
           content,
-          tag
+          tag,
+          // Include which tags this global applies to (empty if not global)
+          tags: promptLibrarySaveGlobal ? Array.from(promptLibrarySaveTags) : []
         })
       });
       const data = await res.json();
@@ -15665,6 +15670,48 @@ Start by introducing yourself and asking about their business in a friendly way.
                       Make Global (available to all websites)
                     </label>
                   </div>
+
+                  {/* Tag selector - shown when Make Global is checked */}
+                  {promptLibrarySaveGlobal && tags.length > 0 && (
+                    <div className="bg-slate-800/50 rounded-lg p-3 border border-purple-500/30">
+                      <label className="block text-sm text-gray-400 mb-2">Applies to tags:</label>
+                      <div className="flex flex-wrap gap-2">
+                        {tags.map(t => (
+                          <label
+                            key={t.name}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-pointer transition ${
+                              promptLibrarySaveTags.has(t.name)
+                                ? 'bg-purple-600 text-white'
+                                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={promptLibrarySaveTags.has(t.name)}
+                              onChange={(e) => {
+                                const newTags = new Set(promptLibrarySaveTags);
+                                if (e.target.checked) {
+                                  newTags.add(t.name);
+                                } else {
+                                  newTags.delete(t.name);
+                                }
+                                setPromptLibrarySaveTags(newTags);
+                              }}
+                              className="sr-only"
+                            />
+                            <span className="font-medium">{t.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {promptLibrarySaveTags.size === 0 && (
+                        <p className="text-xs text-amber-400 mt-2">Select at least one tag</p>
+                      )}
+                      {promptLibrarySaveTags.size === tags.length && (
+                        <p className="text-xs text-emerald-400 mt-2">✓ Applies to all tags</p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex justify-end gap-2 pt-4">
                     <button
                       onClick={() => setShowPromptLibrary(false)}

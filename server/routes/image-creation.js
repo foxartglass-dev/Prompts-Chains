@@ -3747,6 +3747,11 @@ router.post('/prompt-library', requireDb, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: type, mode, name, content' });
     }
 
+    // Convert tags array to PostgreSQL array format
+    const tagsArray = Array.isArray(tags) && tags.length > 0 ? tags : null;
+
+    console.log('[Prompt Library] Saving:', { name, type, mode, isGlobal, tag, tags: tagsArray });
+
     const result = await sql`
       INSERT INTO prompt_library (
         website_id, is_global, type, mode, name, description, content, tag, tags
@@ -3759,7 +3764,7 @@ router.post('/prompt-library', requireDb, async (req, res) => {
         ${description || null},
         ${content},
         ${tag || null},
-        ${tags}
+        ${tagsArray}
       )
       RETURNING *
     `;
@@ -3769,7 +3774,14 @@ router.post('/prompt-library', requireDb, async (req, res) => {
 
   } catch (error) {
     console.error('[Prompt Library] POST error:', error);
-    res.status(500).json({ error: error.message });
+    // Check if table doesn't exist
+    if (error.message?.includes('prompt_library') || error.message?.includes('does not exist')) {
+      return res.status(500).json({
+        error: 'Prompt Library table not created yet. Please run migration 024_add_prompt_library.sql in your database console.',
+        needsMigration: true
+      });
+    }
+    res.status(500).json({ error: error.message || 'Unknown database error' });
   }
 });
 
