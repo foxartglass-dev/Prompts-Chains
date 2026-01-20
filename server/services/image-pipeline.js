@@ -309,6 +309,17 @@ export async function processArticleWithImages(content, options = {}) {
     // Check if we should use main_prompt mode (avatar's mainPrompt with smart matching)
     const useMainPromptMode = livePromptMode === 'main_prompt' && targetAvatar?.mainPrompt;
 
+    // CRITICAL DEBUG: Log prompt mode selection to trace issues
+    console.log('[Image Pipeline] PROMPT MODE SELECTION:');
+    console.log('  - Requested livePromptMode:', livePromptMode);
+    console.log('  - targetAvatar:', targetAvatar?.name || '(none)');
+    console.log('  - targetAvatar.mainPrompt exists:', !!targetAvatar?.mainPrompt);
+    console.log('  - mainPrompt preview:', targetAvatar?.mainPrompt?.substring(0, 80) || '(empty)');
+    console.log('  - useMainPromptMode:', useMainPromptMode);
+    console.log('  - Will use:', useMainPromptMode ? 'MAIN_PROMPT' :
+                                 (livePromptMode === 'guided_gpt' ? 'GUIDED_GPT' :
+                                  (!openaiApiKey ? 'BASIC_PROMPTS' : 'SMART_PROMPT')));
+
     if (useMainPromptMode) {
       // MAIN_PROMPT MODE: Use avatar's mainPrompt with smart-matched placeholders
       // KEY FIX: Match EACH image position to LOCAL content (75 words around it)
@@ -542,6 +553,17 @@ export async function processArticleWithImages(content, options = {}) {
     } else {
       // SMART_PROMPT MODE: Use GPT-4o-mini to analyze content (legacy behavior)
       progress('generating_prompts', { message: 'Analyzing content for image prompts (smart prompt mode)...' });
+
+      // WARN if user selected a different mode but we fell through to smart_prompt
+      if (livePromptMode === 'main_prompt') {
+        console.warn('[Smart Prompt Mode] WARNING: User selected main_prompt but falling through to smart_prompt');
+        console.warn('[Smart Prompt Mode] Reason: targetAvatar.mainPrompt is empty or undefined');
+        console.warn('[Smart Prompt Mode] Avatar:', targetAvatar?.name || '(no avatar selected)');
+        console.warn('[Smart Prompt Mode] To fix: Add a mainPrompt to your avatar in Image Creation settings');
+      } else if (livePromptMode === 'guided_gpt') {
+        console.warn('[Smart Prompt Mode] WARNING: User selected guided_gpt but falling through to smart_prompt');
+        console.warn('[Smart Prompt Mode] Reason: No OpenAI API key provided');
+      }
 
       // If there's guidance provided, we could pass it to the prompt generator
       // For now, log it for visibility

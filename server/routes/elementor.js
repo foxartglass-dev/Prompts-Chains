@@ -1302,13 +1302,18 @@ router.post('/publish', async (req, res) => {
           console.log('[Elementor Publish] DEBUG - effectiveUseBank:', effectiveUseBank, 'imagesFromBank:', imagesFromBank, 'isFallbackFromBank:', isFallbackFromBank);
 
           // Use fallback_prompt_mode when falling back from bank, otherwise use live_prompt_mode
+          // CRITICAL: Don't chain fallback_prompt_mode -> live_prompt_mode, they are SEPARATE settings!
+          // User explicitly sets fallback_prompt_mode for bank fallback behavior.
           if (isFallbackFromBank || (effectiveUseBank && imagesFromBank === 0)) {
             // Fallback scenario: bank was tried but empty or insufficient
-            livePromptMode = config.fallback_prompt_mode || config.live_prompt_mode || 'main_prompt';
+            // Use fallback_prompt_mode (default: main_prompt), NOT live_prompt_mode
+            livePromptMode = config.fallback_prompt_mode || 'main_prompt';
             console.log('[Elementor Publish] Using FALLBACK prompt mode:', livePromptMode);
+            console.log('[Elementor Publish] DEBUG - config.fallback_prompt_mode was:', config.fallback_prompt_mode || '(undefined)');
           } else {
-            // Direct Generate Live mode
+            // Direct Generate Live mode (integration_mode = 'live' or not using bank)
             livePromptMode = config.live_prompt_mode || 'main_prompt';
+            console.log('[Elementor Publish] Using DIRECT LIVE prompt mode:', livePromptMode);
           }
 
           smartPromptGuidance = config.smart_prompt_guidance || '';
