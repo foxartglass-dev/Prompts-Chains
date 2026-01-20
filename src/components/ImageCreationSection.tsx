@@ -2971,7 +2971,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const fetchPromptLibrary = async (type: 'prompt' | 'rule', mode: 'guided_gpt' | 'smart_prompt') => {
     setPromptLibraryLoading(true);
     try {
-      const websiteId = workflow?.website_id;
+      const websiteId = consultantContext.workflow?.website_id;
       const params = new URLSearchParams({
         type,
         mode,
@@ -3014,7 +3014,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          websiteId: workflow?.website_id,
+          websiteId: consultantContext.workflow?.website_id,
           isGlobal: promptLibrarySaveGlobal,
           type: promptLibraryMode,
           mode: promptLibraryTarget,
@@ -3129,13 +3129,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   ) => {
     setVersionHistoryLoading(true);
     try {
-      const websiteId = workflow?.website_id;
-      const workflowId = workflow?.id;
+      const websiteId = consultantContext.workflow?.website_id;
+      const wfId = consultantContext.workflow?.id;
       const params = new URLSearchParams({
         entityType,
         entityId,
         ...(websiteId && { websiteId: String(websiteId) }),
-        ...(workflowId && { workflowId: String(workflowId) })
+        ...(wfId && { workflowId: String(wfId) })
       });
       const res = await fetch(`/api/image-creation/version-history?${params}`);
       const data = await res.json();
@@ -3220,8 +3220,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          websiteId: workflow?.website_id,
-          workflowId: workflow?.id,
+          websiteId: consultantContext.workflow?.website_id,
+          workflowId: consultantContext.workflow?.id,
           entityType: versionHistoryType,
           entityId: versionHistoryEntityId,
           versionName: versionHistorySaveName || `v${Date.now()}`,
@@ -4463,7 +4463,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
    * Uses website_id from workflow to get articles for the current website
    */
   const fetchSelectableArticleList = async () => {
-    const websiteId = workflow?.website_id;
+    const websiteId = consultantContext.workflow?.website_id;
     if (!websiteId && !workflowId) return;
     setFetchingSelectableList(true);
     try {
