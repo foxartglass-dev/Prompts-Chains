@@ -1560,7 +1560,12 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       category_templates,
       // Chat Files and Conversations (for organized chat sessions)
       consultant_chat_files,
-      consultant_chat_conversations
+      consultant_chat_conversations,
+      // Guided GPT and Smart Prompt prompts/rules (for Generate Live persistence)
+      guided_gpt_prompts,
+      smart_prompt_prompts,
+      guided_gpt_rules,
+      legacy_prompt_rules
     } = req.body;
 
     // DEBUG: Log what Test Mode is sending
@@ -1725,7 +1730,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 text_snippets,
                 category_templates,
                 consultant_chat_files,
-                consultant_chat_conversations
+                consultant_chat_conversations,
+                guided_gpt_prompts,
+                smart_prompt_prompts,
+                guided_gpt_rules,
+                legacy_prompt_rules
               ) VALUES (
                 ${websiteId},
                 ${enabled ?? false},
@@ -1757,7 +1766,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${JSON.stringify(text_snippets ?? [])},
                 ${JSON.stringify(category_templates ?? [])},
                 ${JSON.stringify(consultant_chat_files ?? [])},
-                ${JSON.stringify(consultant_chat_conversations ?? [])}
+                ${JSON.stringify(consultant_chat_conversations ?? [])},
+                ${JSON.stringify(guided_gpt_prompts ?? [])},
+                ${JSON.stringify(smart_prompt_prompts ?? [])},
+                ${JSON.stringify(guided_gpt_rules ?? [])},
+                ${JSON.stringify(legacy_prompt_rules ?? [])}
               )
               RETURNING id
             `
@@ -1793,7 +1806,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 text_snippets,
                 category_templates,
                 consultant_chat_files,
-                consultant_chat_conversations
+                consultant_chat_conversations,
+                guided_gpt_prompts,
+                smart_prompt_prompts,
+                guided_gpt_rules,
+                legacy_prompt_rules
               ) VALUES (
                 ${workflowId},
               ${enabled ?? false},
@@ -1825,7 +1842,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               ${JSON.stringify(text_snippets ?? [])},
               ${JSON.stringify(category_templates ?? [])},
               ${JSON.stringify(consultant_chat_files ?? [])},
-              ${JSON.stringify(consultant_chat_conversations ?? [])}
+              ${JSON.stringify(consultant_chat_conversations ?? [])},
+              ${JSON.stringify(guided_gpt_prompts ?? [])},
+              ${JSON.stringify(smart_prompt_prompts ?? [])},
+              ${JSON.stringify(guided_gpt_rules ?? [])},
+              ${JSON.stringify(legacy_prompt_rules ?? [])}
             )
             RETURNING id
           `;
@@ -1995,6 +2016,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
                 consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
                 consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
+                guided_gpt_prompts = COALESCE(${guided_gpt_prompts ? JSON.stringify(guided_gpt_prompts) : null}::jsonb, guided_gpt_prompts),
+                smart_prompt_prompts = COALESCE(${smart_prompt_prompts ? JSON.stringify(smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
+                guided_gpt_rules = COALESCE(${guided_gpt_rules ? JSON.stringify(guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
+                legacy_prompt_rules = COALESCE(${legacy_prompt_rules ? JSON.stringify(legacy_prompt_rules) : null}::jsonb, legacy_prompt_rules),
                 updated_at = CURRENT_TIMESTAMP
               WHERE website_id = ${websiteId}
               RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
@@ -2034,6 +2059,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
                 consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
                 consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
+                guided_gpt_prompts = COALESCE(${guided_gpt_prompts ? JSON.stringify(guided_gpt_prompts) : null}::jsonb, guided_gpt_prompts),
+                smart_prompt_prompts = COALESCE(${smart_prompt_prompts ? JSON.stringify(smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
+                guided_gpt_rules = COALESCE(${guided_gpt_rules ? JSON.stringify(guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
+                legacy_prompt_rules = COALESCE(${legacy_prompt_rules ? JSON.stringify(legacy_prompt_rules) : null}::jsonb, legacy_prompt_rules),
                 updated_at = CURRENT_TIMESTAMP
               WHERE workflow_id = ${workflowId}
               RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
@@ -2074,6 +2103,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
                   consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
                   consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
+                  guided_gpt_prompts = COALESCE(${guided_gpt_prompts ? JSON.stringify(guided_gpt_prompts) : null}::jsonb, guided_gpt_prompts),
+                  smart_prompt_prompts = COALESCE(${smart_prompt_prompts ? JSON.stringify(smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
+                  guided_gpt_rules = COALESCE(${guided_gpt_rules ? JSON.stringify(guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
+                  legacy_prompt_rules = COALESCE(${legacy_prompt_rules ? JSON.stringify(legacy_prompt_rules) : null}::jsonb, legacy_prompt_rules),
                   updated_at = CURRENT_TIMESTAMP
                 WHERE website_id = ${websiteId}
               `;
@@ -2106,6 +2139,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
                   consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
                   consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
+                  guided_gpt_prompts = COALESCE(${guided_gpt_prompts ? JSON.stringify(guided_gpt_prompts) : null}::jsonb, guided_gpt_prompts),
+                  smart_prompt_prompts = COALESCE(${smart_prompt_prompts ? JSON.stringify(smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
+                  guided_gpt_rules = COALESCE(${guided_gpt_rules ? JSON.stringify(guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
+                  legacy_prompt_rules = COALESCE(${legacy_prompt_rules ? JSON.stringify(legacy_prompt_rules) : null}::jsonb, legacy_prompt_rules),
                   updated_at = CURRENT_TIMESTAMP
                 WHERE workflow_id = ${workflowId}
               `;
@@ -3593,6 +3630,217 @@ router.post('/upload-bank-to-staging', requireDb, async (req, res) => {
 
   } catch (error) {
     console.error('[Upload Bank to Staging] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// PROMPT LIBRARY
+// Reusable prompts and rules for Guided GPT and Smart Prompt
+// ========================================
+
+/**
+ * GET /api/image-creation/prompt-library
+ * Get all prompts/rules for a website (includes global ones)
+ * Query params: websiteId, type (prompt|rule), mode (guided_gpt|smart_prompt)
+ */
+router.get('/prompt-library', requireDb, async (req, res) => {
+  try {
+    const { websiteId, type, mode } = req.query;
+
+    let items;
+    if (websiteId) {
+      // Get website-specific + global items
+      if (type && mode) {
+        items = await sql`
+          SELECT * FROM prompt_library
+          WHERE (website_id = ${websiteId} OR is_global = true)
+            AND type = ${type}
+            AND mode = ${mode}
+          ORDER BY is_global DESC, updated_at DESC
+        `;
+      } else if (type) {
+        items = await sql`
+          SELECT * FROM prompt_library
+          WHERE (website_id = ${websiteId} OR is_global = true)
+            AND type = ${type}
+          ORDER BY is_global DESC, updated_at DESC
+        `;
+      } else if (mode) {
+        items = await sql`
+          SELECT * FROM prompt_library
+          WHERE (website_id = ${websiteId} OR is_global = true)
+            AND mode = ${mode}
+          ORDER BY is_global DESC, updated_at DESC
+        `;
+      } else {
+        items = await sql`
+          SELECT * FROM prompt_library
+          WHERE (website_id = ${websiteId} OR is_global = true)
+          ORDER BY is_global DESC, updated_at DESC
+        `;
+      }
+    } else {
+      // Get only global items
+      if (type && mode) {
+        items = await sql`
+          SELECT * FROM prompt_library
+          WHERE is_global = true
+            AND type = ${type}
+            AND mode = ${mode}
+          ORDER BY updated_at DESC
+        `;
+      } else if (type) {
+        items = await sql`
+          SELECT * FROM prompt_library
+          WHERE is_global = true
+            AND type = ${type}
+          ORDER BY updated_at DESC
+        `;
+      } else if (mode) {
+        items = await sql`
+          SELECT * FROM prompt_library
+          WHERE is_global = true
+            AND mode = ${mode}
+          ORDER BY updated_at DESC
+        `;
+      } else {
+        items = await sql`
+          SELECT * FROM prompt_library
+          WHERE is_global = true
+          ORDER BY updated_at DESC
+        `;
+      }
+    }
+
+    res.json({ success: true, items });
+
+  } catch (error) {
+    console.error('[Prompt Library] GET error:', error);
+    // If table doesn't exist, return empty array
+    if (error.message?.includes('prompt_library') || error.message?.includes('does not exist')) {
+      return res.json({ success: true, items: [], message: 'Table not created yet - run migration 024' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/image-creation/prompt-library
+ * Save a new prompt or rule to the library
+ */
+router.post('/prompt-library', requireDb, async (req, res) => {
+  try {
+    const {
+      websiteId,
+      isGlobal = false,
+      type,       // 'prompt' or 'rule'
+      mode,       // 'guided_gpt' or 'smart_prompt'
+      name,
+      description,
+      content,
+      tag,        // H, J, C, or Global
+      tags = []
+    } = req.body;
+
+    if (!type || !mode || !name || !content) {
+      return res.status(400).json({ error: 'Missing required fields: type, mode, name, content' });
+    }
+
+    const result = await sql`
+      INSERT INTO prompt_library (
+        website_id, is_global, type, mode, name, description, content, tag, tags
+      ) VALUES (
+        ${isGlobal ? null : websiteId},
+        ${isGlobal},
+        ${type},
+        ${mode},
+        ${name},
+        ${description || null},
+        ${content},
+        ${tag || null},
+        ${tags}
+      )
+      RETURNING *
+    `;
+
+    console.log('[Prompt Library] Created:', result[0].id, name);
+    res.json({ success: true, item: result[0] });
+
+  } catch (error) {
+    console.error('[Prompt Library] POST error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/image-creation/prompt-library/:id
+ * Update a prompt or rule in the library
+ */
+router.put('/prompt-library/:id', requireDb, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      websiteId,
+      isGlobal,
+      name,
+      description,
+      content,
+      tag,
+      tags
+    } = req.body;
+
+    const result = await sql`
+      UPDATE prompt_library
+      SET
+        website_id = COALESCE(${isGlobal ? null : websiteId}, website_id),
+        is_global = COALESCE(${isGlobal}, is_global),
+        name = COALESCE(${name}, name),
+        description = COALESCE(${description}, description),
+        content = COALESCE(${content}, content),
+        tag = COALESCE(${tag}, tag),
+        tags = COALESCE(${tags}, tags),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${id}
+      RETURNING *
+    `;
+
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    console.log('[Prompt Library] Updated:', id);
+    res.json({ success: true, item: result[0] });
+
+  } catch (error) {
+    console.error('[Prompt Library] PUT error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/image-creation/prompt-library/:id
+ * Delete a prompt or rule from the library
+ */
+router.delete('/prompt-library/:id', requireDb, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await sql`
+      DELETE FROM prompt_library
+      WHERE id = ${id}
+      RETURNING id, name
+    `;
+
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    console.log('[Prompt Library] Deleted:', id, result[0].name);
+    res.json({ success: true, deleted: result[0] });
+
+  } catch (error) {
+    console.error('[Prompt Library] DELETE error:', error);
     res.status(500).json({ error: error.message });
   }
 });

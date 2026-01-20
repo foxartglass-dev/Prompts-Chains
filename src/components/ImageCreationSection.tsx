@@ -780,6 +780,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [showTextSnippetBank, setShowTextSnippetBank] = useState(false);
   const [snippetCategoryFilter, setSnippetCategoryFilter] = useState<string>('all');
   const [showPlaceholderTemplates, setShowPlaceholderTemplates] = useState(false);
+  // Prompt Library modal state
+  const [showPromptLibrary, setShowPromptLibrary] = useState(false);
+  const [promptLibraryMode, setPromptLibraryMode] = useState<'prompt' | 'rule'>('prompt');
+  const [promptLibraryTarget, setPromptLibraryTarget] = useState<'guided_gpt' | 'smart_prompt'>('guided_gpt');
+  const [promptLibraryItems, setPromptLibraryItems] = useState<any[]>([]);
+  const [promptLibraryLoading, setPromptLibraryLoading] = useState(false);
+  const [promptLibrarySaveMode, setPromptLibrarySaveMode] = useState(false);
+  const [promptLibrarySaveName, setPromptLibrarySaveName] = useState('');
+  const [promptLibrarySaveDesc, setPromptLibrarySaveDesc] = useState('');
+  const [promptLibrarySaveGlobal, setPromptLibrarySaveGlobal] = useState(false);
   // Placeholder template editing state
   const [editingPlaceholderTemplate, setEditingPlaceholderTemplate] = useState<PlaceholderCategoryTemplate | null>(null);
   const [editPlaceholderTemplateName, setEditPlaceholderTemplateName] = useState('');
@@ -2914,6 +2924,161 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setSmartPromptsActiveTag(targetTag);
     setSmartPromptsActiveId(newPrompt.id);
     showNotification(`Copied prompt to ${targetTag}`, 'success');
+  };
+
+  // ========== PROMPT LIBRARY FUNCTIONS ==========
+
+  // Fetch items from the prompt library
+  const fetchPromptLibrary = async (type: 'prompt' | 'rule', mode: 'guided_gpt' | 'smart_prompt') => {
+    setPromptLibraryLoading(true);
+    try {
+      const websiteId = workflow?.website_id;
+      const params = new URLSearchParams({
+        type,
+        mode,
+        ...(websiteId && { websiteId: String(websiteId) })
+      });
+      const res = await fetch(`/api/image-creation/prompt-library?${params}`);
+      const data = await res.json();
+      if (data.success) {
+        setPromptLibraryItems(data.items || []);
+      } else {
+        showNotification(data.error || 'Failed to fetch library', 'error');
+      }
+    } catch (error) {
+      console.error('Prompt library fetch error:', error);
+      showNotification('Failed to load prompt library', 'error');
+    }
+    setPromptLibraryLoading(false);
+  };
+
+  // Open prompt library modal
+  const openPromptLibrary = (type: 'prompt' | 'rule', mode: 'guided_gpt' | 'smart_prompt', saveMode: boolean = false) => {
+    setPromptLibraryMode(type);
+    setPromptLibraryTarget(mode);
+    setPromptLibrarySaveMode(saveMode);
+    setPromptLibrarySaveName('');
+    setPromptLibrarySaveDesc('');
+    setPromptLibrarySaveGlobal(false);
+    setShowPromptLibrary(true);
+    fetchPromptLibrary(type, mode);
+  };
+
+  // Save current prompt/rule to library
+  const saveToPromptLibrary = async (content: string, tag: string) => {
+    if (!promptLibrarySaveName.trim()) {
+      showNotification('Please enter a name', 'error');
+      return;
+    }
+    try {
+      const res = await fetch('/api/image-creation/prompt-library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          websiteId: workflow?.website_id,
+          isGlobal: promptLibrarySaveGlobal,
+          type: promptLibraryMode,
+          mode: promptLibraryTarget,
+          name: promptLibrarySaveName,
+          description: promptLibrarySaveDesc,
+          content,
+          tag
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification('Saved to library!', 'success');
+        setShowPromptLibrary(false);
+        // Refresh the library
+        fetchPromptLibrary(promptLibraryMode, promptLibraryTarget);
+      } else {
+        showNotification(data.error || 'Failed to save', 'error');
+      }
+    } catch (error) {
+      console.error('Save to library error:', error);
+      showNotification('Failed to save to library', 'error');
+    }
+  };
+
+  // Apply a library item to the current prompts/rules
+  const applyFromPromptLibrary = (item: any) => {
+    if (promptLibraryMode === 'prompt') {
+      // Add as a new prompt
+      const tag = promptLibraryTarget === 'guided_gpt' ? guidedPromptsActiveTag : smartPromptsActiveTag;
+      if (promptLibraryTarget === 'guided_gpt') {
+        const existingPrompts = settings.guided_gpt_prompts || [];
+        const newPrompt: GuidedGptPrompt = {
+          id: `gpt-${Date.now()}`,
+          tag,
+          name: item.name,
+          guardrails: {
+            instructions: item.content,
+            uniformDescription: '',
+            defaultSubject: '',
+            avoidList: ''
+          },
+          globalAppliesTo: tag === 'Global' ? ['H', 'J', 'C'] : undefined,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        updateSettings({ guided_gpt_prompts: [...existingPrompts, newPrompt] });
+        setGuidedPromptsActiveId(newPrompt.id);
+      } else {
+        const existingPrompts = settings.smart_prompt_prompts || [];
+        const newPrompt: SmartPromptPrompt = {
+          id: `smart-${Date.now()}`,
+          tag,
+          name: item.name,
+          guidance: item.content,
+          globalAppliesTo: tag === 'Global' ? ['H', 'J', 'C'] : undefined,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        updateSettings({ smart_prompt_prompts: [...existingPrompts, newPrompt] });
+        setSmartPromptsActiveId(newPrompt.id);
+      }
+    } else {
+      // Add as a new rule
+      const tag = promptLibraryTarget === 'guided_gpt' ? guidedPromptsActiveTag : smartPromptsActiveTag;
+      const newRule: TagBasedRule = {
+        id: `rule-${Date.now()}`,
+        tag,
+        title: item.name,
+        text: item.content,
+        order: 0,
+        globalAppliesTo: tag === 'Global' ? ['H', 'J', 'C'] : undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      if (promptLibraryTarget === 'guided_gpt') {
+        const existingRules = settings.guided_gpt_rules || [];
+        updateSettings({ guided_gpt_rules: [...existingRules, newRule] });
+      } else {
+        const existingRules = settings.legacy_prompt_rules || [];
+        updateSettings({ legacy_prompt_rules: [...existingRules, newRule] });
+      }
+    }
+    showNotification(`Applied "${item.name}" from library`, 'success');
+    setShowPromptLibrary(false);
+  };
+
+  // Delete an item from the library
+  const deleteFromPromptLibrary = async (itemId: number) => {
+    if (!confirm('Delete this item from the library?')) return;
+    try {
+      const res = await fetch(`/api/image-creation/prompt-library/${itemId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification('Deleted from library', 'success');
+        setPromptLibraryItems(promptLibraryItems.filter(i => i.id !== itemId));
+      } else {
+        showNotification(data.error || 'Failed to delete', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to delete', 'error');
+    }
   };
 
   // Chat Handlers
@@ -6741,16 +6906,32 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </select>
                               </div>
                             )}
+                            {/* Prompt Library buttons */}
+                            <button
+                              onClick={() => openPromptLibrary('prompt', 'guided_gpt', false)}
+                              className="px-2 py-1.5 text-xs bg-purple-600 hover:bg-purple-500 text-white rounded transition font-medium"
+                              title="Load prompt from library"
+                            >
+                              📚 Library
+                            </button>
                           </div>
                         ) : (
                           <div className="text-center py-4 text-slate-500 text-xs">
                             <p>No prompts for {guidedPromptsActiveTag === 'Global' ? 'Global' : `tag "${guidedPromptsActiveTag}"`} yet.</p>
-                            <button
-                              onClick={() => handleAddGuidedPrompt(guidedPromptsActiveTag)}
-                              className="mt-2 px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-light text-slate-900 text-xs rounded transition font-medium"
-                            >
-                              + Add First Prompt
-                            </button>
+                            <div className="flex items-center justify-center gap-2 mt-2">
+                              <button
+                                onClick={() => handleAddGuidedPrompt(guidedPromptsActiveTag)}
+                                className="px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-light text-slate-900 text-xs rounded transition font-medium"
+                              >
+                                + Add First Prompt
+                              </button>
+                              <button
+                                onClick={() => openPromptLibrary('prompt', 'guided_gpt', false)}
+                                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition font-medium"
+                              >
+                                📚 From Library
+                              </button>
+                            </div>
                           </div>
                         )}
 
@@ -6773,13 +6954,25 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   </span>
                                 )}
                               </div>
-                              <button
-                                onClick={() => handleRemoveGuidedPrompt(activeGuidedPrompt.id)}
-                                className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition text-xs"
-                                title="Delete this prompt"
-                              >
-                                🗑️ Delete
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    setPromptLibrarySaveName(activeGuidedPrompt.name);
+                                    openPromptLibrary('prompt', 'guided_gpt', true);
+                                  }}
+                                  className="text-purple-400 hover:text-purple-300 p-1 rounded hover:bg-purple-900/30 transition text-xs"
+                                  title="Save to library for reuse"
+                                >
+                                  💾 Save to Library
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveGuidedPrompt(activeGuidedPrompt.id)}
+                                  className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition text-xs"
+                                  title="Delete this prompt"
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
                             </div>
 
                             {/* Guardrails */}
@@ -6942,12 +7135,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 {getRulesForTag(settings.guided_gpt_rules || [], guidedRulesActiveTag).length === 0 ? (
                                   <div className="text-center py-4 text-slate-500 text-xs">
                                     <p>No rules for {guidedRulesActiveTag === 'Global' ? 'Global' : `tag "${guidedRulesActiveTag}"`} yet.</p>
-                                    <button
-                                      onClick={() => handleAddGuidedRule(guidedRulesActiveTag)}
-                                      className="mt-2 px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-light text-slate-900 text-xs rounded transition font-medium"
-                                    >
-                                      + Add First Rule
-                                    </button>
+                                    <div className="flex items-center justify-center gap-2 mt-2">
+                                      <button
+                                        onClick={() => handleAddGuidedRule(guidedRulesActiveTag)}
+                                        className="px-3 py-1.5 bg-brand-gold hover:bg-brand-gold-light text-slate-900 text-xs rounded transition font-medium"
+                                      >
+                                        + Add First Rule
+                                      </button>
+                                      <button
+                                        onClick={() => openPromptLibrary('rule', 'guided_gpt', false)}
+                                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition font-medium"
+                                      >
+                                        📚 From Library
+                                      </button>
+                                    </div>
                                   </div>
                                 ) : (
                                   getRulesForTag(settings.guided_gpt_rules || [], guidedRulesActiveTag).map((rule, idx) => (
@@ -8733,16 +8934,32 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </select>
                               </div>
                             )}
+                            {/* Prompt Library button */}
+                            <button
+                              onClick={() => openPromptLibrary('prompt', 'smart_prompt', false)}
+                              className="px-2 py-1.5 text-xs bg-purple-600 hover:bg-purple-500 text-white rounded transition font-medium"
+                              title="Load prompt from library"
+                            >
+                              📚 Library
+                            </button>
                           </div>
                         ) : (
                           <div className="text-center py-4 text-slate-500 text-xs">
                             <p>No prompts for {smartPromptsActiveTag === 'Global' ? 'Global' : `tag "${smartPromptsActiveTag}"`} yet.</p>
-                            <button
-                              onClick={() => handleAddSmartPrompt(smartPromptsActiveTag)}
-                              className="mt-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition font-medium"
-                            >
-                              + Add First Prompt
-                            </button>
+                            <div className="flex items-center justify-center gap-2 mt-2">
+                              <button
+                                onClick={() => handleAddSmartPrompt(smartPromptsActiveTag)}
+                                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition font-medium"
+                              >
+                                + Add First Prompt
+                              </button>
+                              <button
+                                onClick={() => openPromptLibrary('prompt', 'smart_prompt', false)}
+                                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition font-medium"
+                              >
+                                📚 From Library
+                              </button>
+                            </div>
                           </div>
                         )}
 
@@ -8765,13 +8982,25 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   </span>
                                 )}
                               </div>
-                              <button
-                                onClick={() => handleRemoveSmartPrompt(activeSmartPrompt.id)}
-                                className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition text-xs"
-                                title="Delete this prompt"
-                              >
-                                🗑️ Delete
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    setPromptLibrarySaveName(activeSmartPrompt.name);
+                                    openPromptLibrary('prompt', 'smart_prompt', true);
+                                  }}
+                                  className="text-purple-400 hover:text-purple-300 p-1 rounded hover:bg-purple-900/30 transition text-xs"
+                                  title="Save to library for reuse"
+                                >
+                                  💾 Save to Library
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveSmartPrompt(activeSmartPrompt.id)}
+                                  className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-900/30 transition text-xs"
+                                  title="Delete this prompt"
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
                             </div>
 
                             {/* Guidance */}
@@ -8894,12 +9123,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 {getRulesForTag(settings.legacy_prompt_rules || [], legacyRulesActiveTag).length === 0 ? (
                                   <div className="text-center py-4 text-slate-500 text-xs">
                                     <p>No rules for {legacyRulesActiveTag === 'Global' ? 'Global' : `tag "${legacyRulesActiveTag}"`} yet.</p>
-                                    <button
-                                      onClick={() => handleAddLegacyRule(legacyRulesActiveTag)}
-                                      className="mt-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition"
-                                    >
-                                      + Add First Rule
-                                    </button>
+                                    <div className="flex items-center justify-center gap-2 mt-2">
+                                      <button
+                                        onClick={() => handleAddLegacyRule(legacyRulesActiveTag)}
+                                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition"
+                                      >
+                                        + Add First Rule
+                                      </button>
+                                      <button
+                                        onClick={() => openPromptLibrary('rule', 'smart_prompt', false)}
+                                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition font-medium"
+                                      >
+                                        📚 From Library
+                                      </button>
+                                    </div>
                                   </div>
                                 ) : (
                                   getRulesForTag(settings.legacy_prompt_rules || [], legacyRulesActiveTag).map((rule, idx) => (
@@ -14723,6 +14960,166 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <p className="text-slate-400 text-sm">
                     Switch to <strong className="text-purple-400">Advanced</strong> mode to use placeholder categories with multiple options per category.
                   </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========== PROMPT LIBRARY MODAL ========== */}
+      {showPromptLibrary && createPortal(
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-slate-900 rounded-xl w-[90vw] max-w-[800px] max-h-[80vh] flex flex-col border border-purple-500/30">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-purple-500/30 shrink-0">
+              <div>
+                <h2 className="text-xl font-semibold text-purple-400">
+                  {promptLibrarySaveMode ? 'Save to' : ''} {promptLibraryMode === 'prompt' ? 'Prompt' : 'Rule'} Library
+                  <span className="text-sm font-normal text-slate-400 ml-2">
+                    ({promptLibraryTarget === 'guided_gpt' ? 'Guided GPT' : 'Smart Prompt'})
+                  </span>
+                </h2>
+                <p className="text-sm text-gray-400 mt-1">
+                  {promptLibrarySaveMode
+                    ? 'Save this prompt/rule for reuse across workflows'
+                    : 'Select a template to apply to your current setup'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPromptLibrary(false)}
+                className="text-gray-400 hover:text-white text-3xl leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto p-4">
+              {promptLibrarySaveMode ? (
+                /* Save Mode */
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Name *</label>
+                    <input
+                      type="text"
+                      value={promptLibrarySaveName}
+                      onChange={(e) => setPromptLibrarySaveName(e.target.value)}
+                      placeholder="e.g., Cleaning Company Prompt"
+                      className="w-full bg-slate-800 border border-purple-500/50 rounded px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Description (optional)</label>
+                    <textarea
+                      value={promptLibrarySaveDesc}
+                      onChange={(e) => setPromptLibrarySaveDesc(e.target.value)}
+                      placeholder="What is this prompt/rule for?"
+                      className="w-full bg-slate-800 border border-purple-500/50 rounded px-3 py-2 text-white resize-none"
+                      rows={2}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="saveGlobal"
+                      checked={promptLibrarySaveGlobal}
+                      onChange={(e) => setPromptLibrarySaveGlobal(e.target.checked)}
+                      className="w-4 h-4 rounded border-purple-500 text-purple-600 focus:ring-purple-500 bg-slate-900"
+                    />
+                    <label htmlFor="saveGlobal" className="text-sm text-gray-300">
+                      Make Global (available to all websites)
+                    </label>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-4">
+                    <button
+                      onClick={() => setShowPromptLibrary(false)}
+                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Get content from active prompt/rule
+                        let content = '';
+                        let tag = '';
+                        if (promptLibraryMode === 'prompt') {
+                          if (promptLibraryTarget === 'guided_gpt' && activeGuidedPrompt) {
+                            content = activeGuidedPrompt.guardrails.instructions;
+                            tag = activeGuidedPrompt.tag;
+                          } else if (promptLibraryTarget === 'smart_prompt' && activeSmartPrompt) {
+                            content = activeSmartPrompt.guidance;
+                            tag = activeSmartPrompt.tag;
+                          }
+                        }
+                        saveToPromptLibrary(content, tag);
+                      }}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded transition font-medium"
+                    >
+                      💾 Save to Library
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Browse/Apply Mode */
+                <div className="space-y-4">
+                  {promptLibraryLoading ? (
+                    <div className="text-center py-8 text-slate-400">
+                      Loading library...
+                    </div>
+                  ) : promptLibraryItems.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400">
+                      <p>No {promptLibraryMode}s saved yet.</p>
+                      <p className="text-sm mt-2">Save your first {promptLibraryMode} to build your library!</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3">
+                      {promptLibraryItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="bg-slate-800 rounded-lg p-4 border border-slate-700 hover:border-purple-500/50 transition"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-medium text-white">{item.name}</h3>
+                                {item.is_global && (
+                                  <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded">
+                                    GLOBAL
+                                  </span>
+                                )}
+                                {item.tag && (
+                                  <span className="text-[10px] bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded">
+                                    {item.tag}
+                                  </span>
+                                )}
+                              </div>
+                              {item.description && (
+                                <p className="text-sm text-slate-400 mt-1">{item.description}</p>
+                              )}
+                              <p className="text-xs text-slate-500 mt-2 line-clamp-2">{item.content}</p>
+                            </div>
+                            <div className="flex items-center gap-2 ml-4">
+                              <button
+                                onClick={() => applyFromPromptLibrary(item)}
+                                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded transition"
+                              >
+                                Apply
+                              </button>
+                              <button
+                                onClick={() => deleteFromPromptLibrary(item.id)}
+                                className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition"
+                                title="Delete"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
