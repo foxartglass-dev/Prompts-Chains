@@ -30,6 +30,13 @@ interface ImageDecisionReport {
   quality?: string | null;
   smartMatchingEnabled?: boolean;
   images: ImageDecisionReportImage[];
+  // NEW: Detailed source tracking (added Jan 20, 2026)
+  sourceMode?: 'bank' | 'bank_fallback' | 'live' | 'none'; // More detailed than mode
+  promptMode?: 'main_prompt' | 'guided_gpt' | 'smart_prompt' | null; // Which prompt source was used
+  livePromptMode?: string; // Legacy field, same as promptMode
+  sourceSummary?: string; // Human-readable like "Bank → Main Prompt"
+  avatar?: string; // Avatar name used
+  mainPrompt?: string; // First 100 chars of main prompt if used
 }
 
 interface Article {
@@ -996,6 +1003,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                 <th className="p-2">Article</th>
                 <th className="p-2">Meta</th>
                 <th className="p-2">Image</th>
+                <th className="p-2">Source</th>
                 <th className="p-2">Bank</th>
                 <th className="p-2">Live</th>
                 <th className="p-2">AI</th>
@@ -1068,6 +1076,29 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                               : 'bg-amber-600/30 text-amber-400'
                         }`}>
                           {!hasImages ? 'Off' : hasPushedImages ? 'WP' : 'Draft'}
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="p-2 text-xs">
+                    {/* Source Summary - Shows path like "Bank", "Bank → Main Prompt", "Live/Guided GPT" */}
+                    {(() => {
+                      const report = article.image_decision_report;
+                      if (!report) return <span className="text-gray-500">-</span>;
+
+                      // Use the new sourceSummary field if available, otherwise build from mode/promptMode
+                      const summary = report.sourceSummary ||
+                        (report.mode === 'bank' ? 'Bank' :
+                         report.mode === 'live' ? `Live/${report.livePromptMode || 'smart'}` : '-');
+
+                      // Color based on source mode
+                      const colorClass = report.sourceMode === 'bank' ? 'text-brand-gold' :
+                                         report.sourceMode === 'bank_fallback' ? 'text-amber-400' :
+                                         report.mode === 'live' ? 'text-brand-cyan' : 'text-gray-400';
+
+                      return (
+                        <span className={`${colorClass} truncate max-w-[100px]`} title={summary}>
+                          {summary}
                         </span>
                       );
                     })()}
@@ -1182,6 +1213,20 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                         })} {new Date(selectedArticle.created_at).toLocaleTimeString('en-US', {
                           hour: 'numeric', minute: '2-digit', hour12: true
                         })}
+                      </span>
+                    )}
+                    {/* IMAGE SOURCE BADGE - Shows path like "Bank → Main Prompt" */}
+                    {selectedArticle.image_decision_report && (
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ml-2 ${
+                        selectedArticle.image_decision_report.sourceMode === 'bank' ? 'bg-brand-gold/20 text-brand-gold' :
+                        selectedArticle.image_decision_report.sourceMode === 'bank_fallback' ? 'bg-amber-500/20 text-amber-400' :
+                        selectedArticle.image_decision_report.mode === 'live' ? 'bg-brand-cyan/20 text-brand-cyan' :
+                        'bg-gray-600/20 text-gray-400'
+                      }`}>
+                        {selectedArticle.image_decision_report.sourceSummary ||
+                         (selectedArticle.image_decision_report.mode === 'bank' ? 'Bank' :
+                          selectedArticle.image_decision_report.mode === 'live' ?
+                            `Live/${selectedArticle.image_decision_report.livePromptMode || 'smart'}` : '-')}
                       </span>
                     )}
                   </div>
