@@ -68,6 +68,66 @@ The 507 error issue was already fixed by excluding `template_data` from list que
 
 ---
 
+## Issue 4: fallback_prompt_mode Not Saving (CRITICAL) - FIXED Jan 20, 2026
+
+### What Was Wrong
+User could select Main Prompt, Guided GPT, or Smart Prompt for "When bank is empty, generate using:" but ALL selections produced the same behavior. The setting was never saved to the database.
+
+### Root Cause Discovery (Archaeology)
+This was a **multi-layer bug** requiring investigation through 4 code layers:
+
+1. **Frontend (ImageCreationSection.tsx)**: Working correctly - sent fallback_prompt_mode in updateSettings()
+2. **Server API (image-creation.js)**: Had the column in queries but...
+3. **Database**: THE COLUMN DIDN'T EXIST! It was in schema.sql but never migrated
+4. **Runtime (elementor.js)**: Was chaining settings with `||` which masked the problem
+
+### The Hidden Bug Pattern
+```javascript
+// schema.sql had the column defined:
+fallback_prompt_mode VARCHAR(20) DEFAULT 'main_prompt'
+
+// BUT the migration was never run! Column didn't exist in production.
+// When code tried to save:
+UPDATE settings SET fallback_prompt_mode = 'guided_gpt' WHERE id = 1
+// PostgreSQL: ERROR column "fallback_prompt_mode" does not exist
+
+// Fallback query ran WITHOUT the column:
+UPDATE settings SET integration_mode = 'bank' WHERE id = 1
+// SUCCESS but fallback_prompt_mode was lost!
+
+// When reading back:
+config.fallback_prompt_mode // undefined
+
+// elementor.js line 1307 then chained:
+livePromptMode = config.fallback_prompt_mode || config.live_prompt_mode || 'main_prompt'
+// Since fallback_prompt_mode was undefined, it always fell through!
+```
+
+### How It Was Fixed
+1. **Added migration 022** to `setup-all.mjs` to create `fallback_prompt_mode` column
+2. **Added migration 023** to create `live_prompt_mode` column (was also missing)
+3. **Fixed the chaining logic** in elementor.js - now treats the two settings separately:
+   ```javascript
+   if (isFallbackFromBank) {
+     livePromptMode = config.fallback_prompt_mode || 'main_prompt';  // SEPARATE!
+   } else {
+     livePromptMode = config.live_prompt_mode || 'main_prompt';
+   }
+   ```
+
+### Golden Rules Added
+- **Golden Rule #15**: fallback_prompt_mode and live_prompt_mode are SEPARATE - never chain with ||
+- **Golden Rule #16**: Database columns MUST exist - schema.sql alone is NOT enough
+
+### Testing Confirmation
+Ran 6 test scenarios (Jan 20, 2026):
+- Bank mode: Main Prompt ✓, Guided GPT ✓, Smart Prompt ✓
+- Live mode: Main Prompt ✓, Guided GPT ✓, Smart Prompt ✓
+
+All 6 correctly used the selected prompt mode as shown in logs.
+
+---
+
 ## Commits That Fixed These Issues
 
 | Commit | Description |
@@ -77,6 +137,8 @@ The 507 error issue was already fixed by excluding `template_data` from list que
 | e8da445 | Add database migration for missing columns |
 | ae7c6ec | Add debug logging for templates |
 | 5780550 | Add template columns to ALL fallback queries |
+| 6c96d15 | Fix fallback_prompt_mode not being respected (logic fix) |
+| 59a74a8 | Add fallback_prompt_mode and live_prompt_mode columns to database |
 
 ---
 
@@ -90,4 +152,10 @@ The 507 error issue was already fixed by excluding `template_data` from list que
 
 4. **GET endpoints may not return new fields** - Just because a column exists doesn't mean the API returns it.
 
-5. **The Blueprint page has more details** - See Golden Rules #13 and #14, and the Changelog for Jan 20, 2026.
+5. **schema.sql is NOT the truth** - It's documentation only. Actual columns come from setup-all.mjs migrations which run on server start.
+
+6. **Check if columns actually exist** - When code "silently fails", check if the database column physically exists. Use `SELECT column_name FROM information_schema.columns`.
+
+7. **Don't chain settings with ||** - If two settings control different paths (fallback vs direct), they must be kept separate. Chaining with `||` masks bugs.
+
+8. **The Blueprint page has more details** - See Golden Rules #13-16, System Archaeology tab, and the Changelog for Jan 20, 2026.
