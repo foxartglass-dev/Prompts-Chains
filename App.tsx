@@ -2073,15 +2073,15 @@ const App: React.FC = () => {
     
     const renderSection = (title: React.ReactNode, id: string, icon: React.ReactNode, children: React.ReactNode, defaultOpen = false, rightContent?: React.ReactNode) => (
       <div className="bg-card rounded-xl shadow-glow-cyan card-3d hover:shadow-card-hover border-2 border-brand-cyan relative z-0">
-        <h2 className={`text-xl font-bold flex items-center text-brand-cyan py-2 px-4`}>
+        <h2 className={`text-xl font-bold flex items-center text-brand-cyan py-2 px-2 sm:px-4 overflow-x-auto`}>
           <div className="flex items-center cursor-pointer shrink-0" onClick={() => toggleCollapsible(id)}>
             {icon}
-            <span className="ml-3">{title}</span>
-            <svg className={`w-5 h-5 ml-2 transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+            <span className="ml-2 sm:ml-3 text-base sm:text-xl">{title}</span>
+            <svg className={`w-4 h-4 sm:w-5 sm:h-5 ml-1 sm:ml-2 transform transition-transform ${openSections.has(id) ? 'rotate-180' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
           </div>
           {/* Clickable spacer area - click to collapse/expand */}
-          <div className="flex-1 h-8 cursor-pointer" onClick={() => toggleCollapsible(id)}></div>
-          {rightContent && <div className="flex items-center gap-3 shrink-0" onClick={e => e.stopPropagation()}>{rightContent}</div>}
+          <div className="flex-1 min-w-[8px] h-8 cursor-pointer" onClick={() => toggleCollapsible(id)}></div>
+          {rightContent && <div className="flex items-center gap-1 sm:gap-3 shrink-0" onClick={e => e.stopPropagation()}>{rightContent}</div>}
         </h2>
         <div className={`transition-all duration-300 ease-in-out ${openSections.has(id) ? '' : 'max-h-0 overflow-hidden'}`}>
             <div className="p-5 pt-0 border-t border-brand-cyan/30">{children}</div>
@@ -3130,7 +3130,7 @@ const App: React.FC = () => {
                     <>
                         {/* Workflow Context - Matches Default dropdown style */}
                         {currentWorkflowContext.workflowName && (
-                            <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 sm:py-1.5 bg-slate-900 border-2 border-brand-gold rounded-lg max-w-[50vw] sm:max-w-none overflow-hidden">
+                            <div className="flex items-center gap-1 px-1 sm:px-2.5 py-0.5 sm:py-1.5 bg-slate-900 border border-brand-gold sm:border-2 rounded-lg max-w-[35vw] sm:max-w-none overflow-hidden">
                                 <svg className="h-4 w-4 text-brand-cyan flex-shrink-0 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
@@ -3141,30 +3141,30 @@ const App: React.FC = () => {
                                 <span className="text-slate-500 hidden sm:inline">|</span>
                                 {currentWorkflowContext.isStandalone ? (
                                     <>
-                                        <span className="text-purple-400 text-xs sm:text-sm font-medium">Standalone</span>
+                                        <span className="text-purple-400 text-[10px] sm:text-sm font-medium">Standalone</span>
                                         <span className="text-slate-500 hidden sm:inline">-</span>
-                                        <span className="text-brand-gold text-xs sm:text-sm font-semibold truncate max-w-[100px] sm:max-w-none">{currentWorkflowContext.workflowName}</span>
+                                        <span className="text-brand-gold text-[10px] sm:text-sm font-semibold truncate max-w-[50px] sm:max-w-none">{currentWorkflowContext.workflowName}</span>
                                     </>
                                 ) : (
                                     <>
-                                        <span className="text-brand-cyan text-xs sm:text-sm font-medium whitespace-nowrap truncate max-w-[60px] sm:max-w-none">
+                                        <span className="text-brand-cyan text-[10px] sm:text-sm font-medium whitespace-nowrap truncate max-w-[40px] sm:max-w-none">
                                             {(currentWorkflowContext.clientName || 'Client').length > 20
                                                 ? (currentWorkflowContext.clientName || 'Client').substring(0, 20) + '...'
                                                 : currentWorkflowContext.clientName || 'Client'}
                                         </span>
                                         <span className="text-slate-500 hidden sm:inline">-</span>
-                                        <span className="text-brand-gold text-xs sm:text-sm font-medium whitespace-nowrap truncate max-w-[60px] sm:max-w-none hidden sm:inline">
+                                        <span className="text-brand-gold text-[10px] sm:text-sm font-medium whitespace-nowrap truncate max-w-[40px] sm:max-w-none hidden sm:inline">
                                             {formatWebsiteUrl(currentWorkflowContext.websiteName)}
                                         </span>
                                         <span className="text-slate-500 hidden sm:inline">-</span>
-                                        <span className="text-brand-gold text-xs sm:text-sm font-semibold whitespace-nowrap truncate max-w-[80px] sm:max-w-none">{currentWorkflowContext.workflowName}</span>
+                                        <span className="text-brand-gold text-[10px] sm:text-sm font-semibold whitespace-nowrap truncate max-w-[50px] sm:max-w-none">{currentWorkflowContext.workflowName}</span>
                                     </>
                                 )}
                             </div>
                         )}
 
                         {/* Notification Button */}
-                        <div className="ml-1 sm:ml-2 flex-shrink-0">
+                        <div className="flex-shrink-0 hidden sm:block">
                             <PendingMetaNotification
                                 onOpenArticle={(articleId) => {
                                     setIsArticlesOpen(true);
@@ -3177,7 +3177,7 @@ const App: React.FC = () => {
                             <button
                                 onClick={() => saveWorkflowToDatabase(true)}
                                 disabled={isSaving}
-                                className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg font-semibold transition border-2 text-xs cursor-pointer hover:opacity-80 flex-shrink-0 ${
+                                className={`flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg font-semibold transition border sm:border-2 text-[10px] sm:text-xs cursor-pointer hover:opacity-80 flex-shrink-0 ${
                                     hasUnsavedChanges
                                         ? 'bg-yellow-500 text-slate-900 border-yellow-500'
                                         : 'bg-brand-cyan text-slate-900 border-brand-cyan'
@@ -3186,15 +3186,15 @@ const App: React.FC = () => {
                             >
                                 {isSaving ? (
                                     <>
-                                        <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
-                                        <span className="font-bold">Saving...</span>
+                                        <span className="font-bold hidden sm:inline">Saving...</span>
                                     </>
                                 ) : (
                                     <>
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
                                         </svg>
                                         <span className="font-bold">
