@@ -488,6 +488,17 @@ router.post('/publish', async (req, res) => {
     let imageGenModel = 'flux-1.1-pro';  // Default to Flux (gpt-image-1.5 requires org verification)
     let imageQuality = 'low'; // Default to low for websites (cheapest)
 
+    // CRITICAL: Store first config read values for consistency with second read
+    // These persist across both config reads to ensure avatar/settings match
+    let firstReadLivePromptMode = null;
+    let firstReadFallbackPromptMode = null;
+    let firstReadTargetAvatar = null;
+    let firstReadSmartPromptGuidance = null;
+    let firstReadMergedGuardrails = null;
+    let firstReadArticleTag = null;
+    let firstReadSmartMatchingConfig = null;
+    let firstReadMatchPlurals = true;
+
     // Skip ALL image-related steps if articleOnly mode
     if (!articleOnly && workflowId && isDatabaseEnabled()) {
       try {
@@ -597,6 +608,17 @@ router.post('/publish', async (req, res) => {
           config._targetAvatar = targetAvatar;
           config._mergedGuardrails = mergedGuardrails;
           config._articleTag = articleTag;
+
+          // CRITICAL: Also store in outer-scoped variables for consistency
+          // This ensures the second config read uses the SAME avatar and settings
+          firstReadLivePromptMode = livePromptMode;
+          firstReadFallbackPromptMode = fallbackPromptMode;
+          firstReadTargetAvatar = targetAvatar;
+          firstReadSmartPromptGuidance = smartPromptGuidance;
+          firstReadMergedGuardrails = mergedGuardrails;
+          firstReadArticleTag = articleTag;
+          firstReadSmartMatchingConfig = config.smart_matching_config || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 };
+          firstReadMatchPlurals = config.match_plurals !== false;
 
           console.log('[Elementor Publish] Integration mode:', integrationMode);
           console.log('[Elementor Publish] Smart matching mode:', smartMatchingMode);
@@ -1274,17 +1296,24 @@ router.post('/publish', async (req, res) => {
     // Skip if articleOnly mode
     const needsLiveGeneration = !articleOnly && effectiveGenerateLive && imagesFromBank < dynamicMaxImages;
 
-    // Get Generate Live settings from config if available
-    let livePromptMode = 'smart_prompt';
-    let targetAvatar = null;
-    let smartPromptGuidance = '';
-    let matchPlurals = true;
-    let smartMatchingConfig = { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 };
-    let guidedGuardrails = null;
+    // Get Generate Live settings - USE FIRST READ VALUES IF AVAILABLE for consistency
+    // This fixes the bug where second config read might get different data or fail silently
+    let livePromptMode = firstReadLivePromptMode || 'main_prompt'; // Default to main_prompt, NOT smart_prompt
+    let targetAvatar = firstReadTargetAvatar; // Use avatar from first read
+    let smartPromptGuidance = firstReadSmartPromptGuidance || '';
+    let matchPlurals = firstReadMatchPlurals;
+    let smartMatchingConfig = firstReadSmartMatchingConfig || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 };
+    let guidedGuardrails = firstReadMergedGuardrails || null;
     let guidedModel = 'gpt-4o';
 
     // Determine if this is a fallback from bank mode (bank was tried but had insufficient images)
     const isFallbackFromBank = effectiveUseBank && imagesFromBank > 0 && imagesFromBank < dynamicMaxImages;
+
+    // Log which values we're starting with from first read
+    console.log('[Elementor Publish] Step 3 - Starting with first read values:');
+    console.log('  - livePromptMode:', livePromptMode, '(from firstRead:', !!firstReadLivePromptMode, ')');
+    console.log('  - targetAvatar:', targetAvatar?.name || '(null)', '(from firstRead:', !!firstReadTargetAvatar, ')');
+    console.log('  - targetAvatar.mainPrompt exists:', !!targetAvatar?.mainPrompt);
 
     if (workflowId && isDatabaseEnabled()) {
       try {
@@ -1339,27 +1368,39 @@ router.post('/publish', async (req, res) => {
           // Use fallback_prompt_mode when falling back from bank, otherwise use live_prompt_mode
           // CRITICAL: Don't chain fallback_prompt_mode -> live_prompt_mode, they are SEPARATE settings!
           // User explicitly sets fallback_prompt_mode for bank fallback behavior.
+          // NOTE: Only update prompt mode if we don't already have valid first read values
           if (isFallbackFromBank || (effectiveUseBank && imagesFromBank === 0)) {
             // Fallback scenario: bank was tried but empty or insufficient
             // Use fallback_prompt_mode (default: main_prompt), NOT live_prompt_mode
-            livePromptMode = config.fallback_prompt_mode || 'main_prompt';
+            livePromptMode = firstReadFallbackPromptMode || config.fallback_prompt_mode || 'main_prompt';
             console.log('[Elementor Publish] Using FALLBACK prompt mode:', livePromptMode);
             console.log('[Elementor Publish] DEBUG - config.fallback_prompt_mode was:', config.fallback_prompt_mode || '(undefined)');
           } else {
             // Direct Generate Live mode (integration_mode = 'live' or not using bank)
-            livePromptMode = config.live_prompt_mode || 'main_prompt';
+            // CRITICAL FIX: Prefer firstRead value to ensure consistency
+            livePromptMode = firstReadLivePromptMode || config.live_prompt_mode || 'main_prompt';
             console.log('[Elementor Publish] Using DIRECT LIVE prompt mode:', livePromptMode);
+            console.log('[Elementor Publish] DEBUG - firstReadLivePromptMode:', firstReadLivePromptMode, 'config.live_prompt_mode:', config.live_prompt_mode);
           }
 
-          smartPromptGuidance = config.smart_prompt_guidance || '';
-          matchPlurals = config.match_plurals !== false;
-          smartMatchingConfig = config.smart_matching_config || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 };
+          // Only update these if we don't have values from first read
+          if (!firstReadSmartPromptGuidance) smartPromptGuidance = config.smart_prompt_guidance || '';
+          if (!firstReadMatchPlurals) matchPlurals = config.match_plurals !== false;
+          if (!firstReadSmartMatchingConfig) smartMatchingConfig = config.smart_matching_config || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 };
 
-          // Find the target avatar for this article (using multi-prompt per tag system)
+          // CRITICAL FIX: Only select avatar from second read if first read didn't provide one
+          // This ensures we use the SAME avatar throughout the entire publish flow
           const avatars = config.audience_avatars || [];
           const tagMatch = keyword?.match(/\(([A-Z])\)/i);
           const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
-          targetAvatar = selectAvatarForTag(avatars, articleTag);
+
+          if (!targetAvatar) {
+            // First read didn't provide avatar, fall back to second read selection
+            targetAvatar = selectAvatarForTag(avatars, articleTag);
+            console.log('[Elementor Publish] Avatar selected from SECOND READ (first read was null)');
+          } else {
+            console.log('[Elementor Publish] Using avatar from FIRST READ for consistency');
+          }
 
           // DEBUG: Log all avatars and their mainPrompts to identify stale data
           console.log('[Avatar Debug] Total avatars in config:', avatars.length);
