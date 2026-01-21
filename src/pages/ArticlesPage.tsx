@@ -213,9 +213,9 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose, defaultWeb
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
       <div className="bg-slate-900 rounded-lg w-[95vw] h-[90vh] overflow-hidden border border-brand-cyan/30 flex flex-col">
         {/* Header */}
-        <header className="flex items-center justify-between px-6 py-3 border-b border-brand-cyan/30 bg-slate-800/50 flex-shrink-0">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-brand-gold">Articles</h1>
+        <header className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 border-b border-brand-cyan/30 bg-slate-800/50 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+            <h1 className="text-lg sm:text-xl font-bold text-brand-gold flex-shrink-0">Articles</h1>
 
           {/* Website Selector */}
           <select
@@ -224,7 +224,7 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose, defaultWeb
               const website = websites.find(w => w.id === parseInt(e.target.value));
               setSelectedWebsite(website || null);
             }}
-            className="bg-slate-800 border border-brand-cyan/30 rounded-lg px-3 py-1.5 text-white text-sm focus:border-brand-cyan focus:outline-none"
+            className="bg-slate-800 border border-brand-cyan/30 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 text-white text-xs sm:text-sm focus:border-brand-cyan focus:outline-none min-w-0 flex-1 max-w-[200px] sm:max-w-none"
           >
             <option value="">All Websites</option>
             {websites.map(w => (
@@ -250,31 +250,31 @@ const ArticlesPage: React.FC<ArticlesPageProps> = ({ isOpen, onClose, defaultWeb
                   alert('Sync failed');
                 }
               }}
-              className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-brand-cyan/30 rounded-lg text-sm text-gray-300 hover:text-white transition flex items-center gap-2"
+              className="p-1.5 sm:px-3 sm:py-1.5 bg-slate-700 hover:bg-slate-600 border border-brand-cyan/30 rounded-lg text-sm text-gray-300 hover:text-white transition flex items-center gap-2 flex-shrink-0"
               title="Sync pages from WordPress"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              Sync
+              <span className="hidden sm:inline">Sync</span>
             </button>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Tab Navigation */}
-          <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
+          <div className="flex items-center gap-0.5 sm:gap-1 bg-slate-800 rounded-lg p-0.5 sm:p-1 overflow-x-auto">
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'bg-brand-cyan text-slate-900'
                     : 'text-gray-400 hover:text-white hover:bg-slate-700'
                 }`}
               >
-                {tab.icon}
+                <span className="hidden sm:inline">{tab.icon}</span>
                 {tab.label}
               </button>
             ))}

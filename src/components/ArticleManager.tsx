@@ -851,48 +851,50 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
           )}
 
           {viewMode === 'list' && (
-            <div className="h-full flex flex-col p-4">
+            <div className="h-full flex flex-col p-2 sm:p-4">
               {/* Filters */}
-              <div className="flex gap-4 mb-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-4">
                 <input
                   type="text"
                   placeholder="Search by keyword..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1 bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
+                  className="flex-1 bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white text-sm"
                 />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
-                >
-                  <option value="">All Status</option>
-                  <option value="generated">Generated</option>
-                  <option value="passed">Passed</option>
-                  <option value="flagged">Flagged</option>
-                  <option value="edited">Edited</option>
-                  <option value="published">Published</option>
-                </select>
-                <select
-                  value={clientFilter}
-                  onChange={(e) => setClientFilter(e.target.value)}
-                  className="bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
-                >
-                  <option value="">All Clients</option>
-                  {uniqueClients.map((client) => (
-                    <option key={client} value={client}>{client}</option>
-                  ))}
-                </select>
-                <select
-                  value={websiteFilter}
-                  onChange={(e) => setWebsiteFilter(e.target.value)}
-                  className="bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
-                >
-                  <option value="">All Websites</option>
-                  {uniqueWebsites.map((website) => (
-                    <option key={website} value={website}>{website}</option>
-                  ))}
-                </select>
+                <div className="flex gap-2 sm:gap-4 flex-wrap sm:flex-nowrap">
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="flex-1 sm:flex-none bg-gray-800 border border-brand-cyan/30 rounded px-2 sm:px-3 py-2 text-white text-sm"
+                  >
+                    <option value="">All Status</option>
+                    <option value="generated">Generated</option>
+                    <option value="passed">Passed</option>
+                    <option value="flagged">Flagged</option>
+                    <option value="edited">Edited</option>
+                    <option value="published">Published</option>
+                  </select>
+                  <select
+                    value={clientFilter}
+                    onChange={(e) => setClientFilter(e.target.value)}
+                    className="flex-1 sm:flex-none bg-gray-800 border border-brand-cyan/30 rounded px-2 sm:px-3 py-2 text-white text-sm"
+                  >
+                    <option value="">All Clients</option>
+                    {uniqueClients.map((client) => (
+                      <option key={client} value={client}>{client}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={websiteFilter}
+                    onChange={(e) => setWebsiteFilter(e.target.value)}
+                    className="flex-1 sm:flex-none bg-gray-800 border border-brand-cyan/30 rounded px-2 sm:px-3 py-2 text-white text-sm"
+                  >
+                    <option value="">All Websites</option>
+                    {uniqueWebsites.map((website) => (
+                      <option key={website} value={website}>{website}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Article List */}
@@ -902,7 +904,8 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                 ) : filteredArticles.length === 0 ? (
                   <div className="text-center text-gray-400 py-8">No articles found</div>
                 ) : (
-                  <table className="w-full text-sm">
+                  <div className="overflow-x-auto">
+                  <table className="w-full text-xs sm:text-sm min-w-[800px]">
                     <thead className="sticky top-0 bg-gray-800">
                       <tr className="text-left text-gray-400">
                         <th className="p-2">Keyword</th>
@@ -1094,6 +1097,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
             </div>
@@ -1104,15 +1108,15 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
               {/* Main content area */}
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Article header */}
-                <div className="p-4 border-b border-brand-cyan/30 flex-shrink-0">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-white">{selectedArticle.keyword}</h3>
+                <div className="p-2 sm:p-4 border-b border-brand-cyan/30 flex-shrink-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-base sm:text-lg font-semibold text-white truncate">{selectedArticle.keyword}</h3>
                       {/* Article Title (generated from template) */}
-                      <div className="text-sm text-brand-cyan mt-0.5">
+                      <div className="text-xs sm:text-sm text-brand-cyan mt-0.5 truncate">
                         {generatePageTitle(selectedArticle)}
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-sm text-gray-400">
+                      <div className="flex items-center gap-2 sm:gap-3 mt-1 text-xs sm:text-sm text-gray-400 flex-wrap">
                         {selectedArticle.tag && (
                           <span className="px-2 py-0.5 bg-brand-gold rounded text-xs text-slate-900 font-medium">
                             {selectedArticle.tag}
@@ -1398,7 +1402,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                         <p className="text-gray-500 text-xs">Images will appear here once generated from the Image Creation section</p>
                       </div>
                     ) : (
-                      <div className={`grid gap-3 ${expandedImages ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-4 md:grid-cols-6'}`}>
+                      <div className={`grid gap-3 ${expandedImages ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4 md:grid-cols-6'}`}>
                         {(selectedArticle.generated_images || []).map((image, imgIdx) => (
                           <div
                             key={image.id || `img-${imgIdx}`}
@@ -1498,7 +1502,7 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     {/* Meta Titles Selection */}
                     <div className="bg-slate-900 rounded-lg p-4 border border-brand-gold/30">
                       <h4 className="text-sm font-semibold text-brand-gold mb-3 flex items-center justify-between">

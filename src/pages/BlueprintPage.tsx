@@ -47,12 +47,12 @@ const BlueprintPage: React.FC<BlueprintPageProps> = ({ isOpen, onClose }) => {
 
           <div className="flex items-center gap-3">
             {/* Tab Navigation */}
-            <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
+            <div className="flex items-center gap-0.5 sm:gap-1 bg-slate-800 rounded-lg p-0.5 sm:p-1 overflow-x-auto max-w-[60vw] sm:max-w-none">
               {tabs.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                  className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
                     activeTab === tab.id
                       ? 'bg-brand-cyan text-slate-900'
                       : 'text-gray-400 hover:text-white hover:bg-slate-700'
