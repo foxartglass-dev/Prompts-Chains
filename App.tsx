@@ -254,7 +254,7 @@ const App: React.FC = () => {
     const [isWordPressOpen, setIsWordPressOpen] = useState(false);
     const [isArticlesPageOpen, setIsArticlesPageOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [globalSettings, setGlobalSettings] = useState<{local_viking_api_key?: string}>({});
+    const [globalSettings, setGlobalSettings] = useState<{local_viking_api_key?: string; timezone?: string}>({ timezone: 'America/Chicago' });
     const [globalSettingsLoading, setGlobalSettingsLoading] = useState(false);
     const [isMoreDropdownOpen, setIsMoreDropdownOpen] = useState(false);
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
@@ -678,7 +678,8 @@ const App: React.FC = () => {
                 .then(data => {
                     if (data.success && data.settings) {
                         setGlobalSettings({
-                            local_viking_api_key: data.settings.local_viking_api_key || ''
+                            local_viking_api_key: data.settings.local_viking_api_key || '',
+                            timezone: data.settings.timezone || 'America/Chicago'
                         });
                     }
                 })
@@ -2267,6 +2268,40 @@ const App: React.FC = () => {
                                         <span className="text-slate-400 text-sm">seconds</span>
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Timezone Setting */}
+                            <div className="bg-slate-800/50 p-4 rounded-lg border border-blue-500/30">
+                                <h3 className="text-lg font-semibold text-blue-400 mb-3">Timezone</h3>
+                                <div className="flex items-center gap-4">
+                                    <select
+                                        value={globalSettings.timezone || 'America/Chicago'}
+                                        onChange={e => setGlobalSettings(prev => ({ ...prev, timezone: e.target.value }))}
+                                        className="flex-1 bg-slate-700 border border-blue-500/50 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        <option value="America/New_York">Eastern Time (ET)</option>
+                                        <option value="America/Chicago">Central Time (CT)</option>
+                                        <option value="America/Denver">Mountain Time (MT)</option>
+                                        <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                                        <option value="America/Anchorage">Alaska Time (AKT)</option>
+                                        <option value="Pacific/Honolulu">Hawaii Time (HT)</option>
+                                        <option value="UTC">UTC</option>
+                                        <option value="Europe/London">London (GMT/BST)</option>
+                                        <option value="Europe/Paris">Paris (CET/CEST)</option>
+                                        <option value="Asia/Tokyo">Tokyo (JST)</option>
+                                        <option value="Australia/Sydney">Sydney (AEST/AEDT)</option>
+                                    </select>
+                                    <button
+                                        onClick={saveGlobalSettings}
+                                        disabled={globalSettingsLoading}
+                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-white text-sm font-medium transition"
+                                    >
+                                        {globalSettingsLoading ? 'Saving...' : 'Save'}
+                                    </button>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-2">
+                                    Current time: {new Date().toLocaleString('en-US', { timeZone: globalSettings.timezone || 'America/Chicago', hour: '2-digit', minute: '2-digit', hour12: true, month: 'short', day: 'numeric' })}
+                                </p>
                             </div>
 
                             {/* Open Router Override */}

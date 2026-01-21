@@ -21,6 +21,7 @@ const ensureTableSchema = async () => {
       staging_wp_url VARCHAR(500),
       staging_wp_user VARCHAR(255),
       staging_wp_password VARCHAR(255),
+      timezone VARCHAR(100) DEFAULT 'America/Chicago',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -31,6 +32,7 @@ const ensureTableSchema = async () => {
     await sql`ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS staging_wp_url VARCHAR(500)`;
     await sql`ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS staging_wp_user VARCHAR(255)`;
     await sql`ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS staging_wp_password VARCHAR(255)`;
+    await sql`ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS timezone VARCHAR(100) DEFAULT 'America/Chicago'`;
   } catch (e) {
     // Columns might already exist
   }
@@ -69,7 +71,8 @@ router.put('/', requireDb, async (req, res) => {
       local_viking_api_key,
       staging_wp_url,
       staging_wp_user,
-      staging_wp_password
+      staging_wp_password,
+      timezone
     } = req.body;
 
     await ensureTableSchema();
@@ -80,8 +83,8 @@ router.put('/', requireDb, async (req, res) => {
     if (existing.length === 0) {
       // Insert with values
       await sql`
-        INSERT INTO global_settings (id, local_viking_api_key, staging_wp_url, staging_wp_user, staging_wp_password)
-        VALUES (1, ${local_viking_api_key || null}, ${staging_wp_url || null}, ${staging_wp_user || null}, ${staging_wp_password || null})
+        INSERT INTO global_settings (id, local_viking_api_key, staging_wp_url, staging_wp_user, staging_wp_password, timezone)
+        VALUES (1, ${local_viking_api_key || null}, ${staging_wp_url || null}, ${staging_wp_user || null}, ${staging_wp_password || null}, ${timezone || 'America/Chicago'})
       `;
     } else {
       // Update existing row
@@ -91,6 +94,7 @@ router.put('/', requireDb, async (req, res) => {
             staging_wp_url = ${staging_wp_url || null},
             staging_wp_user = ${staging_wp_user || null},
             staging_wp_password = ${staging_wp_password || null},
+            timezone = ${timezone || 'America/Chicago'},
             updated_at = CURRENT_TIMESTAMP
         WHERE id = 1
       `;
