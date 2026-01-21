@@ -3130,41 +3130,41 @@ const App: React.FC = () => {
                     <>
                         {/* Workflow Context - Matches Default dropdown style */}
                         {currentWorkflowContext.workflowName && (
-                            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 border-2 border-brand-gold rounded-lg flex-nowrap">
-                                <svg className="h-4 w-4 text-brand-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 sm:py-1.5 bg-slate-900 border-2 border-brand-gold rounded-lg max-w-[50vw] sm:max-w-none overflow-hidden">
+                                <svg className="h-4 w-4 text-brand-cyan flex-shrink-0 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <span className="flex flex-col items-center leading-tight">
+                                <span className="flex flex-col items-center leading-tight hidden sm:flex">
                                     <span className="text-brand-gold text-sm font-semibold">Current</span>
                                     <span className="text-brand-gold text-[10px]">Workflow</span>
                                 </span>
-                                <span className="text-slate-500">|</span>
+                                <span className="text-slate-500 hidden sm:inline">|</span>
                                 {currentWorkflowContext.isStandalone ? (
                                     <>
-                                        <span className="text-purple-400 text-sm font-medium">Standalone</span>
-                                        <span className="text-slate-500">-</span>
-                                        <span className="text-brand-gold text-sm font-semibold">{currentWorkflowContext.workflowName}</span>
+                                        <span className="text-purple-400 text-xs sm:text-sm font-medium">Standalone</span>
+                                        <span className="text-slate-500 hidden sm:inline">-</span>
+                                        <span className="text-brand-gold text-xs sm:text-sm font-semibold truncate max-w-[100px] sm:max-w-none">{currentWorkflowContext.workflowName}</span>
                                     </>
                                 ) : (
                                     <>
-                                        <span className="text-brand-cyan text-sm font-medium whitespace-nowrap">
+                                        <span className="text-brand-cyan text-xs sm:text-sm font-medium whitespace-nowrap truncate max-w-[60px] sm:max-w-none">
                                             {(currentWorkflowContext.clientName || 'Client').length > 20
                                                 ? (currentWorkflowContext.clientName || 'Client').substring(0, 20) + '...'
                                                 : currentWorkflowContext.clientName || 'Client'}
                                         </span>
-                                        <span className="text-slate-500">-</span>
-                                        <span className="text-brand-gold text-sm font-medium whitespace-nowrap">
+                                        <span className="text-slate-500 hidden sm:inline">-</span>
+                                        <span className="text-brand-gold text-xs sm:text-sm font-medium whitespace-nowrap truncate max-w-[60px] sm:max-w-none hidden sm:inline">
                                             {formatWebsiteUrl(currentWorkflowContext.websiteName)}
                                         </span>
-                                        <span className="text-slate-500">-</span>
-                                        <span className="text-brand-gold text-sm font-semibold whitespace-nowrap">{currentWorkflowContext.workflowName}</span>
+                                        <span className="text-slate-500 hidden sm:inline">-</span>
+                                        <span className="text-brand-gold text-xs sm:text-sm font-semibold whitespace-nowrap truncate max-w-[80px] sm:max-w-none">{currentWorkflowContext.workflowName}</span>
                                     </>
                                 )}
                             </div>
                         )}
 
                         {/* Notification Button */}
-                        <div className="ml-2">
+                        <div className="ml-1 sm:ml-2 flex-shrink-0">
                             <PendingMetaNotification
                                 onOpenArticle={(articleId) => {
                                     setIsArticlesOpen(true);
@@ -3177,7 +3177,7 @@ const App: React.FC = () => {
                             <button
                                 onClick={() => saveWorkflowToDatabase(true)}
                                 disabled={isSaving}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-lg font-semibold transition border-2 text-xs cursor-pointer hover:opacity-80 ${
+                                className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg font-semibold transition border-2 text-xs cursor-pointer hover:opacity-80 flex-shrink-0 ${
                                     hasUnsavedChanges
                                         ? 'bg-yellow-500 text-slate-900 border-yellow-500'
                                         : 'bg-brand-cyan text-slate-900 border-brand-cyan'
@@ -3200,9 +3200,7 @@ const App: React.FC = () => {
                                         <span className="font-bold">
                                             {hasUnsavedChanges ? 'Save' : 'Saved'}
                                         </span>
-                                        {lastSaveTime && (
-                                            <span className="text-[10px] opacity-75">{lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                                        )}
+                                        <span className="text-[10px] opacity-75 hidden sm:inline">{lastSaveTime && lastSaveTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                     </>
                                 )}
                             </button>
