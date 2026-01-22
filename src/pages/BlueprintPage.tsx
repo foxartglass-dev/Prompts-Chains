@@ -1251,6 +1251,43 @@ const DataSourcesDiagram: React.FC = () => (
           </div>
         </div>
       </div>
+
+      {/* global_settings table */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border border-blue-500/30">
+        <h3 className="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          global_settings
+        </h3>
+        <div className="space-y-2 text-sm">
+          <div className="text-gray-400 mb-2">App-wide settings (single row, id=1)</div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
+            <code className="text-brand-gold">local_viking_api_key</code>
+            <span className="text-gray-400">Global Local Viking key</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
+            <code className="text-brand-gold">staging_wp_url</code>
+            <span className="text-gray-400">Staging WordPress URL</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
+            <code className="text-brand-gold">staging_wp_user</code>
+            <span className="text-gray-400">Staging WP username</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
+            <code className="text-brand-gold">staging_wp_password</code>
+            <span className="text-gray-400">Staging WP password</span>
+          </div>
+          <div className="flex justify-between items-center py-1">
+            <code className="text-brand-gold">timezone</code>
+            <span className="text-gray-400">IANA timezone (default: America/Chicago)</span>
+          </div>
+        </div>
+        <div className="mt-4 p-3 bg-blue-900/30 rounded-lg text-xs text-blue-300">
+          <strong>Access:</strong> Settings modal in header. API: GET/PUT /api/global-settings
+        </div>
+      </div>
     </div>
   </div>
 );
@@ -1909,6 +1946,36 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues (Jan 2026)</h3>
 
       <div className="space-y-4">
+        {/* Jan 22 - Live + Main Prompt Fix */}
+        <div className="bg-slate-800 rounded-lg p-4 border-2 border-cyan-500">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Live + Main Prompt using Smart Prompt instead</span>
+            <span className="text-xs bg-cyan-500/30 text-cyan-300 px-2 py-0.5 rounded">CRITICAL - Jan 22, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> When user selected "Live + Main Prompt", the images generated looked like Smart Prompt results
+            (wrong style). Bank + Main Prompt worked correctly, but Live + Main Prompt did not.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause:</strong> elementor.js had TWO separate database config reads.
+            <ul className="list-disc ml-4 mt-1 space-y-1">
+              <li>First read (Step 2) selected avatar and stored in local <code className="bg-slate-900 px-1 rounded">config</code> object</li>
+              <li>Second read (Step 3) initialized <code className="bg-slate-900 px-1 rounded">livePromptMode = 'smart_prompt'</code> as DEFAULT</li>
+              <li>Second read did its OWN avatar selection, potentially different from first</li>
+              <li>Values from first read went out of scope - lost!</li>
+            </ul>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added outer-scoped variables to persist first read values:
+            <code className="bg-slate-900 px-1 rounded block mt-1 text-xs">firstReadLivePromptMode, firstReadTargetAvatar, firstReadFallbackPromptMode, etc.</code>
+            Changed default from 'smart_prompt' to 'main_prompt'. Second read now uses first read values if available.
+          </div>
+          <div className="text-sm text-cyan-400 mt-2">
+            <strong>File:</strong> server/routes/elementor.js - Look for "CRITICAL: Store first config read values"
+          </div>
+        </div>
+
         {/* Jan 20 - Template persistence FULLY FIXED */}
         <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
           <div className="flex items-center gap-2 mb-2">
@@ -4293,6 +4360,38 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">January 2026</h3>
 
       <div className="space-y-4">
+        {/* Jan 22 - Live + Main Prompt Fix & Timezone Setting */}
+        <div className="border-l-4 border-cyan-500 pl-4">
+          <div className="text-sm text-cyan-400 font-semibold">Jan 22, 2026 - Live + Main Prompt Fix + Global Timezone Setting + Prompt-to-Page Handoff</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-red-400 font-bold">CRITICAL</span>
+              <div>
+                <strong>Live + Main Prompt was using Smart Prompt instead!</strong>
+                <div className="text-xs text-gray-500">Root cause: elementor.js had TWO separate database config reads. First read selected avatar and stored in local config object. Second read (Step 3) initialized livePromptMode = 'smart_prompt' as DEFAULT and did its own avatar selection. First read values went out of scope. Fixed by adding outer-scoped variables to persist first read values (firstReadLivePromptMode, firstReadTargetAvatar, etc.) and using them in second read. Changed default from 'smart_prompt' to 'main_prompt'.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Global Timezone setting added to Settings modal</strong>
+                <div className="text-xs text-gray-500">New timezone column in global_settings table (defaults to 'America/Chicago'). Dropdown in Settings with common US timezones. Shows current time in selected timezone for verification.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DOCS</span>
+              <div>
+                <strong>AGENT_HANDOFF_PROMPT_PAGE_ASSIGNMENT.md created</strong>
+                <div className="text-xs text-gray-500">Two-phase plan: Phase 1 adds H1/H2/H3 ID badges to prompts (safe, test first). Phase 2 adds Site Planning columns and 6-batch sequential execution (separate branch). Protects against breaking system.</div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-cyan-400 font-semibold">Files Modified:</span>
+            <span className="text-gray-400 ml-2">server/routes/elementor.js (avatar consistency), server/routes/global-settings.js (timezone), App.tsx (Settings modal)</span>
+          </div>
+        </div>
+
         {/* Jan 20 - Template Persistence & Image Flow Final Fixes */}
         <div className="border-l-4 border-green-500 pl-4">
           <div className="text-sm text-green-400 font-semibold">Jan 20, 2026 - Template Persistence FULLY FIXED + Prompt Mode Settings FIXED + Image Flow Confirmed</div>
