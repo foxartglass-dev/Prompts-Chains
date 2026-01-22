@@ -135,31 +135,49 @@ Add buttons or a run interface:
 ```
 
 ### Automated Sequential Execution
-When "Run All Sequentially" is clicked, execute in order:
+When "Run All Sequentially" is clicked, execute in order (6 batches):
 
 ```javascript
 async function runAllSequentially() {
-  // 1. Bank First pages - check bank, fallback to assigned prompt
-  await runBatch('bank_first');
+  // Bank First batches (check bank, fallback to assigned prompt)
+  // 1. Bank + Main Prompt pages
+  await runBatch({ bankFirst: true, mode: 'main_prompt' });
 
-  // 2. Main Prompt pages (non-bank)
-  await runBatch('main_prompt');
+  // 2. Bank + Guided GPT pages
+  await runBatch({ bankFirst: true, mode: 'guided_gpt' });
 
-  // 3. Guided GPT pages (non-bank)
-  await runBatch('guided_gpt');
+  // 3. Bank + Smart Prompt pages
+  await runBatch({ bankFirst: true, mode: 'smart_prompt' });
 
-  // 4. Smart Prompt pages (non-bank)
-  await runBatch('smart_prompt');
+  // Live batches (no bank check, straight to prompt)
+  // 4. Main Prompt only pages
+  await runBatch({ bankFirst: false, mode: 'main_prompt' });
+
+  // 5. Guided GPT only pages
+  await runBatch({ bankFirst: false, mode: 'guided_gpt' });
+
+  // 6. Smart Prompt only pages
+  await runBatch({ bankFirst: false, mode: 'smart_prompt' });
 
   // Done! All pages processed
 }
 ```
 
+**The 6 Sequential Runs:**
+1. Bank + Main Prompt (check bank → fallback to Main Prompt H1/H2/H3)
+2. Bank + Guided GPT (check bank → fallback to Guided GPT H1/H2)
+3. Bank + Smart Prompt (check bank → fallback to Smart Prompt H1/H2/H3)
+4. Main Prompt only (straight to Main Prompt, no bank check)
+5. Guided GPT only (straight to Guided GPT, no bank check)
+6. Smart Prompt only (straight to Smart Prompt, no bank check)
+
 **Key points:**
 - Each batch completes before the next starts
+- No mixing within a batch - all pages in batch have same flow
 - User clicks ONE button, walks away
-- Progress UI shows which batch is running (e.g., "Running Main Prompt... 8/12")
+- Progress UI shows which batch is running (e.g., "Bank + Main Prompt... 3/5")
 - Individual "Run X" buttons still available if user wants manual control
+- Empty batches are skipped automatically
 
 ### Execution Logic
 When "Run Main Prompt" is clicked:
