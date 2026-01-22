@@ -1498,6 +1498,46 @@ updateSettings({ consultant_chat_history: newMessages }); // PERSIST!`}</pre>
           </div>
         </div>
       </div>
+
+      {/* Rule 13 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-red-600">
+        <div className="flex items-start gap-4">
+          <div className="bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">13</div>
+          <div>
+            <h3 className="text-lg font-bold text-red-400">Use functional setState in async callbacks to avoid stale closures</h3>
+            <p className="text-gray-300 mt-2 text-sm">
+              When updating state inside an async callback (like AI response handlers), the callback captures
+              variables from when it was CREATED, not when it EXECUTES. This causes stale data bugs.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-red-400 font-medium mb-2">Bad (stale closure - DO NOT):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// settings is captured when sendMessage() is called
+const sendMessage = async () => {
+  const response = await callAI(message);
+  // DANGER: settings here is from SEND time, not RESPONSE time!
+  setSettings({ ...settings, chatHistory: [...settings.chatHistory, response] });
+};`}</pre>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-green-400 font-medium mb-2">Good (functional update - DO THIS):</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// current is ALWAYS the latest state value
+const sendMessage = async () => {
+  const response = await callAI(message);
+  // current gets FRESH state at UPDATE time, not closure time
+  setSettings(current => ({ ...current, chatHistory: [...current.chatHistory, response] }));
+};`}</pre>
+            </div>
+            <p className="text-red-400 mt-3 text-xs">
+              <strong>REAL BUG:</strong> AI Prompt Assistant was erasing mainPrompt because the response handler
+              used stale settings captured at message send time. By the time AI responded (seconds later),
+              the settings had been updated, but the callback still had the old empty data.
+            </p>
+            <p className="text-gray-400 mt-2 text-xs">
+              <strong>Key files:</strong> ImageCreationSection.tsx - AI assistant handleSendMessage callback
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
 
     {/* UI Patterns Quick Reference */}
@@ -1609,6 +1649,32 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues (Jan 2026)</h3>
 
       <div className="space-y-4">
+        {/* Jan 19 - Stale closure fix */}
+        <div className="bg-slate-800 rounded-lg p-4 border border-red-500/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Stale closure erasing mainPrompt in AI assistant callbacks</span>
+            <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded">CRITICAL - Jan 19, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> AI Prompt Assistant responses were sometimes erasing the mainPrompt field,
+            triggering the protection system repeatedly. The protection blocked it but the root cause was still happening.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause:</strong> JavaScript closure captured <code className="bg-slate-900 px-1 rounded">settings</code> at
+            message SEND time. By the time AI responded (seconds later), that settings object was stale.
+            The stale settings had empty mainPrompt which got passed to updateSettings().
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Changed <code className="bg-slate-900 px-1 rounded">setSettings({'{'}...settings, ...updates{'}'})</code> to
+            <code className="bg-slate-900 px-1 rounded">setSettings(current =&gt; ({'{'}...current, ...updates{'}'})</code>)
+            to use functional update which gets fresh state at update time.
+          </div>
+          <div className="text-sm text-red-400 mt-2">
+            <strong>Pattern:</strong> See Golden Rule #13 - Use functional setState in async callbacks
+          </div>
+        </div>
+
         {/* Jan 18 - Persistence fixes */}
         <div className="bg-slate-800 rounded-lg p-4 border border-emerald-500/50">
           <div className="flex items-center gap-2 mb-2">
@@ -3945,6 +4011,38 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">January 2026</h3>
 
       <div className="space-y-4">
+        {/* Jan 19 - Stale Closure Fix */}
+        <div className="border-l-4 border-red-500 pl-4">
+          <div className="text-sm text-red-400 font-semibold">Jan 19, 2026 - Stale Closure Bug Fix</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-red-400 font-bold">CRITICAL</span>
+              <div>
+                <strong>Fixed stale closure causing mainPrompt erasure in AI assistant</strong>
+                <div className="text-xs text-gray-500">Root cause: AI assistant callback captured settings at message SEND time, not RESPONSE time. Used stale avatar data with empty mainPrompt.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>AI assistant now uses functional setSettings()</strong>
+                <div className="text-xs text-gray-500">Changed from setSettings({`{...settings, ...updates}`}) to setSettings(current =&gt; ({`{...current, ...updates}`})) to get fresh state</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-yellow-400 font-bold">REFACTOR</span>
+              <div>
+                <strong>Protection logs changed from error to warn</strong>
+                <div className="text-xs text-gray-500">console.error → console.warn since protection triggering is expected behavior, not an error condition</div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-red-400 font-semibold">Commit:</span>
+            <span className="text-gray-400 ml-2">34b9d83</span>
+          </div>
+        </div>
+
         {/* Jan 18 - Persistence & Protection */}
         <div className="border-l-4 border-emerald-500 pl-4">
           <div className="text-sm text-emerald-400 font-semibold">Jan 18, 2026 - Persistence & Protection Fixes</div>
@@ -4002,7 +4100,7 @@ const ChangelogDiagram: React.FC = () => (
               <span className="text-purple-400 font-bold">DOCS</span>
               <div>
                 <strong>Blueprint: Golden Rules 11 & 12 added</strong>
-                <div className="text-xs text-gray-500">Rule 11: mainPrompt protection pattern. Rule 12: Chat history database sync pattern</div>
+                <div className="text-xs text-gray-500">Rule 11: mainPrompt protection pattern. Rule 12: Chat history database sync pattern. Rule 13: Functional setState for async callbacks</div>
               </div>
             </li>
           </ul>
