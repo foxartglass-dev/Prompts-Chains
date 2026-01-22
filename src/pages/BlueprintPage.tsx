@@ -539,6 +539,56 @@ const ImageFlowDiagram: React.FC = () => (
       </div>
     </div>
 
+    {/* Image Decision Report (Source Tracking) */}
+    <div className="bg-teal-900/20 rounded-xl p-6 border border-teal-500">
+      <h3 className="text-lg font-bold text-teal-400 mb-4">imageDecisionReport (Source Tracking)</h3>
+      <div className="text-xs text-gray-400 mb-4">Added: Jan 20, 2026 | Stored in: <code className="bg-slate-900 px-1 rounded">articles.image_decision_report</code> (JSONB)</div>
+
+      <div className="bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-x-auto mb-4">
+        <pre className="text-gray-300">{`{
+  "sourceMode": "bank" | "bank_fallback" | "live",  // WHERE images came from
+  "promptMode": "main_prompt" | "guided_gpt" | "smart_prompt" | null,  // WHICH prompt was used
+  "sourceSummary": "Bank → Main Prompt",  // Human-readable summary
+  "imageCount": 5,
+  "imagesUsed": ["img-1234-hero", ...],
+  "fallbackReason": "Bank empty - no H-tagged images"  // Only if fallback occurred
+}`}</pre>
+      </div>
+
+      <div className="space-y-3 text-sm">
+        <div className="bg-slate-800 rounded-lg p-3">
+          <div className="text-teal-400 font-semibold mb-2">sourceMode Values:</div>
+          <div className="space-y-1 text-gray-300 text-xs">
+            <div><code className="text-brand-gold">'bank'</code> - All images from Image Bank (no live generation)</div>
+            <div><code className="text-amber-400">'bank_fallback'</code> - Started with bank but fell back to live generation</div>
+            <div><code className="text-brand-cyan">'live'</code> - Direct live generation (bank not used)</div>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-3">
+          <div className="text-teal-400 font-semibold mb-2">promptMode Values (when generating live):</div>
+          <div className="space-y-1 text-gray-300 text-xs">
+            <div><code className="text-brand-gold">'main_prompt'</code> - Avatar's mainPrompt with placeholder substitution</div>
+            <div><code className="text-purple-400">'guided_gpt'</code> - AI assistant generated the prompt</div>
+            <div><code className="text-brand-cyan">'smart_prompt'</code> - Automatic prompt selection</div>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-lg p-3">
+          <div className="text-teal-400 font-semibold mb-2">UI Display:</div>
+          <div className="space-y-1 text-gray-300 text-xs">
+            <div><strong>Article Library:</strong> "Source" column with color-coded badge</div>
+            <div><strong>Article Detail:</strong> Source badge in header next to date/time</div>
+            <div><strong>Processing Log:</strong> Image Path Log section shows simplified per-article decisions</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 text-xs text-gray-400">
+        <strong className="text-teal-400">Key files:</strong> elementor.js (lines ~1100-1200 for tracking), ArticleListView.tsx (display)
+      </div>
+    </div>
+
     {/* Staging WordPress System */}
     <div className="bg-purple-900/20 rounded-xl p-6 border border-purple-500">
       <h3 className="text-lg font-bold text-purple-400 mb-4">Staging WordPress (Image Media Library)</h3>
@@ -1794,6 +1844,41 @@ result.new_column // undefined - column doesn't exist!`}</pre>
             <p className="text-red-400 mt-3 text-xs">
               <strong>REAL BUG:</strong> fallback_prompt_mode was in schema.sql line 290 but never migrated.
               The column physically didn't exist. All saves silently failed to the fallback path.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Rule 17 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-violet-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-violet-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">17</div>
+          <div>
+            <h3 className="text-lg font-bold text-violet-400">Article tags (H), (J), (C) are INTERNAL - strip from UI displays</h3>
+            <span className="text-xs bg-violet-500/30 text-violet-300 px-2 py-0.5 rounded ml-2">UI Pattern - Jan 20, 2026</span>
+            <p className="text-gray-300 mt-2 text-sm">
+              Tags like <code className="bg-slate-900 px-1 rounded">(H)</code>, <code className="bg-slate-900 px-1 rounded">(J)</code>, <code className="bg-slate-900 px-1 rounded">(C)</code>
+              at the end of keywords are for internal processing (they determine which avatar/placeholders to use).
+              They should NEVER appear in the UI or WordPress.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-violet-400 font-medium mb-2">✓ Use stripTagFromKeyword() for all keyword displays:</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// ArticleListView.tsx - helper function
+const stripTagFromKeyword = (keyword: string | null | undefined): string => {
+  if (!keyword) return '';
+  // Removes (H), (J), (C), etc. from end of string
+  return keyword.replace(/\\s*\\([A-Za-z]\\)\\s*$/, '').trim();
+};
+
+// Example: "Standard Cleaning(H)" → "Standard Cleaning"
+// Example: "Topic Name (J)" → "Topic Name"`}</pre>
+            </div>
+            <p className="text-gray-400 mt-3 text-xs">
+              <strong>Places to use:</strong> Article list keyword column, article detail header, ElementorPreview title prop,
+              WordPress publish calls (title parameter), Google Search Preview URL
+            </p>
+            <p className="text-gray-400 mt-2 text-xs">
+              <strong>Key file:</strong> ArticleListView.tsx (~line 85 for function, applied in 6+ locations)
             </p>
           </div>
         </div>
@@ -4350,6 +4435,70 @@ const ChangelogDiagram: React.FC = () => (
           <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
             <span className="text-green-400 font-semibold">Commits:</span>
             <span className="text-gray-400 ml-2">1ee1e0e, 2a769ff, e8da445, ae7c6ec, 5780550</span>
+          </div>
+        </div>
+
+        {/* Jan 20 (Later) - Image Source Tracking & UI Improvements */}
+        <div className="border-l-4 border-teal-500 pl-4">
+          <div className="text-sm text-teal-400 font-semibold">Jan 20, 2026 (Later) - Image Source Tracking + Tag Stripping + Meta Parsing</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Image Source Tracking in imageDecisionReport</strong>
+                <div className="text-xs text-gray-500">Added sourceMode ('bank', 'bank_fallback', 'live'), promptMode ('main_prompt', 'guided_gpt', 'smart_prompt'), and sourceSummary fields. Shows exactly where images came from.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>New "Source" column in Article Library</strong>
+                <div className="text-xs text-gray-500">Color-coded: Gold=Bank, Amber=Bank+Fallback, Cyan=Live. Shows full path like "Bank → Main Prompt" or "Live/Guided GPT"</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Image source badge in Article detail header</strong>
+                <div className="text-xs text-gray-500">Shows sourceSummary next to date/time. Same color scheme as Source column.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Image Path Log in Processing Log section</strong>
+                <div className="text-xs text-gray-500">Simple log file at logs/image-path-decisions.log. Shows timestamp, article ID, keyword, source summary in one line per article. Much easier to debug than Railway logs.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Processing Log history now persists correctly</strong>
+                <div className="text-xs text-gray-500">Added logsRef to capture current logs without React closure issues. History button now shows all logs from completed runs.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>stripTagFromKeyword() - Tags hidden from UI</strong>
+                <div className="text-xs text-gray-500">Tags like (H), (J), (C) are for internal processing (placeholders). Now stripped from: article list, article header, ElementorPreview, WordPress publish calls, Google Search Preview URL.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Defensive parsing for meta_titles and meta_descriptions</strong>
+                <div className="text-xs text-gray-500">If meta data comes back as JSON string instead of array, it's now properly parsed. Prevents "No meta titles generated" when data exists but has wrong type.</div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Key Files:</span>
+            <span className="text-gray-400 ml-2">server/routes/elementor.js (source tracking, log), ArticleListView.tsx (stripTagFromKeyword, Source column, meta parsing), App.tsx (Image Path Log UI, logsRef fix)</span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Commits:</span>
+            <span className="text-gray-400 ml-2">dc95c7b, c25a6d2, 38be499, a9f9a07, 201c95c</span>
           </div>
         </div>
 
