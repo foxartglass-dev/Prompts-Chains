@@ -116,6 +116,53 @@ function selectAvatarForTag(avatars, targetTag) {
 }
 
 /**
+ * Compute avatar ID badge (e.g., "H1", "H2", "Global1") based on position in array
+ * This matches the frontend's getAvatarIdBadge function
+ * @param {Object} avatar - The selected avatar
+ * @param {Array} allAvatars - All audience avatars
+ * @returns {string} The ID badge (e.g., "H1", "Global2")
+ */
+function getAvatarIdBadge(avatar, allAvatars) {
+  if (!avatar || !allAvatars) return '';
+
+  const tag = avatar.tag || '';
+  const isGlobal = avatar.isGlobal;
+
+  if (isGlobal) {
+    const globalAvatars = allAvatars.filter(a => a.isGlobal);
+    const index = globalAvatars.findIndex(a => a.id === avatar.id);
+    return index === -1 ? '' : `Global${index + 1}`;
+  }
+
+  if (tag) {
+    const avatarsForTag = allAvatars.filter(a => a.tag === tag && !a.isGlobal);
+    const index = avatarsForTag.findIndex(a => a.id === avatar.id);
+    return index === -1 ? '' : `${tag}${index + 1}`;
+  }
+
+  return '';
+}
+
+/**
+ * Compute prompt ID badge (e.g., "H1", "H2", "Global1") for Guided GPT or Smart Prompt
+ * @param {Object} prompt - The selected prompt
+ * @param {Array} allPrompts - All prompts in this mode
+ * @returns {string} The ID badge (e.g., "H1", "Global2")
+ */
+function getPromptIdBadge(prompt, allPrompts) {
+  if (!prompt || !allPrompts) return '';
+
+  const tag = prompt.tag;
+  const promptsForTag = allPrompts.filter(p => p.tag === tag);
+  const index = promptsForTag.findIndex(p => p.id === prompt.id);
+
+  if (index === -1) return '';
+
+  const prefix = tag === 'Global' ? 'Global' : tag;
+  return `${prefix}${index + 1}`;
+}
+
+/**
  * Clean content before processing
  * - Remove markdown # at start of text (H1)
  * - Remove AI outline markers (H1:, ## Intro, etc.)
@@ -626,7 +673,8 @@ router.post('/publish', async (req, res) => {
           console.log('[Elementor Publish] Image quality:', imageQuality);
           console.log('[Elementor Publish] Live prompt mode:', livePromptMode);
           if (targetAvatar) {
-            console.log('[Elementor Publish] Target avatar:', targetAvatar.name);
+            const avatarIdBadge = getAvatarIdBadge(targetAvatar, avatars);
+            console.log('[Elementor Publish] Target avatar:', targetAvatar.name, avatarIdBadge ? `[${avatarIdBadge}]` : '');
           }
 
           if (integrationMode === 'live') {
@@ -745,7 +793,8 @@ router.post('/publish', async (req, res) => {
           console.log('[Image Bank] Article tag:', articleTag);
           console.log('[Image Bank] Bank size:', imageBank.length);
           console.log('[Image Bank] Avatars:', avatars.map(a => ({ name: a.name, tag: a.tag, isGlobal: a.isGlobal, appliesTo: a.appliesTo })));
-          console.log('[Image Bank] Target avatar:', targetAvatar?.name, targetAvatar?.tag, targetAvatar?.isGlobal ? '(global)' : '');
+          const bankAvatarIdBadge = targetAvatar ? getAvatarIdBadge(targetAvatar, avatars) : '';
+          console.log('[Image Bank] Target avatar:', targetAvatar?.name, targetAvatar?.tag, targetAvatar?.isGlobal ? '(global)' : '', bankAvatarIdBadge ? `[${bankAvatarIdBadge}]` : '');
 
           // Get available images from bank matching the tag
           // In draft mode: allow images without wpUrl (they won't be embedded in WP page)
@@ -1432,10 +1481,13 @@ router.post('/publish', async (req, res) => {
 
           guidedModel = config.guided_model || 'gpt-4o';
 
+          // Compute avatar ID badge for logging
+          const liveAvatarIdBadge = targetAvatar ? getAvatarIdBadge(targetAvatar, config.audience_avatars || []) : '';
+
           console.log('[Elementor Publish] Generate Live settings:');
           console.log('  - Prompt mode:', livePromptMode);
           console.log('  - Is fallback from bank:', isFallbackFromBank || (effectiveUseBank && imagesFromBank === 0));
-          console.log('  - Target avatar:', targetAvatar?.name || 'None');
+          console.log('  - Target avatar:', targetAvatar?.name || 'None', liveAvatarIdBadge ? `[${liveAvatarIdBadge}]` : '');
           console.log('  - Article tag:', articleTag || 'None');
           if (livePromptMode === 'main_prompt' && targetAvatar?.mainPrompt) {
             console.log('  - Main prompt:', targetAvatar.mainPrompt.substring(0, 50) + '...');
