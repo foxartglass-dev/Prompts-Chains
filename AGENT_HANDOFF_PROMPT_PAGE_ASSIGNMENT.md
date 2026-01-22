@@ -125,13 +125,41 @@ Add buttons or a run interface:
 ┌─────────────────────────────────────────────────────────┐
 │ Run Images                                              │
 ├─────────────────────────────────────────────────────────┤
-│ Main Prompt:  12 pages assigned    [Run Main Prompt]    │
-│ Guided GPT:    3 pages assigned    [Run Guided GPT]     │
-│ Smart Prompt:  2 pages assigned    [Run Smart Prompt]   │
+│ Bank First:    5 pages    [Run Bank]                    │
+│ Main Prompt:  12 pages    [Run Main Prompt]             │
+│ Guided GPT:    3 pages    [Run Guided GPT]              │
+│ Smart Prompt:  2 pages    [Run Smart Prompt]            │
 │                                                         │
-│ [Run All Sequentially]                                  │
+│ [▶ Run All Sequentially]  ← ONE BUTTON, RUNS EVERYTHING │
 └─────────────────────────────────────────────────────────┘
 ```
+
+### Automated Sequential Execution
+When "Run All Sequentially" is clicked, execute in order:
+
+```javascript
+async function runAllSequentially() {
+  // 1. Bank First pages - check bank, fallback to assigned prompt
+  await runBatch('bank_first');
+
+  // 2. Main Prompt pages (non-bank)
+  await runBatch('main_prompt');
+
+  // 3. Guided GPT pages (non-bank)
+  await runBatch('guided_gpt');
+
+  // 4. Smart Prompt pages (non-bank)
+  await runBatch('smart_prompt');
+
+  // Done! All pages processed
+}
+```
+
+**Key points:**
+- Each batch completes before the next starts
+- User clicks ONE button, walks away
+- Progress UI shows which batch is running (e.g., "Running Main Prompt... 8/12")
+- Individual "Run X" buttons still available if user wants manual control
 
 ### Execution Logic
 When "Run Main Prompt" is clicked:
@@ -211,8 +239,17 @@ When "Run Main Prompt" is clicked:
 ---
 
 ## Success Criteria
-- [ ] All prompts show H1, H2, H3 (etc.) badge on left side
+- [ ] All prompts show H1, H2, H3 (etc.) badge on left side (in ALL three modes)
 - [ ] Site Planning shows columns for all three modes with selectable IDs
 - [ ] Bank First checkbox works independently
-- [ ] "Run Main Prompt" executes only Main Prompt-assigned pages
+- [ ] "Run All Sequentially" button runs Bank → Main → Guided → Smart in order
+- [ ] Individual "Run X" buttons still work for manual control
 - [ ] Each page uses its exact assigned prompt ID
+- [ ] Progress shows which batch is running and count (e.g., "Main Prompt 8/12")
+
+## Site Planning Checkbox Behavior
+- Remove/disable old "Select All" and "Start" buttons (they conflict with new system)
+- Checkboxes become assignment trackers:
+  - Auto-checked when page gets a prompt assignment
+  - Unchecked = still needs assignment
+  - Helps user see what's left to configure
