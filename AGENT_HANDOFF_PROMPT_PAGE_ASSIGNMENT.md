@@ -1,6 +1,87 @@
 # Agent Handoff: Prompt-to-Page Assignment System
 
+## IMPORTANT: Two-Phase Approach
+
+**DO PHASE 1 FIRST. Save it, test it, commit it. Then Phase 2 on a separate branch.**
+
+This protects against breaking the system - if Phase 2 causes issues, Phase 1 is already saved and working.
+
+---
+
+# PHASE 1: Prompt ID Badges (DO THIS FIRST)
+
 ## Goal
+Add visible H1, H2, H3 ID badges to all prompts so they're identifiable and can be referenced in rules.
+
+## What to Build
+
+### 1. Add ID Badges to UI
+In ALL three modes (Main Prompt, Guided GPT, Smart Prompt):
+- Display ID badge on **far LEFT** of each prompt
+- Format: `[H1]`, `[H2]`, `[H3]`, `[J1]`, `[J2]`, etc.
+- ID is **uneditable** - auto-assigned based on tag + creation order
+- Title/name goes to the **RIGHT** of the ID (still editable)
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Main Prompt (H tag)                                     │
+├─────────────────────────────────────────────────────────┤
+│ [H1] Navy Blue Product Photos           [Edit] [Delete] │
+│ [H2] Lifestyle Cleaning Scenes          [Edit] [Delete] │
+│ [H3] Before/After Shots                 [Edit] [Delete] │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ Guided GPT (H tag)                                      │
+├─────────────────────────────────────────────────────────┤
+│ [H1] Let GPT decide style               [Edit] [Delete] │
+│ [H2] GPT creative for special cases     [Edit] [Delete] │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ Smart Prompt (H tag)                                    │
+├─────────────────────────────────────────────────────────┤
+│ [H1] Keyword-based matching             [Edit] [Delete] │
+│ [H2] Alternative smart match            [Edit] [Delete] │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 2. Store ID in Database/State
+- Add `prompt_id` field to wherever prompts are stored
+- Auto-assign on creation: count existing prompts with same tag, assign next number
+- IDs persist even if prompts are reordered
+
+### 3. Make IDs Visible to Generation System (CRITICAL)
+The image generation code needs to be able to:
+- See what prompt IDs exist (H1, H2, H3)
+- Know which prompt is H1 vs H2 vs H3
+- This allows rules to reference them: "Use H2 for Move In/Out pages"
+
+### 4. Rules Can Reference IDs
+User can write in rules:
+- "For Move In/Out Cleaning, use H2"
+- "For Kitchen Deep Clean, use H3"
+- System reads the rule, finds prompt with ID H2, uses that prompt
+
+## Phase 1 Success Criteria
+- [ ] All prompts show H1, H2, H3 badge on LEFT side
+- [ ] IDs shown in ALL three modes (Main Prompt, Guided GPT, Smart Prompt)
+- [ ] IDs are auto-assigned based on tag + order
+- [ ] IDs are uneditable (permanent)
+- [ ] User can still edit the prompt title/name
+- [ ] Generation system can see/access prompt IDs
+- [ ] Rules can reference prompt IDs (e.g., "use H2")
+
+## Phase 1 Files to Modify
+- `src/components/ImageCreationSection.tsx` - Add ID badges to UI
+- Prompt storage location - Add `prompt_id` field
+- `server/routes/elementor.js` - Make IDs accessible during generation
+
+---
+
+# PHASE 2: Full Assignment System (SEPARATE BRANCH LATER)
+
+## Goal (After Phase 1 is saved and working)
 Build a system that lets users assign specific prompts to specific pages, then run images in batches by mode (Main Prompt → Guided GPT → Smart Prompt).
 
 ---
@@ -271,3 +352,35 @@ When "Run Main Prompt" is clicked:
   - Auto-checked when page gets a prompt assignment
   - Unchecked = still needs assignment
   - Helps user see what's left to configure
+
+## Status Tracking Column
+Add a "Status" column to show which pages have already been processed:
+```
+│ Page               │ ... │ Status      │
+├────────────────────┼─────┼─────────────┤
+│ House Cleaning     │ ... │ ✓ Draft     │  ← Article exists in drafts
+│ Move In/Out Clean  │ ... │ ✓ Draft     │
+│ Kitchen Deep Clean │ ... │ —           │  ← Not yet processed
+│ Special Event      │ ... │ —           │
+```
+- Check if article exists in articles table for that page/keyword
+- Prevents losing track of what's been done
+- Can still re-run manually if unhappy with result
+
+---
+
+# SUMMARY: The Two-Phase Plan
+
+## Phase 1: Prompt ID Badges
+1. Add H1, H2, H3 badges to ALL prompts in ALL modes
+2. Store IDs in database
+3. Make IDs visible to generation system
+4. User can reference IDs in rules manually
+5. **SAVE THIS. TEST IT. COMMIT IT.**
+
+## Phase 2: Full Assignment System (Separate Branch)
+1. Add columns to Site Planning
+2. Per-page prompt assignment
+3. 6-batch sequential execution
+4. Status tracking
+5. **Only after Phase 1 is stable**
