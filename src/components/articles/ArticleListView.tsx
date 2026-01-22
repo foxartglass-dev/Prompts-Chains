@@ -1221,31 +1221,32 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
       {/* Article Detail Modal - Full Width Tabbed Interface */}
       {selectedArticle && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="bg-slate-900 rounded-lg w-[95vw] h-[90vh] flex flex-col border border-brand-cyan/30 overflow-hidden">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-0">
+          <div className="bg-slate-900 rounded-lg w-full sm:w-[95vw] h-full sm:h-[90vh] flex flex-col border border-brand-cyan/30 overflow-hidden">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-3 border-b border-brand-cyan/30 bg-slate-800/50 shrink-0">
-              <div className="flex items-center gap-4">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-xl font-bold text-brand-gold">{stripTagFromKeyword(selectedArticle.keyword)}</h3>
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(selectedArticle.status)}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 sm:px-6 py-2 sm:py-3 border-b border-brand-cyan/30 bg-slate-800/50 shrink-0 gap-2 sm:gap-0">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 min-w-0">
+                <div className="min-w-0">
+                  {/* Title Row */}
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-3">
+                    <h3 className="text-base sm:text-xl font-bold text-brand-gold truncate max-w-[200px] sm:max-w-none">{stripTagFromKeyword(selectedArticle.keyword)}</h3>
+                    <span className={`px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-medium ${getStatusColor(selectedArticle.status)}`}>
                       {selectedArticle.status}
                     </span>
                     {selectedArticle.tag && (
-                      <span className="px-2 py-0.5 bg-brand-gold/20 text-brand-gold rounded text-xs font-medium">
+                      <span className="px-1.5 sm:px-2 py-0.5 bg-brand-gold/20 text-brand-gold rounded text-[10px] sm:text-xs font-medium">
                         {selectedArticle.tag}
                       </span>
                     )}
-                    <span className="text-gray-400">|</span>
-                    <span className="text-gray-400 text-sm">{selectedArticle.word_count || 0} words</span>
-                    <span className="text-gray-400 text-sm">AI: {selectedArticle.ai_score ?? '-'}%</span>
+                    <span className="text-gray-400 hidden sm:inline">|</span>
+                    <span className="text-gray-400 text-xs sm:text-sm">{selectedArticle.word_count || 0} words</span>
+                    <span className="text-gray-400 text-xs sm:text-sm hidden sm:inline">AI: {selectedArticle.ai_score ?? '-'}%</span>
                     {selectedArticle.images && selectedArticle.images.length > 0 && (
-                      <span className="text-amber-400 text-sm">{selectedArticle.images.length} images</span>
+                      <span className="text-amber-400 text-xs sm:text-sm">{selectedArticle.images.length} images</span>
                     )}
-                    {/* Created Date/Time */}
+                    {/* Created Date/Time - Hidden on mobile */}
                     {selectedArticle.created_at && (
-                      <span className="text-gray-500 text-sm ml-2">
+                      <span className="text-gray-500 text-xs sm:text-sm hidden md:inline">
                         {new Date(selectedArticle.created_at).toLocaleDateString('en-US', {
                           month: 'short', day: 'numeric', year: 'numeric'
                         })} {new Date(selectedArticle.created_at).toLocaleTimeString('en-US', {
@@ -1253,9 +1254,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                         })}
                       </span>
                     )}
-                    {/* IMAGE SOURCE BADGE - Shows path like "Bank → Main Prompt" */}
+                    {/* IMAGE SOURCE BADGE - Hidden on mobile */}
                     {selectedArticle.image_decision_report && (
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ml-2 ${
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium hidden md:inline ${
                         selectedArticle.image_decision_report.sourceMode === 'bank' ? 'bg-brand-gold/20 text-brand-gold' :
                         selectedArticle.image_decision_report.sourceMode === 'bank_fallback' ? 'bg-amber-500/20 text-amber-400' :
                         selectedArticle.image_decision_report.mode === 'live' ? 'bg-brand-cyan/20 text-brand-cyan' :
@@ -1268,8 +1269,8 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       </span>
                     )}
                   </div>
-                  {/* Status Badges Row - Two sections: Created (original) and Live (current) */}
-                  <div className="flex items-center gap-4 mt-1 text-xs font-mono">
+                  {/* Status Badges Row - Hidden on mobile, shown on larger screens */}
+                  <div className="hidden md:flex items-center gap-4 mt-1 text-xs font-mono flex-wrap">
                     {/* CREATED (Original status - static, never changes) */}
                     <div className="flex items-center gap-1">
                       <span className="text-gray-500 mr-1">Created:</span>
@@ -1340,10 +1341,33 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       })()}
                     </div>
                   </div>
+                  {/* Mobile-only condensed Live status */}
+                  <div className="flex md:hidden items-center gap-1 mt-1 text-[10px] font-mono flex-wrap">
+                    <span className="text-brand-cyan">Live:</span>
+                    <span className={`px-1.5 py-0.5 rounded font-medium ${
+                      selectedArticle.wp_post_id ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
+                    }`}>
+                      A:{selectedArticle.wp_post_id ? 'WP' : 'D'}
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded font-medium ${
+                      selectedArticle.meta_wp_pushed_at ? 'bg-green-600/30 text-green-400' : 'bg-amber-600/30 text-amber-400'
+                    }`}>
+                      M:{selectedArticle.meta_wp_pushed_at ? 'WP' : 'D'}
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded font-medium ${
+                      !selectedArticle.images || selectedArticle.images.length === 0
+                        ? 'bg-slate-600/30 text-slate-400'
+                        : selectedArticle.images.some(img => img.pushedToWp)
+                          ? 'bg-green-600/30 text-green-400'
+                          : 'bg-amber-600/30 text-amber-400'
+                    }`}>
+                      I:{!selectedArticle.images || selectedArticle.images.length === 0 ? 'Off' : selectedArticle.images.some(img => img.pushedToWp) ? 'WP' : 'D'}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Tab Navigation */}
-                <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1 ml-6">
+                <div className="flex items-center gap-0.5 sm:gap-1 bg-slate-800 rounded-lg p-0.5 sm:p-1 sm:ml-6 self-start sm:self-auto flex-shrink-0">
                   {[
                     { id: 'preview', label: 'Preview', icon: '👁️' },
                     { id: 'content', label: 'Edit', icon: '✏️' },
@@ -1353,20 +1377,21 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                      className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all ${
                         activeTab === tab.id
                           ? 'bg-brand-cyan text-slate-900'
                           : 'text-gray-400 hover:text-white hover:bg-slate-700'
                       }`}
                     >
-                      <span>{tab.label}</span>
+                      <span className="hidden sm:inline">{tab.label}</span>
+                      <span className="sm:hidden">{tab.label.substring(0, 4)}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Individual Push Buttons */}
-              <div className="flex items-center gap-1 ml-4">
+              {/* Individual Push Buttons - Hidden on mobile, shown on sm+ */}
+              <div className="hidden sm:flex items-center gap-1 ml-2 sm:ml-4 flex-shrink-0">
                 {/* Article to WP */}
                 <div className="relative group">
                   <button
@@ -1462,13 +1487,13 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                {/* Push All to WP Button */}
+              <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                {/* Push All to WP Button - Condensed on mobile */}
                 <div className="relative group">
                   <button
                     onClick={pushAllToWordPress}
                     disabled={pushingAll || !selectedArticle.selected_meta_title}
-                    className={`px-4 py-1.5 rounded text-white font-medium text-sm transition flex items-center gap-2 ${
+                    className={`px-2 sm:px-4 py-1 sm:py-1.5 rounded text-white font-medium text-xs sm:text-sm transition flex items-center gap-1 sm:gap-2 ${
                       selectedArticle.selected_meta_title
                         ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500'
                         : 'bg-gray-600 cursor-not-allowed opacity-60'
@@ -1476,24 +1501,25 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                   >
                     {pushingAll ? (
                       <>
-                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        Pushing All...
+                        <span className="hidden sm:inline">Pushing...</span>
                       </>
                     ) : (
                       <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                         </svg>
-                        Push All to WP
+                        <span className="hidden sm:inline">Push All to WP</span>
+                        <span className="sm:hidden">Push</span>
                       </>
                     )}
                   </button>
-                  {/* Tooltip when disabled */}
+                  {/* Tooltip when disabled - Hidden on mobile */}
                   {!selectedArticle.selected_meta_title && (
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 border border-amber-500/50 rounded-lg text-xs text-amber-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                    <div className="hidden sm:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 border border-amber-500/50 rounded-lg text-xs text-amber-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
                       <div className="flex items-center gap-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -1504,23 +1530,23 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     </div>
                   )}
                 </div>
-                {/* WordPress Link */}
+                {/* WordPress Link - Icon only on mobile */}
                 {selectedArticle.wp_post_url && (
                   <a
                     href={selectedArticle.wp_post_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-sm font-medium flex items-center gap-2 transition"
+                    className="px-2 sm:px-3 py-1 sm:py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 transition"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
-                    View on WP
+                    <span className="hidden sm:inline">View on WP</span>
                   </a>
                 )}
                 <button
                   onClick={closeModal}
-                  className="text-gray-400 hover:text-white text-2xl ml-2"
+                  className="text-gray-400 hover:text-white text-xl sm:text-2xl ml-1 sm:ml-2 flex-shrink-0"
                 >
                   &times;
                 </button>
