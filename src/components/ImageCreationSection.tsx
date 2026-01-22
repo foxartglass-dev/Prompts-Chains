@@ -2826,6 +2826,47 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     return prompts.filter(p => p.tag === tag);
   };
 
+  // Helper to compute prompt ID badge (e.g., "H1", "H2", "Global1")
+  // ID is position-based within the tag's prompt array for each mode
+  const getPromptIdBadge = (promptId: string, promptsArray: { id: string; tag: string }[]): string => {
+    const prompt = promptsArray.find(p => p.id === promptId);
+    if (!prompt) return '';
+
+    const tag = prompt.tag;
+    const promptsForTag = promptsArray.filter(p => p.tag === tag);
+    const index = promptsForTag.findIndex(p => p.id === promptId);
+
+    if (index === -1) return '';
+
+    // Global prompts get "Global1", "Global2", etc.
+    // Tag prompts get "H1", "J2", "C3", etc.
+    const prefix = tag === 'Global' ? 'Global' : tag;
+    return `${prefix}${index + 1}`;
+  };
+
+  // Helper to compute avatar ID badge for Main Prompt mode
+  const getAvatarIdBadge = (avatarId: number | string, avatarsArray: AudienceAvatar[]): string => {
+    const avatar = avatarsArray.find(a => a.id === avatarId);
+    if (!avatar) return '';
+
+    const tag = avatar.tag || '';
+    const isGlobal = avatar.isGlobal;
+
+    if (isGlobal) {
+      const globalAvatars = avatarsArray.filter(a => a.isGlobal);
+      const index = globalAvatars.findIndex(a => a.id === avatarId);
+      return index === -1 ? '' : `Global${index + 1}`;
+    }
+
+    if (tag) {
+      const avatarsForTag = avatarsArray.filter(a => a.tag === tag && !a.isGlobal);
+      const index = avatarsForTag.findIndex(a => a.id === avatarId);
+      return index === -1 ? '' : `${tag}${index + 1}`;
+    }
+
+    return '';
+  };
+
   // Get active guided prompt
   const activeGuidedPrompt = (settings.guided_gpt_prompts || []).find(p => p.id === guidedPromptsActiveId) || null;
   // Get active smart prompt
@@ -7432,19 +7473,31 @@ Start by introducing yourself and asking about their business in a friendly way.
                         {/* Sub-tabs: Prompts within selected tag */}
                         {getGuidedPromptsForTag(guidedPromptsActiveTag).length > 0 ? (
                           <div className="flex flex-wrap items-center gap-2 mb-3">
-                            {getGuidedPromptsForTag(guidedPromptsActiveTag).map((prompt) => (
-                              <button
-                                key={prompt.id}
-                                onClick={() => setGuidedPromptsActiveId(prompt.id)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
-                                  guidedPromptsActiveId === prompt.id
-                                    ? guidedPromptsActiveTag === 'Global' ? 'bg-emerald-600 text-white' : 'bg-brand-gold text-slate-900'
-                                    : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
-                                }`}
-                              >
-                                {prompt.name}
-                              </button>
-                            ))}
+                            {getGuidedPromptsForTag(guidedPromptsActiveTag).map((prompt) => {
+                              const idBadge = getPromptIdBadge(prompt.id, settings.guided_gpt_prompts || []);
+                              return (
+                                <button
+                                  key={prompt.id}
+                                  onClick={() => setGuidedPromptsActiveId(prompt.id)}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
+                                    guidedPromptsActiveId === prompt.id
+                                      ? guidedPromptsActiveTag === 'Global' ? 'bg-emerald-600 text-white' : 'bg-brand-gold text-slate-900'
+                                      : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
+                                  }`}
+                                >
+                                  {idBadge && (
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      guidedPromptsActiveId === prompt.id
+                                        ? 'bg-slate-900/30 text-current'
+                                        : 'bg-slate-700 text-brand-cyan'
+                                    }`}>
+                                      {idBadge}
+                                    </span>
+                                  )}
+                                  {prompt.name}
+                                </button>
+                              );
+                            })}
                             {/* Copy From dropdown */}
                             {(settings.guided_gpt_prompts || []).length > 0 && (
                               <div className="relative ml-2">
@@ -9633,19 +9686,31 @@ Start by introducing yourself and asking about their business in a friendly way.
                         {/* Sub-tabs: Prompts within selected tag */}
                         {getSmartPromptsForTag(smartPromptsActiveTag).length > 0 ? (
                           <div className="flex flex-wrap items-center gap-2 mb-3">
-                            {getSmartPromptsForTag(smartPromptsActiveTag).map((prompt) => (
-                              <button
-                                key={prompt.id}
-                                onClick={() => setSmartPromptsActiveId(prompt.id)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
-                                  smartPromptsActiveId === prompt.id
-                                    ? smartPromptsActiveTag === 'Global' ? 'bg-emerald-600 text-white' : 'bg-purple-600 text-white'
-                                    : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
-                                }`}
-                              >
-                                {prompt.name}
-                              </button>
-                            ))}
+                            {getSmartPromptsForTag(smartPromptsActiveTag).map((prompt) => {
+                              const idBadge = getPromptIdBadge(prompt.id, settings.smart_prompt_prompts || []);
+                              return (
+                                <button
+                                  key={prompt.id}
+                                  onClick={() => setSmartPromptsActiveId(prompt.id)}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 ${
+                                    smartPromptsActiveId === prompt.id
+                                      ? smartPromptsActiveTag === 'Global' ? 'bg-emerald-600 text-white' : 'bg-purple-600 text-white'
+                                      : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
+                                  }`}
+                                >
+                                  {idBadge && (
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      smartPromptsActiveId === prompt.id
+                                        ? 'bg-slate-900/30 text-current'
+                                        : 'bg-slate-700 text-brand-cyan'
+                                    }`}>
+                                      {idBadge}
+                                    </span>
+                                  )}
+                                  {prompt.name}
+                                </button>
+                              );
+                            })}
                             {/* Copy From dropdown */}
                             {(settings.smart_prompt_prompts || []).length > 0 && (
                               <div className="relative ml-2">
@@ -11799,26 +11864,38 @@ Start by introducing yourself and asking about their business in a friendly way.
 
             {/* Level 2: Sub-tabs within selected tag (H-1, H-2, etc.) */}
             <div className="flex flex-wrap gap-2 mb-4">
-              {avatarsForSelectedTag.map((avatar, idx) => (
-                <button
-                  key={avatar.id}
-                  onClick={() => setActiveAvatarId(avatar.id)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
-                    activeAvatarId === avatar.id
-                      ? selectedTagTab === 'global' ? 'bg-emerald-600 text-white' : 'bg-brand-gold text-slate-900'
-                      : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
-                  }`}
-                >
-                  <span>{avatar.name}</span>
-                  <span
-                    onClick={(e) => { e.stopPropagation(); setAvatarToDelete({ id: avatar.id, name: avatar.name }); }}
-                    className="hover:text-red-500 cursor-pointer text-current/50 hover:text-red-500"
-                    title="Delete avatar"
+              {avatarsForSelectedTag.map((avatar, idx) => {
+                const idBadge = getAvatarIdBadge(avatar.id, settings.audience_avatars);
+                return (
+                  <button
+                    key={avatar.id}
+                    onClick={() => setActiveAvatarId(avatar.id)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                      activeAvatarId === avatar.id
+                        ? selectedTagTab === 'global' ? 'bg-emerald-600 text-white' : 'bg-brand-gold text-slate-900'
+                        : 'bg-slate-800 text-brand-gold hover:bg-slate-700'
+                    }`}
                   >
-                    &times;
-                  </span>
-                </button>
-              ))}
+                    {idBadge && (
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        activeAvatarId === avatar.id
+                          ? 'bg-slate-900/30 text-current'
+                          : 'bg-slate-700 text-brand-cyan'
+                      }`}>
+                        {idBadge}
+                      </span>
+                    )}
+                    <span>{avatar.name}</span>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); setAvatarToDelete({ id: avatar.id, name: avatar.name }); }}
+                      className="hover:text-red-500 cursor-pointer text-current/50 hover:text-red-500"
+                      title="Delete avatar"
+                    >
+                      &times;
+                    </span>
+                  </button>
+                );
+              })}
               {avatarsForSelectedTag.length === 0 && (
                 <div className="text-sm text-brand-gold/50 py-2">
                   No prompts for {selectedTagTab === 'global' ? 'Global' : selectedTagTab}. Click + to add one.
@@ -15396,26 +15473,38 @@ Start by introducing yourself and asking about their business in a friendly way.
                 {/* Avatar sub-tabs for selected tag */}
                 {avatarsForSelectedTag.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {avatarsForSelectedTag.map((avatar) => (
-                      <button
-                        key={avatar.id}
-                        onClick={() => setActiveAvatarId(avatar.id)}
-                        className={`px-3 py-1.5 rounded text-sm transition flex items-center gap-2 ${
-                          activeAvatarId === avatar.id
-                            ? 'bg-brand-gold/20 border-2 border-brand-gold text-brand-gold'
-                            : 'bg-slate-800 border border-slate-600 text-slate-300 hover:border-slate-500'
-                        }`}
-                      >
-                        <span>{avatar.name}</span>
-                        <span
-                          onClick={(e) => { e.stopPropagation(); setAvatarToDelete({ id: avatar.id, name: avatar.name }); }}
-                          className="hover:text-red-500 cursor-pointer opacity-50 hover:opacity-100"
-                          title="Delete avatar"
+                    {avatarsForSelectedTag.map((avatar) => {
+                      const idBadge = getAvatarIdBadge(avatar.id, settings.audience_avatars);
+                      return (
+                        <button
+                          key={avatar.id}
+                          onClick={() => setActiveAvatarId(avatar.id)}
+                          className={`px-3 py-1.5 rounded text-sm transition flex items-center gap-2 ${
+                            activeAvatarId === avatar.id
+                              ? 'bg-brand-gold/20 border-2 border-brand-gold text-brand-gold'
+                              : 'bg-slate-800 border border-slate-600 text-slate-300 hover:border-slate-500'
+                          }`}
                         >
-                          &times;
-                        </span>
-                      </button>
-                    ))}
+                          {idBadge && (
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              activeAvatarId === avatar.id
+                                ? 'bg-brand-gold/30 text-brand-gold'
+                                : 'bg-slate-700 text-brand-cyan'
+                            }`}>
+                              {idBadge}
+                            </span>
+                          )}
+                          <span>{avatar.name}</span>
+                          <span
+                            onClick={(e) => { e.stopPropagation(); setAvatarToDelete({ id: avatar.id, name: avatar.name }); }}
+                            className="hover:text-red-500 cursor-pointer opacity-50 hover:opacity-100"
+                            title="Delete avatar"
+                          >
+                            &times;
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
