@@ -1,166 +1,218 @@
 # Agent Handoff: Prompt-to-Page Assignment System
 
-## Overview
-Create a system that allows exact matching between Site Planning pages and specific prompts. Currently, when there are multiple prompts for a tag (H1, H2, H3), the system guesses which to use. This feature eliminates guessing by letting users assign specific prompts to specific pages.
+## Goal
+Build a system that lets users assign specific prompts to specific pages, then run images in batches by mode (Main Prompt → Guided GPT → Smart Prompt).
 
-## Current State
-- Prompts are stored in the Image Creation section under different tags (H, J, C, B, E, G)
-- Each tag can have MULTIPLE prompts (e.g., 3 different "H" prompts for different scenarios)
-- Site Planning has pages tagged with letters (H, J, C, etc.)
-- Image generation currently picks a prompt based on rules/random selection
-- `live_prompt_mode` is set at workflow level, not per-page
+---
 
-## Feature Requirements
+## Part 1: Prompt ID System (All Three Modes)
 
-### Part 1: Prompt ID System
+### What to Build
+Add permanent ID badges to ALL prompts in ALL three modes:
+- **Main Prompt** prompts get: H1, H2, H3, J1, J2, etc.
+- **Guided GPT** prompts get: H1, H2, H3, J1, J2, etc.
+- **Smart Prompt** prompts get: H1, H2, H3, J1, J2, etc.
 
-**Location:** Image Creation Section → Main Prompt area (and similar for Guided GPT, Smart Prompt)
-
-**Changes:**
-1. Each prompt gets an auto-generated ID based on its tag + creation order:
-   - First H prompt = `H1`
-   - Second H prompt = `H2`
-   - Third H prompt = `H3`
-   - Same pattern for J1, J2, J3, C1, C2, etc.
-
-2. The ID should be:
-   - Displayed to the LEFT of the prompt name in a colored circle/badge
-   - **Uneditable** - auto-assigned, persists even if prompts reordered
-   - Stored in database (new column: `prompt_id` in relevant table)
-
-3. User can still edit the prompt NAME (the descriptive title), but not the ID
-
-**UI Example:**
+### UI Layout
 ```
-[H1] Navy Blue Product Photos    [Edit] [Delete]
-[H2] Lifestyle Cleaning Scenes   [Edit] [Delete]
-[H3] Before/After Comparisons    [Edit] [Delete]
+┌─────────────────────────────────────────────────────────┐
+│ Main Prompt (H tag)                                     │
+├─────────────────────────────────────────────────────────┤
+│ [H1] Navy Blue Product Photos           [Edit] [Delete] │
+│ [H2] Lifestyle Cleaning Scenes          [Edit] [Delete] │
+│ [H3] Before/After Shots                 [Edit] [Delete] │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ Guided GPT (H tag)                                      │
+├─────────────────────────────────────────────────────────┤
+│ [H1] Let GPT decide style               [Edit] [Delete] │
+│ [H2] GPT creative for special cases     [Edit] [Delete] │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ Smart Prompt (H tag)                                    │
+├─────────────────────────────────────────────────────────┤
+│ [H1] Keyword-based matching             [Edit] [Delete] │
+│ [H2] Alternative smart match            [Edit] [Delete] │
+│ [H3] Fallback smart prompt              [Edit] [Delete] │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Part 2: Site Planning Page Enhancements
+### Key Rules
+- **ID on far LEFT** in a colored circle/badge
+- **ID is permanent and uneditable** - assigned on creation, never changes
+- **ID is per-mode** - Main Prompt has its own H1, Guided GPT has its own H1
+- **User-defined name is NEXT to the ID** - editable, for human understanding
+- **IDs are for the SYSTEM** to match pages to prompts
+- **Names are for the USER** to understand what each prompt does
 
-**Location:** Site Planning Section (currently in a modal/panel)
+### Database Changes
+Add `prompt_id` column to wherever prompts are stored:
+```sql
+-- For each prompt storage location (main prompts, guided gpt prompts, smart prompts)
+ALTER TABLE [prompt_table] ADD COLUMN IF NOT EXISTS prompt_id VARCHAR(10);
+-- Example values: 'H1', 'H2', 'J1', 'J2', etc.
+```
 
-**Changes:**
+### Auto-Assignment Logic
+When creating a new prompt:
+1. Get the tag (H, J, C, etc.)
+2. Count existing prompts with that tag in that mode
+3. Assign next number: H1, H2, H3, etc.
+4. Store in `prompt_id` column
 
-1. **Full-Page Expand Mode**
-   - Add expand button (like Audience Avatar has)
-   - Full page gives more room for columns
+---
 
-2. **New Columns per Page Row:**
+## Part 2: Site Planning Page Columns
 
-   | Page Name | Tag | Bank First | Mode | Prompt ID |
-   |-----------|-----|------------|------|-----------|
-   | Move In/Out Cleaning | H | [ ] | [Main Prompt ▼] | [H1] [H2] [H3] |
-   | Kitchen Deep Cleaning | H | [x] | [Guided GPT ▼] | [H1] [H2] [H3] |
-   | Office Cleaning | J | [ ] | [Main Prompt ▼] | [J1] [J2] |
+### What to Build
+Add columns to Site Planning that show available prompt IDs for selection.
 
-3. **Column Definitions:**
+### UI Layout (Expanded Full Page)
+```
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│ Site Planning                                                            [Expand ⤢]  │
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│ Filter by Tag: [All] [H] [J] [C] [B] [E] [G]                                         │
+├────────────────────┬─────┬────────┬─────────────────┬──────────────┬─────────────────┤
+│ Page               │ Tag │ Bank   │ Main Prompt     │ Guided GPT   │ Smart Prompt    │
+│                    │     │ First  │                 │              │                 │
+├────────────────────┼─────┼────────┼─────────────────┼──────────────┼─────────────────┤
+│ House Cleaning     │ H   │  [ ]   │ ●H1 ○H2 ○H3    │ ○H1 ○H2      │ ○H1 ○H2 ○H3     │
+│ Move In/Out Clean  │ H   │  [x]   │ ○H1 ●H2 ○H3    │ ○H1 ○H2      │ ○H1 ○H2 ○H3     │
+│ Kitchen Deep Clean │ H   │  [ ]   │ ○H1 ○H2 ○H3    │ ●H1 ○H2      │ ○H1 ○H2 ○H3     │
+│ Special Event      │ H   │  [ ]   │ ○H1 ○H2 ○H3    │ ○H1 ○H2      │ ●H1 ○H2 ○H3     │
+│ Office Cleaning    │ J   │  [ ]   │ ●J1 ○J2        │ ○J1          │ ○J1 ○J2         │
+│ Retail Cleaning    │ J   │  [x]   │ ○J1 ●J2        │ ○J1          │ ○J1 ○J2         │
+└────────────────────┴─────┴────────┴─────────────────┴──────────────┴─────────────────┘
+```
 
-   - **Bank First** (checkbox):
-     - If checked: Try image bank first, use generation mode as fallback
-     - If unchecked: Generate live immediately
+### Selection Rules
+- **Radio button behavior ACROSS the three mode columns** - only ONE selection per row
+- If you select H2 in Main Prompt, Guided GPT and Smart Prompt are all unselected
+- Each column only shows prompt IDs that exist for that tag in that mode
+- H pages show H1, H2, H3 (however many exist)
+- J pages show J1, J2 (however many exist)
 
-   - **Mode** (dropdown):
-     - Main Prompt
-     - Guided GPT
-     - Smart Prompt
+### Bank First Column
+- **Checkbox** (independent of mode selection)
+- If checked: Go to image bank first, use selected prompt as fallback
+- If unchecked: Go directly to selected prompt (live generation)
 
-   - **Prompt ID** (toggle buttons):
-     - Shows only IDs for that page's tag (H pages show H1, H2, H3)
-     - User clicks ONE to select it
-     - Selected one is highlighted
-     - Default: "General" or first prompt if none selected
-
-4. **Filtering:**
-   - When editing H tag rules, only show H pages
-   - Quick filter by tag at top of page
-
-### Part 3: Database Schema Changes
-
-**New column in `site_pages` table (or create new `page_image_config` table):**
+### Database Changes
+Add columns to `site_pages` table:
 ```sql
 ALTER TABLE site_pages ADD COLUMN IF NOT EXISTS bank_first BOOLEAN DEFAULT false;
-ALTER TABLE site_pages ADD COLUMN IF NOT EXISTS generation_mode VARCHAR(50) DEFAULT 'main_prompt';
-ALTER TABLE site_pages ADD COLUMN IF NOT EXISTS assigned_prompt_id VARCHAR(10);
+ALTER TABLE site_pages ADD COLUMN IF NOT EXISTS assigned_mode VARCHAR(20); -- 'main_prompt', 'guided_gpt', 'smart_prompt'
+ALTER TABLE site_pages ADD COLUMN IF NOT EXISTS assigned_prompt_id VARCHAR(10); -- 'H1', 'H2', 'J1', etc.
 ```
 
-**New column in prompts storage (wherever main prompts are stored):**
-```sql
--- Add prompt_id column to store H1, H2, H3, etc.
-ALTER TABLE [prompt_table] ADD COLUMN IF NOT EXISTS prompt_id VARCHAR(10);
+---
+
+## Part 3: Batch Execution by Mode
+
+### What to Build
+Instead of running all pages in one pass with different modes, run in batches:
+
+1. **Run Main Prompt batch** - All pages with Main Prompt selected
+2. **Run Guided GPT batch** - All pages with Guided GPT selected
+3. **Run Smart Prompt batch** - All pages with Smart Prompt selected
+
+### UI for Running
+Add buttons or a run interface:
+```
+┌─────────────────────────────────────────────────────────┐
+│ Run Images                                              │
+├─────────────────────────────────────────────────────────┤
+│ Main Prompt:  12 pages assigned    [Run Main Prompt]    │
+│ Guided GPT:    3 pages assigned    [Run Guided GPT]     │
+│ Smart Prompt:  2 pages assigned    [Run Smart Prompt]   │
+│                                                         │
+│ [Run All Sequentially]                                  │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Part 4: Image Generation Logic Update
+### Execution Logic
+When "Run Main Prompt" is clicked:
+1. Query all pages where `assigned_mode = 'main_prompt'`
+2. Set workflow's `live_prompt_mode = 'main_prompt'`
+3. For each page:
+   - Look up `assigned_prompt_id` (e.g., 'H2')
+   - Fetch the specific prompt with that ID
+   - Generate image using that exact prompt
+4. Repeat for each page in the batch
 
-**Location:** `server/routes/elementor.js` (and related generation code)
+### Why This Approach
+- **Simpler to implement** - mode is set once per batch
+- **Safer** - less likely to break existing code
+- **Current code already supports** running with a single mode
+- **Just need to add** filtering by assignment and prompt ID lookup
 
-**Current flow:**
-1. Get article's tag
-2. Get workflow's `live_prompt_mode`
-3. Select a prompt for that tag (rules-based or random)
-4. Generate image
+---
 
-**New flow:**
-1. Get article's tag and page info
-2. Look up page's config: `bank_first`, `generation_mode`, `assigned_prompt_id`
-3. If `bank_first` = true, check bank first
-4. Use `generation_mode` for how to generate
-5. Use `assigned_prompt_id` to get the EXACT prompt (no guessing)
-6. Generate image
+## Part 4: Implementation Steps
 
-### Part 5: Phased Implementation
+### Step 1: Add Prompt IDs to Existing Prompts
+1. Find where Main Prompt, Guided GPT, and Smart Prompt data is stored
+2. Add `prompt_id` column
+3. Auto-assign IDs to existing prompts (H1, H2, H3 based on order)
+4. Update UI to show ID badge on left, name on right
 
-**Phase 1 (MVP):**
-- Add prompt IDs to existing prompts (H1, H2, H3)
-- Display IDs in UI (uneditable badges)
-- Add the 3 columns to Site Planning
-- Store per-page config in database
-- Update generation to read per-page config
+### Step 2: Add Site Planning Columns
+1. Expand Site Planning to full-page mode (like Audience Avatar)
+2. Add three columns: Main Prompt, Guided GPT, Smart Prompt
+3. Show radio buttons with available IDs for each page's tag
+4. Add Bank First checkbox column
+5. Save selections to database
 
-**Phase 2 (Enhancement):**
-- Full-page expand mode for Site Planning
-- Bulk assignment (select multiple pages, assign same prompt)
-- Default prompt per tag (if no specific assignment)
+### Step 3: Add Batch Execution
+1. Add "Run" section showing counts per mode
+2. Add "Run Main Prompt" button that:
+   - Filters pages by `assigned_mode`
+   - Uses `assigned_prompt_id` to get exact prompt
+   - Generates images
+3. Repeat for Guided GPT and Smart Prompt buttons
+
+---
 
 ## Key Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/SitePlanningSection.tsx` | Add columns, expand mode, per-page config UI |
-| `src/components/ImageCreationSection.tsx` | Display prompt IDs, auto-assign on create |
-| `server/routes/site-planning.js` | API for saving page config |
-| `server/routes/elementor.js` | Read per-page config during generation |
-| Database migrations | Add new columns |
+| `src/components/ImageCreationSection.tsx` | Add prompt ID badges to all three modes |
+| `src/components/SitePlanningSection.tsx` | Add columns, expand mode, selection UI |
+| `server/routes/site-planning.js` | API for saving page assignments |
+| `server/routes/elementor.js` | Read `assigned_prompt_id` during generation |
+| Database | Add columns to prompts and site_pages tables |
 
-## UI Mockup (ASCII)
+---
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ Site Planning                                                    [Expand ⤢] │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ Filter: [All ▼]  [H] [J] [C] [B] [E] [G]                                    │
-├──────────────────────┬─────┬───────┬──────────────┬─────────────────────────┤
-│ Page                 │ Tag │ Bank  │ Mode         │ Prompt                  │
-│                      │     │ First │              │                         │
-├──────────────────────┼─────┼───────┼──────────────┼─────────────────────────┤
-│ House Cleaning       │ H   │ [ ]   │ [Main Prompt]│ (H1) (H2) (H3)         │
-│ Move In/Out Cleaning │ H   │ [x]   │ [Main Prompt]│ (H1) [H2] (H3)  ←selected│
-│ Kitchen Deep Clean   │ H   │ [ ]   │ [Guided GPT] │ (H1) (H2) [H3]         │
-│ Office Cleaning      │ J   │ [ ]   │ [Main Prompt]│ [J1] (J2)              │
-│ Retail Cleaning      │ J   │ [x]   │ [Smart]      │ (J1) [J2]              │
-└──────────────────────┴─────┴───────┴──────────────┴─────────────────────────┘
-```
+## Current State Reference
 
-## Questions for User
-1. Should "General" be an option that uses rule-based selection as fallback?
-2. What happens if a prompt is deleted but pages reference it? (Show warning? Auto-reassign?)
-3. Should there be a "copy settings" feature to duplicate one page's config to others?
+### Where Prompts Are Stored
+- Check `ImageCreationSection.tsx` for how Main Prompt, Guided GPT, Smart Prompt are stored
+- They may be in workflow state, database, or both
+- Need to identify exact storage location before adding `prompt_id`
 
-## Related Context
-- The timezone setting was just added to global settings
-- The Live + Main Prompt bug was fixed (avatar/config consistency between reads)
-- Drip feed has per-website timezone settings
+### Current Generation Flow
+- `server/routes/elementor.js` handles image generation
+- `live_prompt_mode` is read from workflow config
+- Avatar/prompt selection happens in the generation code
+- Need to add lookup of `assigned_prompt_id` from page config
 
-## Priority
-HIGH - This is the "last thing" needed for the tagging system to be complete. Everything else is built, this connects the right prompt to the right page.
+---
+
+## Questions to Resolve
+1. Where exactly are prompts stored for each mode? (workflow state? database table?)
+2. Is Site Planning data in `site_pages` table or elsewhere?
+3. Should there be a "default" option if no specific prompt is assigned?
+
+---
+
+## Success Criteria
+- [ ] All prompts show H1, H2, H3 (etc.) badge on left side
+- [ ] Site Planning shows columns for all three modes with selectable IDs
+- [ ] Bank First checkbox works independently
+- [ ] "Run Main Prompt" executes only Main Prompt-assigned pages
+- [ ] Each page uses its exact assigned prompt ID
