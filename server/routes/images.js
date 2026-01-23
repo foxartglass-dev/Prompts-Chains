@@ -868,4 +868,59 @@ router.get('/stylelock/cost-estimate', async (req, res) => {
   }
 });
 
+/**
+ * Proxy endpoint to download images from external URLs (bypasses CORS)
+ * Used for downloading images from WordPress that don't have CORS headers
+ */
+router.get('/proxy', async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url) {
+      return res.status(400).json({ error: 'URL parameter required' });
+    }
+
+    // Validate URL is from expected domains (security measure)
+    const allowedDomains = [
+      'aichatautomations.com',
+      'wp-content',
+      'uploads',
+      'replicate.delivery',
+      'oaidalleapiprodscus.blob.core.windows.net'
+    ];
+
+    const urlLower = url.toLowerCase();
+    const isAllowed = allowedDomains.some(domain => urlLower.includes(domain));
+
+    if (!isAllowed) {
+      console.warn('[Image Proxy] Blocked request to non-allowed domain:', url);
+      return res.status(403).json({ error: 'Domain not allowed' });
+    }
+
+    console.log('[Image Proxy] Fetching:', url.substring(0, 80) + '...');
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      console.error('[Image Proxy] Fetch failed:', response.status, response.statusText);
+      return res.status(response.status).json({ error: `Failed to fetch image: ${response.statusText}` });
+    }
+
+    // Get content type from response
+    const contentType = response.headers.get('content-type') || 'image/png';
+
+    // Stream the response directly to the client
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+
+    const buffer = await response.arrayBuffer();
+    res.send(Buffer.from(buffer));
+
+    console.log('[Image Proxy] Successfully proxied image');
+  } catch (error) {
+    console.error('[Image Proxy] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
