@@ -278,6 +278,13 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   -- Worker Chat: Operational helper that sees consultant context + setup
   worker_chat_history JSONB DEFAULT '[]', -- Array of {role, content, images?, timestamp}
   worker_model VARCHAR(100) DEFAULT 'gpt-4o-mini', -- Can use cheaper model for operations
+  -- Main Prompt AI Assistant (separate from Guided GPT assistant)
+  main_prompt_chat_history JSONB DEFAULT '[]', -- Active chat messages
+  main_prompt_chat_files JSONB DEFAULT '[]', -- Folder structure for organization
+  main_prompt_chat_conversations JSONB DEFAULT '[]', -- Saved conversations
+  main_prompt_chat_model VARCHAR(100) DEFAULT 'gpt-4o', -- Vision-capable model
+  -- Cross-chat references for ping system between assistants
+  chat_cross_references JSONB DEFAULT '[]', -- [{fromAssistant, toAssistant, conversationId, message, timestamp}]
   -- Page integration settings
   integration_mode VARCHAR(20) DEFAULT 'bank', -- 'live' or 'bank'
   fallback_to_live BOOLEAN DEFAULT true, -- Make from scratch if bank empty

@@ -198,6 +198,18 @@ interface ChatConversation {
   updatedAt: string;
 }
 
+// Cross-chat reference (for ping system between assistants)
+interface ChatCrossReference {
+  id: string;
+  fromAssistant: 'guided_gpt' | 'main_prompt';
+  toAssistant: 'guided_gpt' | 'main_prompt';
+  conversationId: string; // ID of the referenced conversation
+  conversationName: string; // Name for display
+  message: string; // The attached message/question
+  timestamp: string;
+  read: boolean; // Whether the recipient has viewed it
+}
+
 // ========== PROMPT JOURNAL SYSTEM ==========
 // Save prompts, track iterations, organize with tags/files
 
@@ -498,6 +510,13 @@ interface ImageCreationSettings {
   consultant_model: string;
   worker_chat_history: ChatMessage[];
   worker_model: string;
+  // Main Prompt AI Assistant (separate from Guided GPT)
+  main_prompt_chat_history: ChatMessage[];
+  main_prompt_chat_files: ChatFile[];
+  main_prompt_chat_conversations: ChatConversation[];
+  main_prompt_chat_model: string;
+  // Cross-chat references for ping system between assistants
+  chat_cross_references: ChatCrossReference[];
   image_prompt_model: string; // Model for Image Prompt chat (can be image or chat model)
   integration_mode: 'live' | 'bank';
   fallback_to_live: boolean;
@@ -624,6 +643,13 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   consultant_model: 'gpt-4o', // Default to vision model for consultant
   worker_chat_history: [],
   worker_model: 'gpt-4o-mini', // Default to cheaper model for worker
+  // Main Prompt AI Assistant defaults
+  main_prompt_chat_history: [],
+  main_prompt_chat_files: [],
+  main_prompt_chat_conversations: [],
+  main_prompt_chat_model: 'gpt-4o', // Default to vision model
+  // Cross-chat references for ping system
+  chat_cross_references: [],
   image_prompt_model: 'gpt-image-1.5', // Default to OpenAI image model for testing prompts
   integration_mode: 'live',
   fallback_to_live: true,
@@ -984,6 +1010,34 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [renamingItemId, setRenamingItemId] = useState<string | null>(null);
   const [renamingValue, setRenamingValue] = useState('');
 
+  // Main Prompt AI Assistant Chat state (mirrors Guided GPT assistant)
+  const [mainPromptAssistantOpen, setMainPromptAssistantOpen] = useState(false);
+  const [mainPromptAssistantMessages, setMainPromptAssistantMessages] = useState<ChatMessage[]>([]);
+  const [mainPromptAssistantInput, setMainPromptAssistantInput] = useState('');
+  const [mainPromptAssistantImages, setMainPromptAssistantImages] = useState<string[]>([]);
+  const [mainPromptAssistantDocument, setMainPromptAssistantDocument] = useState<{name: string; content: string} | null>(null);
+  const mainPromptAssistantDocInputRef = useRef<HTMLInputElement>(null);
+  const [mainPromptAssistantLoading, setMainPromptAssistantLoading] = useState(false);
+  const mainPromptAssistantChatRef = useRef<HTMLDivElement>(null);
+  const mainPromptAssistantFileInputRef = useRef<HTMLInputElement>(null);
+  const [mainPromptChatHeight, setMainPromptChatHeight] = useState<'sm' | 'md' | 'lg' | 'xl' | 'full'>('md');
+  // Main Prompt Chat File System state
+  const [mainPromptActiveConversationId, setMainPromptActiveConversationId] = useState<string | null>(null);
+  const [mainPromptExpandedFileIds, setMainPromptExpandedFileIds] = useState<Set<string>>(new Set());
+  const [showMainPromptFileManager, setShowMainPromptFileManager] = useState(false);
+  const [mainPromptRenamingItemId, setMainPromptRenamingItemId] = useState<string | null>(null);
+  const [mainPromptRenamingValue, setMainPromptRenamingValue] = useState('');
+  // Main Prompt Save Chat Dialog
+  const [showMainPromptSaveChatDialog, setShowMainPromptSaveChatDialog] = useState(false);
+  const [mainPromptSaveChatTitle, setMainPromptSaveChatTitle] = useState('');
+  const [mainPromptSaveChatFileId, setMainPromptSaveChatFileId] = useState<string | undefined>(undefined);
+  // Main Prompt History Browser
+  const [showMainPromptHistoryBrowser, setShowMainPromptHistoryBrowser] = useState(false);
+  const [mainPromptHistorySearchQuery, setMainPromptHistorySearchQuery] = useState('');
+  const [mainPromptHistorySortOrder, setMainPromptHistorySortOrder] = useState<'newest' | 'oldest'>('newest');
+  // Main Prompt Chat Search
+  const [mainPromptChatSearchQuery, setMainPromptChatSearchQuery] = useState('');
+  const [mainPromptChatSearchResults, setMainPromptChatSearchResults] = useState<Array<{conversationId: string; conversationName: string; messageIndex: number; snippet: string}>>([]);
   // Loaded articles for AI context
   interface LoadedArticle {
     id: number;
@@ -3742,6 +3796,27 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
     parts.push('');
 
+    // ========== GUIDED GPT GUARDRAILS ==========
+    if (settings.guided_guardrails) {
+      parts.push('━━━━━━━━━━ GUIDED GPT GUARDRAILS ━━━━━━━━━━');
+      if (settings.guided_guardrails.uniformDescription) {
+        parts.push(`📋 UNIFORM DESCRIPTION: ${settings.guided_guardrails.uniformDescription}`);
+      }
+      if (settings.guided_guardrails.instructions) {
+        parts.push(`📝 INSTRUCTIONS: ${settings.guided_guardrails.instructions}`);
+      }
+      if (settings.guided_guardrails.excludeInstructions) {
+        parts.push(`🚫 EXCLUDE INSTRUCTIONS: ${settings.guided_guardrails.excludeInstructions}`);
+      }
+      if (settings.guided_guardrails.customSuffix) {
+        parts.push(`✨ CUSTOM SUFFIX: ${settings.guided_guardrails.customSuffix}`);
+      }
+      if (settings.guided_guardrails.formatInstructions) {
+        parts.push(`📐 FORMAT INSTRUCTIONS: ${settings.guided_guardrails.formatInstructions}`);
+      }
+      parts.push('');
+    }
+
     // ========== SMART MATCHING SETTINGS ==========
     parts.push('━━━━━━━━━━ INTEGRATION SETTINGS ━━━━━━━━━━');
     parts.push(`🔄 Integration Mode: ${settings.integration_mode}`);
@@ -4086,6 +4161,355 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     );
     updateSettings({ consultant_chat_conversations: updatedConversations });
     showNotification(newFileId ? 'Chat moved to folder' : 'Chat moved to unfiled', 'success');
+  };
+
+  // ========== CROSS-CHAT PING SYSTEM ==========
+
+  /**
+   * Send a ping/reference from one assistant to another
+   */
+  const handleSendCrossReferencePing = (
+    fromAssistant: 'guided_gpt' | 'main_prompt',
+    message: string
+  ) => {
+    // Determine which conversation to reference and target assistant
+    const toAssistant = fromAssistant === 'guided_gpt' ? 'main_prompt' : 'guided_gpt';
+
+    // Get the current conversation ID based on which assistant is sending
+    let conversationId = '';
+    let conversationName = '';
+
+    if (fromAssistant === 'guided_gpt') {
+      conversationId = activeConversationId || 'unfiled';
+      const conv = (settings.consultant_chat_conversations || []).find(c => c.id === activeConversationId);
+      conversationName = conv?.name || 'Active Chat';
+    } else {
+      conversationId = mainPromptActiveConversationId || 'unfiled';
+      const conv = (settings.main_prompt_chat_conversations || []).find(c => c.id === mainPromptActiveConversationId);
+      conversationName = conv?.name || 'Active Chat';
+    }
+
+    const newPing: ChatCrossReference = {
+      id: `ping-${Date.now()}`,
+      fromAssistant,
+      toAssistant,
+      conversationId,
+      conversationName,
+      message: message.trim(),
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+
+    updateSettings({
+      chat_cross_references: [...(settings.chat_cross_references || []), newPing]
+    });
+
+    showNotification(`Ping sent to ${toAssistant === 'guided_gpt' ? 'Guided GPT' : 'Main Prompt AI'}!`, 'success');
+  };
+
+  /**
+   * Mark a ping as read
+   */
+  const handleMarkPingAsRead = (pingId: string) => {
+    const updatedPings = (settings.chat_cross_references || []).map(p =>
+      p.id === pingId ? { ...p, read: true } : p
+    );
+    updateSettings({ chat_cross_references: updatedPings });
+  };
+
+  /**
+   * Delete a ping
+   */
+  const handleDeletePing = (pingId: string) => {
+    const updatedPings = (settings.chat_cross_references || []).filter(p => p.id !== pingId);
+    updateSettings({ chat_cross_references: updatedPings });
+  };
+
+  /**
+   * Navigate to the conversation referenced in a ping
+   */
+  const handleNavigateToPingedConversation = (ping: ChatCrossReference) => {
+    // Mark as read
+    handleMarkPingAsRead(ping.id);
+
+    // Switch to the originating assistant mode and conversation
+    if (ping.fromAssistant === 'guided_gpt') {
+      // Navigate to Guided GPT conversation
+      updateSettings({ live_prompt_mode: 'guided_gpt' });
+      if (ping.conversationId !== 'unfiled') {
+        handleSwitchConversation(ping.conversationId);
+      }
+      setConsultantPanelOpen(true);
+    } else {
+      // Navigate to Main Prompt conversation
+      updateSettings({ live_prompt_mode: 'main_prompt' });
+      if (ping.conversationId !== 'unfiled') {
+        // Switch to Main Prompt conversation
+        const conversation = (settings.main_prompt_chat_conversations || []).find(c => c.id === ping.conversationId);
+        if (conversation) {
+          setMainPromptActiveConversationId(ping.conversationId);
+          setMainPromptAssistantMessages(conversation.messages);
+        }
+      }
+      setMainPromptAssistantOpen(true);
+    }
+  };
+
+  /**
+   * Get unread pings for an assistant
+   */
+  const getUnreadPingsForAssistant = (assistant: 'guided_gpt' | 'main_prompt'): ChatCrossReference[] => {
+    return (settings.chat_cross_references || []).filter(p => p.toAssistant === assistant && !p.read);
+  };
+
+  // ========== MAIN PROMPT FILE SYSTEM FUNCTIONS ==========
+
+  /**
+   * Get Main Prompt files at a certain level
+   */
+  const getMainPromptFilesAtLevel = (parentId?: string) => {
+    return (settings.main_prompt_chat_files || []).filter(f => f.parentId === parentId);
+  };
+
+  /**
+   * Get Main Prompt conversations in a file
+   */
+  const getMainPromptConversationsInFile = (fileId?: string) => {
+    return (settings.main_prompt_chat_conversations || []).filter(c => c.fileId === fileId);
+  };
+
+  /**
+   * Get active Main Prompt conversation
+   */
+  const mainPromptActiveConversation = (settings.main_prompt_chat_conversations || []).find(c => c.id === mainPromptActiveConversationId) || null;
+
+  /**
+   * Create Main Prompt chat file (folder)
+   */
+  const handleCreateMainPromptChatFile = (parentId?: string) => {
+    const newFile: ChatFile = {
+      id: `file-${Date.now()}`,
+      name: 'New Folder',
+      parentId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      main_prompt_chat_files: [...(settings.main_prompt_chat_files || []), newFile]
+    });
+    setMainPromptRenamingItemId(newFile.id);
+    setMainPromptRenamingValue('New Folder');
+    showNotification('Folder created', 'success');
+  };
+
+  /**
+   * Create Main Prompt conversation
+   */
+  const handleCreateMainPromptConversation = (fileId?: string) => {
+    const newConversation: ChatConversation = {
+      id: `conv-${Date.now()}`,
+      name: 'New Chat',
+      fileId,
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    updateSettings({
+      main_prompt_chat_conversations: [...(settings.main_prompt_chat_conversations || []), newConversation]
+    });
+    setMainPromptActiveConversationId(newConversation.id);
+    setMainPromptAssistantMessages([]);
+    setMainPromptRenamingItemId(newConversation.id);
+    setMainPromptRenamingValue('New Chat');
+    showNotification('Chat created', 'success');
+  };
+
+  /**
+   * Switch Main Prompt conversation
+   */
+  const handleSwitchMainPromptConversation = (conversationId: string) => {
+    // Save current conversation first
+    if (mainPromptActiveConversationId && mainPromptAssistantMessages.length > 0) {
+      const updatedConversations = (settings.main_prompt_chat_conversations || []).map(c =>
+        c.id === mainPromptActiveConversationId
+          ? { ...c, messages: mainPromptAssistantMessages, updatedAt: new Date().toISOString() }
+          : c
+      );
+      updateSettings({ main_prompt_chat_conversations: updatedConversations });
+    }
+
+    // Load new conversation
+    const conversation = (settings.main_prompt_chat_conversations || []).find(c => c.id === conversationId);
+    if (conversation) {
+      setMainPromptActiveConversationId(conversationId);
+      setMainPromptAssistantMessages(conversation.messages);
+      // Auto-scroll to bottom
+      setTimeout(() => {
+        if (mainPromptAssistantChatRef.current) {
+          mainPromptAssistantChatRef.current.scrollTop = mainPromptAssistantChatRef.current.scrollHeight;
+        }
+      }, 100);
+    }
+  };
+
+  /**
+   * Rename Main Prompt file or conversation
+   */
+  const handleRenameMainPromptItem = (itemId: string, newName: string, isFile: boolean) => {
+    if (!newName.trim()) return;
+
+    if (isFile) {
+      const updatedFiles = (settings.main_prompt_chat_files || []).map(f =>
+        f.id === itemId ? { ...f, name: newName.trim(), updatedAt: new Date().toISOString() } : f
+      );
+      updateSettings({ main_prompt_chat_files: updatedFiles });
+    } else {
+      const updatedConversations = (settings.main_prompt_chat_conversations || []).map(c =>
+        c.id === itemId ? { ...c, name: newName.trim(), updatedAt: new Date().toISOString() } : c
+      );
+      updateSettings({ main_prompt_chat_conversations: updatedConversations });
+    }
+    setMainPromptRenamingItemId(null);
+    setMainPromptRenamingValue('');
+  };
+
+  /**
+   * Delete Main Prompt file
+   */
+  const handleDeleteMainPromptFile = (fileId: string) => {
+    if (!window.confirm('Delete this folder and all its chats?')) return;
+
+    const updatedFiles = (settings.main_prompt_chat_files || []).filter(f => f.id !== fileId && f.parentId !== fileId);
+    const updatedConversations = (settings.main_prompt_chat_conversations || []).filter(c => c.fileId !== fileId);
+
+    updateSettings({
+      main_prompt_chat_files: updatedFiles,
+      main_prompt_chat_conversations: updatedConversations
+    });
+    showNotification('Folder deleted', 'info');
+  };
+
+  /**
+   * Delete Main Prompt conversation
+   */
+  const handleDeleteMainPromptConversation = (conversationId: string) => {
+    if (!window.confirm('Delete this chat?')) return;
+
+    const updatedConversations = (settings.main_prompt_chat_conversations || []).filter(c => c.id !== conversationId);
+    updateSettings({ main_prompt_chat_conversations: updatedConversations });
+
+    if (mainPromptActiveConversationId === conversationId) {
+      setMainPromptActiveConversationId(null);
+      setMainPromptAssistantMessages([]);
+    }
+    showNotification('Chat deleted', 'info');
+  };
+
+  /**
+   * Move Main Prompt conversation
+   */
+  const handleMoveMainPromptConversation = (conversationId: string, newFileId: string | undefined) => {
+    const updatedConversations = (settings.main_prompt_chat_conversations || []).map(c =>
+      c.id === conversationId ? { ...c, fileId: newFileId, updatedAt: new Date().toISOString() } : c
+    );
+    updateSettings({ main_prompt_chat_conversations: updatedConversations });
+    showNotification(newFileId ? 'Chat moved to folder' : 'Chat moved to unfiled', 'success');
+  };
+
+  /**
+   * Open Main Prompt save chat dialog
+   */
+  const openMainPromptSaveChatDialog = (fileId?: string) => {
+    if (mainPromptAssistantMessages.length === 0) {
+      showNotification('No messages to save', 'error');
+      return;
+    }
+    setMainPromptSaveChatTitle(`Chat ${new Date().toLocaleDateString()}`);
+    setMainPromptSaveChatFileId(fileId);
+    setShowMainPromptSaveChatDialog(true);
+  };
+
+  /**
+   * Save Main Prompt chat as conversation
+   */
+  const handleSaveMainPromptChatAsConversation = (title: string, fileId?: string) => {
+    if (mainPromptAssistantMessages.length === 0) {
+      showNotification('No messages to save', 'error');
+      return;
+    }
+
+    const newConversation: ChatConversation = {
+      id: `conv-${Date.now()}`,
+      name: title || `Chat ${new Date().toLocaleDateString()}`,
+      fileId,
+      messages: mainPromptAssistantMessages,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    updateSettings({
+      main_prompt_chat_conversations: [...(settings.main_prompt_chat_conversations || []), newConversation],
+      main_prompt_chat_history: []
+    });
+
+    setMainPromptActiveConversationId(newConversation.id);
+    setShowMainPromptSaveChatDialog(false);
+    setMainPromptSaveChatTitle('');
+    showNotification(`Chat saved as "${newConversation.name}"`, 'success');
+  };
+
+  /**
+   * Main Prompt chat search
+   */
+  const handleMainPromptChatSearch = (query: string) => {
+    setMainPromptChatSearchQuery(query);
+    if (!query.trim()) {
+      setMainPromptChatSearchResults([]);
+      return;
+    }
+
+    const results: Array<{conversationId: string; conversationName: string; messageIndex: number; snippet: string}> = [];
+    const queryLower = query.toLowerCase();
+
+    (settings.main_prompt_chat_conversations || []).forEach(conv => {
+      conv.messages.forEach((msg, idx) => {
+        if (msg.content.toLowerCase().includes(queryLower)) {
+          const matchIndex = msg.content.toLowerCase().indexOf(queryLower);
+          const start = Math.max(0, matchIndex - 30);
+          const end = Math.min(msg.content.length, matchIndex + query.length + 30);
+          const snippet = (start > 0 ? '...' : '') + msg.content.slice(start, end) + (end < msg.content.length ? '...' : '');
+
+          results.push({
+            conversationId: conv.id,
+            conversationName: conv.name,
+            messageIndex: idx,
+            snippet
+          });
+        }
+      });
+    });
+
+    setMainPromptChatSearchResults(results);
+  };
+
+  /**
+   * Handle Main Prompt document upload
+   */
+  const handleMainPromptDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setMainPromptAssistantDocument({
+        name: file.name,
+        content: content.slice(0, 50000) // Limit to 50KB
+      });
+      showNotification(`Document "${file.name}" attached`, 'success');
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   /**
@@ -4550,6 +4974,178 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setTimeout(() => {
       if (guidedAssistantChatRef.current) {
         guidedAssistantChatRef.current.scrollTop = guidedAssistantChatRef.current.scrollHeight;
+      }
+    }, 100);
+  };
+
+  /**
+   * Send message to Main Prompt AI Assistant Chat
+   * This chat helps users refine Main Prompt templates and placeholders
+   */
+  const handleMainPromptAssistantSend = async () => {
+    if (!mainPromptAssistantInput.trim() && mainPromptAssistantImages.length === 0 && !mainPromptAssistantDocument) return;
+
+    // Build message content including document if attached
+    let messageContent = mainPromptAssistantInput;
+    if (mainPromptAssistantDocument) {
+      messageContent = `${mainPromptAssistantInput}\n\n📄 **Attached Document: ${mainPromptAssistantDocument.name}**\n\`\`\`\n${mainPromptAssistantDocument.content}\n\`\`\``;
+    }
+
+    const newMessage: ChatMessage = {
+      role: 'user',
+      content: messageContent,
+      images: mainPromptAssistantImages.length > 0 ? mainPromptAssistantImages : undefined,
+      timestamp: new Date().toISOString()
+    };
+
+    // Build message history for API
+    const historyToSend = [...mainPromptAssistantMessages, newMessage];
+
+    // Update local state immediately
+    setMainPromptAssistantMessages(historyToSend);
+    // 🛡️ PERSIST to database immediately
+    if (mainPromptActiveConversationId) {
+      const updatedConversations = (settings.main_prompt_chat_conversations || []).map(c =>
+        c.id === mainPromptActiveConversationId
+          ? { ...c, messages: historyToSend, updatedAt: new Date().toISOString() }
+          : c
+      );
+      updateSettings({ main_prompt_chat_conversations: updatedConversations });
+    } else {
+      updateSettings({ main_prompt_chat_history: historyToSend });
+    }
+    setMainPromptAssistantInput('');
+    setMainPromptAssistantImages([]);
+    setMainPromptAssistantDocument(null);
+    setMainPromptAssistantLoading(true);
+
+    try {
+      // Build context focused on Main Prompt (includes Guided GPT for cross-reference)
+      const context = {
+        // Assistant mode
+        assistantMode: 'main_prompt',
+
+        // Main prompt template from active avatar
+        mainPrompt: activeAvatar?.mainPrompt || '',
+
+        // Placeholder categories with all options
+        placeholderMode: activeAvatar?.placeholderMode || 'simple',
+        placeholderCategories: activeAvatar?.placeholderCategories?.map(cat => ({
+          name: cat.name,
+          placeholder: cat.placeholder,
+          isRandomized: cat.isRandomized,
+          options: cat.options.map(opt => ({
+            number: opt.number,
+            text: opt.text,
+            primaryKeywords: opt.primaryKeywords,
+            secondaryKeywords: opt.useSecondaryKeywords ? opt.secondaryKeywords : undefined
+          }))
+        })) || [],
+
+        // Variations (simple mode)
+        variations: activeAvatar?.variations?.map(v => ({
+          name: v.name,
+          prompt: v.prompt,
+          orientation: v.orientation
+        })) || [],
+
+        // Guided GPT settings (for cross-reference)
+        guidedGuardrails: settings.guided_guardrails,
+
+        // Current avatar info
+        activeAvatar: activeAvatar ? {
+          name: activeAvatar.name,
+          tag: activeAvatar.tag
+        } : null,
+
+        // All avatars
+        allAvatars: settings.audience_avatars.map(a => ({
+          name: a.name,
+          tag: a.tag,
+          hasPrompt: !!a.mainPrompt
+        })),
+
+        // Image bank examples
+        imageBankExamples: (settings.image_bank || [])
+          .slice(0, 10)
+          .map((img: BankImage) => ({
+            title: img.title,
+            prompt: img.prompt,
+            variation: img.variation,
+            model: img.model,
+            used: img.used,
+            avatarTag: img.avatarTag
+          }))
+      };
+
+      const res = await fetch('/api/prompt-assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: settings.main_prompt_chat_model || 'gpt-4o',
+          messages: historyToSend.map(m => ({
+            role: m.role,
+            content: m.content,
+            images: m.images
+          })),
+          context
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const responseContent = data.response;
+        const updatedFields: string[] = [];
+
+        // Check for ```mainprompt blocks - AI can update avatar's main prompt
+        const mainPromptMatch = responseContent.match(/```mainprompt\n?([\s\S]*?)```/);
+        if (mainPromptMatch && activeAvatar) {
+          const newMainPrompt = mainPromptMatch[1].trim();
+          const updatedAvatars = settings.audience_avatars.map(a =>
+            a.id === activeAvatar.id ? { ...a, mainPrompt: newMainPrompt } : a
+          );
+          updateSettings({ audience_avatars: updatedAvatars });
+          updatedFields.push('Main Prompt');
+        }
+
+        // Show notification for updated fields
+        if (updatedFields.length > 0) {
+          showNotification(`✓ Updated: ${updatedFields.join(', ')}`, 'success');
+        }
+
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: responseContent,
+          timestamp: new Date().toISOString()
+        };
+        const updatedHistory = [...historyToSend, assistantMessage];
+        setMainPromptAssistantMessages(updatedHistory);
+
+        // 🛡️ PERSIST assistant response to database
+        if (mainPromptActiveConversationId) {
+          const updatedConversations = (settings.main_prompt_chat_conversations || []).map(c =>
+            c.id === mainPromptActiveConversationId
+              ? { ...c, messages: updatedHistory, updatedAt: new Date().toISOString() }
+              : c
+          );
+          updateSettings({ main_prompt_chat_conversations: updatedConversations });
+        } else {
+          updateSettings({ main_prompt_chat_history: updatedHistory });
+        }
+      } else {
+        showNotification(data.error || 'Chat failed', 'error');
+      }
+    } catch (error) {
+      console.error('Main Prompt assistant chat error:', error);
+      showNotification('Failed to send message', 'error');
+    }
+
+    setMainPromptAssistantLoading(false);
+
+    // Scroll to bottom
+    setTimeout(() => {
+      if (mainPromptAssistantChatRef.current) {
+        mainPromptAssistantChatRef.current.scrollTop = mainPromptAssistantChatRef.current.scrollHeight;
       }
     }, 100);
   };
@@ -6756,6 +7352,24 @@ Start by introducing yourself and asking about their business in a friendly way.
     showNotification('Category removed', 'info');
   };
 
+  /**
+   * Send image to AI Assistant
+   * Routes to Main Prompt AI (main_prompt mode) or Guided GPT (guided_gpt mode)
+   */
+  const handleSendImageToAI = (img: BankImage) => {
+    if (settings.live_prompt_mode === 'main_prompt') {
+      // Send to Main Prompt AI Assistant
+      setMainPromptAssistantImages(prev => [...prev, img.url].slice(0, 4));
+      setMainPromptAssistantOpen(true);
+      showNotification('Image added to Main Prompt AI', 'success');
+    } else {
+      // Send to Guided GPT Consultant (guided_gpt mode)
+      setConsultantImages(prev => [...prev, img.url].slice(0, 4));
+      setConsultantPanelOpen(true);
+      showNotification('Image added to Guided GPT', 'success');
+    }
+  };
+
   // Variation Order Handlers
   const handleSetVariationOrder = (variationId: string) => {
     const currentOrder = settings.manual_variation_order || [];
@@ -7363,9 +7977,799 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </button>
                     </div>
                     {settings.live_prompt_mode === 'main_prompt' && (
-                      <p className="text-[10px] text-brand-gold/70 bg-brand-gold/10 p-2 rounded">
-                        Uses your Main Prompt from the Audience Avatar. Placeholders like {'{Item_Cleaning}'} are filled based on article keywords around each image position.
-                      </p>
+                      <div className="space-y-3 mt-2">
+                        <p className="text-[10px] text-brand-gold/70 bg-brand-gold/10 p-2 rounded">
+                          Uses your Main Prompt from the Audience Avatar. Placeholders like {'{Item_Cleaning}'} are filled based on article keywords around each image position.
+                        </p>
+
+                        {/* Main Prompt AI Assistant */}
+                        <div className="border-t border-brand-gold/30 pt-4">
+                          <button
+                            type="button"
+                            onClick={() => setMainPromptAssistantOpen(!mainPromptAssistantOpen)}
+                            className="w-full flex items-center justify-between p-2 bg-brand-gold/20 hover:bg-brand-gold/30 rounded-lg transition"
+                          >
+                            <span className="flex items-center gap-2 text-brand-gold font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                              AI Prompt Assistant (Main Prompt)
+                              {mainPromptAssistantMessages.length > 0 && (
+                                <span className="px-1.5 py-0.5 bg-brand-gold text-slate-900 text-[10px] rounded-full">
+                                  {mainPromptAssistantMessages.length}
+                                </span>
+                              )}
+                              {/* Cross-chat ping notification badge */}
+                              {getUnreadPingsForAssistant('main_prompt').length > 0 && (
+                                <span className="px-1.5 py-0.5 bg-purple-600 text-white text-[10px] rounded-full animate-pulse">
+                                  {getUnreadPingsForAssistant('main_prompt').length} ping{getUnreadPingsForAssistant('main_prompt').length > 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-brand-gold transition-transform ${mainPromptAssistantOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {mainPromptAssistantOpen && (
+                            <div className="mt-3 space-y-3">
+                              {/* Chat File System Controls */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {/* File/Folder Toggle */}
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMainPromptFileManager(!showMainPromptFileManager)}
+                                  className={`px-2 py-1 rounded text-[10px] transition flex items-center gap-1 ${
+                                    showMainPromptFileManager
+                                      ? 'bg-brand-gold text-slate-900'
+                                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                  }`}
+                                  title="Organize chats into folders"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                  </svg>
+                                  Files
+                                </button>
+
+                                {/* Current Chat Indicator */}
+                                <div className="flex-1 flex items-center gap-2 min-w-0">
+                                  {mainPromptActiveConversationId ? (
+                                    <span className="text-[10px] text-brand-gold truncate flex items-center gap-1">
+                                      <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                      </svg>
+                                      {mainPromptActiveConversation?.name || 'Unknown Chat'}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-500">
+                                      {mainPromptAssistantMessages.length > 0 ? 'Unfiled Chat' : 'Start a new chat'}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Quick Actions */}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCreateMainPromptConversation()}
+                                    className="px-2 py-1 bg-brand-gold/50 hover:bg-brand-gold rounded text-[10px] text-slate-900 transition"
+                                    title="New Chat"
+                                  >
+                                    + New
+                                  </button>
+                                  {mainPromptAssistantMessages.length > 0 && !mainPromptActiveConversationId && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openMainPromptSaveChatDialog()}
+                                      className="px-2 py-1 bg-blue-700 hover:bg-blue-600 rounded text-[10px] text-white transition"
+                                      title="Save current chat with title"
+                                    >
+                                      Save
+                                    </button>
+                                  )}
+                                  {/* Ping Guided GPT button */}
+                                  {mainPromptAssistantMessages.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const msg = window.prompt('Add a message for Guided GPT (optional):');
+                                        if (msg !== null) {
+                                          handleSendCrossReferencePing('main_prompt', msg);
+                                        }
+                                      }}
+                                      className="px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-[10px] text-white transition flex items-center gap-1"
+                                      title="Ping Guided GPT with link to this chat"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                      </svg>
+                                      Ping
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Incoming Pings Section */}
+                              {getUnreadPingsForAssistant('main_prompt').length > 0 && (
+                                <div className="bg-purple-900/30 border border-purple-500/50 rounded-lg p-2">
+                                  <div className="text-[10px] text-purple-400 font-medium mb-2 flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    </svg>
+                                    Pings from Guided GPT
+                                  </div>
+                                  <div className="space-y-1">
+                                    {getUnreadPingsForAssistant('main_prompt').map(ping => (
+                                      <div key={ping.id} className="flex items-center justify-between bg-slate-800/50 rounded px-2 py-1">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-[10px] text-white truncate">{ping.conversationName}</div>
+                                          {ping.message && <div className="text-[9px] text-purple-300 truncate">{ping.message}</div>}
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleNavigateToPingedConversation(ping)}
+                                            className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 rounded text-[9px] text-white"
+                                          >
+                                            Go
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeletePing(ping.id)}
+                                            className="px-1 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[9px] text-white"
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Save Chat Dialog */}
+                              {showMainPromptSaveChatDialog && (
+                                <div className="bg-slate-900 border border-blue-500/50 rounded-lg p-3 mb-2">
+                                  <div className="text-xs text-blue-400 font-medium mb-2">Save Chat</div>
+                                  <input
+                                    type="text"
+                                    value={mainPromptSaveChatTitle}
+                                    onChange={(e) => setMainPromptSaveChatTitle(e.target.value)}
+                                    placeholder="Enter chat title..."
+                                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-white placeholder-slate-500 mb-2"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveMainPromptChatAsConversation(mainPromptSaveChatTitle, mainPromptSaveChatFileId);
+                                      if (e.key === 'Escape') { setShowMainPromptSaveChatDialog(false); setMainPromptSaveChatTitle(''); }
+                                    }}
+                                  />
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => { setShowMainPromptSaveChatDialog(false); setMainPromptSaveChatTitle(''); }}
+                                      className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-[10px] text-slate-300 transition"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveMainPromptChatAsConversation(mainPromptSaveChatTitle, mainPromptSaveChatFileId)}
+                                      className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-[10px] text-white transition"
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* File Manager Panel */}
+                              {showMainPromptFileManager && (
+                                <div className="bg-slate-900 border border-brand-gold/30 rounded-lg p-2 max-h-64 overflow-y-auto">
+                                  <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-700">
+                                    <span className="text-xs text-brand-gold font-medium">Chat Files</span>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCreateMainPromptChatFile()}
+                                        className="px-1.5 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[9px] text-slate-300 transition"
+                                        title="New Folder"
+                                      >
+                                        + Folder
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCreateMainPromptConversation()}
+                                        className="px-1.5 py-0.5 bg-brand-gold/50 hover:bg-brand-gold rounded text-[9px] text-slate-900 transition"
+                                        title="New Chat"
+                                      >
+                                        + Chat
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Search Bar */}
+                                  <div className="mb-2">
+                                    <div className="relative">
+                                      <input
+                                        type="text"
+                                        value={mainPromptChatSearchQuery}
+                                        onChange={(e) => handleMainPromptChatSearch(e.target.value)}
+                                        placeholder="Search chats..."
+                                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 pl-7 text-[10px] text-white placeholder-slate-500"
+                                      />
+                                      <svg className="w-3 h-3 absolute left-2 top-1.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                      </svg>
+                                      {mainPromptChatSearchQuery && (
+                                        <button
+                                          type="button"
+                                          onClick={() => { setMainPromptChatSearchQuery(''); setMainPromptChatSearchResults([]); }}
+                                          className="absolute right-1.5 top-1 text-slate-500 hover:text-slate-300"
+                                        >
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                          </svg>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Search Results */}
+                                  {mainPromptChatSearchResults.length > 0 && (
+                                    <div className="mb-2 pb-2 border-b border-slate-700">
+                                      <div className="text-[9px] text-yellow-500 mb-1">Search Results ({mainPromptChatSearchResults.length})</div>
+                                      {mainPromptChatSearchResults.slice(0, 10).map((result, idx) => (
+                                        <div
+                                          key={`${result.conversationId}-${result.messageIndex}-${idx}`}
+                                          className="p-1.5 rounded cursor-pointer text-[10px] hover:bg-slate-800 text-slate-400 mb-1"
+                                          onClick={() => {
+                                            handleSwitchMainPromptConversation(result.conversationId);
+                                            setMainPromptChatSearchQuery('');
+                                            setMainPromptChatSearchResults([]);
+                                          }}
+                                        >
+                                          <div className="font-medium text-yellow-400 truncate">{result.conversationName}</div>
+                                          <div className="text-slate-500 truncate">{result.snippet}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Unfiled Chats */}
+                                  {getMainPromptConversationsInFile(undefined).length > 0 && (
+                                    <div className="mb-2">
+                                      <div className="text-[9px] text-slate-500 mb-1">Unfiled</div>
+                                      {getMainPromptConversationsInFile(undefined).map(conv => (
+                                        <div
+                                          key={conv.id}
+                                          className={`flex items-center gap-1 p-1 rounded cursor-pointer text-[10px] group ${
+                                            mainPromptActiveConversationId === conv.id
+                                              ? 'bg-brand-gold/30 text-brand-gold'
+                                              : 'hover:bg-slate-800 text-slate-400'
+                                          }`}
+                                          onClick={() => handleSwitchMainPromptConversation(conv.id)}
+                                        >
+                                          <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                          </svg>
+                                          {mainPromptRenamingItemId === conv.id ? (
+                                            <input
+                                              type="text"
+                                              value={mainPromptRenamingValue}
+                                              onChange={(e) => setMainPromptRenamingValue(e.target.value)}
+                                              onBlur={() => handleRenameMainPromptItem(conv.id, mainPromptRenamingValue, false)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleRenameMainPromptItem(conv.id, mainPromptRenamingValue, false);
+                                                if (e.key === 'Escape') { setMainPromptRenamingItemId(null); setMainPromptRenamingValue(''); }
+                                              }}
+                                              className="flex-1 bg-slate-800 border border-brand-gold rounded px-1 text-[10px] text-white"
+                                              autoFocus
+                                              onClick={(e) => e.stopPropagation()}
+                                            />
+                                          ) : (
+                                            <span className="flex-1 truncate">{conv.name}</span>
+                                          )}
+                                          <span className="text-[8px] text-slate-600">{conv.messages.length}</span>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setMainPromptRenamingItemId(conv.id); setMainPromptRenamingValue(conv.name); }}
+                                            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-700 rounded transition"
+                                            title="Rename"
+                                          >
+                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteMainPromptConversation(conv.id); }}
+                                            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-900/50 rounded transition text-red-400"
+                                            title="Delete"
+                                          >
+                                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Folders */}
+                                  {getMainPromptFilesAtLevel(undefined).map(file => (
+                                    <div key={file.id} className="mb-1">
+                                      <div
+                                        className="flex items-center gap-1 p-1 rounded cursor-pointer text-[10px] hover:bg-slate-800 text-slate-300 group"
+                                        onClick={() => {
+                                          const newExpanded = new Set(mainPromptExpandedFileIds);
+                                          if (newExpanded.has(file.id)) {
+                                            newExpanded.delete(file.id);
+                                          } else {
+                                            newExpanded.add(file.id);
+                                          }
+                                          setMainPromptExpandedFileIds(newExpanded);
+                                        }}
+                                      >
+                                        <svg className={`w-3 h-3 transition-transform ${mainPromptExpandedFileIds.has(file.id) ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                                        </svg>
+                                        <svg className="w-3 h-3 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
+                                          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                        </svg>
+                                        {mainPromptRenamingItemId === file.id ? (
+                                          <input
+                                            type="text"
+                                            value={mainPromptRenamingValue}
+                                            onChange={(e) => setMainPromptRenamingValue(e.target.value)}
+                                            onBlur={() => handleRenameMainPromptItem(file.id, mainPromptRenamingValue, true)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') handleRenameMainPromptItem(file.id, mainPromptRenamingValue, true);
+                                              if (e.key === 'Escape') { setMainPromptRenamingItemId(null); setMainPromptRenamingValue(''); }
+                                            }}
+                                            className="flex-1 bg-slate-800 border border-brand-gold rounded px-1 text-[10px] text-white"
+                                            autoFocus
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
+                                        ) : (
+                                          <span className="flex-1 truncate">{file.name}</span>
+                                        )}
+                                        <span className="text-[8px] text-slate-600">{getMainPromptConversationsInFile(file.id).length}</span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleCreateMainPromptConversation(file.id); }}
+                                          className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-brand-gold/50 rounded transition text-brand-gold"
+                                          title="New chat in folder"
+                                        >
+                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                                          </svg>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); setMainPromptRenamingItemId(file.id); setMainPromptRenamingValue(file.name); }}
+                                          className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-700 rounded transition"
+                                          title="Rename folder"
+                                        >
+                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                          </svg>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleDeleteMainPromptFile(file.id); }}
+                                          className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-900/50 rounded transition text-red-400"
+                                          title="Delete folder"
+                                        >
+                                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                      {/* Chats in folder */}
+                                      {mainPromptExpandedFileIds.has(file.id) && (
+                                        <div className="ml-4 mt-1 space-y-0.5">
+                                          {getMainPromptConversationsInFile(file.id).map(conv => (
+                                            <div
+                                              key={conv.id}
+                                              className={`flex items-center gap-1 p-1 rounded cursor-pointer text-[10px] group ${
+                                                mainPromptActiveConversationId === conv.id
+                                                  ? 'bg-brand-gold/30 text-brand-gold'
+                                                  : 'hover:bg-slate-800 text-slate-400'
+                                              }`}
+                                              onClick={() => handleSwitchMainPromptConversation(conv.id)}
+                                            >
+                                              <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                              </svg>
+                                              <span className="flex-1 truncate">{conv.name}</span>
+                                              <span className="text-[8px] text-slate-600">{conv.messages.length}</span>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); handleMoveMainPromptConversation(conv.id, undefined); }}
+                                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-700 rounded transition"
+                                                title="Move to unfiled"
+                                              >
+                                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                                </svg>
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); handleDeleteMainPromptConversation(conv.id); }}
+                                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-900/50 rounded transition text-red-400"
+                                                title="Delete"
+                                              >
+                                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                              </button>
+                                            </div>
+                                          ))}
+                                          {getMainPromptConversationsInFile(file.id).length === 0 && (
+                                            <div className="text-[9px] text-slate-600 italic p-1">Empty folder</div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+
+                                  {/* Empty state */}
+                                  {getMainPromptFilesAtLevel(undefined).length === 0 && getMainPromptConversationsInFile(undefined).length === 0 && (
+                                    <div className="text-center py-4 text-slate-500 text-[10px]">
+                                      <p>No files or chats yet.</p>
+                                      <p className="mt-1">Create a folder to organize your chats!</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="flex items-center justify-between">
+                                <p className="text-[10px] text-brand-gold/60">
+                                  Chat with AI to refine your prompts and get suggestions.
+                                </p>
+                                {/* Chat Height Controls */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[9px] text-slate-500 mr-1">Size:</span>
+                                  <button
+                                    onClick={() => {
+                                      const sizes: Array<'sm' | 'md' | 'lg' | 'xl' | 'full'> = ['sm', 'md', 'lg', 'xl', 'full'];
+                                      const currentIdx = sizes.indexOf(mainPromptChatHeight);
+                                      if (currentIdx > 0) setMainPromptChatHeight(sizes[currentIdx - 1]);
+                                    }}
+                                    disabled={mainPromptChatHeight === 'sm'}
+                                    className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed rounded text-slate-400 hover:text-white transition"
+                                    title="Shrink chat"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </button>
+                                  <span className="text-[9px] text-brand-gold w-8 text-center">{mainPromptChatHeight.toUpperCase()}</span>
+                                  <button
+                                    onClick={() => {
+                                      const sizes: Array<'sm' | 'md' | 'lg' | 'xl' | 'full'> = ['sm', 'md', 'lg', 'xl', 'full'];
+                                      const currentIdx = sizes.indexOf(mainPromptChatHeight);
+                                      if (currentIdx < sizes.length - 1) setMainPromptChatHeight(sizes[currentIdx + 1]);
+                                    }}
+                                    disabled={mainPromptChatHeight === 'full'}
+                                    className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed rounded text-slate-400 hover:text-white transition"
+                                    title="Expand chat"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Chat Messages */}
+                              <div
+                                ref={mainPromptAssistantChatRef}
+                                className={`${chatHeightClasses[mainPromptChatHeight]} overflow-y-auto bg-slate-950 rounded-lg p-3 space-y-3 border border-brand-gold/20 transition-all duration-300`}
+                              >
+                                {mainPromptAssistantMessages.length === 0 ? (
+                                  <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                                    <div className="text-center">
+                                      <svg className="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                      </svg>
+                                      <p>Ask about prompt techniques, guardrails, or upload reference images for analysis</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  mainPromptAssistantMessages.map((msg, idx) => (
+                                    <div
+                                      key={idx}
+                                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                    >
+                                      <div
+                                        className={`max-w-[85%] rounded-lg p-2.5 ${
+                                          msg.role === 'user'
+                                            ? 'bg-brand-gold/20 text-brand-gold'
+                                            : 'bg-slate-800 text-slate-200'
+                                        }`}
+                                      >
+                                        {msg.images && msg.images.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mb-2">
+                                            {msg.images.map((img, imgIdx) => (
+                                              <img key={imgIdx} src={img} alt="" className="h-16 w-auto rounded" />
+                                            ))}
+                                          </div>
+                                        )}
+                                        <div className="text-xs whitespace-pre-wrap">{msg.content}</div>
+                                        {/* Action buttons for assistant messages */}
+                                        {msg.role === 'assistant' && (
+                                          <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                            <button
+                                              onClick={() => {
+                                                navigator.clipboard.writeText(msg.content);
+                                                showNotification('Copied to clipboard', 'success');
+                                              }}
+                                              className="text-[10px] text-slate-400 hover:text-white transition"
+                                            >
+                                              Copy response
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                                {mainPromptAssistantLoading && (
+                                  <div className="flex justify-start">
+                                    <div className="bg-slate-800 rounded-lg p-2.5">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                        <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                        <div className="w-2 h-2 bg-brand-gold rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Image and document attachments preview */}
+                              {(mainPromptAssistantImages.length > 0 || mainPromptAssistantDocument) && (
+                                <div className="flex flex-wrap gap-2 p-2 bg-slate-900 rounded-lg">
+                                  {mainPromptAssistantImages.map((img, idx) => (
+                                    <div key={idx} className="relative group">
+                                      <img src={img} alt="" className="h-12 w-auto rounded" />
+                                      <button
+                                        onClick={() => setMainPromptAssistantImages(prev => prev.filter((_, i) => i !== idx))}
+                                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                      >
+                                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {mainPromptAssistantDocument && (
+                                    <div className="relative group flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded">
+                                      <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                      <span className="text-xs text-slate-300">{mainPromptAssistantDocument.name}</span>
+                                      <span className="text-[10px] text-slate-500">({(mainPromptAssistantDocument.content.length / 1000).toFixed(1)}KB)</span>
+                                      <button
+                                        onClick={() => setMainPromptAssistantDocument(null)}
+                                        className="w-4 h-4 bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                                      >
+                                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Chat Input */}
+                              <div className="flex gap-2">
+                                <input
+                                  ref={mainPromptAssistantFileInputRef}
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={(e) => {
+                                    const files = Array.from(e.target.files || []);
+                                    files.forEach(file => {
+                                      const reader = new FileReader();
+                                      reader.onload = (ev) => {
+                                        if (ev.target?.result) {
+                                          setMainPromptAssistantImages(prev => [...prev, ev.target!.result as string]);
+                                        }
+                                      };
+                                      reader.readAsDataURL(file);
+                                    });
+                                    e.target.value = '';
+                                  }}
+                                  className="hidden"
+                                />
+                                <input
+                                  ref={mainPromptAssistantDocInputRef}
+                                  type="file"
+                                  accept=".txt,.md,.json,.csv,.html,.xml,.js,.ts,.jsx,.tsx,.py,.css,.scss,.yaml,.yml"
+                                  onChange={handleMainPromptDocUpload}
+                                  className="hidden"
+                                />
+                                <button
+                                  onClick={() => mainPromptAssistantFileInputRef.current?.click()}
+                                  className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition"
+                                  title="Attach images"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => mainPromptAssistantDocInputRef.current?.click()}
+                                  className={`p-2 rounded-lg transition ${
+                                    mainPromptAssistantDocument
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white'
+                                  }`}
+                                  title="Attach document (.txt, .md, .json, etc.)"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                  </svg>
+                                </button>
+                                <textarea
+                                  value={mainPromptAssistantInput}
+                                  onChange={(e) => {
+                                    setMainPromptAssistantInput(e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      handleMainPromptAssistantSend();
+                                    }
+                                  }}
+                                  onPaste={async (e) => {
+                                    const items = e.clipboardData?.items;
+                                    if (!items) return;
+
+                                    for (const item of items) {
+                                      if (item.type.startsWith('image/')) {
+                                        e.preventDefault();
+                                        const file = item.getAsFile();
+                                        if (file) {
+                                          const reader = new FileReader();
+                                          reader.onload = (event) => {
+                                            const base64 = event.target?.result as string;
+                                            setMainPromptAssistantImages(prev => [...prev, base64]);
+                                            showNotification('Image pasted', 'success');
+                                          };
+                                          reader.readAsDataURL(file);
+                                        }
+                                        break;
+                                      }
+                                    }
+                                  }}
+                                  placeholder="Ask about prompts, techniques... (Paste images with Ctrl+V)"
+                                  className="flex-1 p-2 text-xs bg-slate-900 border border-brand-gold/30 rounded-lg text-white placeholder-slate-500 resize-none overflow-hidden min-h-[38px] max-h-[200px]"
+                                  disabled={mainPromptAssistantLoading}
+                                  rows={1}
+                                />
+                                <button
+                                  onClick={handleMainPromptAssistantSend}
+                                  disabled={mainPromptAssistantLoading || (!mainPromptAssistantInput.trim() && mainPromptAssistantImages.length === 0)}
+                                  className="px-4 py-2 bg-brand-gold hover:bg-brand-gold-light disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg text-slate-900 text-xs font-medium transition"
+                                >
+                                  {mainPromptAssistantLoading ? '...' : 'Send'}
+                                </button>
+                              </div>
+
+                              {/* Chat Controls - History & Clear */}
+                              <div className="flex items-center justify-between">
+                                {/* History Browser Toggle */}
+                                <button
+                                  onClick={() => setShowMainPromptHistoryBrowser(!showMainPromptHistoryBrowser)}
+                                  className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded transition ${
+                                    showMainPromptHistoryBrowser
+                                      ? 'bg-brand-gold text-slate-900'
+                                      : 'text-slate-400 hover:text-brand-gold hover:bg-brand-gold/20'
+                                  }`}
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  History ({mainPromptAssistantMessages.length})
+                                </button>
+
+                                {/* Clear chat button */}
+                                {mainPromptAssistantMessages.length > 0 && (
+                                  <button
+                                    onClick={() => {
+                                      if (confirm('Clear all chat history? This cannot be undone.')) {
+                                        setMainPromptAssistantMessages([]);
+                                        updateSettings({ main_prompt_chat_history: [] });
+                                        showNotification('Chat cleared', 'success');
+                                      }
+                                    }}
+                                    className="px-2 py-1 text-[10px] text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded transition"
+                                  >
+                                    Clear all
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* History Browser Panel */}
+                              {showMainPromptHistoryBrowser && mainPromptAssistantMessages.length > 0 && (
+                                <div className="p-3 bg-slate-900 border border-brand-gold/30 rounded-lg space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 relative">
+                                      <input
+                                        type="text"
+                                        value={mainPromptHistorySearchQuery}
+                                        onChange={(e) => setMainPromptHistorySearchQuery(e.target.value)}
+                                        placeholder="Search messages..."
+                                        className="w-full pl-7 pr-2 py-1.5 text-[10px] bg-slate-800 border border-slate-600 rounded text-white placeholder-slate-500"
+                                      />
+                                      <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                      </svg>
+                                    </div>
+                                    <select
+                                      value={mainPromptHistorySortOrder}
+                                      onChange={(e) => setMainPromptHistorySortOrder(e.target.value as 'newest' | 'oldest')}
+                                      className="px-2 py-1.5 text-[10px] bg-slate-800 border border-slate-600 rounded text-white"
+                                    >
+                                      <option value="newest">Newest First</option>
+                                      <option value="oldest">Oldest First</option>
+                                    </select>
+                                  </div>
+
+                                  <div className="max-h-60 overflow-y-auto space-y-1">
+                                    {(() => {
+                                      let filteredMsgs = mainPromptAssistantMessages
+                                        .map((msg, idx) => ({ ...msg, originalIndex: idx }))
+                                        .filter(msg =>
+                                          !mainPromptHistorySearchQuery ||
+                                          msg.content.toLowerCase().includes(mainPromptHistorySearchQuery.toLowerCase())
+                                        );
+
+                                      if (mainPromptHistorySortOrder === 'newest') {
+                                        filteredMsgs = filteredMsgs.reverse();
+                                      }
+
+                                      if (filteredMsgs.length === 0) {
+                                        return (
+                                          <p className="text-[10px] text-slate-500 text-center py-2">
+                                            No messages match your search
+                                          </p>
+                                        );
+                                      }
+
+                                      return filteredMsgs.map((msg, idx) => (
+                                        <div
+                                          key={idx}
+                                          className={`p-2 rounded cursor-pointer text-[10px] hover:bg-slate-800 transition ${
+                                            msg.role === 'user' ? 'bg-brand-gold/10 text-brand-gold' : 'bg-slate-800/50 text-slate-300'
+                                          }`}
+                                          onClick={() => {
+                                            mainPromptAssistantChatRef.current?.querySelector(`[data-msg-index="${msg.originalIndex}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                          }}
+                                        >
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className="font-medium">{msg.role === 'user' ? 'You' : 'Assistant'}</span>
+                                            <span className="text-[8px] text-slate-500">#{msg.originalIndex + 1}</span>
+                                          </div>
+                                          <p className="line-clamp-2 text-slate-400">{msg.content}</p>
+                                        </div>
+                                      ));
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
                     {settings.live_prompt_mode === 'guided_gpt' && (
                       <div className="space-y-3 mt-2">
@@ -7883,6 +9287,12 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   {guidedAssistantMessages.length}
                                 </span>
                               )}
+                              {/* Cross-chat ping notification badge */}
+                              {getUnreadPingsForAssistant('guided_gpt').length > 0 && (
+                                <span className="px-1.5 py-0.5 bg-purple-600 text-white text-[10px] rounded-full animate-pulse">
+                                  {getUnreadPingsForAssistant('guided_gpt').length} ping{getUnreadPingsForAssistant('guided_gpt').length > 1 ? 's' : ''}
+                                </span>
+                              )}
                             </span>
                             <svg className={`w-4 h-4 text-emerald-400 transition-transform ${guidedAssistantOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -7946,8 +9356,65 @@ Start by introducing yourself and asking about their business in a friendly way.
                                       Save
                                     </button>
                                   )}
+                                  {/* Ping Main Prompt AI button */}
+                                  {guidedAssistantMessages.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const msg = window.prompt('Add a message for Main Prompt AI (optional):');
+                                        if (msg !== null) {
+                                          handleSendCrossReferencePing('guided_gpt', msg);
+                                        }
+                                      }}
+                                      className="px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-[10px] text-white transition flex items-center gap-1"
+                                      title="Ping Main Prompt AI with link to this chat"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                      </svg>
+                                      Ping
+                                    </button>
+                                  )}
                                 </div>
                               </div>
+
+                              {/* Incoming Pings Section */}
+                              {getUnreadPingsForAssistant('guided_gpt').length > 0 && (
+                                <div className="bg-purple-900/30 border border-purple-500/50 rounded-lg p-2">
+                                  <div className="text-[10px] text-purple-400 font-medium mb-2 flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    </svg>
+                                    Pings from Main Prompt AI
+                                  </div>
+                                  <div className="space-y-1">
+                                    {getUnreadPingsForAssistant('guided_gpt').map(ping => (
+                                      <div key={ping.id} className="flex items-center justify-between bg-slate-800/50 rounded px-2 py-1">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-[10px] text-white truncate">{ping.conversationName}</div>
+                                          {ping.message && <div className="text-[9px] text-purple-300 truncate">{ping.message}</div>}
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleNavigateToPingedConversation(ping)}
+                                            className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 rounded text-[9px] text-white"
+                                          >
+                                            Go
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeletePing(ping.id)}
+                                            className="px-1 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[9px] text-white"
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
 
                               {/* Save Chat Dialog */}
                               {showSaveChatDialog && (
@@ -13431,6 +14898,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                           <div className="flex gap-1 flex-wrap justify-center">
                             <button onClick={() => setPreviewImage(img)} className="px-2 py-0.5 bg-blue-600/80 rounded text-white text-[10px]">Expand</button>
                             <button onClick={() => handleDownloadImage(img)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Download</button>
+                            <button onClick={() => handleSendImageToAI(img)} className="px-2 py-0.5 bg-purple-600/80 rounded text-white text-[10px]">Send to AI</button>
                           </div>
                           <div className="flex gap-1">
                             <button onClick={() => handleMarkAsUsed(img.id, 'manual')} className="px-2 py-0.5 bg-green-600/80 rounded text-white text-[10px]">Used</button>
@@ -14152,6 +15620,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <div className="flex gap-2 flex-wrap justify-center">
                           <button onClick={() => setPreviewImage(img)} className="px-3 py-1 bg-blue-600 rounded text-white text-xs">View</button>
                           <button onClick={() => handleDownloadImage(img)} className="px-3 py-1 bg-brand-cyan rounded text-slate-900 text-xs font-medium">Download</button>
+                          <button onClick={() => handleSendImageToAI(img)} className="px-3 py-1 bg-purple-600 rounded text-white text-xs">Send to AI</button>
                         </div>
                         <div className="flex gap-2">
                           <button onClick={() => handleArchiveImage(img.id)} className="px-3 py-1 bg-amber-600 rounded text-white text-xs">
@@ -14223,6 +15692,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                           <div className="flex gap-2">
                             <button onClick={() => setPreviewImage(img)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs transition">View</button>
                             <button onClick={() => handleDownloadImage(img)} className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 text-xs font-medium transition">Download</button>
+                            <button onClick={() => handleSendImageToAI(img)} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded text-white text-xs transition">Send to AI</button>
                             <button onClick={() => handleArchiveImage(img.id)} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-xs transition">
                               {img.archived ? 'Restore' : 'Archive'}
                             </button>
