@@ -1080,6 +1080,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [testingModeOpen, setTestingModeOpen] = useState(false);
   const [testingModeLoading, setTestingModeLoading] = useState(false);
 
+  // Main Prompt Testing Mode state (separate UI controls, shared data)
+  const [mainPromptTestingModeOpen, setMainPromptTestingModeOpen] = useState(false);
+
   // Multi-tab testing system - each tab is an independent testing session
   interface TestingTab {
     id: string;
@@ -1098,6 +1101,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // ========== PROMPT JOURNAL STATE ==========
   const [journalOpen, setJournalOpen] = useState(false);
+  const [mainPromptJournalOpen, setMainPromptJournalOpen] = useState(false); // Main Prompt's journal UI
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [journalSeries, setJournalSeries] = useState<JournalSeries[]>([]);
   const [journalFilterTag, setJournalFilterTag] = useState<string | null>(null); // Filter by tag/file
@@ -1145,6 +1149,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   }
 
   const [articleTestOpen, setArticleTestOpen] = useState(false);
+  const [mainPromptArticleTestOpen, setMainPromptArticleTestOpen] = useState(false); // Main Prompt's article test UI
   const [articleTestLoading, setArticleTestLoading] = useState(false);
   const [availableArticles, setAvailableArticles] = useState<Array<{ id: string; keyword: string; title: string; wordCount: number }>>([]);
   const [selectedArticleTest, setSelectedArticleTest] = useState<ArticleTest | null>(null);
@@ -4781,7 +4786,26 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             clientName: a.clientName,
             content: a.content
           }))
-        } : null
+        } : null,
+
+        // CROSS-CHAT AWARENESS: Journal entries (shared with Main Prompt)
+        journalEntries: journalEntries.slice(0, 20).map(e => ({
+          prompt: e.prompt,
+          imageUrl: e.imageUrl,
+          model: e.model,
+          tags: e.tags,
+          notes: e.notes,
+          isFinal: e.isFinal
+        })),
+
+        // CROSS-CHAT AWARENESS: Main Prompt recent chat (for context)
+        mainPromptRecentMessages: mainPromptAssistantMessages.slice(-5).map(m => ({
+          role: m.role,
+          content: m.content.substring(0, 500) // Truncate long messages
+        })),
+
+        // Cross-chat pings (for awareness)
+        crossChatPings: settings.chat_cross_references?.filter(p => !p.read).length || 0
       };
 
       const res = await fetch('/api/prompt-assistant/chat', {
@@ -5075,7 +5099,40 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             model: img.model,
             used: img.used,
             avatarTag: img.avatarTag
-          }))
+          })),
+
+        // CROSS-CHAT AWARENESS: Testing Mode (shared with Guided GPT)
+        testingMode: {
+          isOpen: testingModeOpen || mainPromptTestingModeOpen,
+          activeTab: activeTestingTab.name,
+          currentPrompt: activeTestingTab.prompt,
+          fullHistory: activeTestingTab.history.map(h => ({
+            prompt: h.prompt,
+            imageUrl: h.url,
+            model: h.model,
+            timestamp: h.timestamp
+          })),
+          model: settings.default_model || 'gpt-image-1.5'
+        },
+
+        // CROSS-CHAT AWARENESS: Journal entries (shared with Guided GPT)
+        journalEntries: journalEntries.slice(0, 20).map(e => ({
+          prompt: e.prompt,
+          imageUrl: e.imageUrl,
+          model: e.model,
+          tags: e.tags,
+          notes: e.notes,
+          isFinal: e.isFinal
+        })),
+
+        // CROSS-CHAT AWARENESS: Guided GPT recent chat (for context)
+        guidedGptRecentMessages: guidedAssistantMessages.slice(-5).map(m => ({
+          role: m.role,
+          content: m.content.substring(0, 500) // Truncate long messages
+        })),
+
+        // Cross-chat pings (for awareness)
+        crossChatPings: settings.chat_cross_references?.filter(p => !p.read).length || 0
       };
 
       const res = await fetch('/api/prompt-assistant/chat', {
@@ -8764,6 +8821,492 @@ Start by introducing yourself and asking about their business in a friendly way.
                                       ));
                                     })()}
                                   </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ═══════════════════════════════════════════
+                            MAIN PROMPT TESTING MODE - Multi-Tab Sandbox
+                        ═══════════════════════════════════════════ */}
+                        <div className="mt-4 border-t border-brand-gold/30 pt-4">
+                          <button
+                            type="button"
+                            onClick={() => setMainPromptTestingModeOpen(!mainPromptTestingModeOpen)}
+                            className="w-full flex items-center justify-between p-2 bg-brand-gold/20 hover:bg-brand-gold/30 rounded-t-lg transition"
+                          >
+                            <span className="flex items-center gap-2 text-brand-gold font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                              </svg>
+                              Testing Mode
+                              {testingTabs.reduce((sum, t) => sum + t.history.length, 0) > 0 && (
+                                <span className="px-1.5 py-0.5 bg-brand-gold text-slate-900 text-[10px] rounded-full">
+                                  {testingTabs.reduce((sum, t) => sum + t.history.length, 0)}
+                                </span>
+                              )}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <select
+                                onClick={(e) => e.stopPropagation()}
+                                value={settings.default_model || 'gpt-image-1.5'}
+                                onChange={(e) => { e.stopPropagation(); updateSettings({ default_model: e.target.value }); }}
+                                className="px-2 py-1 text-[10px] bg-slate-900 border border-brand-gold/30 rounded text-white"
+                              >
+                                {IMAGE_GENERATION_MODELS.map(m => (
+                                  <option key={m.id} value={m.id}>{m.name.split(' ')[0]}</option>
+                                ))}
+                              </select>
+                              <svg className={`w-4 h-4 text-brand-gold transition-transform ${mainPromptTestingModeOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </button>
+
+                          {mainPromptTestingModeOpen && (
+                            <div className="bg-slate-900/50 rounded-b-lg border border-t-0 border-brand-gold/20">
+                              {/* Tab Bar */}
+                              <div className="flex items-center gap-1 p-1.5 bg-slate-950/50 border-b border-brand-gold/20 overflow-x-auto">
+                                {testingTabs.map((tab) => (
+                                  <div
+                                    key={tab.id}
+                                    className={`group relative flex items-center gap-1 px-2 py-1 rounded text-[10px] cursor-pointer transition-all ${
+                                      activeTestingTabId === tab.id
+                                        ? 'bg-brand-gold text-slate-900'
+                                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                                    }`}
+                                    onClick={() => setActiveTestingTabId(tab.id)}
+                                  >
+                                    {editingTabName === tab.id ? (
+                                      <input
+                                        type="text"
+                                        defaultValue={tab.name}
+                                        autoFocus
+                                        onClick={(e) => e.stopPropagation()}
+                                        onBlur={(e) => renameTestingTab(tab.id, e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') renameTestingTab(tab.id, (e.target as HTMLInputElement).value);
+                                          if (e.key === 'Escape') setEditingTabName(null);
+                                        }}
+                                        className="w-16 px-1 py-0.5 text-[10px] bg-slate-900 border border-brand-gold rounded text-white"
+                                      />
+                                    ) : (
+                                      <>
+                                        <span
+                                          onDoubleClick={(e) => { e.stopPropagation(); setEditingTabName(tab.id); }}
+                                          title="Double-click to rename"
+                                        >
+                                          {tab.name}
+                                        </span>
+                                        {tab.history.length > 0 && (
+                                          <span className="px-1 py-0.5 bg-black/30 rounded text-[8px]">
+                                            {tab.history.length}
+                                          </span>
+                                        )}
+                                        {testingTabs.length > 1 && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); deleteTestingTab(tab.id); }}
+                                            className="ml-1 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition"
+                                            title="Delete tab"
+                                          >
+                                            &times;
+                                          </button>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                ))}
+                                <button
+                                  onClick={addTestingTab}
+                                  className="px-2 py-1 rounded text-[10px] bg-slate-800 text-brand-gold hover:bg-brand-gold hover:text-slate-900 transition"
+                                  title="Add new test tab"
+                                >
+                                  +
+                                </button>
+                              </div>
+
+                              {/* Active Tab Content */}
+                              <div className="p-3 space-y-3">
+                                {/* Prompt input */}
+                                <div className="flex gap-2">
+                                  <textarea
+                                    value={activeTestingTab.prompt}
+                                    onChange={(e) => updateActiveTabPrompt(e.target.value)}
+                                    placeholder="Enter your test prompt here... (AI Assistant can send prompts here directly)"
+                                    className="flex-1 p-2 text-xs bg-slate-900 border border-brand-gold/30 rounded-lg text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                    rows={2}
+                                  />
+                                  <button
+                                    onClick={handleGenerateTestImage}
+                                    disabled={testingModeLoading || !activeTestingTab.prompt.trim()}
+                                    className="px-4 bg-brand-gold hover:bg-brand-gold-light disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg text-slate-900 text-xs font-medium transition flex items-center justify-center"
+                                    title="Generate Test Image"
+                                  >
+                                    {testingModeLoading ? (
+                                      <div className="w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin"></div>
+                                    ) : (
+                                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* History for this tab */}
+                                {activeTestingTab.history.length > 0 && (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[10px] text-brand-gold">History ({activeTestingTab.history.length})</span>
+                                      <div className="flex gap-1">
+                                        <button
+                                          onClick={() => {
+                                            activeTestingTab.history.forEach(h => {
+                                              addJournalEntry({
+                                                prompt: h.prompt,
+                                                imageUrl: h.url,
+                                                model: h.model,
+                                                tags: []
+                                              });
+                                            });
+                                            showNotification(`Saved ${activeTestingTab.history.length} items to journal`, 'success');
+                                          }}
+                                          className="px-2 py-0.5 text-[9px] bg-blue-600 hover:bg-blue-500 text-white rounded transition"
+                                        >
+                                          Save All to Journal
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setTestingTabs(tabs => tabs.map(t =>
+                                              t.id === activeTestingTabId ? { ...t, history: [] } : t
+                                            ));
+                                          }}
+                                          className="px-2 py-0.5 text-[9px] bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition"
+                                        >
+                                          Clear
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-y-auto">
+                                      {activeTestingTab.history.slice().reverse().map((item, idx) => (
+                                        <div key={idx} className="bg-slate-950 rounded-lg p-2 border border-slate-700">
+                                          <img src={item.url} alt="" className="w-full h-auto rounded mb-2" />
+                                          <p className="text-[9px] text-slate-400 line-clamp-2 mb-1">{item.prompt}</p>
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[8px] text-slate-600">{item.model}</span>
+                                            <div className="flex gap-1">
+                                              <button
+                                                onClick={() => handleSaveToImageBank(item.url, item.prompt)}
+                                                className="text-[8px] text-green-400 hover:text-green-300"
+                                                title="Save to image bank"
+                                              >
+                                                Bank
+                                              </button>
+                                              <button
+                                                onClick={() => addJournalEntry({ prompt: item.prompt, imageUrl: item.url, model: item.model, tags: [] })}
+                                                className="text-[8px] text-blue-400 hover:text-blue-300"
+                                                title="Add to journal"
+                                              >
+                                                Journal
+                                              </button>
+                                              <button
+                                                onClick={() => updateActiveTabPrompt(item.prompt)}
+                                                className="text-[8px] text-brand-gold hover:text-brand-gold-light"
+                                                title="Use this prompt"
+                                              >
+                                                Use
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {activeTestingTab.history.length === 0 && (
+                                  <div className="text-center py-4 text-slate-500 text-xs">
+                                    <p>No test images yet.</p>
+                                    <p className="text-[10px] mt-1">Enter a prompt above and click generate to test.</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ═══════════════════════════════════════════
+                            MAIN PROMPT JOURNAL - Save & organize prompts
+                        ═══════════════════════════════════════════ */}
+                        <div className="mt-4 border-t border-blue-500/30 pt-4">
+                          <button
+                            type="button"
+                            onClick={() => setMainPromptJournalOpen(!mainPromptJournalOpen)}
+                            className="w-full flex items-center justify-between p-2 bg-blue-900/30 hover:bg-blue-900/50 rounded-t-lg transition"
+                          >
+                            <span className="flex items-center gap-2 text-blue-400 font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                              </svg>
+                              Prompt Journal
+                              {journalEntries.length > 0 && (
+                                <span className="px-1.5 py-0.5 bg-blue-600 text-white text-[10px] rounded-full">
+                                  {journalEntries.length}
+                                </span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-blue-400 transition-transform ${mainPromptJournalOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {mainPromptJournalOpen && (
+                            <div className="bg-slate-900/50 rounded-b-lg border border-t-0 border-blue-500/20 p-3">
+                              {/* Filter by tag */}
+                              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                                <span className="text-[10px] text-blue-400">Filter:</span>
+                                <button
+                                  onClick={() => setJournalFilterTag(null)}
+                                  className={`px-2 py-0.5 rounded text-[9px] transition ${
+                                    !journalFilterTag
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                  }`}
+                                >
+                                  All ({journalEntries.length})
+                                </button>
+                                {journalTags.map(tag => (
+                                  <button
+                                    key={tag}
+                                    onClick={() => setJournalFilterTag(tag)}
+                                    className={`px-2 py-0.5 rounded text-[9px] transition ${
+                                      journalFilterTag === tag
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                    }`}
+                                  >
+                                    {tag} ({journalEntries.filter(e => e.tags.includes(tag)).length})
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Journal entries */}
+                              {filteredJournalEntries.length > 0 ? (
+                                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                  {filteredJournalEntries.map((entry) => (
+                                    <div
+                                      key={entry.id}
+                                      className={`bg-slate-950 rounded-lg p-2 border ${
+                                        entry.isFinal ? 'border-green-500/50' : 'border-slate-700'
+                                      }`}
+                                    >
+                                      <div className="flex gap-3">
+                                        {entry.imageUrl && (
+                                          <img src={entry.imageUrl} alt="" className="w-16 h-auto rounded flex-shrink-0" />
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-[10px] text-slate-400 mb-1 line-clamp-2">{entry.prompt}</div>
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            {entry.tags.map(tag => (
+                                              <span key={tag} className="px-1.5 py-0.5 bg-blue-900/50 text-blue-400 text-[8px] rounded">
+                                                {tag}
+                                              </span>
+                                            ))}
+                                            {entry.isFinal && (
+                                              <span className="px-1.5 py-0.5 bg-green-600 text-white text-[8px] rounded font-medium">
+                                                WINNER
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2 mt-1">
+                                            <button
+                                              onClick={() => loadPromptFromJournal(entry)}
+                                              className="text-[9px] text-brand-gold hover:text-brand-gold-light"
+                                            >
+                                              Load
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                const note = prompt('Add note:', entry.notes || '');
+                                                if (note !== null) {
+                                                  updateJournalEntry(entry.id, { notes: note });
+                                                }
+                                              }}
+                                              className="text-[9px] text-slate-400 hover:text-white"
+                                            >
+                                              Note
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                const tag = prompt('Add tag:');
+                                                if (tag) {
+                                                  updateJournalEntry(entry.id, { tags: [...entry.tags, tag] });
+                                                }
+                                              }}
+                                              className="text-[9px] text-slate-400 hover:text-white"
+                                            >
+                                              +Tag
+                                            </button>
+                                            <button
+                                              onClick={() => deleteJournalEntry(entry.id)}
+                                              className="text-[9px] text-red-400 hover:text-red-300"
+                                            >
+                                              Delete
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-center py-4 text-slate-500 text-xs">
+                                  <p>No journal entries yet.</p>
+                                  <p className="text-[10px] mt-1">Save prompts from Testing Mode to keep track of your work.</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ═══════════════════════════════════════════
+                            MAIN PROMPT ARTICLE TESTING - Test full page layouts
+                        ═══════════════════════════════════════════ */}
+                        <div className="mt-4 border-t border-purple-500/30 pt-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMainPromptArticleTestOpen(!mainPromptArticleTestOpen);
+                              if (!mainPromptArticleTestOpen) fetchAvailableArticles();
+                            }}
+                            className="w-full flex items-center justify-between p-2 bg-purple-900/30 hover:bg-purple-900/50 rounded-t-lg transition"
+                          >
+                            <span className="flex items-center gap-2 text-purple-400 font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              Article Testing
+                              {selectedArticleTest && (
+                                <span className="px-1.5 py-0.5 bg-purple-600 text-white text-[10px] rounded-full">
+                                  {selectedArticleTest.placements.length} spots
+                                </span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-purple-400 transition-transform ${mainPromptArticleTestOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {mainPromptArticleTestOpen && (
+                            <div className="bg-slate-900/50 rounded-b-lg border border-t-0 border-purple-500/20 p-3">
+                              <p className="text-[10px] text-purple-300/60 mb-3">
+                                Import a real article to test image placement rules. See where images would go and what keywords are matched.
+                              </p>
+
+                              {/* Article selector */}
+                              <div className="flex gap-2 mb-3">
+                                <select
+                                  value={selectedArticleTest?.articleId || ''}
+                                  onChange={(e) => e.target.value && loadArticleForTesting(e.target.value)}
+                                  className="flex-1 p-2 text-xs bg-slate-900 border border-purple-500/30 rounded text-white"
+                                  disabled={articleTestLoading}
+                                >
+                                  <option value="">Select an article...</option>
+                                  {availableArticles.map(a => (
+                                    <option key={a.id} value={a.id}>
+                                      {a.keyword} ({a.wordCount} words)
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={fetchAvailableArticles}
+                                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded text-purple-400 text-xs transition"
+                                  title="Refresh article list"
+                                >
+                                  ↻
+                                </button>
+                              </div>
+
+                              {/* Keyword range slider */}
+                              <div className="mb-3 p-2 bg-slate-950 rounded border border-purple-500/20">
+                                <div className="flex items-center justify-between mb-1">
+                                  <label className="text-[10px] text-purple-400">Keyword Search Range:</label>
+                                  <span className="text-[10px] text-white font-medium">{keywordRange} words each way</span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min="10"
+                                  max="100"
+                                  value={keywordRange}
+                                  onChange={(e) => setKeywordRange(parseInt(e.target.value))}
+                                  className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                                />
+                                <div className="flex justify-between text-[8px] text-slate-500 mt-1">
+                                  <span>10 words</span>
+                                  <span>50 words</span>
+                                  <span>100 words</span>
+                                </div>
+                                {selectedArticleTest && (
+                                  <button
+                                    onClick={reanalyzeArticle}
+                                    className="mt-2 w-full p-1.5 text-[10px] bg-purple-900/50 hover:bg-purple-800/50 text-purple-300 rounded transition"
+                                  >
+                                    Re-analyze with new range
+                                  </button>
+                                )}
+                              </div>
+
+                              {articleTestLoading && (
+                                <div className="text-center py-4">
+                                  <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mx-auto mb-2"></div>
+                                  <p className="text-[10px] text-purple-400">Loading article...</p>
+                                </div>
+                              )}
+
+                              {selectedArticleTest && !articleTestLoading && (
+                                <div className="space-y-3">
+                                  <div className="p-2 bg-purple-900/30 rounded border border-purple-500/30">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <div className="text-xs text-white font-medium">{selectedArticleTest.keyword}</div>
+                                        <div className="text-[10px] text-purple-300">{selectedArticleTest.wordCount} words • {selectedArticleTest.placements.length} image spots</div>
+                                      </div>
+                                      <button
+                                        onClick={() => setSelectedArticleTest(null)}
+                                        className="text-[9px] text-slate-400 hover:text-white"
+                                      >
+                                        Clear
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Placements list */}
+                                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                    {selectedArticleTest.placements.map((placement, idx) => (
+                                      <div key={placement.id} className="bg-slate-950 rounded p-2 border border-slate-700">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="text-[10px] text-purple-400 font-medium">Spot #{idx + 1}</span>
+                                          <span className="text-[8px] text-slate-500">Paragraph {placement.paragraphIndex + 1}</span>
+                                        </div>
+                                        <div className="text-[9px] text-slate-400 mb-1">
+                                          Keywords: {placement.matchedKeywords.length > 0 ? (
+                                            <span className="text-purple-300">{placement.matchedKeywords.join(', ')}</span>
+                                          ) : (
+                                            <span className="text-slate-600">None matched</span>
+                                          )}
+                                        </div>
+                                        {placement.generatedImage && (
+                                          <img src={placement.generatedImage.url} alt="" className="w-full h-auto rounded mt-2" />
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {!selectedArticleTest && !articleTestLoading && (
+                                <div className="text-center py-4 text-slate-500 text-xs">
+                                  <p>Select an article to test image placements.</p>
                                 </div>
                               )}
                             </div>
