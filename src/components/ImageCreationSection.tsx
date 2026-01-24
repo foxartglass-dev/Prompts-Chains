@@ -3786,6 +3786,27 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }
     parts.push('');
 
+    // ========== GUIDED GPT GUARDRAILS ==========
+    if (settings.guided_guardrails) {
+      parts.push('━━━━━━━━━━ GUIDED GPT GUARDRAILS ━━━━━━━━━━');
+      if (settings.guided_guardrails.uniformDescription) {
+        parts.push(`📋 UNIFORM DESCRIPTION: ${settings.guided_guardrails.uniformDescription}`);
+      }
+      if (settings.guided_guardrails.instructions) {
+        parts.push(`📝 INSTRUCTIONS: ${settings.guided_guardrails.instructions}`);
+      }
+      if (settings.guided_guardrails.excludeInstructions) {
+        parts.push(`🚫 EXCLUDE INSTRUCTIONS: ${settings.guided_guardrails.excludeInstructions}`);
+      }
+      if (settings.guided_guardrails.customSuffix) {
+        parts.push(`✨ CUSTOM SUFFIX: ${settings.guided_guardrails.customSuffix}`);
+      }
+      if (settings.guided_guardrails.formatInstructions) {
+        parts.push(`📐 FORMAT INSTRUCTIONS: ${settings.guided_guardrails.formatInstructions}`);
+      }
+      parts.push('');
+    }
+
     // ========== SMART MATCHING SETTINGS ==========
     parts.push('━━━━━━━━━━ INTEGRATION SETTINGS ━━━━━━━━━━');
     parts.push(`🔄 Integration Mode: ${settings.integration_mode}`);
@@ -4130,6 +4151,105 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     );
     updateSettings({ consultant_chat_conversations: updatedConversations });
     showNotification(newFileId ? 'Chat moved to folder' : 'Chat moved to unfiled', 'success');
+  };
+
+  // ========== CROSS-CHAT PING SYSTEM ==========
+
+  /**
+   * Send a ping/reference from one assistant to another
+   */
+  const handleSendCrossReferencePing = (
+    fromAssistant: 'guided_gpt' | 'main_prompt',
+    message: string
+  ) => {
+    // Determine which conversation to reference and target assistant
+    const toAssistant = fromAssistant === 'guided_gpt' ? 'main_prompt' : 'guided_gpt';
+
+    // Get the current conversation ID based on which assistant is sending
+    let conversationId = '';
+    let conversationName = '';
+
+    if (fromAssistant === 'guided_gpt') {
+      conversationId = activeConversationId || 'unfiled';
+      const conv = (settings.consultant_chat_conversations || []).find(c => c.id === activeConversationId);
+      conversationName = conv?.name || 'Active Chat';
+    } else {
+      conversationId = mainPromptActiveConversationId || 'unfiled';
+      const conv = (settings.main_prompt_chat_conversations || []).find(c => c.id === mainPromptActiveConversationId);
+      conversationName = conv?.name || 'Active Chat';
+    }
+
+    const newPing: ChatCrossReference = {
+      id: `ping-${Date.now()}`,
+      fromAssistant,
+      toAssistant,
+      conversationId,
+      conversationName,
+      message: message.trim(),
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+
+    updateSettings({
+      chat_cross_references: [...(settings.chat_cross_references || []), newPing]
+    });
+
+    showNotification(`Ping sent to ${toAssistant === 'guided_gpt' ? 'Guided GPT' : 'Main Prompt AI'}!`, 'success');
+  };
+
+  /**
+   * Mark a ping as read
+   */
+  const handleMarkPingAsRead = (pingId: string) => {
+    const updatedPings = (settings.chat_cross_references || []).map(p =>
+      p.id === pingId ? { ...p, read: true } : p
+    );
+    updateSettings({ chat_cross_references: updatedPings });
+  };
+
+  /**
+   * Delete a ping
+   */
+  const handleDeletePing = (pingId: string) => {
+    const updatedPings = (settings.chat_cross_references || []).filter(p => p.id !== pingId);
+    updateSettings({ chat_cross_references: updatedPings });
+  };
+
+  /**
+   * Navigate to the conversation referenced in a ping
+   */
+  const handleNavigateToPingedConversation = (ping: ChatCrossReference) => {
+    // Mark as read
+    handleMarkPingAsRead(ping.id);
+
+    // Switch to the originating assistant mode and conversation
+    if (ping.fromAssistant === 'guided_gpt') {
+      // Navigate to Guided GPT conversation
+      updateSettings({ live_prompt_mode: 'guided_gpt' });
+      if (ping.conversationId !== 'unfiled') {
+        handleSwitchConversation(ping.conversationId);
+      }
+      setConsultantPanelOpen(true);
+    } else {
+      // Navigate to Main Prompt conversation
+      updateSettings({ live_prompt_mode: 'main_prompt' });
+      if (ping.conversationId !== 'unfiled') {
+        // Switch to Main Prompt conversation
+        const conversation = (settings.main_prompt_chat_conversations || []).find(c => c.id === ping.conversationId);
+        if (conversation) {
+          setMainPromptActiveConversationId(ping.conversationId);
+          setMainPromptAssistantMessages(conversation.messages);
+        }
+      }
+      setMainPromptAssistantOpen(true);
+    }
+  };
+
+  /**
+   * Get unread pings for an assistant
+   */
+  const getUnreadPingsForAssistant = (assistant: 'guided_gpt' | 'main_prompt'): ChatCrossReference[] => {
+    return (settings.chat_cross_references || []).filter(p => p.toAssistant === assistant && !p.read);
   };
 
   /**
@@ -4594,6 +4714,178 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setTimeout(() => {
       if (guidedAssistantChatRef.current) {
         guidedAssistantChatRef.current.scrollTop = guidedAssistantChatRef.current.scrollHeight;
+      }
+    }, 100);
+  };
+
+  /**
+   * Send message to Main Prompt AI Assistant Chat
+   * This chat helps users refine Main Prompt templates and placeholders
+   */
+  const handleMainPromptAssistantSend = async () => {
+    if (!mainPromptAssistantInput.trim() && mainPromptAssistantImages.length === 0 && !mainPromptAssistantDocument) return;
+
+    // Build message content including document if attached
+    let messageContent = mainPromptAssistantInput;
+    if (mainPromptAssistantDocument) {
+      messageContent = `${mainPromptAssistantInput}\n\n📄 **Attached Document: ${mainPromptAssistantDocument.name}**\n\`\`\`\n${mainPromptAssistantDocument.content}\n\`\`\``;
+    }
+
+    const newMessage: ChatMessage = {
+      role: 'user',
+      content: messageContent,
+      images: mainPromptAssistantImages.length > 0 ? mainPromptAssistantImages : undefined,
+      timestamp: new Date().toISOString()
+    };
+
+    // Build message history for API
+    const historyToSend = [...mainPromptAssistantMessages, newMessage];
+
+    // Update local state immediately
+    setMainPromptAssistantMessages(historyToSend);
+    // 🛡️ PERSIST to database immediately
+    if (mainPromptActiveConversationId) {
+      const updatedConversations = (settings.main_prompt_chat_conversations || []).map(c =>
+        c.id === mainPromptActiveConversationId
+          ? { ...c, messages: historyToSend, updatedAt: new Date().toISOString() }
+          : c
+      );
+      updateSettings({ main_prompt_chat_conversations: updatedConversations });
+    } else {
+      updateSettings({ main_prompt_chat_history: historyToSend });
+    }
+    setMainPromptAssistantInput('');
+    setMainPromptAssistantImages([]);
+    setMainPromptAssistantDocument(null);
+    setMainPromptAssistantLoading(true);
+
+    try {
+      // Build context focused on Main Prompt (includes Guided GPT for cross-reference)
+      const context = {
+        // Assistant mode
+        assistantMode: 'main_prompt',
+
+        // Main prompt template from active avatar
+        mainPrompt: activeAvatar?.mainPrompt || '',
+
+        // Placeholder categories with all options
+        placeholderMode: activeAvatar?.placeholderMode || 'simple',
+        placeholderCategories: activeAvatar?.placeholderCategories?.map(cat => ({
+          name: cat.name,
+          placeholder: cat.placeholder,
+          isRandomized: cat.isRandomized,
+          options: cat.options.map(opt => ({
+            number: opt.number,
+            text: opt.text,
+            primaryKeywords: opt.primaryKeywords,
+            secondaryKeywords: opt.useSecondaryKeywords ? opt.secondaryKeywords : undefined
+          }))
+        })) || [],
+
+        // Variations (simple mode)
+        variations: activeAvatar?.variations?.map(v => ({
+          name: v.name,
+          prompt: v.prompt,
+          orientation: v.orientation
+        })) || [],
+
+        // Guided GPT settings (for cross-reference)
+        guidedGuardrails: settings.guided_guardrails,
+
+        // Current avatar info
+        activeAvatar: activeAvatar ? {
+          name: activeAvatar.name,
+          tag: activeAvatar.tag
+        } : null,
+
+        // All avatars
+        allAvatars: settings.audience_avatars.map(a => ({
+          name: a.name,
+          tag: a.tag,
+          hasPrompt: !!a.mainPrompt
+        })),
+
+        // Image bank examples
+        imageBankExamples: (settings.image_bank || [])
+          .slice(0, 10)
+          .map((img: BankImage) => ({
+            title: img.title,
+            prompt: img.prompt,
+            variation: img.variation,
+            model: img.model,
+            used: img.used,
+            avatarTag: img.avatarTag
+          }))
+      };
+
+      const res = await fetch('/api/prompt-assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: settings.main_prompt_chat_model || 'gpt-4o',
+          messages: historyToSend.map(m => ({
+            role: m.role,
+            content: m.content,
+            images: m.images
+          })),
+          context
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const responseContent = data.response;
+        const updatedFields: string[] = [];
+
+        // Check for ```mainprompt blocks - AI can update avatar's main prompt
+        const mainPromptMatch = responseContent.match(/```mainprompt\n?([\s\S]*?)```/);
+        if (mainPromptMatch && activeAvatar) {
+          const newMainPrompt = mainPromptMatch[1].trim();
+          const updatedAvatars = settings.audience_avatars.map(a =>
+            a.id === activeAvatar.id ? { ...a, mainPrompt: newMainPrompt } : a
+          );
+          updateSettings({ audience_avatars: updatedAvatars });
+          updatedFields.push('Main Prompt');
+        }
+
+        // Show notification for updated fields
+        if (updatedFields.length > 0) {
+          showNotification(`✓ Updated: ${updatedFields.join(', ')}`, 'success');
+        }
+
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: responseContent,
+          timestamp: new Date().toISOString()
+        };
+        const updatedHistory = [...historyToSend, assistantMessage];
+        setMainPromptAssistantMessages(updatedHistory);
+
+        // 🛡️ PERSIST assistant response to database
+        if (mainPromptActiveConversationId) {
+          const updatedConversations = (settings.main_prompt_chat_conversations || []).map(c =>
+            c.id === mainPromptActiveConversationId
+              ? { ...c, messages: updatedHistory, updatedAt: new Date().toISOString() }
+              : c
+          );
+          updateSettings({ main_prompt_chat_conversations: updatedConversations });
+        } else {
+          updateSettings({ main_prompt_chat_history: updatedHistory });
+        }
+      } else {
+        showNotification(data.error || 'Chat failed', 'error');
+      }
+    } catch (error) {
+      console.error('Main Prompt assistant chat error:', error);
+      showNotification('Failed to send message', 'error');
+    }
+
+    setMainPromptAssistantLoading(false);
+
+    // Scroll to bottom
+    setTimeout(() => {
+      if (mainPromptAssistantChatRef.current) {
+        mainPromptAssistantChatRef.current.scrollTop = mainPromptAssistantChatRef.current.scrollHeight;
       }
     }, 100);
   };
@@ -6800,6 +7092,24 @@ Start by introducing yourself and asking about their business in a friendly way.
     showNotification('Category removed', 'info');
   };
 
+  /**
+   * Send image to AI Assistant
+   * Routes to Main Prompt AI (main_prompt mode) or Guided GPT (guided_gpt mode)
+   */
+  const handleSendImageToAI = (img: BankImage) => {
+    if (settings.live_prompt_mode === 'main_prompt') {
+      // Send to Main Prompt AI Assistant
+      setMainPromptAssistantImages(prev => [...prev, img.url].slice(0, 4));
+      setMainPromptAssistantOpen(true);
+      showNotification('Image added to Main Prompt AI', 'success');
+    } else {
+      // Send to Guided GPT Consultant (guided_gpt mode)
+      setConsultantImages(prev => [...prev, img.url].slice(0, 4));
+      setConsultantPanelOpen(true);
+      showNotification('Image added to Guided GPT', 'success');
+    }
+  };
+
   // Variation Order Handlers
   const handleSetVariationOrder = (variationId: string) => {
     const currentOrder = settings.manual_variation_order || [];
@@ -7407,9 +7717,275 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </button>
                     </div>
                     {settings.live_prompt_mode === 'main_prompt' && (
-                      <p className="text-[10px] text-brand-gold/70 bg-brand-gold/10 p-2 rounded">
-                        Uses your Main Prompt from the Audience Avatar. Placeholders like {'{Item_Cleaning}'} are filled based on article keywords around each image position.
-                      </p>
+                      <div className="space-y-3 mt-2">
+                        <p className="text-[10px] text-brand-gold/70 bg-brand-gold/10 p-2 rounded">
+                          Uses your Main Prompt from the Audience Avatar. Placeholders like {'{Item_Cleaning}'} are filled based on article keywords around each image position.
+                        </p>
+
+                        {/* Main Prompt AI Assistant */}
+                        <div className="border-t border-brand-gold/30 pt-4">
+                          <button
+                            type="button"
+                            onClick={() => setMainPromptAssistantOpen(!mainPromptAssistantOpen)}
+                            className="w-full flex items-center justify-between p-2 bg-brand-gold/20 hover:bg-brand-gold/30 rounded-lg transition"
+                          >
+                            <span className="flex items-center gap-2 text-brand-gold font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                              AI Prompt Assistant (Main Prompt)
+                              {mainPromptAssistantMessages.length > 0 && (
+                                <span className="px-1.5 py-0.5 bg-brand-gold text-slate-900 text-[10px] rounded-full">
+                                  {mainPromptAssistantMessages.length}
+                                </span>
+                              )}
+                              {/* Cross-chat ping notification badge */}
+                              {getUnreadPingsForAssistant('main_prompt').length > 0 && (
+                                <span className="px-1.5 py-0.5 bg-purple-600 text-white text-[10px] rounded-full animate-pulse">
+                                  {getUnreadPingsForAssistant('main_prompt').length} ping{getUnreadPingsForAssistant('main_prompt').length > 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-brand-gold transition-transform ${mainPromptAssistantOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {mainPromptAssistantOpen && (
+                            <div className="mt-3 space-y-3">
+                              {/* Quick Actions */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowMainPromptFileManager(!showMainPromptFileManager)}
+                                  className={`px-2 py-1 rounded text-[10px] transition flex items-center gap-1 ${
+                                    showMainPromptFileManager
+                                      ? 'bg-brand-gold text-slate-900'
+                                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                  }`}
+                                  title="Organize chats into folders"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                  </svg>
+                                  Files
+                                </button>
+                                <div className="flex-1 text-[10px] text-slate-500">
+                                  {mainPromptAssistantMessages.length > 0 ? 'Active Chat' : 'Start a new chat'}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMainPromptAssistantMessages([]);
+                                    setMainPromptActiveConversationId(null);
+                                  }}
+                                  className="px-2 py-1 bg-brand-gold/50 hover:bg-brand-gold rounded text-[10px] text-slate-900 transition"
+                                  title="New Chat"
+                                >
+                                  + New
+                                </button>
+                                {/* Ping Guided GPT button */}
+                                {mainPromptAssistantMessages.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const msg = window.prompt('Add a message for Guided GPT (optional):');
+                                      if (msg !== null) {
+                                        handleSendCrossReferencePing('main_prompt', msg);
+                                      }
+                                    }}
+                                    className="px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-[10px] text-white transition flex items-center gap-1"
+                                    title="Ping Guided GPT with link to this chat"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    </svg>
+                                    Ping
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Incoming Pings Section */}
+                              {getUnreadPingsForAssistant('main_prompt').length > 0 && (
+                                <div className="bg-purple-900/30 border border-purple-500/50 rounded-lg p-2">
+                                  <div className="text-[10px] text-purple-400 font-medium mb-2 flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    </svg>
+                                    Pings from Guided GPT
+                                  </div>
+                                  <div className="space-y-1">
+                                    {getUnreadPingsForAssistant('main_prompt').map(ping => (
+                                      <div key={ping.id} className="flex items-center justify-between bg-slate-800/50 rounded px-2 py-1">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-[10px] text-white truncate">{ping.conversationName}</div>
+                                          {ping.message && <div className="text-[9px] text-purple-300 truncate">{ping.message}</div>}
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleNavigateToPingedConversation(ping)}
+                                            className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 rounded text-[9px] text-white"
+                                          >
+                                            Go
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeletePing(ping.id)}
+                                            className="px-1 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[9px] text-white"
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Chat Messages */}
+                              <div
+                                ref={mainPromptAssistantChatRef}
+                                className={`${chatHeightClasses[mainPromptChatHeight]} overflow-y-auto bg-slate-950 rounded-lg p-3 space-y-3`}
+                              >
+                                {mainPromptAssistantMessages.length === 0 ? (
+                                  <div className="text-center text-slate-500 text-xs py-8">
+                                    <p className="mb-2">Ask about prompt techniques, guardrails, or upload reference images for analysis.</p>
+                                    <p className="text-[10px] text-slate-600">I can see your Main Prompt settings and help you improve them.</p>
+                                  </div>
+                                ) : (
+                                  mainPromptAssistantMessages.map((msg, idx) => (
+                                    <div
+                                      key={idx}
+                                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                    >
+                                      <div
+                                        className={`max-w-[85%] rounded-lg px-3 py-2 text-xs ${
+                                          msg.role === 'user'
+                                            ? 'bg-brand-gold/20 text-brand-gold'
+                                            : 'bg-slate-800 text-slate-200'
+                                        }`}
+                                      >
+                                        {msg.images && msg.images.length > 0 && (
+                                          <div className="flex flex-wrap gap-2 mb-2">
+                                            {msg.images.map((imgUrl, imgIdx) => (
+                                              <img
+                                                key={imgIdx}
+                                                src={imgUrl}
+                                                alt="Attached"
+                                                className="max-w-32 max-h-32 rounded border border-slate-600"
+                                              />
+                                            ))}
+                                          </div>
+                                        )}
+                                        <div className="whitespace-pre-wrap">{msg.content}</div>
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                                {mainPromptAssistantLoading && (
+                                  <div className="flex justify-start">
+                                    <div className="bg-slate-800 rounded-lg px-3 py-2 text-xs text-slate-400">
+                                      <span className="animate-pulse">Thinking...</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Image Preview */}
+                              {mainPromptAssistantImages.length > 0 && (
+                                <div className="flex flex-wrap gap-2 p-2 bg-slate-800 rounded-lg">
+                                  {mainPromptAssistantImages.map((imgUrl, idx) => (
+                                    <div key={idx} className="relative group">
+                                      <img src={imgUrl} alt="To send" className="w-16 h-16 object-cover rounded" />
+                                      <button
+                                        type="button"
+                                        onClick={() => setMainPromptAssistantImages(prev => prev.filter((_, i) => i !== idx))}
+                                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-[10px] opacity-0 group-hover:opacity-100 transition"
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Input Area */}
+                              <div className="flex gap-2">
+                                <input
+                                  type="file"
+                                  ref={mainPromptAssistantFileInputRef}
+                                  className="hidden"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={(e) => {
+                                    const files = Array.from(e.target.files || []);
+                                    files.forEach(file => {
+                                      const reader = new FileReader();
+                                      reader.onload = (ev) => {
+                                        if (ev.target?.result) {
+                                          setMainPromptAssistantImages(prev => [...prev, ev.target!.result as string]);
+                                        }
+                                      };
+                                      reader.readAsDataURL(file);
+                                    });
+                                    e.target.value = '';
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => mainPromptAssistantFileInputRef.current?.click()}
+                                  className="px-2 py-2 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 transition"
+                                  title="Add images"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                </button>
+                                <textarea
+                                  value={mainPromptAssistantInput}
+                                  onChange={(e) => setMainPromptAssistantInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      handleMainPromptAssistantSend();
+                                    }
+                                  }}
+                                  placeholder="Ask about prompts, techniques, or image analysis..."
+                                  className="flex-1 bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-white placeholder-slate-500 resize-none"
+                                  rows={2}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={handleMainPromptAssistantSend}
+                                  disabled={mainPromptAssistantLoading || (!mainPromptAssistantInput.trim() && mainPromptAssistantImages.length === 0)}
+                                  className="px-4 py-2 bg-brand-gold hover:bg-brand-gold-light disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 rounded font-medium text-sm transition"
+                                >
+                                  Send
+                                </button>
+                              </div>
+
+                              {/* Height Control */}
+                              <div className="flex justify-end gap-1">
+                                {(['sm', 'md', 'lg', 'xl', 'full'] as const).map(size => (
+                                  <button
+                                    key={size}
+                                    type="button"
+                                    onClick={() => setMainPromptChatHeight(size)}
+                                    className={`px-2 py-0.5 rounded text-[10px] transition ${
+                                      mainPromptChatHeight === size
+                                        ? 'bg-brand-gold text-slate-900'
+                                        : 'bg-slate-800 text-slate-500 hover:bg-slate-700'
+                                    }`}
+                                  >
+                                    {size.toUpperCase()}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
                     {settings.live_prompt_mode === 'guided_gpt' && (
                       <div className="space-y-3 mt-2">
@@ -7927,6 +8503,12 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   {guidedAssistantMessages.length}
                                 </span>
                               )}
+                              {/* Cross-chat ping notification badge */}
+                              {getUnreadPingsForAssistant('guided_gpt').length > 0 && (
+                                <span className="px-1.5 py-0.5 bg-purple-600 text-white text-[10px] rounded-full animate-pulse">
+                                  {getUnreadPingsForAssistant('guided_gpt').length} ping{getUnreadPingsForAssistant('guided_gpt').length > 1 ? 's' : ''}
+                                </span>
+                              )}
                             </span>
                             <svg className={`w-4 h-4 text-emerald-400 transition-transform ${guidedAssistantOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -7990,8 +8572,65 @@ Start by introducing yourself and asking about their business in a friendly way.
                                       Save
                                     </button>
                                   )}
+                                  {/* Ping Main Prompt AI button */}
+                                  {guidedAssistantMessages.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const msg = window.prompt('Add a message for Main Prompt AI (optional):');
+                                        if (msg !== null) {
+                                          handleSendCrossReferencePing('guided_gpt', msg);
+                                        }
+                                      }}
+                                      className="px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-[10px] text-white transition flex items-center gap-1"
+                                      title="Ping Main Prompt AI with link to this chat"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                      </svg>
+                                      Ping
+                                    </button>
+                                  )}
                                 </div>
                               </div>
+
+                              {/* Incoming Pings Section */}
+                              {getUnreadPingsForAssistant('guided_gpt').length > 0 && (
+                                <div className="bg-purple-900/30 border border-purple-500/50 rounded-lg p-2">
+                                  <div className="text-[10px] text-purple-400 font-medium mb-2 flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    </svg>
+                                    Pings from Main Prompt AI
+                                  </div>
+                                  <div className="space-y-1">
+                                    {getUnreadPingsForAssistant('guided_gpt').map(ping => (
+                                      <div key={ping.id} className="flex items-center justify-between bg-slate-800/50 rounded px-2 py-1">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-[10px] text-white truncate">{ping.conversationName}</div>
+                                          {ping.message && <div className="text-[9px] text-purple-300 truncate">{ping.message}</div>}
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleNavigateToPingedConversation(ping)}
+                                            className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-500 rounded text-[9px] text-white"
+                                          >
+                                            Go
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeletePing(ping.id)}
+                                            className="px-1 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[9px] text-white"
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
 
                               {/* Save Chat Dialog */}
                               {showSaveChatDialog && (
@@ -13475,6 +14114,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                           <div className="flex gap-1 flex-wrap justify-center">
                             <button onClick={() => setPreviewImage(img)} className="px-2 py-0.5 bg-blue-600/80 rounded text-white text-[10px]">Expand</button>
                             <button onClick={() => handleDownloadImage(img)} className="px-2 py-0.5 bg-brand-cyan/80 rounded text-slate-900 text-[10px] font-medium">Download</button>
+                            <button onClick={() => handleSendImageToAI(img)} className="px-2 py-0.5 bg-purple-600/80 rounded text-white text-[10px]">Send to AI</button>
                           </div>
                           <div className="flex gap-1">
                             <button onClick={() => handleMarkAsUsed(img.id, 'manual')} className="px-2 py-0.5 bg-green-600/80 rounded text-white text-[10px]">Used</button>
@@ -14196,6 +14836,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <div className="flex gap-2 flex-wrap justify-center">
                           <button onClick={() => setPreviewImage(img)} className="px-3 py-1 bg-blue-600 rounded text-white text-xs">View</button>
                           <button onClick={() => handleDownloadImage(img)} className="px-3 py-1 bg-brand-cyan rounded text-slate-900 text-xs font-medium">Download</button>
+                          <button onClick={() => handleSendImageToAI(img)} className="px-3 py-1 bg-purple-600 rounded text-white text-xs">Send to AI</button>
                         </div>
                         <div className="flex gap-2">
                           <button onClick={() => handleArchiveImage(img.id)} className="px-3 py-1 bg-amber-600 rounded text-white text-xs">
@@ -14267,6 +14908,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                           <div className="flex gap-2">
                             <button onClick={() => setPreviewImage(img)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-xs transition">View</button>
                             <button onClick={() => handleDownloadImage(img)} className="px-3 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark rounded text-slate-900 text-xs font-medium transition">Download</button>
+                            <button onClick={() => handleSendImageToAI(img)} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded text-white text-xs transition">Send to AI</button>
                             <button onClick={() => handleArchiveImage(img.id)} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-xs transition">
                               {img.archived ? 'Restore' : 'Archive'}
                             </button>
