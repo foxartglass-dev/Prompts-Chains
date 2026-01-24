@@ -198,6 +198,18 @@ interface ChatConversation {
   updatedAt: string;
 }
 
+// Cross-chat reference (for ping system between assistants)
+interface ChatCrossReference {
+  id: string;
+  fromAssistant: 'guided_gpt' | 'main_prompt';
+  toAssistant: 'guided_gpt' | 'main_prompt';
+  conversationId: string; // ID of the referenced conversation
+  conversationName: string; // Name for display
+  message: string; // The attached message/question
+  timestamp: string;
+  read: boolean; // Whether the recipient has viewed it
+}
+
 // ========== PROMPT JOURNAL SYSTEM ==========
 // Save prompts, track iterations, organize with tags/files
 
@@ -498,6 +510,13 @@ interface ImageCreationSettings {
   consultant_model: string;
   worker_chat_history: ChatMessage[];
   worker_model: string;
+  // Main Prompt AI Assistant (separate from Guided GPT)
+  main_prompt_chat_history: ChatMessage[];
+  main_prompt_chat_files: ChatFile[];
+  main_prompt_chat_conversations: ChatConversation[];
+  main_prompt_chat_model: string;
+  // Cross-chat references for ping system between assistants
+  chat_cross_references: ChatCrossReference[];
   image_prompt_model: string; // Model for Image Prompt chat (can be image or chat model)
   integration_mode: 'live' | 'bank';
   fallback_to_live: boolean;
@@ -624,6 +643,13 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   consultant_model: 'gpt-4o', // Default to vision model for consultant
   worker_chat_history: [],
   worker_model: 'gpt-4o-mini', // Default to cheaper model for worker
+  // Main Prompt AI Assistant defaults
+  main_prompt_chat_history: [],
+  main_prompt_chat_files: [],
+  main_prompt_chat_conversations: [],
+  main_prompt_chat_model: 'gpt-4o', // Default to vision model
+  // Cross-chat references for ping system
+  chat_cross_references: [],
   image_prompt_model: 'gpt-image-1.5', // Default to OpenAI image model for testing prompts
   integration_mode: 'live',
   fallback_to_live: true,
@@ -983,6 +1009,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [showChatFileManager, setShowChatFileManager] = useState(false);
   const [renamingItemId, setRenamingItemId] = useState<string | null>(null);
   const [renamingValue, setRenamingValue] = useState('');
+
+  // Main Prompt AI Assistant Chat state (mirrors Guided GPT assistant)
+  const [mainPromptAssistantOpen, setMainPromptAssistantOpen] = useState(false);
+  const [mainPromptAssistantMessages, setMainPromptAssistantMessages] = useState<ChatMessage[]>([]);
+  const [mainPromptAssistantInput, setMainPromptAssistantInput] = useState('');
+  const [mainPromptAssistantImages, setMainPromptAssistantImages] = useState<string[]>([]);
+  const [mainPromptAssistantDocument, setMainPromptAssistantDocument] = useState<{name: string; content: string} | null>(null);
+  const mainPromptAssistantDocInputRef = useRef<HTMLInputElement>(null);
+  const [mainPromptAssistantLoading, setMainPromptAssistantLoading] = useState(false);
+  const mainPromptAssistantChatRef = useRef<HTMLDivElement>(null);
+  const mainPromptAssistantFileInputRef = useRef<HTMLInputElement>(null);
+  const [mainPromptChatHeight, setMainPromptChatHeight] = useState<'sm' | 'md' | 'lg' | 'xl' | 'full'>('md');
+  // Main Prompt Chat File System state
+  const [mainPromptActiveConversationId, setMainPromptActiveConversationId] = useState<string | null>(null);
+  const [mainPromptExpandedFileIds, setMainPromptExpandedFileIds] = useState<Set<string>>(new Set());
+  const [showMainPromptFileManager, setShowMainPromptFileManager] = useState(false);
+  const [mainPromptRenamingItemId, setMainPromptRenamingItemId] = useState<string | null>(null);
+  const [mainPromptRenamingValue, setMainPromptRenamingValue] = useState('');
 
   // Loaded articles for AI context
   interface LoadedArticle {
