@@ -2482,7 +2482,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     for (let i = 0; i < imagesToDownload.length; i++) {
       const img = imagesToDownload[i];
       try {
-        const response = await fetch(img.url);
+        // Use proxy endpoint to bypass CORS for WordPress URLs
+        const imageUrl = img.url.includes('wp-content') || img.url.includes('aichatautomations')
+          ? `/api/images/proxy?url=${encodeURIComponent(img.url)}`
+          : img.url;
+
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -2495,7 +2503,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         // Small delay between downloads to prevent browser issues
         await new Promise(r => setTimeout(r, 200));
       } catch (error) {
-        console.error('Failed to download:', img.id);
+        console.error('Failed to download:', img.id, error);
+        showNotification(`Failed to download image ${i + 1}`, 'error');
       }
     }
 
