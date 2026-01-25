@@ -655,4 +655,118 @@ router.post('/generate-for-node', requireDb, async (req, res) => {
   }
 });
 
+// ========== AI SETTINGS ENDPOINTS ==========
+// These allow customization of AI system prompts that control assistant behavior
+
+/**
+ * GET /api/workflows/:workflowId/ai-settings
+ * Get AI behavior settings for a workflow
+ */
+router.get('/:workflowId/ai-settings', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+    console.log('[AI Settings] GET for workflow:', workflowId);
+
+    // First check if the workflow has a linked website
+    const workflowResult = await sql`
+      SELECT website_id FROM workflows WHERE id = ${workflowId}
+    `;
+
+    let settings = {};
+
+    if (workflowResult.length > 0 && workflowResult[0].website_id) {
+      // Try website-level settings first
+      const websiteId = workflowResult[0].website_id;
+      const websiteSettings = await sql`
+        SELECT ai_settings FROM website_image_settings WHERE website_id = ${websiteId}
+      `;
+      if (websiteSettings.length > 0 && websiteSettings[0].ai_settings) {
+        settings = websiteSettings[0].ai_settings;
+      }
+    }
+
+    // If no website settings, try workflow-level
+    if (Object.keys(settings).length === 0) {
+      const workflowSettings = await sql`
+        SELECT ai_settings FROM image_creation_settings WHERE workflow_id = ${workflowId}
+      `;
+      if (workflowSettings.length > 0 && workflowSettings[0].ai_settings) {
+        settings = workflowSettings[0].ai_settings;
+      }
+    }
+
+    res.json({ settings });
+  } catch (error) {
+    console.error('[AI Settings] Error fetching:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/workflows/:workflowId/ai-settings
+ * Save AI behavior settings for a workflow
+ */
+router.put('/:workflowId/ai-settings', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+    const { settings } = req.body;
+    console.log('[AI Settings] PUT for workflow:', workflowId);
+    console.log('[AI Settings] Settings keys:', Object.keys(settings || {}));
+
+    // Check if workflow has a linked website
+    const workflowResult = await sql`
+      SELECT website_id FROM workflows WHERE id = ${workflowId}
+    `;
+
+    if (workflowResult.length > 0 && workflowResult[0].website_id) {
+      // Save to website-level (shared across workflows)
+      const websiteId = workflowResult[0].website_id;
+      console.log('[AI Settings] Saving to website-level:', websiteId);
+
+      // Check if website settings exist
+      const existing = await sql`
+        SELECT id FROM website_image_settings WHERE website_id = ${websiteId}
+      `;
+
+      if (existing.length > 0) {
+        await sql`
+          UPDATE website_image_settings
+          SET ai_settings = ${JSON.stringify(settings)}, updated_at = NOW()
+          WHERE website_id = ${websiteId}
+        `;
+      } else {
+        await sql`
+          INSERT INTO website_image_settings (website_id, ai_settings)
+          VALUES (${websiteId}, ${JSON.stringify(settings)})
+        `;
+      }
+    } else {
+      // Save to workflow-level
+      console.log('[AI Settings] Saving to workflow-level:', workflowId);
+
+      const existing = await sql`
+        SELECT id FROM image_creation_settings WHERE workflow_id = ${workflowId}
+      `;
+
+      if (existing.length > 0) {
+        await sql`
+          UPDATE image_creation_settings
+          SET ai_settings = ${JSON.stringify(settings)}, updated_at = NOW()
+          WHERE workflow_id = ${workflowId}
+        `;
+      } else {
+        await sql`
+          INSERT INTO image_creation_settings (workflow_id, ai_settings)
+          VALUES (${workflowId}, ${JSON.stringify(settings)})
+        `;
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[AI Settings] Error saving:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

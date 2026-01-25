@@ -115,8 +115,43 @@ When creating image plans, consider:
 
 Be concise but thorough. Focus on practical, actionable advice based on how modern image AI actually works.`;
 
+// Helper function to get AI settings for a workflow
+async function getAISettings(workflowId, sql) {
+  if (!workflowId || !sql) return {};
+
+  try {
+    // First check if workflow has a linked website
+    const workflowResult = await sql`
+      SELECT website_id FROM workflows WHERE id = ${workflowId}
+    `;
+
+    if (workflowResult.length > 0 && workflowResult[0].website_id) {
+      // Try website-level settings first
+      const websiteId = workflowResult[0].website_id;
+      const websiteSettings = await sql`
+        SELECT ai_settings FROM website_image_settings WHERE website_id = ${websiteId}
+      `;
+      if (websiteSettings.length > 0 && websiteSettings[0].ai_settings) {
+        return websiteSettings[0].ai_settings;
+      }
+    }
+
+    // Try workflow-level settings
+    const workflowSettings = await sql`
+      SELECT ai_settings FROM image_creation_settings WHERE workflow_id = ${workflowId}
+    `;
+    if (workflowSettings.length > 0 && workflowSettings[0].ai_settings) {
+      return workflowSettings[0].ai_settings;
+    }
+  } catch (err) {
+    console.error('[AI Settings] Error fetching:', err.message);
+  }
+
+  return {};
+}
+
 // Call OpenAI API with vision support
-async function callOpenAI(messages, model, apiKey, maxTokens = 2048) {
+async function callOpenAI(messages, model, apiKey, maxTokens = 2048, systemPrompt = ASSISTANT_SYSTEM_PROMPT) {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -127,7 +162,7 @@ async function callOpenAI(messages, model, apiKey, maxTokens = 2048) {
       model,
       max_completion_tokens: maxTokens,
       messages: [
-        { role: 'system', content: ASSISTANT_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         ...messages
       ],
     }),
@@ -149,7 +184,7 @@ async function callOpenAI(messages, model, apiKey, maxTokens = 2048) {
 }
 
 // Call Anthropic API with vision support
-async function callAnthropic(messages, model, apiKey, maxTokens = 2048) {
+async function callAnthropic(messages, model, apiKey, maxTokens = 2048, systemPrompt = ASSISTANT_SYSTEM_PROMPT) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -160,7 +195,7 @@ async function callAnthropic(messages, model, apiKey, maxTokens = 2048) {
     body: JSON.stringify({
       model,
       max_tokens: maxTokens,
-      system: ASSISTANT_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages,
     }),
   });
@@ -181,7 +216,7 @@ async function callAnthropic(messages, model, apiKey, maxTokens = 2048) {
 }
 
 // Call Google Gemini API with vision support
-async function callGemini(messages, model, apiKey, maxTokens = 2048) {
+async function callGemini(messages, model, apiKey, maxTokens = 2048, systemPrompt = ASSISTANT_SYSTEM_PROMPT) {
   // Convert messages to Gemini format
   const geminiMessages = messages.map(msg => ({
     role: msg.role === 'assistant' ? 'model' : 'user',
@@ -209,7 +244,7 @@ async function callGemini(messages, model, apiKey, maxTokens = 2048) {
 
   // Add system instruction as first user message if needed
   const contents = [
-    { role: 'user', parts: [{ text: ASSISTANT_SYSTEM_PROMPT + '\n\nNow, please respond to the following:' }] },
+    { role: 'user', parts: [{ text: systemPrompt + '\n\nNow, please respond to the following:' }] },
     { role: 'model', parts: [{ text: 'Understood! I\'m ready to help you craft effective image prompts. What would you like to work on?' }] },
     ...geminiMessages
   ];
@@ -318,10 +353,24 @@ function formatAnthropicMessage(message) {
  */
 router.post('/chat', async (req, res) => {
   try {
-    const { model = 'gpt-4o', messages, context } = req.body;
+    const { model = 'gpt-4o', messages, context, workflowId } = req.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'Messages array is required' });
+    }
+
+    // Get custom AI settings if workflowId provided
+    let customSystemPrompt = ASSISTANT_SYSTEM_PROMPT;
+    if (workflowId && isDatabaseEnabled()) {
+      try {
+        const aiSettings = await getAISettings(workflowId, sql);
+        if (aiSettings.assistant_system_prompt) {
+          customSystemPrompt = aiSettings.assistant_system_prompt;
+          console.log('[Prompt Assistant] Using custom system prompt for workflow:', workflowId);
+        }
+      } catch (err) {
+        console.error('[Prompt Assistant] Error fetching AI settings:', err.message);
+      }
     }
 
     // Get model info
@@ -512,28 +561,34 @@ router.post('/chat', async (req, res) => {
       return msg;
     });
 
-    // Call the appropriate API
+    // Call the appropriate API with custom system prompt
     let result;
     switch (modelInfo.provider) {
       case 'openai':
         result = await callOpenAI(
           processedMessages.map(formatOpenAIMessage),
           model,
-          apiKey
+          apiKey,
+          2048,
+          customSystemPrompt
         );
         break;
       case 'anthropic':
         result = await callAnthropic(
           processedMessages.map(formatAnthropicMessage),
           model,
-          apiKey
+          apiKey,
+          2048,
+          customSystemPrompt
         );
         break;
       case 'google':
         result = await callGemini(
           processedMessages.map(formatOpenAIMessage), // Gemini uses similar format
           model,
-          apiKey
+          apiKey,
+          2048,
+          customSystemPrompt
         );
         break;
     }

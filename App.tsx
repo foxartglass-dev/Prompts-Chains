@@ -22,6 +22,7 @@ import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components
 import WordPressSettings from './src/components/WordPressSettings';
 import ArticlesPage from './src/pages/ArticlesPage';
 import BlueprintPage from './src/pages/BlueprintPage';
+import AISettingsPage from './src/pages/AISettingsPage';
 import ImageCreationSection from './src/components/ImageCreationSection';
 import SitePlanningSection from './src/components/SitePlanningSection';
 import LocalVikingSection from './src/components/LocalVikingSection';
@@ -260,6 +261,7 @@ const App: React.FC = () => {
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
     const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
     const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
+    const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
     const [isTestRunnerOpen, setIsTestRunnerOpen] = useState(false);
     const [testQueue, setTestQueue] = useState<Array<{
       articleMode: 'draft' | 'wordpress';
@@ -2208,6 +2210,13 @@ const App: React.FC = () => {
               onClose={() => setIsBlueprintOpen(false)}
             />
 
+            {/* AI Settings - Customize AI behavior system prompts */}
+            <AISettingsPage
+              isOpen={isAISettingsOpen}
+              onClose={() => setIsAISettingsOpen(false)}
+              workflowId={currentWorkflowId}
+            />
+
             {/* Test Runner Popup */}
             <TestRunnerPopup
               isOpen={isTestRunnerOpen}
@@ -2800,12 +2809,21 @@ const App: React.FC = () => {
                                     </button>
                                     <button
                                         onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsBlueprintOpen(true); }}
-                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition rounded-b-lg"
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition"
                                     >
                                         <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
                                         </svg>
                                         <span className="text-sm font-medium">Blueprint</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAISettingsOpen(true); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition rounded-b-lg"
+                                    >
+                                        <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                        <span className="text-sm font-medium">AI Settings</span>
                                     </button>
                                 </div>
                             )}

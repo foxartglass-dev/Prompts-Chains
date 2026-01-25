@@ -4818,7 +4818,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             content: m.content,
             images: m.images
           })),
-          context
+          context,
+          workflowId
         })
       });
 
@@ -5145,7 +5146,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             content: m.content,
             images: m.images
           })),
-          context
+          context,
+          workflowId
         })
       });
 
