@@ -468,6 +468,10 @@ CREATE TABLE IF NOT EXISTS site_plan_nodes (
   is_pillar_page BOOLEAN DEFAULT false, -- Main category/pillar page
   is_in_menu BOOLEAN DEFAULT true,
   menu_order INTEGER,
+  -- Phase 2: Prompt Assignment
+  bank_first BOOLEAN DEFAULT false, -- Check image bank before generating
+  assigned_mode VARCHAR(20), -- 'main_prompt', 'guided_gpt', 'smart_prompt'
+  assigned_prompt_id VARCHAR(10), -- Specific prompt ID: 'H1', 'H2', 'J1', 'Global1', etc.
   -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

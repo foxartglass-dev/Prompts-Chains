@@ -28,6 +28,38 @@ interface SitePlanNode {
   is_in_menu: boolean;
   menu_order: number | null;
   children: SitePlanNode[];
+  // Phase 2: Prompt Assignment fields
+  bank_first?: boolean;
+  assigned_mode?: 'main_prompt' | 'guided_gpt' | 'smart_prompt' | null;
+  assigned_prompt_id?: string | null;
+}
+
+// Prompt ID structure from image_creation_settings
+interface PromptIdEntry {
+  id: string;
+  promptId: string;
+  name: string;
+}
+
+interface PromptIdsByTag {
+  [tag: string]: PromptIdEntry[];
+}
+
+interface PromptIds {
+  main_prompt: PromptIdsByTag;
+  guided_gpt: PromptIdsByTag;
+  smart_prompt: PromptIdsByTag;
+}
+
+interface BatchStats {
+  bank_main_prompt: number;
+  bank_guided_gpt: number;
+  bank_smart_prompt: number;
+  live_main_prompt: number;
+  live_guided_gpt: number;
+  live_smart_prompt: number;
+  unassigned: number;
+  withArticles: number;
 }
 
 interface SitePlan {
@@ -150,6 +182,166 @@ const SitePlanningSection: React.FC<Props> = ({
 
   // Plan creation state
   const [creatingPlan, setCreatingPlan] = useState(false);
+
+  // ========== PHASE 2: PROMPT ASSIGNMENT STATE ==========
+  const [showAssignmentMode, setShowAssignmentMode] = useState(false);
+  const [promptIds, setPromptIds] = useState<PromptIds | null>(null);
+  const [batchStats, setBatchStats] = useState<BatchStats | null>(null);
+  const [loadingPromptIds, setLoadingPromptIds] = useState(false);
+  const [showRunBatchModal, setShowRunBatchModal] = useState(false);
+  const [runningBatch, setRunningBatch] = useState(false);
+  const [batchResult, setBatchResult] = useState<any>(null);
+  const [pendingAssignments, setPendingAssignments] = useState<Map<number, { bankFirst: boolean; mode: string | null; promptId: string | null }>>(new Map());
+
+  // Load prompt IDs from image_creation_settings
+  const loadPromptIds = useCallback(async () => {
+    if (!workflowId) return;
+    setLoadingPromptIds(true);
+    try {
+      const res = await fetch(`/api/site-planning/prompt-ids/${workflowId}`);
+      const data = await res.json();
+      if (data.success) {
+        setPromptIds(data.promptIds);
+      }
+    } catch (error) {
+      console.error('Failed to load prompt IDs:', error);
+    }
+    setLoadingPromptIds(false);
+  }, [workflowId]);
+
+  // Load batch statistics
+  const loadBatchStats = useCallback(async () => {
+    if (!plan) return;
+    try {
+      const res = await fetch(`/api/site-planning/batch-stats/${plan.id}`);
+      const data = await res.json();
+      if (data.success) {
+        setBatchStats(data.batches);
+      }
+    } catch (error) {
+      console.error('Failed to load batch stats:', error);
+    }
+  }, [plan]);
+
+  // Save pending assignments to server
+  const saveAssignments = async () => {
+    if (!plan || pendingAssignments.size === 0) return;
+
+    const assignments = Array.from(pendingAssignments.entries()).map(([nodeId, assignment]) => ({
+      nodeId,
+      bankFirst: assignment.bankFirst,
+      assignedMode: assignment.mode,
+      assignedPromptId: assignment.promptId
+    }));
+
+    try {
+      const res = await fetch(`/api/site-planning/assign-prompts/${plan.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignments })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification(`Saved ${data.updated} assignments`, 'success');
+        setPendingAssignments(new Map());
+        loadNodes(plan.id);
+        loadBatchStats();
+      } else {
+        showNotification(data.error || 'Failed to save assignments', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to save assignments', 'error');
+    }
+  };
+
+  // Update a single node's assignment (local state)
+  const updateNodeAssignment = (nodeId: number, field: 'bankFirst' | 'mode' | 'promptId', value: any) => {
+    const current = pendingAssignments.get(nodeId) || {
+      bankFirst: flatNodes.find(n => n.id === nodeId)?.bank_first || false,
+      mode: flatNodes.find(n => n.id === nodeId)?.assigned_mode || null,
+      promptId: flatNodes.find(n => n.id === nodeId)?.assigned_prompt_id || null
+    };
+
+    if (field === 'bankFirst') {
+      current.bankFirst = value;
+    } else if (field === 'mode') {
+      current.mode = value;
+      // Clear prompt ID when mode changes (different prompt IDs per mode)
+      current.promptId = null;
+    } else if (field === 'promptId') {
+      current.promptId = value;
+    }
+
+    const newMap = new Map(pendingAssignments);
+    newMap.set(nodeId, current);
+    setPendingAssignments(newMap);
+  };
+
+  // Get the effective assignment for a node (pending or saved)
+  const getNodeAssignment = (node: SitePlanNode) => {
+    const pending = pendingAssignments.get(node.id);
+    if (pending) return pending;
+    return {
+      bankFirst: node.bank_first || false,
+      mode: node.assigned_mode || null,
+      promptId: node.assigned_prompt_id || null
+    };
+  };
+
+  // Extract tag from node title (e.g., "Deep Cleaning(H)" -> "H")
+  const extractTag = (title: string): string | null => {
+    const match = title.match(/\(([A-Z]+)\)$/i);
+    return match ? match[1].toUpperCase() : null;
+  };
+
+  // Get available prompt IDs for a specific tag and mode
+  const getPromptIdsForTagAndMode = (tag: string | null, mode: string | null): PromptIdEntry[] => {
+    if (!promptIds || !mode) return [];
+    const modePrompts = promptIds[mode as keyof PromptIds];
+    if (!modePrompts) return [];
+
+    // Return prompts for this specific tag + Global prompts
+    const tagPrompts = tag ? (modePrompts[tag] || []) : [];
+    const globalPrompts = modePrompts['Global'] || [];
+    return [...tagPrompts, ...globalPrompts];
+  };
+
+  // Run batch execution
+  const runBatch = async (batchType: string, dryRun: boolean = false) => {
+    if (!plan) return;
+
+    setRunningBatch(true);
+    try {
+      const res = await fetch(`/api/site-planning/run-batch/${plan.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchType, dryRun, skipWithArticles: true })
+      });
+      const data = await res.json();
+      setBatchResult(data);
+      if (data.success && !dryRun) {
+        showNotification(data.message, 'success');
+        loadBatchStats();
+      }
+    } catch (error) {
+      showNotification('Failed to run batch', 'error');
+    }
+    setRunningBatch(false);
+  };
+
+  // Load prompt IDs when workflow changes or assignment mode is enabled
+  useEffect(() => {
+    if (showAssignmentMode && workflowId) {
+      loadPromptIds();
+    }
+  }, [showAssignmentMode, workflowId, loadPromptIds]);
+
+  // Load batch stats when plan loads or assignment mode is enabled
+  useEffect(() => {
+    if (showAssignmentMode && plan) {
+      loadBatchStats();
+    }
+  }, [showAssignmentMode, plan, loadBatchStats]);
 
   // Load plan and nodes
   const loadPlan = useCallback(async () => {
@@ -927,6 +1119,55 @@ const SitePlanningSection: React.FC<Props> = ({
             </span>
           )}
 
+          {/* PHASE 2: Assign Prompts Mode Toggle */}
+          <div className="flex items-center gap-2 border-r border-slate-600 pr-4 mr-2">
+            <button
+              onClick={() => {
+                setShowAssignmentMode(!showAssignmentMode);
+                if (!showAssignmentMode) {
+                  // Entering assignment mode - cancel selection mode
+                  setSelectionMode(false);
+                  setSelectedNodes(new Set());
+                }
+              }}
+              className={`px-3 py-1.5 rounded text-white text-sm transition flex items-center gap-1 ${
+                showAssignmentMode ? 'bg-amber-600' : 'bg-slate-600 hover:bg-slate-500'
+              }`}
+              title="Assign prompts to pages for batch execution"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              {showAssignmentMode ? 'Exit Assign' : 'Assign Prompts'}
+            </button>
+
+            {/* Save/Run when in assignment mode */}
+            {showAssignmentMode && (
+              <>
+                {pendingAssignments.size > 0 && (
+                  <button
+                    onClick={saveAssignments}
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white text-sm transition flex items-center gap-1"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Save ({pendingAssignments.size})
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowRunBatchModal(true)}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition flex items-center gap-1"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  </svg>
+                  Run Batches
+                </button>
+              </>
+            )}
+          </div>
+
           {/* UNIFIED START BUTTON - Respects toggle settings */}
           <div className="flex items-center gap-2 border-r border-slate-600 pr-4 mr-2">
             {/* Toggle Selection Mode */}
@@ -934,6 +1175,8 @@ const SitePlanningSection: React.FC<Props> = ({
               onClick={() => {
                 setSelectionMode(!selectionMode);
                 if (selectionMode) setSelectedNodes(new Set());
+                // Exit assignment mode when entering selection mode
+                if (!selectionMode) setShowAssignmentMode(false);
               }}
               className={`px-3 py-1.5 rounded text-white text-sm transition flex items-center gap-1 ${
                 selectionMode ? 'bg-blue-600' : 'bg-slate-600 hover:bg-slate-500'
@@ -1247,28 +1490,412 @@ const SitePlanningSection: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Tree view */}
-      <div className="bg-slate-900 rounded-lg border border-slate-700 p-4 min-h-[400px]">
-        {nodes.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <p>No pages in plan yet.</p>
-            <p className="text-sm mt-2">Click "Add Page" to start building your site structure.</p>
-          </div>
-        ) : (
-          nodes.map(node => renderNode(node))
-        )}
-      </div>
+      {/* PHASE 2: Assignment Table View */}
+      {showAssignmentMode ? (
+        <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
+          {/* Assignment Stats Bar */}
+          {batchStats && (
+            <div className="p-3 bg-slate-800 border-b border-slate-700 flex flex-wrap items-center gap-4 text-xs">
+              <span className="text-gray-400 font-medium">Batch Stats:</span>
+              <span className="text-blue-400">Bank+Main: {batchStats.bank_main_prompt}</span>
+              <span className="text-green-400">Bank+Guided: {batchStats.bank_guided_gpt}</span>
+              <span className="text-purple-400">Bank+Smart: {batchStats.bank_smart_prompt}</span>
+              <span className="text-blue-300">Live Main: {batchStats.live_main_prompt}</span>
+              <span className="text-green-300">Live Guided: {batchStats.live_guided_gpt}</span>
+              <span className="text-purple-300">Live Smart: {batchStats.live_smart_prompt}</span>
+              <span className="text-gray-500">Unassigned: {batchStats.unassigned}</span>
+              <span className="text-amber-400">Has Article: {batchStats.withArticles}</span>
+            </div>
+          )}
 
-      {/* Legend */}
-      <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-400">
-        <span className="font-medium">Page Types:</span>
-        {PAGE_TYPES.map(type => (
-          <span key={type.id} className="flex items-center gap-1">
-            <span className={`w-2 h-2 rounded-full ${type.color}`} />
-            {type.name}
-          </span>
-        ))}
-      </div>
+          {/* Assignment Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-800 text-gray-400">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">Page</th>
+                  <th className="px-4 py-3 text-center font-medium w-24">
+                    <span className="flex items-center justify-center gap-1" title="Check bank for existing images first">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+                      </svg>
+                      Bank
+                    </span>
+                  </th>
+                  <th className="px-4 py-3 text-center font-medium">
+                    <span className="text-blue-400">Main Prompt</span>
+                  </th>
+                  <th className="px-4 py-3 text-center font-medium">
+                    <span className="text-green-400">Guided GPT</span>
+                  </th>
+                  <th className="px-4 py-3 text-center font-medium">
+                    <span className="text-purple-400">Smart Prompt</span>
+                  </th>
+                  <th className="px-4 py-3 text-center font-medium w-24">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700">
+                {flatNodes.map((node) => {
+                  const assignment = getNodeAssignment(node);
+                  const tag = extractTag(node.title);
+                  const hasArticle = node.assigned_article_id !== null;
+                  const isPending = pendingAssignments.has(node.id);
+
+                  return (
+                    <tr key={node.id} className={`hover:bg-slate-800/50 ${isPending ? 'bg-amber-900/20' : ''}`}>
+                      {/* Page Title */}
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <span style={{ marginLeft: `${node.depth * 16}px` }} className="text-gray-500">
+                            {node.depth > 0 && '└'}
+                          </span>
+                          <span className="text-white">{node.title}</span>
+                          {tag && (
+                            <span className="px-1.5 py-0.5 bg-slate-700 text-gray-400 text-xs rounded">
+                              {tag}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Bank First Checkbox */}
+                      <td className="px-4 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={assignment.bankFirst}
+                          onChange={(e) => updateNodeAssignment(node.id, 'bankFirst', e.target.checked)}
+                          className="w-4 h-4 rounded border-slate-500 bg-slate-700 text-amber-500 focus:ring-amber-500"
+                        />
+                      </td>
+
+                      {/* Main Prompt Radio + Prompt ID Select */}
+                      <td className="px-4 py-2 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <input
+                            type="radio"
+                            name={`mode-${node.id}`}
+                            checked={assignment.mode === 'main_prompt'}
+                            onChange={() => updateNodeAssignment(node.id, 'mode', 'main_prompt')}
+                            className="w-4 h-4 border-slate-500 bg-slate-700 text-blue-500 focus:ring-blue-500"
+                          />
+                          {assignment.mode === 'main_prompt' && (
+                            <select
+                              value={assignment.promptId || ''}
+                              onChange={(e) => updateNodeAssignment(node.id, 'promptId', e.target.value || null)}
+                              className="text-xs bg-slate-700 border border-slate-600 rounded px-1 py-0.5 text-white"
+                            >
+                              <option value="">Select...</option>
+                              {getPromptIdsForTagAndMode(tag, 'main_prompt').map(p => (
+                                <option key={p.promptId} value={p.promptId}>
+                                  [{p.promptId}] {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Guided GPT Radio + Prompt ID Select */}
+                      <td className="px-4 py-2 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <input
+                            type="radio"
+                            name={`mode-${node.id}`}
+                            checked={assignment.mode === 'guided_gpt'}
+                            onChange={() => updateNodeAssignment(node.id, 'mode', 'guided_gpt')}
+                            className="w-4 h-4 border-slate-500 bg-slate-700 text-green-500 focus:ring-green-500"
+                          />
+                          {assignment.mode === 'guided_gpt' && (
+                            <select
+                              value={assignment.promptId || ''}
+                              onChange={(e) => updateNodeAssignment(node.id, 'promptId', e.target.value || null)}
+                              className="text-xs bg-slate-700 border border-slate-600 rounded px-1 py-0.5 text-white"
+                            >
+                              <option value="">Select...</option>
+                              {getPromptIdsForTagAndMode(tag, 'guided_gpt').map(p => (
+                                <option key={p.promptId} value={p.promptId}>
+                                  [{p.promptId}] {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Smart Prompt Radio + Prompt ID Select */}
+                      <td className="px-4 py-2 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <input
+                            type="radio"
+                            name={`mode-${node.id}`}
+                            checked={assignment.mode === 'smart_prompt'}
+                            onChange={() => updateNodeAssignment(node.id, 'mode', 'smart_prompt')}
+                            className="w-4 h-4 border-slate-500 bg-slate-700 text-purple-500 focus:ring-purple-500"
+                          />
+                          {assignment.mode === 'smart_prompt' && (
+                            <select
+                              value={assignment.promptId || ''}
+                              onChange={(e) => updateNodeAssignment(node.id, 'promptId', e.target.value || null)}
+                              className="text-xs bg-slate-700 border border-slate-600 rounded px-1 py-0.5 text-white"
+                            >
+                              <option value="">Select...</option>
+                              {getPromptIdsForTagAndMode(tag, 'smart_prompt').map(p => (
+                                <option key={p.promptId} value={p.promptId}>
+                                  [{p.promptId}] {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-4 py-2 text-center">
+                        {hasArticle ? (
+                          <span className="px-2 py-0.5 bg-green-600/30 text-green-400 text-xs rounded">
+                            Has Draft
+                          </span>
+                        ) : assignment.mode && assignment.promptId ? (
+                          <span className="px-2 py-0.5 bg-blue-600/30 text-blue-400 text-xs rounded">
+                            Ready
+                          </span>
+                        ) : assignment.mode ? (
+                          <span className="px-2 py-0.5 bg-amber-600/30 text-amber-400 text-xs rounded">
+                            Need ID
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-slate-600/30 text-gray-500 text-xs rounded">
+                            —
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {loadingPromptIds && (
+            <div className="p-4 text-center text-gray-400">
+              Loading prompt IDs...
+            </div>
+          )}
+
+          {flatNodes.length === 0 && (
+            <div className="p-8 text-center text-gray-500">
+              No pages in plan yet. Add pages first, then assign prompts.
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Tree view */
+        <div className="bg-slate-900 rounded-lg border border-slate-700 p-4 min-h-[400px]">
+          {nodes.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <p>No pages in plan yet.</p>
+              <p className="text-sm mt-2">Click "Add Page" to start building your site structure.</p>
+            </div>
+          ) : (
+            nodes.map(node => renderNode(node))
+          )}
+        </div>
+      )}
+
+      {/* Legend (only show in tree view) */}
+      {!showAssignmentMode && (
+        <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-400">
+          <span className="font-medium">Page Types:</span>
+          {PAGE_TYPES.map(type => (
+            <span key={type.id} className="flex items-center gap-1">
+              <span className={`w-2 h-2 rounded-full ${type.color}`} />
+              {type.name}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Run Batch Modal */}
+      {showRunBatchModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-auto shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+              <h3 className="text-lg font-semibold text-white">Run Batch Execution</h3>
+              <button
+                onClick={() => { setShowRunBatchModal(false); setBatchResult(null); }}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Batch Stats Summary */}
+              {batchStats && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-slate-800 rounded-lg">
+                    <h4 className="text-sm font-medium text-amber-400 mb-2 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+                      </svg>
+                      Bank First (Check Bank → Fallback)
+                    </h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-blue-400">Main Prompt</span>
+                        <span className="text-white">{batchStats.bank_main_prompt}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-green-400">Guided GPT</span>
+                        <span className="text-white">{batchStats.bank_guided_gpt}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-purple-400">Smart Prompt</span>
+                        <span className="text-white">{batchStats.bank_smart_prompt}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-800 rounded-lg">
+                    <h4 className="text-sm font-medium text-cyan-400 mb-2 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Live Only (Generate Fresh)
+                    </h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-blue-300">Main Prompt</span>
+                        <span className="text-white">{batchStats.live_main_prompt}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-green-300">Guided GPT</span>
+                        <span className="text-white">{batchStats.live_guided_gpt}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-purple-300">Smart Prompt</span>
+                        <span className="text-white">{batchStats.live_smart_prompt}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Skip info */}
+              {batchStats && (batchStats.unassigned > 0 || batchStats.withArticles > 0) && (
+                <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                  <h4 className="text-sm font-medium text-gray-400 mb-2">Will be skipped:</h4>
+                  <div className="space-y-1 text-sm">
+                    {batchStats.unassigned > 0 && (
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <span>•</span>
+                        <span>{batchStats.unassigned} pages with no assignment</span>
+                      </div>
+                    )}
+                    {batchStats.withArticles > 0 && (
+                      <div className="flex items-center gap-2 text-amber-400">
+                        <span>•</span>
+                        <span>{batchStats.withArticles} pages already have articles</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Batch Result */}
+              {batchResult && (
+                <div className="p-3 bg-slate-800 rounded-lg border border-green-700/50">
+                  <h4 className="text-sm font-medium text-green-400 mb-2">
+                    {batchResult.dryRun ? 'Dry Run Result' : 'Execution Complete'}
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Would process:</span>
+                      <span className="text-green-400">{batchResult.results?.processed?.length || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Would skip:</span>
+                      <span className="text-amber-400">{batchResult.results?.skipped?.length || 0}</span>
+                    </div>
+
+                    {/* Skip reasons breakdown */}
+                    {batchResult.skipReasons && Object.keys(batchResult.skipReasons).length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-slate-700">
+                        <h5 className="text-xs font-medium text-gray-500 mb-2">Skip Reasons:</h5>
+                        {Object.entries(batchResult.skipReasons).map(([reason, count]) => (
+                          <div key={reason} className="flex justify-between text-xs">
+                            <span className="text-gray-500">{reason}</span>
+                            <span className="text-amber-400">{count as number}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between pt-4 border-t border-slate-700">
+                <button
+                  onClick={() => runBatch('all', true)}
+                  disabled={runningBatch}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 rounded text-white text-sm transition flex items-center gap-2"
+                >
+                  {runningBatch ? (
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                  Preview (Dry Run)
+                </button>
+
+                <button
+                  onClick={() => runBatch('all', false)}
+                  disabled={runningBatch}
+                  className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-800 rounded text-white font-medium transition flex items-center gap-2"
+                >
+                  {runningBatch ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Running...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Run All 6 Batches
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Batch order explanation */}
+              <div className="text-xs text-gray-500 mt-2">
+                <p className="mb-1">Execution order:</p>
+                <ol className="list-decimal list-inside space-y-0.5">
+                  <li>Bank + Main Prompt</li>
+                  <li>Bank + Guided GPT</li>
+                  <li>Bank + Smart Prompt</li>
+                  <li>Live Main Prompt only</li>
+                  <li>Live Guided GPT only</li>
+                  <li>Live Smart Prompt only</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal */}
       {showEditModal && editingNode && (
