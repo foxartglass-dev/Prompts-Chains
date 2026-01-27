@@ -243,7 +243,8 @@ export async function processArticleWithImages(content, options = {}) {
     quality = 'low', // low for websites, medium, high for print
 
     // Generate Live Prompt Mode Options
-    livePromptMode = 'smart_prompt', // 'main_prompt', 'guided_gpt', or 'smart_prompt'
+    // CRITICAL: Default to 'main_prompt' NOT 'smart_prompt' - user's preferred mode
+    livePromptMode = 'main_prompt', // 'main_prompt', 'guided_gpt', or 'smart_prompt'
     targetAvatar = null, // Audience avatar with mainPrompt and placeholderCategories
     smartPromptGuidance = '', // Optional guidance for smart_prompt mode
     matchPlurals = true, // Whether to match plural forms in smart matching
@@ -307,18 +308,37 @@ export async function processArticleWithImages(content, options = {}) {
 
     // Step 3: Generate prompts for each section
     // Check if we should use main_prompt mode (avatar's mainPrompt with smart matching)
-    const useMainPromptMode = livePromptMode === 'main_prompt' && targetAvatar?.mainPrompt;
+    // FIXED: Use !! to ensure boolean, not the prompt string itself
+    const useMainPromptMode = livePromptMode === 'main_prompt' && !!targetAvatar?.mainPrompt;
 
     // CRITICAL DEBUG: Log prompt mode selection to trace issues
-    console.log('[Image Pipeline] PROMPT MODE SELECTION:');
-    console.log('  - Requested livePromptMode:', livePromptMode);
-    console.log('  - targetAvatar:', targetAvatar?.name || '(none)');
-    console.log('  - targetAvatar.mainPrompt exists:', !!targetAvatar?.mainPrompt);
-    console.log('  - mainPrompt preview:', targetAvatar?.mainPrompt?.substring(0, 80) || '(empty)');
-    console.log('  - useMainPromptMode:', useMainPromptMode);
-    console.log('  - Will use:', useMainPromptMode ? 'MAIN_PROMPT' :
-                                 (livePromptMode === 'guided_gpt' ? 'GUIDED_GPT' :
-                                  (!openaiApiKey ? 'BASIC_PROMPTS' : 'SMART_PROMPT')));
+    console.log('\n[Image Pipeline] ========== PROMPT MODE SELECTION ==========');
+    console.log('[Image Pipeline] Requested mode:', livePromptMode);
+    console.log('[Image Pipeline] Avatar:', targetAvatar?.name || '(NONE!)');
+    console.log('[Image Pipeline] Avatar.mainPrompt exists:', !!targetAvatar?.mainPrompt);
+    console.log('[Image Pipeline] useMainPromptMode (boolean):', useMainPromptMode);
+
+    // Determine what mode will ACTUALLY be used
+    let actualMode;
+    if (useMainPromptMode) {
+      actualMode = 'MAIN_PROMPT';
+    } else if (livePromptMode === 'guided_gpt' && openaiApiKey) {
+      actualMode = 'GUIDED_GPT';
+    } else if (!openaiApiKey) {
+      actualMode = 'BASIC_PROMPTS (no API key)';
+    } else {
+      actualMode = 'SMART_PROMPT (FALLBACK!)';
+    }
+    console.log('[Image Pipeline] >>> ACTUAL MODE:', actualMode, '<<<');
+
+    // WARN if there's a mismatch
+    if (livePromptMode === 'main_prompt' && !useMainPromptMode) {
+      console.error('[Image Pipeline] ⚠️ ERROR: User selected main_prompt but it CANNOT be used!');
+      console.error('[Image Pipeline] Reason: targetAvatar.mainPrompt is', targetAvatar?.mainPrompt ? 'set' : 'EMPTY/MISSING');
+      console.error('[Image Pipeline] Avatar name:', targetAvatar?.name || '(no avatar)');
+      console.error('[Image Pipeline] This will fall through to:', actualMode);
+    }
+    console.log('[Image Pipeline] ================================================\n');
 
     if (useMainPromptMode) {
       // MAIN_PROMPT MODE: Use avatar's mainPrompt with smart-matched placeholders
