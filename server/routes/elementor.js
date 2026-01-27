@@ -1505,6 +1505,20 @@ router.post('/publish', async (req, res) => {
 
     if (needsLiveGeneration) {
       const imagesToGenerate = dynamicMaxImages - imagesFromBank;
+
+      // ===== CLEAR IMAGE RUN SUMMARY =====
+      const promptModeLabel = livePromptMode === 'main_prompt' ? 'MAIN PROMPT' :
+                              livePromptMode === 'guided_gpt' ? 'GUIDED GPT' :
+                              livePromptMode === 'smart_prompt' ? 'SMART PROMPT' : livePromptMode;
+      const avatarLabel = targetAvatar ? `${targetAvatar.name} [${targetAvatar.tag || 'No Tag'}]` : '(none)';
+      console.log('\n========================================');
+      console.log(`[IMAGE RUN] Mode: ${promptModeLabel}`);
+      console.log(`[IMAGE RUN] Avatar: ${avatarLabel}`);
+      console.log(`[IMAGE RUN] Model: ${imageGenModel} | Quality: ${imageQuality}`);
+      console.log(`[IMAGE RUN] Images to generate: ${imagesToGenerate}`);
+      console.log(`[IMAGE RUN] Article: ${keyword || title || '(unknown)'}`);
+      console.log('========================================\n');
+
       console.log(`[Elementor Publish] Generating ${imagesToGenerate} live images with model: ${imageGenModel}`);
       console.log(`[Elementor Publish] Prompt mode: ${livePromptMode}`);
 

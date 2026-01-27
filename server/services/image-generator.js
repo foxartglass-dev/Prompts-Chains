@@ -44,6 +44,7 @@ async function generateWithOpenAI(prompt, options, apiKey) {
   }
 
   console.log(`[Image Generator] OpenAI gpt-image-1.5, quality: ${quality}, size: ${finalSize}`);
+  console.log(`[Image Generator] PROMPT SENT (first 500 chars): ${prompt.substring(0, 500)}...`);
 
   // gpt-image-1.5 doesn't support response_format - it always returns base64
   const response = await openai.images.generate({
@@ -57,6 +58,12 @@ async function generateWithOpenAI(prompt, options, apiKey) {
   // gpt-image-1.5 returns base64 data, convert to data URL
   let imageUrl;
   const revisedPrompt = response.data[0].revised_prompt;
+
+  // CRITICAL: Log what OpenAI actually used vs what we sent
+  console.log(`[Image Generator] REVISED PROMPT FROM OPENAI: ${revisedPrompt || '(none returned)'}`);
+  if (revisedPrompt && revisedPrompt !== prompt) {
+    console.warn(`[Image Generator] ⚠️ OpenAI CHANGED THE PROMPT! Check if uniform/style instructions are preserved.`);
+  }
 
   if (response.data[0].b64_json) {
     imageUrl = `data:image/png;base64,${response.data[0].b64_json}`;
