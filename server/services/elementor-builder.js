@@ -182,6 +182,7 @@ function buildImageWidget(imageData, options = {}) {
  * @returns {Object} Elementor widget object
  */
 function buildButtonWidget(text, url, options = {}) {
+  const { align = 'center' } = options;
   return {
     id: generateElementId(),
     elType: 'widget',
@@ -194,6 +195,7 @@ function buildButtonWidget(text, url, options = {}) {
         is_external: '',
         nofollow: ''
       },
+      align: align,
       background_color: '#0064A1',
       text_padding: { unit: 'px', top: '10', right: '50', bottom: '10', left: '50' }
     },
@@ -520,7 +522,7 @@ function buildElementorPage(chunkedContent, options = {}) {
       pageElements.push(buildStatsBarPlaceholder());
     }
 
-    pageElements.push(buildContentSection(chunk, { ctaText, ctaUrl, showCta: true }));
+    pageElements.push(buildContentSection(chunk, { ctaText, ctaUrl, showCta: false }));
   });
 
   // 3. Stats bar at bottom if configured
