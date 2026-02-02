@@ -1,6 +1,7 @@
 /**
  * Elementor API Routes
  * Handles the full pipeline: Article → Elementor Page
+ * Last verified: 2026-02-02 - No duplicate promptModeLabel declarations
  */
 
 import express from 'express';
