@@ -4,6 +4,10 @@
  * - Breaks at H2 headings
  * - Ensures no chunk exceeds maxWords (default 300)
  * - Returns chunks with placeholder for image data
+ *
+ * ENHANCED: Now supports template structure rules
+ * - FAQ formatting follows template patterns (bold/plain, numbered/not, spacing)
+ * - Section headings can be simplified based on template
  */
 
 /**
@@ -224,10 +228,11 @@ function splitLongSection(content, maxWords) {
  * @param {Object} options - Chunking options
  * @param {number} options.maxWords - Maximum words per chunk (default 300)
  * @param {boolean} options.alternateImageSide - Alternate image alignment (default true)
+ * @param {Object} options.templateStructure - Template structure rules for formatting
  * @returns {Object} Chunked content structure
  */
 function chunkContent(content, options = {}) {
-  const { maxWords = 300, alternateImageSide = true } = options;
+  const { maxWords = 300, alternateImageSide = true, templateStructure = null } = options;
 
   if (!content || typeof content !== 'string') {
     return {
@@ -254,10 +259,23 @@ function chunkContent(content, options = {}) {
   for (const section of sections) {
     // Check if this is an FAQ section and format it specially
     let sectionContent = section.content;
-    const isFaq = isFAQSection(section.heading);
+    let sectionHeading = section.heading;
+    const isFaq = isFAQSection(sectionHeading);
 
     if (isFaq) {
-      sectionContent = formatFAQContent(sectionContent);
+      // Format FAQ content using template structure rules if available
+      sectionContent = formatFAQContent(sectionContent, templateStructure);
+
+      // Simplify FAQ heading if template uses simple format
+      // E.g., convert "FAQs: Apartment Cleaning in Hendersonville, TN" to just "FAQs"
+      if (templateStructure?.faq?.headingFormat === 'simple' && sectionHeading) {
+        // Remove everything after colon or dash
+        const simplifiedHeading = sectionHeading.replace(/[:–-].*$/, '').trim();
+        // Only use simplified if it still contains FAQ keyword
+        if (isFAQSection(simplifiedHeading)) {
+          sectionHeading = simplifiedHeading;
+        }
+      }
     }
 
     // Split section if too long
@@ -266,7 +284,7 @@ function chunkContent(content, options = {}) {
     // First chunk of section gets the heading
     sectionChunks.forEach((chunkContent, index) => {
       chunks.push({
-        heading: index === 0 ? section.heading : null,
+        heading: index === 0 ? sectionHeading : null,
         content: chunkContent,
         wordCount: countWords(chunkContent),
         imageData: null, // Placeholder for image - will be filled by image generation
@@ -326,10 +344,13 @@ function extractTitle(content) {
 
 /**
  * Format FAQ content with proper Q&A spacing
- * Detects question/answer pairs and formats them:
- * - Question as bold text (NOT heading)
- * - Answer directly below (no blank line)
- * - One blank line between Q&A pairs
+ * Detects question/answer pairs and formats them based on template rules
+ *
+ * Template structure options:
+ * - questionFormat: 'bold' | 'h3' | 'plain' | 'numbered'
+ * - questionNumbered: true/false
+ * - spacingBetweenQA: 'tight' | 'spaced'
+ * - spacingBetweenPairs: 'tight' | 'spaced'
  *
  * Handles multiple input formats:
  * - Markdown H1: # Question?
@@ -337,46 +358,115 @@ function extractTitle(content) {
  * - Plain text questions ending with ?
  *
  * @param {string} content - Raw FAQ content
+ * @param {Object} templateStructure - Optional template structure rules
  * @returns {string} Formatted FAQ content
  */
-function formatFAQContent(content) {
+function formatFAQContent(content, templateStructure = null) {
   if (!content) return content;
 
+  // Get formatting rules from template or use defaults
+  const faqRules = templateStructure?.faq || {
+    questionFormat: 'bold',
+    questionNumbered: false,
+    spacingBetweenQA: 'tight',
+    spacingBetweenPairs: 'spaced'
+  };
+
   let formatted = content;
+  let questionIndex = 0;
 
-  // Pattern 1: Convert markdown H1 questions (# Question?) to bold
-  // This is critical - AI often generates FAQ questions as H1 headers
-  formatted = formatted.replace(/^#\s+([^\n]+\?)\s*$/gm, (match, question) => {
-    return `<strong>${question.trim()}</strong>`;
+  // First, extract all Q&A pairs so we can reformat them consistently
+  // Pattern to find questions: lines ending with ?
+  const qaPattern = /(?:^|\n)(?:#\s+|\*\*)?([^\n]+\?)(?:\*\*)?(?:\n+)([\s\S]*?)(?=(?:\n(?:#\s+|\*\*)?[^\n]+\?)|$)/g;
+
+  const qaPairs = [];
+  let match;
+  let lastContent = '';
+
+  // Extract Q&A pairs
+  const lines = formatted.split('\n');
+  let currentQuestion = null;
+  let currentAnswer = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Check if line is a question (ends with ?, possibly in markdown format)
+    const questionMatch = trimmed.match(/^(?:#\s+|\*\*)?(.+\?)(?:\*\*)?$/);
+
+    if (questionMatch) {
+      // Save previous Q&A pair
+      if (currentQuestion) {
+        qaPairs.push({
+          question: currentQuestion,
+          answer: currentAnswer.join('\n').trim()
+        });
+      }
+      // Start new Q&A pair
+      currentQuestion = questionMatch[1].replace(/^\*\*|\*\*$/g, '').trim();
+      currentAnswer = [];
+    } else if (currentQuestion && trimmed) {
+      // This is answer content
+      currentAnswer.push(trimmed);
+    }
+  }
+
+  // Don't forget the last Q&A pair
+  if (currentQuestion) {
+    qaPairs.push({
+      question: currentQuestion,
+      answer: currentAnswer.join('\n').trim()
+    });
+  }
+
+  // If no Q&A pairs found, return original with basic cleanup
+  if (qaPairs.length === 0) {
+    // Fallback to basic formatting
+    formatted = content;
+    formatted = formatted.replace(/^#\s+([^\n]+\?)\s*$/gm, '<strong>$1</strong>');
+    formatted = formatted.replace(/\*\*([^*]+\?)\*\*\s*/g, '<strong>$1</strong>\n');
+    return formatted.trim();
+  }
+
+  // Rebuild content with template formatting rules
+  const formattedPairs = qaPairs.map((qa, index) => {
+    let questionText = qa.question;
+
+    // Apply numbering if template requires it
+    if (faqRules.questionNumbered) {
+      questionText = `${index + 1}. ${questionText}`;
+    }
+
+    // Apply question format based on template
+    let formattedQuestion;
+    switch (faqRules.questionFormat) {
+      case 'h3':
+        formattedQuestion = `<h3>${questionText}</h3>`;
+        break;
+      case 'plain':
+        formattedQuestion = questionText;
+        break;
+      case 'numbered':
+        // Already handled above, just make it bold
+        formattedQuestion = `<strong>${questionText}</strong>`;
+        break;
+      case 'bold':
+      default:
+        formattedQuestion = `<strong>${questionText}</strong>`;
+        break;
+    }
+
+    // Determine spacing between question and answer
+    const qaJoiner = faqRules.spacingBetweenQA === 'spaced' ? '\n\n' : '\n';
+
+    return formattedQuestion + qaJoiner + qa.answer;
   });
 
-  // Pattern 2: **Question?** followed by Answer (bold markdown questions)
-  formatted = formatted.replace(/\*\*([^*]+\?)\*\*\s*/g, (match, question) => {
-    return `<strong>${question.trim()}</strong>\n`;
-  });
+  // Join Q&A pairs with appropriate spacing
+  const pairJoiner = faqRules.spacingBetweenPairs === 'spaced' ? '\n\n' : '\n';
+  formatted = formattedPairs.join(pairJoiner);
 
-  // Clean up any existing formatting issues
-  formatted = formatted.replace(/\*\*\s*\*\*/g, ''); // Remove empty bold markers
-
-  // Split on the pattern where one Q&A ends and another begins
-  // Look for: period/text followed by ** or <strong> (start of next question)
-  formatted = formatted.replace(/([.!])\s*(<strong>)/g, '$1\n\n$2');
-
-  // Also handle: answer ending followed by start of unbolded question with capital letter
-  // Pattern: period followed by capital letter starting a question (likely ends with ?)
-  formatted = formatted.replace(/([.!])\s+([A-Z][^.?!]*\?)/g, '$1\n\n<strong>$2</strong>');
-
-  // Ensure questions are separated from their answers by newline only (no double newline)
-  // Pattern: </strong> followed by answer text
-  formatted = formatted.replace(/(<\/strong>)\s*(?=\s*[A-Z])/g, '$1\n');
-
-  // Clean up: ensure no more than 2 consecutive newlines
+  // Final cleanup
   formatted = formatted.replace(/\n{3,}/g, '\n\n');
-
-  // Trim each line
-  formatted = formatted.split('\n').map(line => line.trim()).join('\n');
-
-  // Remove empty lines at start/end
   formatted = formatted.trim();
 
   return formatted;

@@ -730,22 +730,37 @@ function buildElementorPage(chunkedContent, options = {}) {
     includeStatsBar = false,
     statsBarPosition = 'middle', // 'middle' or 'bottom'
     heroImageSide = 'right', // 'left' or 'right' - alternates per article
-    templateStyles = null // Styles from workflow_elementor_styles table
+    templateStyles = null // Styles from workflow_elementor_styles table (includes structure)
   } = options;
 
   // Set current styles context - merges template with defaults
   currentStyles = mergeStyles(templateStyles);
 
+  // Extract structure rules from template if available
+  const structure = templateStyles?.structure || null;
+
+  // Determine hero image side: use template structure if available, otherwise use passed option
+  const effectiveHeroImageSide = structure?.hero?.imageSide || heroImageSide;
+
+  // Determine stats bar settings from template
+  const showStatsBar = structure?.statsBar?.detected || includeStatsBar;
+  const effectiveStatsBarPosition = structure?.statsBar?.position || statsBarPosition;
+  const templateStats = structure?.statsBar?.stats || [];
+
+  // Determine CTA placement from template
+  const ctaAfterEachSection = structure?.sections?.ctaAfterEachSection || false;
+  const ctaInHero = structure?.sections?.ctaInHero !== false; // Default true
+
   const pageElements = [];
 
-  // 1. Hero section (intro) - image on heroImageSide
+  // 1. Hero section (intro) - image on effectiveHeroImageSide
   // Note: title is used for WordPress page title, NOT displayed as H1
   // The H1 is extracted from the intro content (the headline)
   if (chunkedContent.intro || title) {
     pageElements.push(buildHeroSection(title, chunkedContent.intro, {
-      heroImageSide,
-      ctaText,
-      ctaUrl
+      heroImageSide: effectiveHeroImageSide,
+      ctaText: ctaInHero ? ctaText : null,
+      ctaUrl: ctaInHero ? ctaUrl : null
     }));
   }
 
@@ -755,16 +770,27 @@ function buildElementorPage(chunkedContent, options = {}) {
 
   chunks.forEach((chunk, index) => {
     // Add stats bar in middle if configured
-    if (includeStatsBar && statsBarPosition === 'middle' && index === middleIndex) {
-      pageElements.push(buildStatsBarPlaceholder());
+    if (showStatsBar && effectiveStatsBarPosition === 'middle' && index === middleIndex) {
+      pageElements.push(buildStatsBarPlaceholder({
+        stats: templateStats.length > 0 ? templateStats : undefined
+      }));
     }
 
-    pageElements.push(buildContentSection(chunk, { ctaText, ctaUrl, showCta: false }));
+    // Show CTA after section if template says to, or if it's a FAQ section (never show CTA after FAQ)
+    const showCtaAfterSection = ctaAfterEachSection && !chunk.isFAQ;
+
+    pageElements.push(buildContentSection(chunk, {
+      ctaText,
+      ctaUrl,
+      showCta: showCtaAfterSection
+    }));
   });
 
   // 3. Stats bar at bottom if configured
-  if (includeStatsBar && statsBarPosition === 'bottom') {
-    pageElements.push(buildStatsBarPlaceholder());
+  if (showStatsBar && effectiveStatsBarPosition === 'bottom') {
+    pageElements.push(buildStatsBarPlaceholder({
+      stats: templateStats.length > 0 ? templateStats : undefined
+    }));
   }
 
   // Wrap everything in a root container (full width, sections handle their own boxing)

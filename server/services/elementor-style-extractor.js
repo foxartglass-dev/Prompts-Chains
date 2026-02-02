@@ -1,6 +1,13 @@
 /**
  * Elementor Style Extractor Service
- * Fetches Elementor page data from WordPress and extracts reusable styles
+ * Fetches Elementor page data from WordPress and extracts reusable styles AND structure
+ *
+ * ENHANCED: Now captures page STRUCTURE in addition to styling:
+ * - FAQ formatting (bold questions, spacing, numbering)
+ * - Section layout patterns
+ * - Stats bar presence and position
+ * - CTA button placement
+ * - Hero section layout
  */
 
 import { createAuthHeader } from './wordpress-publisher.js';
@@ -73,39 +80,136 @@ export function extractStylesFromElementorData(elementorDataJson) {
     image: null,
     statsBar: null,
     // Track what we found
-    foundElements: []
+    foundElements: [],
+
+    // STRUCTURE PATTERNS - captures how content is laid out, not just styled
+    structure: {
+      // FAQ section structure
+      faq: {
+        detected: false,
+        headingFormat: null,        // 'simple' (just "FAQs") or 'extended' ("FAQs: Location Name")
+        questionFormat: 'bold',      // 'bold', 'h3', 'numbered', 'plain'
+        questionNumbered: false,     // true if questions have numbers like "1. Question?"
+        answerFormat: 'plain',       // 'plain', 'italic', etc.
+        spacingBetweenQA: 'tight',   // 'tight' (no gap) or 'spaced' (blank line)
+        spacingBetweenPairs: 'spaced' // 'tight' or 'spaced' between Q&A pairs
+      },
+      // Section structure
+      sections: {
+        ctaAfterEachSection: false,  // CTA button after every content section
+        ctaAtEnd: true,              // CTA only at end
+        ctaInHero: true              // CTA in hero section
+      },
+      // Stats bar
+      statsBar: {
+        detected: false,
+        position: null,              // 'middle', 'bottom', or null
+        stats: []                    // Array of { value, label } from the actual stats bar
+      },
+      // Hero section
+      hero: {
+        imageSide: 'right',          // 'left' or 'right'
+        hasHeadline: true,
+        hasSubtext: true,
+        hasCta: true
+      },
+      // Banner/card elements (for future rotation feature)
+      banners: {
+        detected: false,
+        positions: [],               // Where banners appear
+        items: []                    // Banner content for rotation
+      }
+    }
   };
+
+  // Track state during traversal for structure detection
+  let sectionIndex = 0;
+  let totalSections = 0;
+  let ctaCount = 0;
+  let statsBarSectionIndex = null;
+  let heroDetected = false;
+  let currentSectionHasHeading = false;
+  let textWidgetsInCurrentSection = [];
+
+  // First pass: count sections
+  function countSections(elements) {
+    let count = 0;
+    if (!Array.isArray(elements)) return count;
+    for (const el of elements) {
+      if (el.elType === 'container' && !el.isInner) {
+        count++;
+      }
+    }
+    return count;
+  }
+  totalSections = countSections(elements);
 
   /**
    * Recursively traverse Elementor elements
    */
-  function traverse(elements, depth = 0, parentType = null) {
+  function traverse(elements, depth = 0, parentType = null, containerIndex = 0) {
     if (!Array.isArray(elements)) return;
 
     for (const el of elements) {
       // Track container padding and gaps at top level
       if (el.elType === 'container' && depth === 0) {
         extractContainerStyles(el, styles);
+        sectionIndex++;
+        currentSectionHasHeading = false;
+        textWidgetsInCurrentSection = [];
+
+        // Detect hero section (first section with row direction)
+        if (!heroDetected && el.settings?.flex_direction === 'row') {
+          heroDetected = true;
+          // Analyze hero structure
+          analyzeHeroStructure(el, styles);
+        }
       }
 
       // Extract widget-specific styles
       if (el.widgetType) {
         switch (el.widgetType) {
           case 'button':
+            ctaCount++;
             if (!styles.button) {
               styles.button = extractButtonStyles(el);
               styles.foundElements.push('button');
+            }
+            // Track CTA placement
+            if (sectionIndex === 1 && heroDetected) {
+              styles.structure.sections.ctaInHero = true;
             }
             break;
 
           case 'heading':
             extractHeadingStyles(el, styles);
+            currentSectionHasHeading = true;
+
+            // Detect FAQ section by heading text
+            const headingText = el.settings?.title || '';
+            if (isFaqHeading(headingText)) {
+              styles.structure.faq.detected = true;
+              styles.foundElements.push('faq-section');
+              // Analyze if heading is simple "FAQs" or extended "FAQs: Location"
+              if (headingText.includes(':')) {
+                styles.structure.faq.headingFormat = 'extended';
+              } else {
+                styles.structure.faq.headingFormat = 'simple';
+              }
+            }
             break;
 
           case 'text-editor':
             if (!styles.text) {
               styles.text = extractTextStyles(el);
               styles.foundElements.push('text');
+            }
+            textWidgetsInCurrentSection.push(el);
+
+            // Analyze text content for FAQ structure
+            const textContent = el.settings?.editor || '';
+            if (styles.structure.faq.detected || containsFaqContent(textContent)) {
+              analyzeFaqStructure(textContent, styles);
             }
             break;
 
@@ -118,9 +222,19 @@ export function extractStylesFromElementorData(elementorDataJson) {
 
           case 'icon-box':
             // Stats bar indicator
-            if (!styles.statsBar && parentType === 'container') {
-              styles.statsBar = { detected: true };
-              styles.foundElements.push('statsBar');
+            if (parentType === 'container') {
+              if (!styles.statsBar) {
+                styles.statsBar = { detected: true };
+                styles.foundElements.push('statsBar');
+              }
+              statsBarSectionIndex = sectionIndex;
+              styles.structure.statsBar.detected = true;
+              // Extract stat values
+              const statValue = el.settings?.title_text || '';
+              const statLabel = el.settings?.description_text || '';
+              if (statValue || statLabel) {
+                styles.structure.statsBar.stats.push({ value: statValue, label: statLabel });
+              }
             }
             break;
         }
@@ -139,9 +253,32 @@ export function extractStylesFromElementorData(elementorDataJson) {
 
       // Recurse into children
       if (el.elements) {
-        traverse(el.elements, depth + 1, el.elType);
+        traverse(el.elements, depth + 1, el.elType, sectionIndex);
       }
     }
+  }
+
+  traverse(elements);
+
+  // Post-processing: determine stats bar position
+  if (styles.structure.statsBar.detected && statsBarSectionIndex !== null) {
+    const relativePosition = statsBarSectionIndex / totalSections;
+    if (relativePosition < 0.3) {
+      styles.structure.statsBar.position = 'top';
+    } else if (relativePosition > 0.7) {
+      styles.structure.statsBar.position = 'bottom';
+    } else {
+      styles.structure.statsBar.position = 'middle';
+    }
+  }
+
+  // Determine CTA placement pattern
+  if (ctaCount > 0) {
+    // If CTAs appear in most sections, it's "after each section"
+    // Otherwise it's just at specific points
+    const ctaRatio = ctaCount / totalSections;
+    styles.structure.sections.ctaAfterEachSection = ctaRatio > 0.5;
+    styles.structure.sections.ctaAtEnd = ctaCount >= 1;
   }
 
   traverse(elements);
@@ -259,6 +396,129 @@ function extractContainerStyles(el, styles) {
 }
 
 /**
+ * Check if a heading text indicates an FAQ section
+ */
+function isFaqHeading(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return lower.includes('faq') ||
+         lower.includes('frequently asked') ||
+         lower.includes('common questions') ||
+         lower === 'questions' ||
+         lower === 'q&a' ||
+         lower === 'q & a';
+}
+
+/**
+ * Check if text content contains FAQ patterns (questions and answers)
+ */
+function containsFaqContent(content) {
+  if (!content) return false;
+  // Look for question patterns: text ending with ? followed by answer text
+  const questionPattern = /\?[\s\S]*?[.!]/;
+  // Look for bold questions
+  const boldQuestionPattern = /<strong>[^<]+\?<\/strong>/i;
+  return questionPattern.test(content) || boldQuestionPattern.test(content);
+}
+
+/**
+ * Analyze FAQ content structure to detect formatting patterns
+ */
+function analyzeFaqStructure(content, styles) {
+  if (!content) return;
+
+  const faq = styles.structure.faq;
+
+  // Check for numbered questions: "1. Question?" or "1) Question?"
+  if (/^\s*\d+[\.\)]\s*[^?]+\?/m.test(content)) {
+    faq.questionNumbered = true;
+  }
+
+  // Check for bold questions: <strong>Question?</strong>
+  if (/<strong>[^<]+\?<\/strong>/i.test(content)) {
+    faq.questionFormat = 'bold';
+  }
+  // Check for H3 questions
+  else if (/<h3[^>]*>[^<]+\?<\/h3>/i.test(content)) {
+    faq.questionFormat = 'h3';
+  }
+  // Plain text questions
+  else if (/^[^<\n]+\?$/m.test(content)) {
+    faq.questionFormat = 'plain';
+  }
+
+  // Check spacing patterns
+  // Tight: question immediately followed by answer (just newline)
+  // Spaced: blank line between question and answer
+  if (/<\/strong>\s*\n\s*\n/.test(content) || /\?\s*\n\s*\n/.test(content)) {
+    faq.spacingBetweenQA = 'spaced';
+  } else {
+    faq.spacingBetweenQA = 'tight';
+  }
+
+  // Check spacing between Q&A pairs
+  // Look for pattern: answer ending with period, then gap before next question
+  if (/[.!]\s*\n\s*\n\s*(<strong>|<h3|\d+[\.\)])/i.test(content)) {
+    faq.spacingBetweenPairs = 'spaced';
+  } else {
+    faq.spacingBetweenPairs = 'tight';
+  }
+}
+
+/**
+ * Analyze hero section structure
+ */
+function analyzeHeroStructure(heroElement, styles) {
+  if (!heroElement || !heroElement.elements) return;
+
+  const hero = styles.structure.hero;
+  let foundImage = false;
+  let foundHeading = false;
+  let foundText = false;
+  let foundButton = false;
+  let imageIsFirst = false;
+
+  // Check children to determine layout
+  function scanChildren(elements, isFirst = true) {
+    if (!Array.isArray(elements)) return;
+
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i];
+
+      if (el.widgetType === 'image') {
+        foundImage = true;
+        if (isFirst && i === 0) {
+          imageIsFirst = true;
+        }
+      } else if (el.widgetType === 'heading') {
+        foundHeading = true;
+      } else if (el.widgetType === 'text-editor') {
+        foundText = true;
+      } else if (el.widgetType === 'button') {
+        foundButton = true;
+      }
+
+      // Check inner containers
+      if (el.elType === 'container' && el.elements) {
+        // If first inner container has image, image is on left
+        if (el.elements.some(child => child.widgetType === 'image')) {
+          if (i === 0) imageIsFirst = true;
+        }
+        scanChildren(el.elements, false);
+      }
+    }
+  }
+
+  scanChildren(heroElement.elements);
+
+  // Determine image side based on order
+  hero.imageSide = imageIsFirst ? 'left' : 'right';
+  hero.hasHeadline = foundHeading;
+  hero.hasSubtext = foundText;
+  hero.hasCta = foundButton;
+}
+
+/**
  * Convert extracted styles to database-ready format
  * Maps the nested style object to flat database columns
  */
@@ -316,7 +576,10 @@ export function stylesToDatabaseFormat(styles, sourceInfo) {
     } : null,
     stats_padding: styles.statsBar?.padding || null,
 
-    // Full data backup
+    // STRUCTURE PATTERNS - how content is laid out
+    structure: styles.structure || null,
+
+    // Full data backup (includes both styles AND structure)
     extracted_styles: styles
   };
 }
@@ -413,6 +676,66 @@ export function formatStylesForPreview(styles) {
         ? `${styles.statsBar.gradient_angle.size}deg`
         : '90deg'
     };
+  }
+
+  // Add STRUCTURE patterns to preview
+  if (styles.structure) {
+    preview.structure = {};
+
+    // FAQ structure
+    if (styles.structure.faq?.detected) {
+      preview.structure.faq = {
+        'Heading Format': styles.structure.faq.headingFormat === 'simple'
+          ? 'Simple (just "FAQs")'
+          : 'Extended (includes location/topic)',
+        'Question Style': styles.structure.faq.questionFormat === 'bold'
+          ? 'Bold text'
+          : styles.structure.faq.questionFormat === 'h3'
+          ? 'H3 heading'
+          : styles.structure.faq.questionFormat === 'numbered'
+          ? 'Numbered'
+          : 'Plain text',
+        'Questions Numbered': styles.structure.faq.questionNumbered ? 'Yes' : 'No',
+        'Q&A Spacing': styles.structure.faq.spacingBetweenQA === 'tight'
+          ? 'Tight (no gap)'
+          : 'Spaced (blank line)',
+        'Between Pairs': styles.structure.faq.spacingBetweenPairs === 'tight'
+          ? 'Tight'
+          : 'Spaced'
+      };
+    }
+
+    // Stats bar structure
+    if (styles.structure.statsBar?.detected) {
+      preview.structure.statsBar = {
+        'Detected': 'Yes',
+        'Position': styles.structure.statsBar.position || 'unknown',
+        'Stats Count': styles.structure.statsBar.stats?.length || 0
+      };
+      if (styles.structure.statsBar.stats?.length > 0) {
+        preview.structure.statsBar['Stats'] = styles.structure.statsBar.stats
+          .map(s => `${s.value}: ${s.label}`)
+          .join(', ');
+      }
+    }
+
+    // Hero structure
+    if (styles.structure.hero) {
+      preview.structure.hero = {
+        'Image Side': styles.structure.hero.imageSide || 'right',
+        'Has Headline': styles.structure.hero.hasHeadline ? 'Yes' : 'No',
+        'Has Subtext': styles.structure.hero.hasSubtext ? 'Yes' : 'No',
+        'Has CTA Button': styles.structure.hero.hasCta ? 'Yes' : 'No'
+      };
+    }
+
+    // Section/CTA structure
+    if (styles.structure.sections) {
+      preview.structure.sections = {
+        'CTA After Each Section': styles.structure.sections.ctaAfterEachSection ? 'Yes' : 'No',
+        'CTA In Hero': styles.structure.sections.ctaInHero ? 'Yes' : 'No'
+      };
+    }
   }
 
   return preview;
