@@ -54,6 +54,46 @@ function extractIntro(content) {
 }
 
 /**
+ * Pre-process content to consolidate FAQ sections
+ * When we encounter a "FAQs" or "Frequently Asked Questions" H2,
+ * all subsequent H2s that look like questions (end with ?) should be
+ * converted to bold text, not treated as separate sections.
+ * @param {string} content - Raw content
+ * @returns {string} Content with FAQ questions consolidated
+ */
+function consolidateFAQSection(content) {
+  if (!content) return content;
+
+  let result = content;
+
+  // Pattern to find FAQ section header
+  const faqHeaderPattern = /^(##\s*(?:FAQs?|Frequently Asked Questions?|Common Questions?|Q\s*&\s*A))\s*$/gim;
+
+  const faqMatch = faqHeaderPattern.exec(result);
+  if (!faqMatch) {
+    // No FAQ section found
+    return result;
+  }
+
+  // Found FAQ header - everything after it until EOF or next non-question H2
+  // should have its H2 questions converted to bold
+  const faqStartIndex = faqMatch.index + faqMatch[0].length;
+  const beforeFaq = result.substring(0, faqMatch.index + faqMatch[0].length);
+  let faqContent = result.substring(faqStartIndex);
+
+  // Convert ## Question? to **Question?** (bold) within FAQ section
+  // Pattern: ## followed by text ending with ?
+  faqContent = faqContent.replace(/^##\s*([^\n]+\?)\s*$/gm, '**$1**');
+
+  // Also handle # Question? (H1 style questions)
+  faqContent = faqContent.replace(/^#\s+([^\n]+\?)\s*$/gm, '**$1**');
+
+  result = beforeFaq + faqContent;
+
+  return result;
+}
+
+/**
  * Split content by H2 headings
  * @param {string} content - HTML content with H2 headings
  * @returns {Array<{ heading: string, content: string }>}
@@ -198,8 +238,11 @@ function chunkContent(content, options = {}) {
     };
   }
 
+  // Pre-process: Consolidate FAQ sections so questions aren't split as separate H2s
+  const processedContent = consolidateFAQSection(content);
+
   // Extract intro (content before first H2)
-  const { intro, remaining } = extractIntro(content);
+  const { intro, remaining } = extractIntro(processedContent);
 
   // Split remaining content by H2
   const sections = splitByH2(remaining);
@@ -284,9 +327,14 @@ function extractTitle(content) {
 /**
  * Format FAQ content with proper Q&A spacing
  * Detects question/answer pairs and formats them:
- * - Question on its own line
+ * - Question as bold text (NOT heading)
  * - Answer directly below (no blank line)
  * - One blank line between Q&A pairs
+ *
+ * Handles multiple input formats:
+ * - Markdown H1: # Question?
+ * - Markdown bold: **Question?**
+ * - Plain text questions ending with ?
  *
  * @param {string} content - Raw FAQ content
  * @returns {string} Formatted FAQ content
@@ -294,45 +342,33 @@ function extractTitle(content) {
 function formatFAQContent(content) {
   if (!content) return content;
 
-  // Split content into sentences/segments
-  // Questions typically start with ** or are marked somehow, and end with ?
-  // Pattern: **Question here?** Answer here.
-
-  // First, let's handle the common format: **Question?** Answer
-  // Also handle: "Question?" Answer format
-
   let formatted = content;
 
-  // Pattern 1: **Question?** followed by Answer (bold markdown questions)
-  // Split at each question mark followed by ** (end of bold question)
+  // Pattern 1: Convert markdown H1 questions (# Question?) to bold
+  // This is critical - AI often generates FAQ questions as H1 headers
+  formatted = formatted.replace(/^#\s+([^\n]+\?)\s*$/gm, (match, question) => {
+    return `<strong>${question.trim()}</strong>`;
+  });
+
+  // Pattern 2: **Question?** followed by Answer (bold markdown questions)
   formatted = formatted.replace(/\*\*([^*]+\?)\*\*\s*/g, (match, question) => {
     return `<strong>${question.trim()}</strong>\n`;
   });
 
-  // Pattern 2: Find question marks followed by text that looks like an answer
-  // This handles cases like: "Does daily janitorial service include kitchen?** Yes—counters..."
-  // We want to put a newline after each answer (before next question)
-
-  // Split by question patterns - look for text ending in ? followed by answer text
-  const qaPattern = /([^?]+\?)\s*([^?]+?)(?=\s*[A-Z*"][^?]*\?|$)/g;
-
-  // Actually, let's be more careful. The FAQ content typically has:
-  // **Question?** Answer text. **Next Question?** Next answer.
-
-  // First clean up any existing formatting issues
+  // Clean up any existing formatting issues
   formatted = formatted.replace(/\*\*\s*\*\*/g, ''); // Remove empty bold markers
 
   // Split on the pattern where one Q&A ends and another begins
-  // Look for: period/text followed by ** (start of next bold question)
-  formatted = formatted.replace(/([.!])\s*(\*\*[A-Z])/g, '$1\n\n$2');
+  // Look for: period/text followed by ** or <strong> (start of next question)
+  formatted = formatted.replace(/([.!])\s*(<strong>)/g, '$1\n\n$2');
 
   // Also handle: answer ending followed by start of unbolded question with capital letter
   // Pattern: period followed by capital letter starting a question (likely ends with ?)
-  formatted = formatted.replace(/([.!])\s+([A-Z][^.?!]*\?)/g, '$1\n\n$2');
+  formatted = formatted.replace(/([.!])\s+([A-Z][^.?!]*\?)/g, '$1\n\n<strong>$2</strong>');
 
   // Ensure questions are separated from their answers by newline only (no double newline)
-  // Pattern: question mark (possibly with **) followed by answer
-  formatted = formatted.replace(/(\?)\s*(\*\*\s*)?(?=\s*[A-Z])/g, '$1\n');
+  // Pattern: </strong> followed by answer text
+  formatted = formatted.replace(/(<\/strong>)\s*(?=\s*[A-Z])/g, '$1\n');
 
   // Clean up: ensure no more than 2 consecutive newlines
   formatted = formatted.replace(/\n{3,}/g, '\n\n');

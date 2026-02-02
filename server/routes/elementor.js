@@ -1714,6 +1714,8 @@ router.post('/publish', async (req, res) => {
     // Step 5: Build Elementor structure
     const elementorData = buildElementorPage(chunked, {
       title: pageTitle,
+      ctaText,
+      ctaUrl,
       includeStatsBar,
       statsBarPosition,
       heroImageSide // Pass hero side for alternating layout

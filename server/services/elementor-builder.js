@@ -182,6 +182,7 @@ function buildImageWidget(imageData, options = {}) {
  * @returns {Object} Elementor widget object
  */
 function buildButtonWidget(text, url, options = {}) {
+  const { align = 'center' } = options;
   return {
     id: generateElementId(),
     elType: 'widget',
@@ -194,6 +195,7 @@ function buildButtonWidget(text, url, options = {}) {
         is_external: '',
         nofollow: ''
       },
+      align: align,
       background_color: '#0064A1',
       text_padding: { unit: 'px', top: '10', right: '50', bottom: '10', left: '50' }
     },
@@ -252,25 +254,87 @@ function buildContainer(elements, options = {}) {
 }
 
 /**
- * Build the hero/intro section (H1 + intro text + image side by side)
- * @param {string} title - Page title (H1)
+ * Extract headline from intro content
+ * The headline is typically the first line that ends with a phrase (no period) or
+ * is distinctly styled. It's usually the first sentence/line before the main paragraph.
+ * @param {string} content - Intro content
+ * @returns {{ headline: string|null, remainingContent: string }}
+ */
+function extractHeadlineFromIntro(content) {
+  if (!content) return { headline: null, remainingContent: content };
+
+  // Split by newlines first
+  const lines = content.split('\n').map(l => l.trim()).filter(l => l);
+
+  if (lines.length === 0) return { headline: null, remainingContent: content };
+
+  // Check if first line looks like a headline:
+  // - Relatively short (under 150 chars)
+  // - Doesn't end with a period, or ends with a distinct phrase
+  // - Often contains location, service name, or tagline
+  const firstLine = lines[0];
+
+  // If first line is short and looks like a headline (ends without period or is title-case style)
+  const isHeadline = firstLine.length < 150 &&
+    (!firstLine.endsWith('.') || firstLine.split(' ').length < 20);
+
+  if (isHeadline && lines.length > 1) {
+    return {
+      headline: firstLine,
+      remainingContent: lines.slice(1).join('\n')
+    };
+  }
+
+  // If content is one paragraph, try to extract first sentence as headline
+  // Look for a natural break point (first sentence that could be a headline)
+  const firstSentenceMatch = content.match(/^([^.!?]+[.!?])/);
+  if (firstSentenceMatch && firstSentenceMatch[1].length < 150) {
+    return {
+      headline: firstSentenceMatch[1].trim(),
+      remainingContent: content.slice(firstSentenceMatch[0].length).trim()
+    };
+  }
+
+  return { headline: null, remainingContent: content };
+}
+
+/**
+ * Build the hero/intro section (H1 headline + intro text + image side by side + CTA button)
+ * @param {string} title - Page title (used for WordPress page title, NOT displayed as H1)
  * @param {Object} introChunk - Intro chunk from chunker
  * @param {Object} options - Section options
  * @returns {Object} Elementor container
  */
 function buildHeroSection(title, introChunk, options = {}) {
   // heroImageSide: 'left' or 'right' - alternates per article
-  const { heroImageSide = 'right' } = options;
+  // ctaText and ctaUrl for Book Now button
+  const { heroImageSide = 'right', ctaText = 'Book Now!', ctaUrl = '#' } = options;
 
-  // Text side: Title + intro text (NO CTA button)
+  // Text side: Headline (H1) + intro text + CTA button
   const textElements = [];
 
-  if (title) {
+  // Extract headline from intro content - this becomes the H1
+  // We do NOT use the keyword as the H1 (that would create duplicate titles)
+  let introContent = introChunk?.content || '';
+  const { headline, remainingContent } = extractHeadlineFromIntro(introContent);
+
+  // Add headline as H1 (extracted from intro, not the keyword)
+  if (headline) {
+    textElements.push(buildHeadingWidget(headline, 'h1', { align: 'center' }));
+    introContent = remainingContent;
+  } else if (title && !introContent.toLowerCase().startsWith(title.toLowerCase())) {
+    // Fallback: only use title as H1 if intro doesn't already contain it
     textElements.push(buildHeadingWidget(title, 'h1', { align: 'center' }));
   }
 
-  if (introChunk && introChunk.content) {
-    textElements.push(buildTextEditorWidget(introChunk.content));
+  // Add remaining intro text
+  if (introContent) {
+    textElements.push(buildTextEditorWidget(introContent));
+  }
+
+  // Add CTA button after intro text
+  if (ctaText && ctaUrl) {
+    textElements.push(buildButtonWidget(ctaText, ctaUrl));
   }
 
   const textContainer = buildContainer(textElements, {
@@ -327,11 +391,13 @@ function buildHeroSection(title, introChunk, options = {}) {
 }
 
 /**
- * Build a content section with heading and text (optionally with embedded image)
+ * Build a content section with heading, text, and optional CTA button
  * @param {Object} chunk - Chunk from chunker
+ * @param {Object} options - Section options { ctaText, ctaUrl, showCta }
  * @returns {Object} Elementor container
  */
-function buildContentSection(chunk) {
+function buildContentSection(chunk, options = {}) {
+  const { ctaText = 'Book Now!', ctaUrl = '#', showCta = true } = options;
   const elements = [];
 
   // Add heading if present
@@ -347,6 +413,11 @@ function buildContentSection(chunk) {
     chunk.imageAlignment,
     { isFAQ: chunk.isFAQ || false }
   ));
+
+  // Add CTA button after content (unless it's FAQ section)
+  if (showCta && ctaText && ctaUrl && !chunk.isFAQ) {
+    elements.push(buildButtonWidget(ctaText, ctaUrl));
+  }
 
   return buildContainer(elements, {
     direction: 'column',
@@ -421,6 +492,8 @@ function buildStatsBarPlaceholder(options = {}) {
 function buildElementorPage(chunkedContent, options = {}) {
   const {
     title = '',
+    ctaText = 'Book Now!',
+    ctaUrl = '#',
     includeStatsBar = false,
     statsBarPosition = 'middle', // 'middle' or 'bottom'
     heroImageSide = 'right' // 'left' or 'right' - alternates per article
@@ -429,8 +502,14 @@ function buildElementorPage(chunkedContent, options = {}) {
   const pageElements = [];
 
   // 1. Hero section (intro) - image on heroImageSide
+  // Note: title is used for WordPress page title, NOT displayed as H1
+  // The H1 is extracted from the intro content (the headline)
   if (chunkedContent.intro || title) {
-    pageElements.push(buildHeroSection(title, chunkedContent.intro, { heroImageSide }));
+    pageElements.push(buildHeroSection(title, chunkedContent.intro, {
+      heroImageSide,
+      ctaText,
+      ctaUrl
+    }));
   }
 
   // 2. Content sections
@@ -443,7 +522,7 @@ function buildElementorPage(chunkedContent, options = {}) {
       pageElements.push(buildStatsBarPlaceholder());
     }
 
-    pageElements.push(buildContentSection(chunk));
+    pageElements.push(buildContentSection(chunk, { ctaText, ctaUrl, showCta: false }));
   });
 
   // 3. Stats bar at bottom if configured
