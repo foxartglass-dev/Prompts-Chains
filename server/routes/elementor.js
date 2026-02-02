@@ -1711,6 +1711,27 @@ router.post('/publish', async (req, res) => {
     // Strip any tag identifier like (H), (J) from the title
     const pageTitle = stripTagFromKeyword(title) || extractTitle(cleanedContent) || 'Untitled Page';
 
+    // Step 4.5: Fetch workflow template styles (if available)
+    let templateStyles = null;
+    if (workflowId && isDatabaseEnabled()) {
+      try {
+        const [styleRecord] = await sql`
+          SELECT extracted_styles
+          FROM workflow_elementor_styles
+          WHERE workflow_id = ${workflowId}
+            AND status = 'active'
+          LIMIT 1
+        `;
+        if (styleRecord?.extracted_styles) {
+          templateStyles = styleRecord.extracted_styles;
+          console.log(`[Elementor Publish] Using template styles from workflow ${workflowId}`);
+        }
+      } catch (styleErr) {
+        console.error('[Elementor Publish] Failed to fetch template styles:', styleErr.message);
+        // Continue without template - will use defaults
+      }
+    }
+
     // Step 5: Build Elementor structure
     const elementorData = buildElementorPage(chunked, {
       title: pageTitle,
@@ -1718,7 +1739,8 @@ router.post('/publish', async (req, res) => {
       ctaUrl,
       includeStatsBar,
       statsBarPosition,
-      heroImageSide // Pass hero side for alternating layout
+      heroImageSide, // Pass hero side for alternating layout
+      templateStyles // Pass template styles from database
     });
 
     // Step 6: Get Elementor meta fields
@@ -2203,12 +2225,33 @@ router.post('/publish-article/:id', requireDb, async (req, res) => {
       (article.meta_titles && article.meta_titles[0]) ||
       'Untitled Page';
 
+    // Fetch workflow template styles if available
+    let templateStyles = null;
+    if (article.workflow_id) {
+      try {
+        const [styleRecord] = await sql`
+          SELECT extracted_styles
+          FROM workflow_elementor_styles
+          WHERE workflow_id = ${article.workflow_id}
+            AND status = 'active'
+          LIMIT 1
+        `;
+        if (styleRecord?.extracted_styles) {
+          templateStyles = styleRecord.extracted_styles;
+          console.log(`[Push Article] Using template styles from workflow ${article.workflow_id}`);
+        }
+      } catch (styleErr) {
+        console.error('[Push Article] Failed to fetch template styles:', styleErr.message);
+      }
+    }
+
     // Build Elementor structure
     const elementorData = buildElementorPage(chunked, {
       title: pageTitle,
       ctaText,
       ctaUrl,
-      includeStatsBar
+      includeStatsBar,
+      templateStyles
     });
 
     // Get Elementor meta fields
@@ -2425,10 +2468,31 @@ router.post('/batch-publish', requireDb, async (req, res) => {
         const chunked = chunkContent(content, { maxWords });
         // Strip any tag identifier like (H), (J) from the keyword
         const pageTitle = stripTagFromKeyword(article.keyword) || 'Untitled';
+
+        // Fetch workflow template styles if available
+        let templateStyles = null;
+        if (article.workflow_id) {
+          try {
+            const [styleRecord] = await sql`
+              SELECT extracted_styles
+              FROM workflow_elementor_styles
+              WHERE workflow_id = ${article.workflow_id}
+                AND status = 'active'
+              LIMIT 1
+            `;
+            if (styleRecord?.extracted_styles) {
+              templateStyles = styleRecord.extracted_styles;
+            }
+          } catch (styleErr) {
+            // Continue without template
+          }
+        }
+
         const elementorData = buildElementorPage(chunked, {
           title: pageTitle,
           ctaText,
-          ctaUrl
+          ctaUrl,
+          templateStyles
         });
         const elementorMeta = getElementorMetaFields(elementorData);
 

@@ -30,6 +30,7 @@ import { VibeCoderToggle } from './src/components/VibeCoderNotepad';
 import HelpButton from './src/components/HelpButton';
 import LogViewer from './src/components/LogViewer';
 import TestRunnerPopup from './src/components/TestRunnerPopup';
+import ElementorTemplateSection from './src/components/ElementorTemplateSection';
 
 // Types for workflow
 interface WorkflowItem {
@@ -3425,6 +3426,12 @@ const App: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Elementor Page Style Template */}
+                            <ElementorTemplateSection
+                                workflowId={currentWorkflowId}
+                                websiteUrl={currentProject.state.wpCredentials?.url}
+                            />
                         </div>
                     , false,
                     /* rightContent - Always visible toggles in header */
