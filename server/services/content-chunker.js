@@ -54,6 +54,46 @@ function extractIntro(content) {
 }
 
 /**
+ * Pre-process content to consolidate FAQ sections
+ * When we encounter a "FAQs" or "Frequently Asked Questions" H2,
+ * all subsequent H2s that look like questions (end with ?) should be
+ * converted to bold text, not treated as separate sections.
+ * @param {string} content - Raw content
+ * @returns {string} Content with FAQ questions consolidated
+ */
+function consolidateFAQSection(content) {
+  if (!content) return content;
+
+  let result = content;
+
+  // Pattern to find FAQ section header
+  const faqHeaderPattern = /^(##\s*(?:FAQs?|Frequently Asked Questions?|Common Questions?|Q\s*&\s*A))\s*$/gim;
+
+  const faqMatch = faqHeaderPattern.exec(result);
+  if (!faqMatch) {
+    // No FAQ section found
+    return result;
+  }
+
+  // Found FAQ header - everything after it until EOF or next non-question H2
+  // should have its H2 questions converted to bold
+  const faqStartIndex = faqMatch.index + faqMatch[0].length;
+  const beforeFaq = result.substring(0, faqMatch.index + faqMatch[0].length);
+  let faqContent = result.substring(faqStartIndex);
+
+  // Convert ## Question? to **Question?** (bold) within FAQ section
+  // Pattern: ## followed by text ending with ?
+  faqContent = faqContent.replace(/^##\s*([^\n]+\?)\s*$/gm, '**$1**');
+
+  // Also handle # Question? (H1 style questions)
+  faqContent = faqContent.replace(/^#\s+([^\n]+\?)\s*$/gm, '**$1**');
+
+  result = beforeFaq + faqContent;
+
+  return result;
+}
+
+/**
  * Split content by H2 headings
  * @param {string} content - HTML content with H2 headings
  * @returns {Array<{ heading: string, content: string }>}
@@ -198,8 +238,11 @@ function chunkContent(content, options = {}) {
     };
   }
 
+  // Pre-process: Consolidate FAQ sections so questions aren't split as separate H2s
+  const processedContent = consolidateFAQSection(content);
+
   // Extract intro (content before first H2)
-  const { intro, remaining } = extractIntro(content);
+  const { intro, remaining } = extractIntro(processedContent);
 
   // Split remaining content by H2
   const sections = splitByH2(remaining);
