@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import sql from '../db/index.js';
+import { sql, isDatabaseEnabled } from '../db/index.js';
 import {
   fetchWordPressPage,
   extractStylesFromElementorData,
