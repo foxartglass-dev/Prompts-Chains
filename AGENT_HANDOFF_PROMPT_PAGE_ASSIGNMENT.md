@@ -1,14 +1,47 @@
 # Agent Handoff: Prompt-to-Page Assignment System
 
-## IMPORTANT: Two-Phase Approach
+## STATUS: PHASE 2 COMPLETE
 
-**DO PHASE 1 FIRST. Save it, test it, commit it. Then Phase 2 on a separate branch.**
+**Both phases have been implemented:**
+- [x] Phase 1: Prompt ID badges (H1, H2, J1, etc.) - DONE
+- [x] Phase 2: Full assignment system - DONE
 
-This protects against breaking the system - if Phase 2 causes issues, Phase 1 is already saved and working.
+### What's Implemented (Phase 2):
+
+1. **Database columns** added to `site_plan_nodes`:
+   - `bank_first` BOOLEAN
+   - `assigned_mode` VARCHAR (main_prompt, guided_gpt, smart_prompt)
+   - `assigned_prompt_id` VARCHAR (H1, H2, J1, Global1, etc.)
+
+2. **Backend endpoints** in `server/routes/site-planning.js`:
+   - `POST /assign-prompts/:planId` - Batch assign prompts to nodes
+   - `GET /prompt-ids/:workflowId` - Get available prompt IDs
+   - `GET /batch-stats/:planId` - Get batch statistics
+   - `POST /run-batch/:planId` - Execute batches (dry-run supported)
+   - `POST /clear-assignments/:planId` - Clear all assignments
+
+3. **Frontend UI** in `SitePlanningSection.tsx`:
+   - "Assign Prompts" button toggles assignment mode
+   - Table view with columns: Page | Bank | Main Prompt | Guided GPT | Smart Prompt | Status
+   - Radio buttons for mode selection (mutually exclusive across columns)
+   - Dropdown for prompt ID selection (shows available IDs for tag)
+   - Save pending assignments button
+   - "Run Batches" modal with stats, dry-run preview, skip reasons
+
+4. **Skip Messaging**:
+   - Shows why pages would be skipped (no assignment, already has article, no prompt ID)
+   - Displays skip counts by reason in the run modal
+
+### What's NOT Implemented (Future Enhancement):
+
+The actual batch execution that triggers workflow processing is stubbed out. The infrastructure is in place but needs to be connected to the main workflow pipeline:
+- Currently returns what WOULD be processed (dry-run works)
+- To fully automate: Need to connect to `onStartWorkflow` callback or internal workflow functions
+- For now: User can manually use the START button after seeing the assignment plan
 
 ---
 
-# PHASE 1: Prompt ID Badges (DO THIS FIRST)
+# PHASE 1: Prompt ID Badges (COMPLETE)
 
 ## Goal
 Add visible H1, H2, H3 ID badges to all prompts so they're identifiable and can be referenced in rules.
@@ -275,6 +308,27 @@ When "Run Main Prompt" is clicked:
 - **Safer** - less likely to break existing code
 - **Current code already supports** running with a single mode
 - **Just need to add** filtering by assignment and prompt ID lookup
+
+### Skip Messaging (User Feedback)
+When pages are skipped during batch execution, show clear messaging:
+```
+┌─────────────────────────────────────────────────────────┐
+│ Run Summary                                             │
+├─────────────────────────────────────────────────────────┤
+│ ✓ Processed: 18 pages                                   │
+│ ⚠ Skipped: 4 pages                                      │
+│                                                         │
+│ Skipped reasons:                                        │
+│ • 2 pages: No prompt assigned                           │
+│ • 1 page: Already has article in drafts                 │
+│ • 1 page: Missing required tag                          │
+└─────────────────────────────────────────────────────────┘
+```
+- Tell user WHY something wasn't run
+- Show if checkbox wasn't checked
+- Show if assignment was incomplete
+- Show if article already exists (optional re-run available)
+- Helps user identify unfinished configuration
 
 ---
 
