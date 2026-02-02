@@ -1507,12 +1507,12 @@ router.post('/publish', async (req, res) => {
       const imagesToGenerate = dynamicMaxImages - imagesFromBank;
 
       // ===== CLEAR IMAGE RUN SUMMARY =====
-      const promptModeLabel = livePromptMode === 'main_prompt' ? 'MAIN PROMPT' :
+      const promptModeLogLabel = livePromptMode === 'main_prompt' ? 'MAIN PROMPT' :
                               livePromptMode === 'guided_gpt' ? 'GUIDED GPT' :
                               livePromptMode === 'smart_prompt' ? 'SMART PROMPT' : livePromptMode;
       const avatarLabel = targetAvatar ? `${targetAvatar.name} [${targetAvatar.tag || 'No Tag'}]` : '(none)';
       console.log('\n========================================');
-      console.log(`[IMAGE RUN] Mode: ${promptModeLabel}`);
+      console.log(`[IMAGE RUN] Mode: ${promptModeLogLabel}`);
       console.log(`[IMAGE RUN] Avatar: ${avatarLabel}`);
       console.log(`[IMAGE RUN] Model: ${imageGenModel} | Quality: ${imageQuality}`);
       console.log(`[IMAGE RUN] Images to generate: ${imagesToGenerate}`);
