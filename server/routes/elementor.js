@@ -1,7 +1,6 @@
 /**
  * Elementor API Routes
  * Handles the full pipeline: Article → Elementor Page
- * Last verified: 2026-02-02 - No duplicate promptModeLabel declarations
  */
 
 import express from 'express';
@@ -1506,6 +1505,20 @@ router.post('/publish', async (req, res) => {
 
     if (needsLiveGeneration) {
       const imagesToGenerate = dynamicMaxImages - imagesFromBank;
+
+      // ===== CLEAR IMAGE RUN SUMMARY =====
+      const promptModeLogLabel = livePromptMode === 'main_prompt' ? 'MAIN PROMPT' :
+                              livePromptMode === 'guided_gpt' ? 'GUIDED GPT' :
+                              livePromptMode === 'smart_prompt' ? 'SMART PROMPT' : livePromptMode;
+      const avatarLabel = targetAvatar ? `${targetAvatar.name} [${targetAvatar.tag || 'No Tag'}]` : '(none)';
+      console.log('\n========================================');
+      console.log(`[IMAGE RUN] Mode: ${promptModeLogLabel}`);
+      console.log(`[IMAGE RUN] Avatar: ${avatarLabel}`);
+      console.log(`[IMAGE RUN] Model: ${imageGenModel} | Quality: ${imageQuality}`);
+      console.log(`[IMAGE RUN] Images to generate: ${imagesToGenerate}`);
+      console.log(`[IMAGE RUN] Article: ${keyword || title || '(unknown)'}`);
+      console.log('========================================\n');
+
       console.log(`[Elementor Publish] Generating ${imagesToGenerate} live images with model: ${imageGenModel}`);
       console.log(`[Elementor Publish] Prompt mode: ${livePromptMode}`);
 
