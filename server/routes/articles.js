@@ -115,6 +115,33 @@ router.get('/:id', requireDb, async (req, res) => {
 
     const article = articles[0];
 
+    // 🔍 CREDENTIAL FALLBACK: If website credentials are missing, try workflow credentials
+    // Following Golden Rule #8: Settings hierarchy - website_id FIRST, then workflow_id
+    if (!article.wp_url || !article.wp_user || !article.wp_app_password) {
+      try {
+        const workflowState = article.workflow_state ?
+          (typeof article.workflow_state === 'string' ? JSON.parse(article.workflow_state) : article.workflow_state)
+          : null;
+
+        if (workflowState?.wpCredentials) {
+          const wfCreds = workflowState.wpCredentials;
+          // Only fill in missing values, don't overwrite existing website-level credentials
+          if (!article.wp_url && wfCreds.url) {
+            article.wp_url = wfCreds.url;
+          }
+          if (!article.wp_user && wfCreds.user) {
+            article.wp_user = wfCreds.user;
+          }
+          if (!article.wp_app_password && wfCreds.password) {
+            article.wp_app_password = wfCreds.password;
+          }
+          console.log(`[Article ${id}] Using workflow-level WordPress credentials as fallback`);
+        }
+      } catch (parseError) {
+        console.error(`[Article ${id}] Failed to parse workflow_state for credential fallback:`, parseError);
+      }
+    }
+
     // 🔍 MEGA IMAGE STATUS CHECK - See EVERYTHING about images for this article
     megaImageStatus(id, article);
 
