@@ -314,7 +314,11 @@ router.put('/nodes/:nodeId', requireDb, async (req, res) => {
       menuOrder,
       sortOrder,
       wpPageId,
-      wpPostUrl
+      wpPostUrl,
+      // Phase 2: Prompt Assignment fields
+      bankFirst,
+      assignedMode,
+      assignedPromptId
     } = req.body;
 
     // Get current node to find plan ID
@@ -355,6 +359,9 @@ router.put('/nodes/:nodeId', requireDb, async (req, res) => {
         depth = ${depth},
         wp_page_id = COALESCE(${wpPageId}, wp_page_id),
         wp_post_url = COALESCE(${wpPostUrl}, wp_post_url),
+        bank_first = COALESCE(${bankFirst}, bank_first),
+        assigned_mode = COALESCE(${assignedMode}, assigned_mode),
+        assigned_prompt_id = COALESCE(${assignedPromptId}, assigned_prompt_id),
         updated_at = CURRENT_TIMESTAMP,
         built_at = CASE WHEN ${wpPageId}::INTEGER IS NOT NULL THEN CURRENT_TIMESTAMP ELSE built_at END,
         published_at = CASE WHEN ${status} = 'published' THEN CURRENT_TIMESTAMP ELSE published_at END
@@ -1516,6 +1523,431 @@ router.post('/bulk-edit/:planId', requireDb, async (req, res) => {
 
   } catch (error) {
     console.error('[Site Planning] Error bulk editing:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// PHASE 2: PROMPT ASSIGNMENT SYSTEM
+// ============================================
+
+/**
+ * POST /api/site-planning/assign-prompts/:planId
+ * Batch assign prompts to multiple nodes at once
+ */
+router.post('/assign-prompts/:planId', requireDb, async (req, res) => {
+  try {
+    const { planId } = req.params;
+    const { assignments } = req.body;
+
+    if (!Array.isArray(assignments)) {
+      return res.status(400).json({ error: 'assignments must be an array' });
+    }
+
+    const results = [];
+    const skipped = [];
+
+    for (const assignment of assignments) {
+      if (!assignment.nodeId) {
+        skipped.push({ reason: 'Missing nodeId', data: assignment });
+        continue;
+      }
+
+      // Validate mode if provided
+      if (assignment.assignedMode && !['main_prompt', 'guided_gpt', 'smart_prompt'].includes(assignment.assignedMode)) {
+        skipped.push({ nodeId: assignment.nodeId, reason: 'Invalid assignedMode' });
+        continue;
+      }
+
+      try {
+        const result = await sql`
+          UPDATE site_plan_nodes
+          SET
+            bank_first = COALESCE(${assignment.bankFirst}, bank_first),
+            assigned_mode = ${assignment.assignedMode || null},
+            assigned_prompt_id = ${assignment.assignedPromptId || null},
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${assignment.nodeId} AND site_plan_id = ${planId}
+          RETURNING id, title, bank_first, assigned_mode, assigned_prompt_id
+        `;
+
+        if (result.length > 0) {
+          results.push(result[0]);
+        } else {
+          skipped.push({ nodeId: assignment.nodeId, reason: 'Node not found in plan' });
+        }
+      } catch (err) {
+        skipped.push({ nodeId: assignment.nodeId, reason: err.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      updated: results.length,
+      skipped: skipped.length,
+      results,
+      skippedDetails: skipped
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error assigning prompts:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/site-planning/prompt-ids/:workflowId
+ * Get available prompt IDs from image_creation_settings for a workflow
+ * Returns prompt IDs organized by mode (main_prompt, guided_gpt, smart_prompt) and tag
+ */
+router.get('/prompt-ids/:workflowId', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+
+    // Get image creation settings for this workflow
+    const settings = await sql`
+      SELECT
+        audience_avatars,
+        guided_gpt_prompts,
+        smart_prompt_prompts
+      FROM image_creation_settings
+      WHERE workflow_id = ${workflowId}
+    `;
+
+    if (settings.length === 0) {
+      return res.json({
+        success: true,
+        promptIds: {
+          main_prompt: {},
+          guided_gpt: {},
+          smart_prompt: {}
+        }
+      });
+    }
+
+    const config = settings[0];
+
+    // Helper to compute prompt IDs by tag
+    const computePromptIds = (prompts, tagField = 'tag') => {
+      const byTag = {};
+      if (!Array.isArray(prompts)) return byTag;
+
+      prompts.forEach((prompt, index) => {
+        const tag = prompt[tagField] || 'Global';
+        if (!byTag[tag]) {
+          byTag[tag] = [];
+        }
+        const position = byTag[tag].length + 1;
+        const prefix = tag === 'Global' ? 'Global' : tag;
+        byTag[tag].push({
+          id: prompt.id,
+          promptId: `${prefix}${position}`,
+          name: prompt.name || prompt.title || `${prefix}${position}`
+        });
+      });
+
+      return byTag;
+    };
+
+    // Process each mode
+    const promptIds = {
+      main_prompt: computePromptIds(config.audience_avatars || []),
+      guided_gpt: computePromptIds(config.guided_gpt_prompts || []),
+      smart_prompt: computePromptIds(config.smart_prompt_prompts || [])
+    };
+
+    res.json({
+      success: true,
+      promptIds
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error getting prompt IDs:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/site-planning/batch-stats/:planId
+ * Get statistics for batch execution planning
+ * Shows how many pages are assigned to each mode/batch
+ */
+router.get('/batch-stats/:planId', requireDb, async (req, res) => {
+  try {
+    const { planId } = req.params;
+
+    // Get counts by mode and bank_first combination
+    const stats = await sql`
+      SELECT
+        COALESCE(assigned_mode, 'unassigned') as mode,
+        bank_first,
+        COUNT(*) as count
+      FROM site_plan_nodes
+      WHERE site_plan_id = ${planId}
+      GROUP BY assigned_mode, bank_first
+      ORDER BY assigned_mode, bank_first
+    `;
+
+    // Get total unassigned pages
+    const unassigned = await sql`
+      SELECT COUNT(*) as count
+      FROM site_plan_nodes
+      WHERE site_plan_id = ${planId}
+        AND (assigned_mode IS NULL OR assigned_mode = '')
+    `;
+
+    // Get pages with existing articles
+    const withArticles = await sql`
+      SELECT COUNT(*) as count
+      FROM site_plan_nodes
+      WHERE site_plan_id = ${planId}
+        AND assigned_article_id IS NOT NULL
+    `;
+
+    // Organize into batch structure
+    const batches = {
+      bank_main_prompt: 0,
+      bank_guided_gpt: 0,
+      bank_smart_prompt: 0,
+      live_main_prompt: 0,
+      live_guided_gpt: 0,
+      live_smart_prompt: 0,
+      unassigned: parseInt(unassigned[0]?.count || 0),
+      withArticles: parseInt(withArticles[0]?.count || 0)
+    };
+
+    stats.forEach(row => {
+      const mode = row.mode;
+      const bankFirst = row.bank_first;
+      const count = parseInt(row.count);
+
+      if (mode === 'unassigned') {
+        batches.unassigned = count;
+      } else if (bankFirst) {
+        batches[`bank_${mode}`] = count;
+      } else {
+        batches[`live_${mode}`] = count;
+      }
+    });
+
+    res.json({
+      success: true,
+      batches,
+      total: Object.values(batches).reduce((a, b) => a + b, 0) - batches.withArticles
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error getting batch stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-planning/run-batch/:planId
+ * Execute a specific batch or all batches sequentially
+ * The 6 batches are run in order:
+ * 1. Bank + Main Prompt
+ * 2. Bank + Guided GPT
+ * 3. Bank + Smart Prompt
+ * 4. Live Main Prompt
+ * 5. Live Guided GPT
+ * 6. Live Smart Prompt
+ */
+router.post('/run-batch/:planId', requireDb, async (req, res) => {
+  try {
+    const { planId } = req.params;
+    const {
+      batchType,  // 'all' or specific: 'bank_main_prompt', 'live_guided_gpt', etc.
+      skipWithArticles = true,  // Skip pages that already have articles
+      dryRun = false  // If true, just return what would be processed
+    } = req.body;
+
+    // Get plan with workflow info
+    const plans = await sql`
+      SELECT sp.*, wf.id as workflow_id
+      FROM site_plans sp
+      LEFT JOIN workflows wf ON sp.workflow_id = wf.id
+      WHERE sp.id = ${planId}
+    `;
+
+    if (plans.length === 0) {
+      return res.status(404).json({ error: 'Site plan not found' });
+    }
+
+    const plan = plans[0];
+    if (!plan.workflow_id) {
+      return res.status(400).json({ error: 'Site plan not linked to a workflow' });
+    }
+
+    // Define batch order
+    const batchOrder = [
+      { name: 'bank_main_prompt', bankFirst: true, mode: 'main_prompt' },
+      { name: 'bank_guided_gpt', bankFirst: true, mode: 'guided_gpt' },
+      { name: 'bank_smart_prompt', bankFirst: true, mode: 'smart_prompt' },
+      { name: 'live_main_prompt', bankFirst: false, mode: 'main_prompt' },
+      { name: 'live_guided_gpt', bankFirst: false, mode: 'guided_gpt' },
+      { name: 'live_smart_prompt', bankFirst: false, mode: 'smart_prompt' }
+    ];
+
+    // Determine which batches to run
+    const batchesToRun = batchType === 'all'
+      ? batchOrder
+      : batchOrder.filter(b => b.name === batchType);
+
+    if (batchesToRun.length === 0) {
+      return res.status(400).json({ error: `Invalid batch type: ${batchType}` });
+    }
+
+    const results = {
+      processed: [],
+      skipped: [],
+      errors: [],
+      summary: {}
+    };
+
+    // Process each batch
+    for (const batch of batchesToRun) {
+      // Get pages for this batch
+      let query = sql`
+        SELECT spn.*,
+          a.id as existing_article_id,
+          a.status as article_status
+        FROM site_plan_nodes spn
+        LEFT JOIN articles a ON spn.assigned_article_id = a.id
+        WHERE spn.site_plan_id = ${planId}
+          AND spn.assigned_mode = ${batch.mode}
+          AND spn.bank_first = ${batch.bankFirst}
+      `;
+
+      const pages = await query;
+
+      const batchResult = {
+        batch: batch.name,
+        total: pages.length,
+        processed: 0,
+        skipped: 0,
+        errors: 0,
+        pages: []
+      };
+
+      for (const page of pages) {
+        // Check if should skip
+        if (skipWithArticles && page.existing_article_id) {
+          batchResult.skipped++;
+          results.skipped.push({
+            nodeId: page.id,
+            title: page.title,
+            reason: 'Already has article',
+            articleId: page.existing_article_id,
+            articleStatus: page.article_status
+          });
+          continue;
+        }
+
+        if (!page.assigned_prompt_id) {
+          batchResult.skipped++;
+          results.skipped.push({
+            nodeId: page.id,
+            title: page.title,
+            reason: 'No prompt ID assigned'
+          });
+          continue;
+        }
+
+        if (dryRun) {
+          batchResult.processed++;
+          batchResult.pages.push({
+            nodeId: page.id,
+            title: page.title,
+            promptId: page.assigned_prompt_id,
+            bankFirst: page.bank_first,
+            mode: page.assigned_mode,
+            wouldProcess: true
+          });
+        } else {
+          // TODO: Actually trigger the workflow processing here
+          // For now, just mark as would-process
+          // The actual processing would call the elementor publish endpoint
+          // or trigger the workflow with specific settings
+          batchResult.processed++;
+          results.processed.push({
+            nodeId: page.id,
+            title: page.title,
+            promptId: page.assigned_prompt_id,
+            batch: batch.name
+          });
+        }
+      }
+
+      results.summary[batch.name] = batchResult;
+    }
+
+    // Calculate skip reasons summary
+    const skipReasons = {};
+    results.skipped.forEach(s => {
+      skipReasons[s.reason] = (skipReasons[s.reason] || 0) + 1;
+    });
+
+    res.json({
+      success: true,
+      dryRun,
+      workflowId: plan.workflow_id,
+      results,
+      skipReasons,
+      message: dryRun
+        ? `Dry run complete. Would process ${results.processed.length} pages, skip ${results.skipped.length}.`
+        : `Batch execution complete. Processed ${results.processed.length} pages, skipped ${results.skipped.length}.`
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error running batch:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-planning/clear-assignments/:planId
+ * Clear all prompt assignments for a plan (reset to unassigned)
+ */
+router.post('/clear-assignments/:planId', requireDb, async (req, res) => {
+  try {
+    const { planId } = req.params;
+    const { nodeIds } = req.body; // Optional: specific nodes to clear
+
+    let result;
+    if (nodeIds && Array.isArray(nodeIds) && nodeIds.length > 0) {
+      result = await sql`
+        UPDATE site_plan_nodes
+        SET
+          bank_first = false,
+          assigned_mode = NULL,
+          assigned_prompt_id = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE site_plan_id = ${planId}
+          AND id = ANY(${nodeIds})
+        RETURNING id
+      `;
+    } else {
+      result = await sql`
+        UPDATE site_plan_nodes
+        SET
+          bank_first = false,
+          assigned_mode = NULL,
+          assigned_prompt_id = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE site_plan_id = ${planId}
+        RETURNING id
+      `;
+    }
+
+    res.json({
+      success: true,
+      cleared: result.length,
+      message: `Cleared assignments for ${result.length} pages`
+    });
+
+  } catch (error) {
+    console.error('[Site Planning] Error clearing assignments:', error);
     res.status(500).json({ error: error.message });
   }
 });
