@@ -972,6 +972,56 @@ async function setup() {
       console.log('  - templates website_id column already exists');
     }
 
+    // Migration 028: Create workflow_elementor_styles table
+    const hasElementorStylesTable = await sql`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_name = 'workflow_elementor_styles'
+    `;
+    if (hasElementorStylesTable.length === 0) {
+      await sql`
+        CREATE TABLE workflow_elementor_styles (
+          id SERIAL PRIMARY KEY,
+          workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+          source_page_id INTEGER,
+          source_page_url TEXT,
+          source_page_title TEXT,
+          button_background_color TEXT,
+          button_text_color TEXT,
+          button_border_radius TEXT,
+          button_padding JSONB,
+          button_typography JSONB,
+          h1_color TEXT,
+          h1_typography JSONB,
+          h2_color TEXT,
+          h2_typography JSONB,
+          h3_color TEXT,
+          h3_typography JSONB,
+          text_color TEXT,
+          text_typography JSONB,
+          container_padding JSONB,
+          section_gap TEXT,
+          content_width INTEGER,
+          hero_padding JSONB,
+          hero_gap TEXT,
+          image_border_radius TEXT,
+          image_max_width TEXT,
+          image_float_margin TEXT,
+          stats_background_color TEXT,
+          stats_gradient JSONB,
+          stats_padding JSONB,
+          raw_elementor_data JSONB,
+          extracted_styles JSONB,
+          status VARCHAR(20) DEFAULT 'active',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+      await sql`CREATE INDEX idx_workflow_elementor_styles_workflow ON workflow_elementor_styles(workflow_id)`;
+      console.log('  ✓ Created workflow_elementor_styles table');
+    } else {
+      console.log('  - workflow_elementor_styles table already exists');
+    }
+
     console.log('');
     console.log('================================');
     console.log('✅ Database setup complete!');
