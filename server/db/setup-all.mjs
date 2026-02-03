@@ -1026,71 +1026,84 @@ async function setup() {
     // COMPONENT LIBRARY SYSTEM
     // ================================
     console.log('');
-    console.log('📦 Creating Component Library tables...\n');
+    console.log('📦 Creating Component Library tables...');
+    console.log('[DEBUG] Starting Component Library table creation...');
 
     // Component Library table
-    const hasComponentLibrary = await sql`
-      SELECT table_name FROM information_schema.tables
-      WHERE table_name = 'component_library'
-    `;
-    if (hasComponentLibrary.length === 0) {
-      await sql`
-        CREATE TABLE component_library (
-          id SERIAL PRIMARY KEY,
-          workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-          slot_number INTEGER NOT NULL CHECK (slot_number BETWEEN 1 AND 3),
-          slot_name VARCHAR(100),
-          component_type VARCHAR(50) NOT NULL,
-          component_ref VARCHAR(200) NOT NULL,
-          tag VARCHAR(10),
-          name VARCHAR(200) NOT NULL,
-          source_page_id INTEGER,
-          source_page_url TEXT,
-          sort_order INTEGER DEFAULT 0,
-          is_active BOOLEAN DEFAULT true,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
+    try {
+      const hasComponentLibrary = await sql`
+        SELECT table_name FROM information_schema.tables
+        WHERE table_name = 'component_library'
       `;
-      await sql`CREATE INDEX idx_component_library_lookup ON component_library(workflow_id, slot_number, tag) WHERE is_active = true`;
-      await sql`CREATE INDEX idx_component_library_workflow ON component_library(workflow_id)`;
-      console.log('  ✓ Created component_library table');
-    } else {
-      console.log('  - component_library table already exists');
+      if (hasComponentLibrary.length === 0) {
+        await sql`
+          CREATE TABLE component_library (
+            id SERIAL PRIMARY KEY,
+            workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+            slot_number INTEGER NOT NULL CHECK (slot_number BETWEEN 1 AND 3),
+            slot_name VARCHAR(100),
+            component_type VARCHAR(50) NOT NULL,
+            component_ref VARCHAR(200) NOT NULL,
+            tag VARCHAR(10),
+            name VARCHAR(200) NOT NULL,
+            source_page_id INTEGER,
+            source_page_url TEXT,
+            sort_order INTEGER DEFAULT 0,
+            is_active BOOLEAN DEFAULT true,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `;
+        await sql`CREATE INDEX IF NOT EXISTS idx_component_library_lookup ON component_library(workflow_id, slot_number, tag) WHERE is_active = true`;
+        await sql`CREATE INDEX IF NOT EXISTS idx_component_library_workflow ON component_library(workflow_id)`;
+        console.log('  ✓ Created component_library table');
+      } else {
+        console.log('  - component_library table already exists');
+      }
+    } catch (err) {
+      console.error('  ✗ Error with component_library table:', err.message);
     }
 
     // Component Rotation State table
-    const hasRotationState = await sql`
-      SELECT table_name FROM information_schema.tables
-      WHERE table_name = 'component_rotation_state'
-    `;
-    if (hasRotationState.length === 0) {
-      await sql`
-        CREATE TABLE component_rotation_state (
-          id SERIAL PRIMARY KEY,
-          workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-          slot_number INTEGER NOT NULL,
-          tag VARCHAR(10),
-          last_used_component_id INTEGER REFERENCES component_library(id) ON DELETE SET NULL,
-          last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(workflow_id, slot_number, tag)
-        )
+    try {
+      const hasRotationState = await sql`
+        SELECT table_name FROM information_schema.tables
+        WHERE table_name = 'component_rotation_state'
       `;
-      console.log('  ✓ Created component_rotation_state table');
-    } else {
-      console.log('  - component_rotation_state table already exists');
+      if (hasRotationState.length === 0) {
+        await sql`
+          CREATE TABLE component_rotation_state (
+            id SERIAL PRIMARY KEY,
+            workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+            slot_number INTEGER NOT NULL,
+            tag VARCHAR(10),
+            last_used_component_id INTEGER REFERENCES component_library(id) ON DELETE SET NULL,
+            last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(workflow_id, slot_number, tag)
+          )
+        `;
+        console.log('  ✓ Created component_rotation_state table');
+      } else {
+        console.log('  - component_rotation_state table already exists');
+      }
+    } catch (err) {
+      console.error('  ✗ Error with component_rotation_state table:', err.message);
     }
 
     // Add component_settings column to workflows
-    const hasComponentSettings = await sql`
-      SELECT column_name FROM information_schema.columns
-      WHERE table_name = 'workflows' AND column_name = 'component_settings'
-    `;
-    if (hasComponentSettings.length === 0) {
-      await sql`ALTER TABLE workflows ADD COLUMN component_settings JSONB DEFAULT '{"enabled": false, "slots": [{"number": 1, "name": "Hero/Slider", "position": "top", "rotation": "sequential"}, {"number": 2, "name": "Stats Bar", "position": "middle", "rotation": "sequential"}, {"number": 3, "name": "Benefits", "position": "bottom", "rotation": "sequential"}]}'`;
-      console.log('  ✓ Added component_settings column to workflows');
-    } else {
-      console.log('  - component_settings column already exists');
+    try {
+      const hasComponentSettings = await sql`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'workflows' AND column_name = 'component_settings'
+      `;
+      if (hasComponentSettings.length === 0) {
+        await sql`ALTER TABLE workflows ADD COLUMN IF NOT EXISTS component_settings JSONB DEFAULT '{"enabled": false, "slots": [{"number": 1, "name": "Hero/Slider", "position": "top", "rotation": "sequential"}, {"number": 2, "name": "Stats Bar", "position": "middle", "rotation": "sequential"}, {"number": 3, "name": "Benefits", "position": "bottom", "rotation": "sequential"}]}'`;
+        console.log('  ✓ Added component_settings column to workflows');
+      } else {
+        console.log('  - component_settings column already exists');
+      }
+    } catch (err) {
+      console.error('  ✗ Error with component_settings column:', err.message);
     }
 
     console.log('');
