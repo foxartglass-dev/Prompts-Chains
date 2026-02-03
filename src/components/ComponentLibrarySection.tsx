@@ -53,6 +53,57 @@ interface ComponentLibraryProps {
   websiteUrl?: string;
 }
 
+// Sub-component for detected component row with slot/tag selection
+// Must be defined BEFORE ComponentLibrarySection to avoid hoisting issues
+const DetectedComponentRow: React.FC<{
+  detected: DetectedComponent;
+  label: string;
+  tags: Tag[];
+  onSave: (detected: DetectedComponent, slot: number, tag: string, name: string) => void;
+}> = ({ detected, label, tags, onSave }) => {
+  const [slot, setSlot] = useState(1);
+  const [tag, setTag] = useState('');
+  const [name, setName] = useState(detected.alias || detected.templateId || '');
+
+  return (
+    <div className="flex items-center gap-2 bg-slate-900 rounded p-2">
+      <span className="text-xs text-gray-300 flex-shrink-0">{label}</span>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Name"
+        className="flex-1 bg-slate-800 border border-gray-600 rounded px-2 py-1 text-xs text-white"
+      />
+      <select
+        value={slot}
+        onChange={(e) => setSlot(parseInt(e.target.value))}
+        className="bg-slate-800 border border-gray-600 rounded px-1 py-1 text-xs text-white"
+      >
+        <option value={1}>Slot 1</option>
+        <option value={2}>Slot 2</option>
+        <option value={3}>Slot 3</option>
+      </select>
+      <select
+        value={tag}
+        onChange={(e) => setTag(e.target.value)}
+        className="bg-slate-800 border border-gray-600 rounded px-1 py-1 text-xs text-white"
+      >
+        <option value="">Global</option>
+        {tags.map(t => (
+          <option key={t.id} value={t.name}>{t.name}</option>
+        ))}
+      </select>
+      <button
+        onClick={() => onSave(detected, slot, tag, name)}
+        className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-500"
+      >
+        Add
+      </button>
+    </div>
+  );
+};
+
 const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
   workflowId,
   tags = [],
@@ -576,56 +627,6 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
           )}
         </div>
       )}
-    </div>
-  );
-};
-
-// Sub-component for detected component row with slot/tag selection
-const DetectedComponentRow: React.FC<{
-  detected: DetectedComponent;
-  label: string;
-  tags: Tag[];
-  onSave: (detected: DetectedComponent, slot: number, tag: string, name: string) => void;
-}> = ({ detected, label, tags, onSave }) => {
-  const [slot, setSlot] = useState(1);
-  const [tag, setTag] = useState('');
-  const [name, setName] = useState(detected.alias || detected.templateId || '');
-
-  return (
-    <div className="flex items-center gap-2 bg-slate-900 rounded p-2">
-      <span className="text-xs text-gray-300 flex-shrink-0">{label}</span>
-      <input
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Name"
-        className="flex-1 bg-slate-800 border border-gray-600 rounded px-2 py-1 text-xs text-white"
-      />
-      <select
-        value={slot}
-        onChange={(e) => setSlot(parseInt(e.target.value))}
-        className="bg-slate-800 border border-gray-600 rounded px-1 py-1 text-xs text-white"
-      >
-        <option value={1}>Slot 1</option>
-        <option value={2}>Slot 2</option>
-        <option value={3}>Slot 3</option>
-      </select>
-      <select
-        value={tag}
-        onChange={(e) => setTag(e.target.value)}
-        className="bg-slate-800 border border-gray-600 rounded px-1 py-1 text-xs text-white"
-      >
-        <option value="">Global</option>
-        {tags.map(t => (
-          <option key={t.id} value={t.name}>{t.name}</option>
-        ))}
-      </select>
-      <button
-        onClick={() => onSave(detected, slot, tag, name)}
-        className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-500"
-      >
-        Add
-      </button>
     </div>
   );
 };
