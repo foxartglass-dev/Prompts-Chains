@@ -478,8 +478,33 @@ router.post('/publish', async (req, res) => {
     // Step 0: Clean content (remove markdown #, stray dashes, fix H2 titles)
     const cleanedContent = cleanContent(content);
 
-    // Step 1: Chunk the content first
-    let chunked = chunkContent(cleanedContent, { maxWords });
+    // Step 0.5: Fetch workflow template (styles AND structure) - needed BEFORE chunking
+    // so the chunker can apply structure rules (FAQ formatting, heading simplification, etc.)
+    let templateStyles = null;
+    if (workflowId && isDatabaseEnabled()) {
+      try {
+        const [styleRecord] = await sql`
+          SELECT extracted_styles
+          FROM workflow_elementor_styles
+          WHERE workflow_id = ${workflowId}
+            AND status = 'active'
+          LIMIT 1
+        `;
+        if (styleRecord?.extracted_styles) {
+          templateStyles = styleRecord.extracted_styles;
+          console.log(`[Elementor Publish] Using template (styles + structure) from workflow ${workflowId}`);
+        }
+      } catch (styleErr) {
+        console.error('[Elementor Publish] Failed to fetch template:', styleErr.message);
+        // Continue without template - will use defaults
+      }
+    }
+
+    // Step 1: Chunk the content first - pass template structure for formatting rules
+    let chunked = chunkContent(cleanedContent, {
+      maxWords,
+      templateStructure: templateStyles?.structure || null
+    });
     let imagesGenerated = 0;
     let imagesFromBank = 0;
     let estimatedCost = null;
@@ -1711,6 +1736,8 @@ router.post('/publish', async (req, res) => {
     // Strip any tag identifier like (H), (J) from the title
     const pageTitle = stripTagFromKeyword(title) || extractTitle(cleanedContent) || 'Untitled Page';
 
+    // Note: templateStyles already fetched in Step 0.5 (before chunking) so structure rules can be applied
+
     // Step 5: Build Elementor structure
     const elementorData = buildElementorPage(chunked, {
       title: pageTitle,
@@ -1718,7 +1745,8 @@ router.post('/publish', async (req, res) => {
       ctaUrl,
       includeStatsBar,
       statsBarPosition,
-      heroImageSide // Pass hero side for alternating layout
+      heroImageSide, // Pass hero side for alternating layout
+      templateStyles // Pass template styles from database
     });
 
     // Step 6: Get Elementor meta fields
@@ -2194,8 +2222,32 @@ router.post('/publish-article/:id', requireDb, async (req, res) => {
       return res.status(400).json({ error: 'Article has no content' });
     }
 
-    // Chunk the content
-    const chunked = chunkContent(content, { maxWords });
+    // Fetch workflow template (styles + structure) BEFORE chunking
+    // so the chunker can apply structure rules (FAQ formatting, etc.)
+    let templateStyles = null;
+    if (article.workflow_id) {
+      try {
+        const [styleRecord] = await sql`
+          SELECT extracted_styles
+          FROM workflow_elementor_styles
+          WHERE workflow_id = ${article.workflow_id}
+            AND status = 'active'
+          LIMIT 1
+        `;
+        if (styleRecord?.extracted_styles) {
+          templateStyles = styleRecord.extracted_styles;
+          console.log(`[Push Article] Using template (styles + structure) from workflow ${article.workflow_id}`);
+        }
+      } catch (styleErr) {
+        console.error('[Push Article] Failed to fetch template:', styleErr.message);
+      }
+    }
+
+    // Chunk the content - pass template structure for formatting rules
+    const chunked = chunkContent(content, {
+      maxWords,
+      templateStructure: templateStyles?.structure || null
+    });
 
     // Use keyword as title, or first meta title
     // Strip any tag identifier like (H), (J) from the keyword
@@ -2208,7 +2260,8 @@ router.post('/publish-article/:id', requireDb, async (req, res) => {
       title: pageTitle,
       ctaText,
       ctaUrl,
-      includeStatsBar
+      includeStatsBar,
+      templateStyles
     });
 
     // Get Elementor meta fields
@@ -2421,14 +2474,38 @@ router.post('/batch-publish', requireDb, async (req, res) => {
           continue;
         }
 
-        // Chunk and build
-        const chunked = chunkContent(content, { maxWords });
+        // Fetch workflow template (styles + structure) BEFORE chunking
+        let templateStyles = null;
+        if (article.workflow_id) {
+          try {
+            const [styleRecord] = await sql`
+              SELECT extracted_styles
+              FROM workflow_elementor_styles
+              WHERE workflow_id = ${article.workflow_id}
+                AND status = 'active'
+              LIMIT 1
+            `;
+            if (styleRecord?.extracted_styles) {
+              templateStyles = styleRecord.extracted_styles;
+            }
+          } catch (styleErr) {
+            // Continue without template
+          }
+        }
+
+        // Chunk and build - pass template structure for formatting rules
+        const chunked = chunkContent(content, {
+          maxWords,
+          templateStructure: templateStyles?.structure || null
+        });
         // Strip any tag identifier like (H), (J) from the keyword
         const pageTitle = stripTagFromKeyword(article.keyword) || 'Untitled';
+
         const elementorData = buildElementorPage(chunked, {
           title: pageTitle,
           ctaText,
-          ctaUrl
+          ctaUrl,
+          templateStyles
         });
         const elementorMeta = getElementorMetaFields(elementorData);
 
