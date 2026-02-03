@@ -460,6 +460,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       let wpPostId = selectedArticle.wp_post_id;
       if (!wpPostId) {
         console.log('[Push All] Step 2: Creating WordPress page...');
+        console.log('[Push All] DEBUG - workflow_id being sent:', selectedArticle.workflow_id, '| article id:', selectedArticle.id);
         const articleRes = await fetch('/api/elementor/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

@@ -1742,21 +1742,34 @@ router.post('/publish', async (req, res) => {
     // Step 4.5: Select components from Component Library (if enabled)
     // Extract tag from keyword for component selection
     let articleComponents = null;
+    console.log('[ComponentLibrary] ========== COMPONENT INJECTION CHECK ==========');
+    console.log('[ComponentLibrary] workflowId received:', workflowId, '| type:', typeof workflowId);
+    console.log('[ComponentLibrary] isDatabaseEnabled():', isDatabaseEnabled());
+    console.log('[ComponentLibrary] articleOnly mode:', articleOnly);
+
+    if (!workflowId) {
+      console.log('[ComponentLibrary] ❌ SKIPPED - No workflowId provided in request');
+    } else if (!isDatabaseEnabled()) {
+      console.log('[ComponentLibrary] ❌ SKIPPED - Database not enabled');
+    }
+
     if (workflowId && isDatabaseEnabled()) {
       try {
         const tagMatch = keyword?.match(/\(([A-Z])\)/i);
         const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
 
+        console.log('[ComponentLibrary] Calling selectComponentsForArticle with workflowId:', parseInt(workflowId), 'articleTag:', articleTag);
         const componentSelection = await selectComponentsForArticle(parseInt(workflowId), articleTag);
+        console.log('[ComponentLibrary] Selection result:', JSON.stringify(componentSelection, null, 2));
+
         if (componentSelection.enabled) {
           articleComponents = componentSelection;
-          console.log('[Elementor Publish] Component Library enabled, selected components:', {
-            slot1: componentSelection.slot1?.name || 'none',
-            slot2: componentSelection.slot2?.name || 'none',
-            slot3: componentSelection.slot3?.name || 'none'
-          });
+          console.log('[ComponentLibrary] ✅ ENABLED - Components selected:');
+          console.log('[ComponentLibrary]   Slot 1 (top):', componentSelection.slot1?.name || 'none', componentSelection.slot1 ? `[${componentSelection.slot1.type}: ${componentSelection.slot1.ref}]` : '');
+          console.log('[ComponentLibrary]   Slot 2 (middle):', componentSelection.slot2?.name || 'none', componentSelection.slot2 ? `[${componentSelection.slot2.type}: ${componentSelection.slot2.ref}]` : '');
+          console.log('[ComponentLibrary]   Slot 3 (bottom):', componentSelection.slot3?.name || 'none', componentSelection.slot3 ? `[${componentSelection.slot3.type}: ${componentSelection.slot3.ref}]` : '');
         } else {
-          console.log('[Elementor Publish] Component Library not enabled for this workflow');
+          console.log('[ComponentLibrary] ❌ DISABLED - Component Library not enabled for workflow', workflowId);
         }
       } catch (err) {
         console.error('[Elementor Publish] Component Library selection error:', err.message);
