@@ -4399,7 +4399,7 @@ const App: React.FC = () => {
                         <ComponentLibrarySection
                             workflowId={currentWorkflowId}
                             tags={tags}
-                            websiteUrl={currentProject.state.wpCredentials?.url}
+                            websiteUrl={currentProject?.state?.wpCredentials?.url}
                         />
                     )}
 
