@@ -103,12 +103,16 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
   try {
     // Get settings first to check if enabled
     const settings = await getComponentSettings(workflowId);
+    console.log('[ComponentLibrary] Settings for workflow', workflowId, '- enabled:', settings.enabled);
+
     if (!settings.enabled) {
+      console.log('[ComponentLibrary] DISABLED - returning empty result');
       return { enabled: false, slot1: null, slot2: null, slot3: null };
     }
 
     // Get all active components for this workflow
     const allComponents = await getComponentsForWorkflow(workflowId);
+    console.log('[ComponentLibrary] Found', allComponents.length, 'active components');
 
     const result = {
       enabled: true,
@@ -166,11 +170,13 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
         name: selectedComponent.name,
         id: selectedComponent.id
       };
+      console.log(`[ComponentLibrary] Slot ${slotNumber} -> ${selectedComponent.name} (${selectedComponent.component_type}: ${selectedComponent.component_ref})`);
 
       // Update rotation state
       await updateRotationState(workflowId, slotNumber, articleTag, selectedComponent.id);
     }
 
+    console.log('[ComponentLibrary] Final selection result:', JSON.stringify(result));
     return result;
   } catch (err) {
     // Any error - return disabled state to not break publish flow
