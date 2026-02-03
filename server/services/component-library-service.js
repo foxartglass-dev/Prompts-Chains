@@ -103,73 +103,73 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
   try {
     // Get settings first to check if enabled
     const settings = await getComponentSettings(workflowId);
-  if (!settings.enabled) {
-    return { enabled: false, slot1: null, slot2: null, slot3: null };
-  }
-
-  // Get all active components for this workflow
-  const allComponents = await getComponentsForWorkflow(workflowId);
-
-  const result = {
-    enabled: true,
-    slot1: null,
-    slot2: null,
-    slot3: null
-  };
-
-  // Process each slot
-  for (let slotNumber = 1; slotNumber <= 3; slotNumber++) {
-    const slotConfig = settings.slots.find(s => s.number === slotNumber);
-    const rotationMode = slotConfig?.rotation || 'sequential';
-
-    // Get components for this slot
-    const slotComponents = allComponents.filter(c => c.slot_number === slotNumber);
-
-    // First try to find components matching the article tag
-    let matchingComponents = articleTag
-      ? slotComponents.filter(c => c.tag === articleTag)
-      : [];
-
-    // If no tag-specific components, fall back to Global (null tag)
-    if (matchingComponents.length === 0) {
-      matchingComponents = slotComponents.filter(c => c.tag === null || c.tag === '');
+    if (!settings.enabled) {
+      return { enabled: false, slot1: null, slot2: null, slot3: null };
     }
 
-    // If still no components, skip this slot
-    if (matchingComponents.length === 0) {
-      continue;
-    }
+    // Get all active components for this workflow
+    const allComponents = await getComponentsForWorkflow(workflowId);
 
-    // Select component based on rotation mode
-    let selectedComponent;
-    if (matchingComponents.length === 1) {
-      selectedComponent = matchingComponents[0];
-    } else if (rotationMode === 'random') {
-      // Random selection
-      const randomIndex = Math.floor(Math.random() * matchingComponents.length);
-      selectedComponent = matchingComponents[randomIndex];
-    } else {
-      // Sequential rotation - get next in order
-      selectedComponent = await getNextInRotation(
-        workflowId,
-        slotNumber,
-        articleTag,
-        matchingComponents
-      );
-    }
-
-    // Store the result
-    const slotKey = `slot${slotNumber}`;
-    result[slotKey] = {
-      type: selectedComponent.component_type,
-      ref: selectedComponent.component_ref,
-      name: selectedComponent.name,
-      id: selectedComponent.id
+    const result = {
+      enabled: true,
+      slot1: null,
+      slot2: null,
+      slot3: null
     };
 
-    // Update rotation state
-    await updateRotationState(workflowId, slotNumber, articleTag, selectedComponent.id);
-  }
+    // Process each slot
+    for (let slotNumber = 1; slotNumber <= 3; slotNumber++) {
+      const slotConfig = settings.slots.find(s => s.number === slotNumber);
+      const rotationMode = slotConfig?.rotation || 'sequential';
+
+      // Get components for this slot
+      const slotComponents = allComponents.filter(c => c.slot_number === slotNumber);
+
+      // First try to find components matching the article tag
+      let matchingComponents = articleTag
+        ? slotComponents.filter(c => c.tag === articleTag)
+        : [];
+
+      // If no tag-specific components, fall back to Global (null tag)
+      if (matchingComponents.length === 0) {
+        matchingComponents = slotComponents.filter(c => c.tag === null || c.tag === '');
+      }
+
+      // If still no components, skip this slot
+      if (matchingComponents.length === 0) {
+        continue;
+      }
+
+      // Select component based on rotation mode
+      let selectedComponent;
+      if (matchingComponents.length === 1) {
+        selectedComponent = matchingComponents[0];
+      } else if (rotationMode === 'random') {
+        // Random selection
+        const randomIndex = Math.floor(Math.random() * matchingComponents.length);
+        selectedComponent = matchingComponents[randomIndex];
+      } else {
+        // Sequential rotation - get next in order
+        selectedComponent = await getNextInRotation(
+          workflowId,
+          slotNumber,
+          articleTag,
+          matchingComponents
+        );
+      }
+
+      // Store the result
+      const slotKey = `slot${slotNumber}`;
+      result[slotKey] = {
+        type: selectedComponent.component_type,
+        ref: selectedComponent.component_ref,
+        name: selectedComponent.name,
+        id: selectedComponent.id
+      };
+
+      // Update rotation state
+      await updateRotationState(workflowId, slotNumber, articleTag, selectedComponent.id);
+    }
 
     return result;
   } catch (err) {
