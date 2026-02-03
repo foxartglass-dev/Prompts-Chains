@@ -103,12 +103,16 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
   try {
     // Get settings first to check if enabled
     const settings = await getComponentSettings(workflowId);
+    console.log('[ComponentLibrary] Settings for workflow', workflowId, '- enabled:', settings.enabled);
+
     if (!settings.enabled) {
+      console.log('[ComponentLibrary] DISABLED - returning empty result');
       return { enabled: false, slot1: null, slot2: null, slot3: null };
     }
 
     // Get all active components for this workflow
     const allComponents = await getComponentsForWorkflow(workflowId);
+    console.log('[ComponentLibrary] Found', allComponents.length, 'active components');
 
     const result = {
       enabled: true,
@@ -166,11 +170,13 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
         name: selectedComponent.name,
         id: selectedComponent.id
       };
+      console.log(`[ComponentLibrary] Slot ${slotNumber} -> ${selectedComponent.name} (${selectedComponent.component_type}: ${selectedComponent.component_ref})`);
 
       // Update rotation state
       await updateRotationState(workflowId, slotNumber, articleTag, selectedComponent.id);
     }
 
+    console.log('[ComponentLibrary] Final selection result:', JSON.stringify(result));
     return result;
   } catch (err) {
     // Any error - return disabled state to not break publish flow
@@ -319,20 +325,59 @@ export function detectComponentsFromPageJson(elementorDataJson) {
   const sliders = [];
   const templates = [];
 
+  const widgetTypesFound = new Set();
+
   function traverse(el, depth = 0) {
     if (!el) return;
 
-    // Check for Slider Revolution shortcode
+    // Log widget types for debugging
+    if (el.widgetType) {
+      widgetTypesFound.add(el.widgetType);
+    }
+
+    // Check for Slider Revolution shortcode (multiple formats)
     if (el.widgetType === 'shortcode' && el.settings?.shortcode) {
-      const match = el.settings.shortcode.match(/\[rev_slider\s+alias="([^"]+)"\]/);
+      const shortcode = el.settings.shortcode;
+      // Match alias with single or double quotes, anywhere in shortcode
+      const match = shortcode.match(/\[rev_slider[^\]]*alias=["']([^"']+)["']/i) ||
+                    shortcode.match(/\[rev_slider[^\]]*alias=([^\s\]]+)/i);
       if (match) {
         sliders.push({
           type: 'slider_revolution',
           alias: match[1],
-          fullShortcode: el.settings.shortcode,
+          fullShortcode: shortcode,
           elementorId: el.id,
           depth
         });
+      }
+    }
+
+    // Check for Slider Revolution dedicated widget (many possible widget type names)
+    const revSliderWidgetTypes = [
+      'rev-slider', 'revslider', 'slider_revolution', 'sr6_slider', 'sr7_slider',
+      'sr-slider', 'slider-revolution', 'rev_slider', 'revolution-slider',
+      'themepunch-revslider', 'tp-revslider'
+    ];
+
+    // Also catch any widget type containing 'rev' and 'slider'
+    const isRevSliderWidget = revSliderWidgetTypes.includes(el.widgetType) ||
+      (el.widgetType && el.widgetType.toLowerCase().includes('rev') && el.widgetType.toLowerCase().includes('slider'));
+
+    if (isRevSliderWidget) {
+      // Try multiple possible setting names for the alias
+      const alias = el.settings?.alias || el.settings?.slider_alias || el.settings?.revslider_alias ||
+                    el.settings?.slider || el.settings?.rev_slider || el.settings?.selected_slider ||
+                    el.settings?.slider_id;
+      if (alias) {
+        sliders.push({
+          type: 'slider_revolution',
+          alias: String(alias),
+          elementorId: el.id,
+          depth
+        });
+      } else {
+        // Still log it even without alias so we know we found one
+        console.log('[ComponentLibrary] Found Rev Slider widget but no alias. Settings:', JSON.stringify(el.settings).substring(0, 500));
       }
     }
 
@@ -358,6 +403,10 @@ export function detectComponentsFromPageJson(elementorDataJson) {
   } else {
     traverse(elements);
   }
+
+  // Log what we found for debugging
+  console.log('[ComponentLibrary] Widget types found on page:', Array.from(widgetTypesFound));
+  console.log('[ComponentLibrary] Detected sliders:', sliders.length, 'templates:', templates.length);
 
   return { sliders, templates };
 }

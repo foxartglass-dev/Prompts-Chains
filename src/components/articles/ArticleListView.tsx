@@ -385,6 +385,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           content: editContent || selectedArticle.final_content,
           status: 'draft',
           articleId: selectedArticle.id,
+          workflowId: selectedArticle.workflow_id,
           isManualPush: true
         })
       });
@@ -470,6 +471,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             content: editContent || selectedArticle.final_content,
             status: 'draft',
             articleId: selectedArticle.id,
+            workflowId: selectedArticle.workflow_id,
             isManualPush: true
           })
         });
@@ -767,6 +769,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           content: editContent || selectedArticle.final_content,
           status: 'draft',
           articleId: selectedArticle.id,
+          workflowId: selectedArticle.workflow_id,
           isManualPush: true,
           // ARTICLE ONLY MODE - skip ALL image processing
           articleOnly: true

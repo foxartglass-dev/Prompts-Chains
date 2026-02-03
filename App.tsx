@@ -4398,7 +4398,7 @@ const App: React.FC = () => {
                         </svg>,
                         <ComponentLibrarySection
                             workflowId={currentWorkflowId}
-                            tags={tags}
+                            tags={currentProject?.state?.tags || []}
                             websiteUrl={currentProject?.state?.wpCredentials?.url}
                         />
                     )}
