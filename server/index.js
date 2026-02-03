@@ -39,6 +39,7 @@ import dripFeedRouter from './routes/drip-feed.js';
 import testPresetsRouter from './routes/test-presets.js';
 import reverseImageRouter from './routes/reverse-image.js';
 import elementorStylesRouter from './routes/elementor-styles.js';
+import componentLibraryRouter from './routes/component-library.js';
 import { initDripFeedScheduler } from './services/drip-feed-scheduler.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
@@ -214,6 +215,7 @@ app.use('/api/logs', logsRouter);
 app.use('/api/drip-feed', dripFeedRouter);
 app.use('/api/test-presets', testPresetsRouter);
 app.use('/api/reverse-image', reverseImageRouter);
+app.use('/api/component-library', componentLibraryRouter);
 app.use('/api', elementorStylesRouter);  // Routes like /api/workflows/:id/elementor-style
 
 // Database status endpoint

@@ -400,6 +400,65 @@ function buildButtonWidget(text, url, options = {}) {
 }
 
 /**
+ * Build a Slider Revolution widget (shortcode)
+ * Used for hero sliders captured from existing pages
+ * @param {string} alias - The slider alias (e.g., "residential-1-1")
+ * @returns {Object} Elementor shortcode widget
+ */
+function buildSliderRevolutionWidget(alias) {
+  return {
+    id: generateElementId(),
+    elType: 'widget',
+    widgetType: 'shortcode',
+    isInner: false,
+    settings: {
+      shortcode: `[rev_slider alias="${alias}"]`
+    },
+    elements: []
+  };
+}
+
+/**
+ * Build an Elementor Template widget
+ * Used for stats bars, benefit sections, etc. captured from Elementor template library
+ * @param {string|number} templateId - The Elementor template ID
+ * @returns {Object} Elementor template widget
+ */
+function buildElementorTemplateWidget(templateId) {
+  return {
+    id: generateElementId(),
+    elType: 'widget',
+    widgetType: 'template',
+    isInner: false,
+    settings: {
+      template_id: templateId.toString()
+    },
+    elements: []
+  };
+}
+
+/**
+ * Build a component widget based on type and reference
+ * Wrapper function for component library injection
+ * @param {Object} component - Component with type and ref
+ * @returns {Object|null} Elementor widget or null if invalid
+ */
+function buildComponentWidget(component) {
+  if (!component || !component.type || !component.ref) {
+    return null;
+  }
+
+  if (component.type === 'slider_revolution') {
+    return buildSliderRevolutionWidget(component.ref);
+  } else if (component.type === 'elementor_template') {
+    return buildElementorTemplateWidget(component.ref);
+  }
+
+  console.warn(`[ElementorBuilder] Unknown component type: ${component.type}`);
+  return null;
+}
+
+/**
  * Build a container with specified direction
  * @param {Array} elements - Child elements
  * @param {Object} options - Container options
@@ -730,7 +789,8 @@ function buildElementorPage(chunkedContent, options = {}) {
     includeStatsBar = false,
     statsBarPosition = 'middle', // 'middle' or 'bottom'
     heroImageSide = 'right', // 'left' or 'right' - alternates per article
-    templateStyles = null // Styles from workflow_elementor_styles table (includes structure)
+    templateStyles = null, // Styles from workflow_elementor_styles table (includes structure)
+    components = null // Component library injection { slot1, slot2, slot3 }
   } = options;
 
   // Set current styles context - merges template with defaults
@@ -743,7 +803,9 @@ function buildElementorPage(chunkedContent, options = {}) {
   const effectiveHeroImageSide = structure?.hero?.imageSide || heroImageSide;
 
   // Determine stats bar settings from template
-  const showStatsBar = structure?.statsBar?.detected || includeStatsBar;
+  // Component library slot2 takes precedence over legacy stats bar
+  const hasSlot2Component = components?.slot2 != null;
+  const showStatsBar = !hasSlot2Component && (structure?.statsBar?.detected || includeStatsBar);
   const effectiveStatsBarPosition = structure?.statsBar?.position || statsBarPosition;
   const templateStats = structure?.statsBar?.stats || [];
 
@@ -752,6 +814,16 @@ function buildElementorPage(chunkedContent, options = {}) {
   const ctaInHero = structure?.sections?.ctaInHero !== false; // Default true
 
   const pageElements = [];
+
+  // === SLOT 1: TOP (before hero) ===
+  // Inject component library slot 1 (e.g., Slider Revolution hero slider)
+  if (components?.slot1) {
+    const slot1Widget = buildComponentWidget(components.slot1);
+    if (slot1Widget) {
+      pageElements.push(slot1Widget);
+      console.log(`[ElementorBuilder] Injected slot1 component: ${components.slot1.name}`);
+    }
+  }
 
   // 1. Hero section (intro) - image on effectiveHeroImageSide
   // Note: title is used for WordPress page title, NOT displayed as H1
@@ -769,11 +841,21 @@ function buildElementorPage(chunkedContent, options = {}) {
   const middleIndex = Math.floor(chunks.length / 2);
 
   chunks.forEach((chunk, index) => {
-    // Add stats bar in middle if configured
-    if (showStatsBar && effectiveStatsBarPosition === 'middle' && index === middleIndex) {
-      pageElements.push(buildStatsBarPlaceholder({
-        stats: templateStats.length > 0 ? templateStats : undefined
-      }));
+    // === SLOT 2: MIDDLE (between content chunks) ===
+    if (index === middleIndex) {
+      // Component library slot2 takes precedence
+      if (components?.slot2) {
+        const slot2Widget = buildComponentWidget(components.slot2);
+        if (slot2Widget) {
+          pageElements.push(slot2Widget);
+          console.log(`[ElementorBuilder] Injected slot2 component: ${components.slot2.name}`);
+        }
+      } else if (showStatsBar && effectiveStatsBarPosition === 'middle') {
+        // Fallback to legacy stats bar
+        pageElements.push(buildStatsBarPlaceholder({
+          stats: templateStats.length > 0 ? templateStats : undefined
+        }));
+      }
     }
 
     // Show CTA after section if template says to, or if it's a FAQ section (never show CTA after FAQ)
@@ -786,8 +868,16 @@ function buildElementorPage(chunkedContent, options = {}) {
     }));
   });
 
-  // 3. Stats bar at bottom if configured
-  if (showStatsBar && effectiveStatsBarPosition === 'bottom') {
+  // === SLOT 3: BOTTOM (after all content) ===
+  // Component library slot3 takes precedence
+  if (components?.slot3) {
+    const slot3Widget = buildComponentWidget(components.slot3);
+    if (slot3Widget) {
+      pageElements.push(slot3Widget);
+      console.log(`[ElementorBuilder] Injected slot3 component: ${components.slot3.name}`);
+    }
+  } else if (showStatsBar && effectiveStatsBarPosition === 'bottom') {
+    // Fallback to legacy stats bar at bottom
     pageElements.push(buildStatsBarPlaceholder({
       stats: templateStats.length > 0 ? templateStats : undefined
     }));
@@ -847,7 +937,10 @@ export {
   buildButtonWidget,
   buildContainer,
   generateElementId,
-  contentToHtml
+  contentToHtml,
+  buildSliderRevolutionWidget,
+  buildElementorTemplateWidget,
+  buildComponentWidget
 };
 
 export default buildElementorPage;

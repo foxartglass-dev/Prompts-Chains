@@ -63,6 +63,7 @@ import sessionLogger from '../services/session-logger.js';
 import { addBatchToDraftBank } from '../services/draft-image-bank.js';
 import githubLogger from '../services/github-logger.js';
 import { getImageBank } from '../services/image-bank.js';
+import { selectComponentsForArticle } from '../services/component-library-service.js';
 
 const router = express.Router();
 
@@ -1738,6 +1739,31 @@ router.post('/publish', async (req, res) => {
 
     // Note: templateStyles already fetched in Step 0.5 (before chunking) so structure rules can be applied
 
+    // Step 4.5: Select components from Component Library (if enabled)
+    // Extract tag from keyword for component selection
+    let articleComponents = null;
+    if (workflowId && isDatabaseEnabled()) {
+      try {
+        const tagMatch = keyword?.match(/\(([A-Z])\)/i);
+        const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+
+        const componentSelection = await selectComponentsForArticle(parseInt(workflowId), articleTag);
+        if (componentSelection.enabled) {
+          articleComponents = componentSelection;
+          console.log('[Elementor Publish] Component Library enabled, selected components:', {
+            slot1: componentSelection.slot1?.name || 'none',
+            slot2: componentSelection.slot2?.name || 'none',
+            slot3: componentSelection.slot3?.name || 'none'
+          });
+        } else {
+          console.log('[Elementor Publish] Component Library not enabled for this workflow');
+        }
+      } catch (err) {
+        console.error('[Elementor Publish] Component Library selection error:', err.message);
+        // Continue without components - don't fail the publish
+      }
+    }
+
     // Step 5: Build Elementor structure
     const elementorData = buildElementorPage(chunked, {
       title: pageTitle,
@@ -1746,7 +1772,8 @@ router.post('/publish', async (req, res) => {
       includeStatsBar,
       statsBarPosition,
       heroImageSide, // Pass hero side for alternating layout
-      templateStyles // Pass template styles from database
+      templateStyles, // Pass template styles from database
+      components: articleComponents // Pass component library selections
     });
 
     // Step 6: Get Elementor meta fields
@@ -2255,13 +2282,35 @@ router.post('/publish-article/:id', requireDb, async (req, res) => {
       (article.meta_titles && article.meta_titles[0]) ||
       'Untitled Page';
 
+    // Select components from Component Library (if enabled)
+    let articleComponents = null;
+    if (article.workflow_id && isDatabaseEnabled()) {
+      try {
+        const tagMatch = article.keyword?.match(/\(([A-Z])\)/i);
+        const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+
+        const componentSelection = await selectComponentsForArticle(article.workflow_id, articleTag);
+        if (componentSelection.enabled) {
+          articleComponents = componentSelection;
+          console.log('[Push Article] Component Library - selected:', {
+            slot1: componentSelection.slot1?.name || 'none',
+            slot2: componentSelection.slot2?.name || 'none',
+            slot3: componentSelection.slot3?.name || 'none'
+          });
+        }
+      } catch (err) {
+        console.error('[Push Article] Component selection error:', err.message);
+      }
+    }
+
     // Build Elementor structure
     const elementorData = buildElementorPage(chunked, {
       title: pageTitle,
       ctaText,
       ctaUrl,
       includeStatsBar,
-      templateStyles
+      templateStyles,
+      components: articleComponents
     });
 
     // Get Elementor meta fields
@@ -2501,11 +2550,28 @@ router.post('/batch-publish', requireDb, async (req, res) => {
         // Strip any tag identifier like (H), (J) from the keyword
         const pageTitle = stripTagFromKeyword(article.keyword) || 'Untitled';
 
+        // Select components from Component Library (if enabled)
+        let articleComponents = null;
+        if (article.workflow_id) {
+          try {
+            const tagMatch = article.keyword?.match(/\(([A-Z])\)/i);
+            const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+
+            const componentSelection = await selectComponentsForArticle(article.workflow_id, articleTag);
+            if (componentSelection.enabled) {
+              articleComponents = componentSelection;
+            }
+          } catch (err) {
+            // Continue without components
+          }
+        }
+
         const elementorData = buildElementorPage(chunked, {
           title: pageTitle,
           ctaText,
           ctaUrl,
-          templateStyles
+          templateStyles,
+          components: articleComponents
         });
         const elementorMeta = getElementorMetaFields(elementorData);
 
