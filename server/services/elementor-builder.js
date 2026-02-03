@@ -406,16 +406,34 @@ function buildButtonWidget(text, url, options = {}) {
  * @returns {Object} Elementor shortcode widget
  */
 function buildSliderRevolutionWidget(alias) {
-  return {
+  console.log('🎰 [SLIDER DEBUG] buildSliderRevolutionWidget called with alias:', alias);
+
+  // Handle case where user entered full shortcode instead of just alias
+  // e.g., "[rev_slider alias="home-1"]" or "[rev_slider alias="home-1"][/rev_slider]"
+  let shortcode;
+  if (alias && alias.includes('[rev_slider')) {
+    // Already a shortcode - extract and clean it
+    // Remove the closing tag if present
+    shortcode = alias.replace(/\[\/rev_slider\]/gi, '').trim();
+    console.log('🎰 [SLIDER DEBUG] Detected full shortcode, using as-is:', shortcode);
+  } else {
+    // Just an alias - wrap it in the shortcode
+    shortcode = `[rev_slider alias="${alias}"]`;
+    console.log('🎰 [SLIDER DEBUG] Built shortcode from alias:', shortcode);
+  }
+
+  const widget = {
     id: generateElementId(),
     elType: 'widget',
     widgetType: 'shortcode',
     isInner: false,
     settings: {
-      shortcode: `[rev_slider alias="${alias}"]`
+      shortcode: shortcode
     },
     elements: []
   };
+  console.log('🎰 [SLIDER DEBUG] Built widget:', JSON.stringify(widget, null, 2));
+  return widget;
 }
 
 /**
@@ -444,16 +462,25 @@ function buildElementorTemplateWidget(templateId) {
  * @returns {Object|null} Elementor widget or null if invalid
  */
 function buildComponentWidget(component) {
+  console.log('🔧 [buildComponentWidget] CALLED with:', JSON.stringify(component, null, 2));
+
   if (!component || !component.type || !component.ref) {
+    console.log('🔧 [buildComponentWidget] SKIPPED - missing component, type, or ref');
     return null;
   }
+
+  console.log(`🔧 [buildComponentWidget] Processing: type="${component.type}", ref="${component.ref}", name="${component.name}"`);
 
   let widget = null;
 
   if (component.type === 'slider_revolution') {
+    console.log('🔧 [buildComponentWidget] -> Matched slider_revolution, calling buildSliderRevolutionWidget');
     widget = buildSliderRevolutionWidget(component.ref);
   } else if (component.type === 'elementor_template') {
+    console.log('🔧 [buildComponentWidget] -> Matched elementor_template, calling buildElementorTemplateWidget');
     widget = buildElementorTemplateWidget(component.ref);
+  } else {
+    console.log(`🔧 [buildComponentWidget] -> NO MATCH for type: "${component.type}"`);
   }
 
   if (!widget) {
