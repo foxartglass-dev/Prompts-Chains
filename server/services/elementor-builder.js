@@ -815,6 +815,15 @@ function buildElementorPage(chunkedContent, options = {}) {
 
   const pageElements = [];
 
+  // Log component injection status
+  console.log('[ElementorBuilder] ========== BUILDING PAGE ==========');
+  console.log('[ElementorBuilder] Components received:', components ? 'YES' : 'NO');
+  if (components) {
+    console.log('[ElementorBuilder] - slot1:', components.slot1 ? `${components.slot1.name} [${components.slot1.type}]` : 'none');
+    console.log('[ElementorBuilder] - slot2:', components.slot2 ? `${components.slot2.name} [${components.slot2.type}]` : 'none');
+    console.log('[ElementorBuilder] - slot3:', components.slot3 ? `${components.slot3.name} [${components.slot3.type}]` : 'none');
+  }
+
   // === SLOT 1: TOP (before hero) ===
   // Inject component library slot 1 (e.g., Slider Revolution hero slider)
   if (components?.slot1) {
