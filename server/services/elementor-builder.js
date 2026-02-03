@@ -448,14 +448,32 @@ function buildComponentWidget(component) {
     return null;
   }
 
+  let widget = null;
+
   if (component.type === 'slider_revolution') {
-    return buildSliderRevolutionWidget(component.ref);
+    widget = buildSliderRevolutionWidget(component.ref);
   } else if (component.type === 'elementor_template') {
-    return buildElementorTemplateWidget(component.ref);
+    widget = buildElementorTemplateWidget(component.ref);
   }
 
-  console.warn(`[ElementorBuilder] Unknown component type: ${component.type}`);
-  return null;
+  if (!widget) {
+    console.warn(`[ElementorBuilder] Unknown component type: ${component.type}`);
+    return null;
+  }
+
+  // Wrap component in a full-width container to isolate styles
+  // This mimics how Elementor wraps manually-added templates
+  return {
+    id: generateElementId(),
+    elType: 'container',
+    isInner: false,
+    settings: {
+      content_width: 'full',
+      flex_direction: 'column',
+      padding: { unit: 'px', top: '0', right: '0', bottom: '0', left: '0', isLinked: false }
+    },
+    elements: [widget]
+  };
 }
 
 /**
