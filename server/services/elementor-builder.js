@@ -408,20 +408,25 @@ function buildButtonWidget(text, url, options = {}) {
 function buildSliderRevolutionWidget(alias) {
   console.log('🎰 [SLIDER DEBUG] buildSliderRevolutionWidget called with alias:', alias);
 
-  // Handle case where user entered full shortcode instead of just alias
-  // e.g., "[rev_slider alias="home-1"]" or "[rev_slider alias="home-1"][/rev_slider]"
-  let shortcode;
+  // Clean up the alias - extract from shortcode if provided as full shortcode
+  let cleanAlias = alias;
   if (alias && alias.includes('[rev_slider')) {
-    // Already a shortcode - extract and clean it
-    // Remove the closing tag if present
-    shortcode = alias.replace(/\[\/rev_slider\]/gi, '').trim();
-    console.log('🎰 [SLIDER DEBUG] Detected full shortcode, using as-is:', shortcode);
-  } else {
-    // Just an alias - wrap it in the shortcode
-    shortcode = `[rev_slider alias="${alias}"]`;
-    console.log('🎰 [SLIDER DEBUG] Built shortcode from alias:', shortcode);
+    // Extract alias from shortcode like [rev_slider alias="home-1"]
+    const match = alias.match(/alias=["']([^"']+)["']/);
+    if (match) {
+      cleanAlias = match[1];
+      console.log('🎰 [SLIDER DEBUG] Extracted alias from shortcode:', cleanAlias);
+    } else {
+      // Couldn't extract, remove brackets to get just the alias text
+      cleanAlias = alias.replace(/\[rev_slider\s*/gi, '').replace(/\[\/rev_slider\]/gi, '').replace(/alias=/gi, '').replace(/["'\]]/g, '').trim();
+      console.log('🎰 [SLIDER DEBUG] Cleaned alias (fallback):', cleanAlias);
+    }
   }
 
+  const shortcode = `[rev_slider alias="${cleanAlias}"]`;
+  console.log('🎰 [SLIDER DEBUG] Final shortcode:', shortcode);
+
+  // Use Elementor's shortcode widget to render the slider
   const widget = {
     id: generateElementId(),
     elType: 'widget',
@@ -432,6 +437,7 @@ function buildSliderRevolutionWidget(alias) {
     },
     elements: []
   };
+
   console.log('🎰 [SLIDER DEBUG] Built widget:', JSON.stringify(widget, null, 2));
   return widget;
 }
