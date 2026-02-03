@@ -319,17 +319,40 @@ export function detectComponentsFromPageJson(elementorDataJson) {
   const sliders = [];
   const templates = [];
 
+  const widgetTypesFound = new Set();
+
   function traverse(el, depth = 0) {
     if (!el) return;
 
-    // Check for Slider Revolution shortcode
+    // Log widget types for debugging
+    if (el.widgetType) {
+      widgetTypesFound.add(el.widgetType);
+    }
+
+    // Check for Slider Revolution shortcode (multiple formats)
     if (el.widgetType === 'shortcode' && el.settings?.shortcode) {
-      const match = el.settings.shortcode.match(/\[rev_slider\s+alias="([^"]+)"\]/);
+      const shortcode = el.settings.shortcode;
+      // Match alias with single or double quotes, anywhere in shortcode
+      const match = shortcode.match(/\[rev_slider[^\]]*alias=["']([^"']+)["']/i) ||
+                    shortcode.match(/\[rev_slider[^\]]*alias=([^\s\]]+)/i);
       if (match) {
         sliders.push({
           type: 'slider_revolution',
           alias: match[1],
-          fullShortcode: el.settings.shortcode,
+          fullShortcode: shortcode,
+          elementorId: el.id,
+          depth
+        });
+      }
+    }
+
+    // Also check for revolution slider in different widget types
+    if (el.widgetType === 'rev-slider' || el.widgetType === 'revslider' || el.widgetType === 'slider_revolution') {
+      const alias = el.settings?.alias || el.settings?.slider_alias || el.settings?.revslider_alias;
+      if (alias) {
+        sliders.push({
+          type: 'slider_revolution',
+          alias: alias,
           elementorId: el.id,
           depth
         });
@@ -358,6 +381,10 @@ export function detectComponentsFromPageJson(elementorDataJson) {
   } else {
     traverse(elements);
   }
+
+  // Log what we found for debugging
+  console.log('[ComponentLibrary] Widget types found on page:', Array.from(widgetTypesFound));
+  console.log('[ComponentLibrary] Detected sliders:', sliders.length, 'templates:', templates.length);
 
   return { sliders, templates };
 }
