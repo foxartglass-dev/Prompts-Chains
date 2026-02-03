@@ -16,13 +16,18 @@ export async function getComponentsForWorkflow(workflowId) {
     return [];
   }
 
-  const components = await sql`
-    SELECT * FROM component_library
-    WHERE workflow_id = ${workflowId} AND is_active = true
-    ORDER BY slot_number, sort_order, created_at
-  `;
-
-  return components;
+  try {
+    const components = await sql`
+      SELECT * FROM component_library
+      WHERE workflow_id = ${workflowId} AND is_active = true
+      ORDER BY slot_number, sort_order, created_at
+    `;
+    return components;
+  } catch (err) {
+    // Table might not exist yet - return empty array
+    console.error('[ComponentLibrary] Error fetching components:', err.message);
+    return [];
+  }
 }
 
 /**
@@ -31,26 +36,34 @@ export async function getComponentsForWorkflow(workflowId) {
  * @returns {Promise<Object>} Component settings
  */
 export async function getComponentSettings(workflowId) {
+  const defaultSettings = {
+    enabled: false,
+    slots: [
+      { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential' },
+      { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential' },
+      { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential' }
+    ]
+  };
+
   if (!isDatabaseEnabled()) {
-    return { enabled: false, slots: [] };
+    return defaultSettings;
   }
 
-  const result = await sql`
-    SELECT component_settings FROM workflows WHERE id = ${workflowId}
-  `;
+  try {
+    const result = await sql`
+      SELECT component_settings FROM workflows WHERE id = ${workflowId}
+    `;
 
-  if (result.length === 0 || !result[0].component_settings) {
-    return {
-      enabled: false,
-      slots: [
-        { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential' },
-        { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential' },
-        { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential' }
-      ]
-    };
+    if (result.length === 0 || !result[0].component_settings) {
+      return defaultSettings;
+    }
+
+    return result[0].component_settings;
+  } catch (err) {
+    // Column might not exist yet - return defaults
+    console.error('[ComponentLibrary] Error fetching settings:', err.message);
+    return defaultSettings;
   }
-
-  return result[0].component_settings;
 }
 
 /**
@@ -81,12 +94,15 @@ export async function updateComponentSettings(workflowId, settings) {
  * @returns {Promise<Object>} Components for each slot { slot1: {...}, slot2: {...}, slot3: {...}, enabled: boolean }
  */
 export async function selectComponentsForArticle(workflowId, articleTag) {
+  const disabledResult = { enabled: false, slot1: null, slot2: null, slot3: null };
+
   if (!isDatabaseEnabled()) {
-    return { enabled: false, slot1: null, slot2: null, slot3: null };
+    return disabledResult;
   }
 
-  // Get settings first to check if enabled
-  const settings = await getComponentSettings(workflowId);
+  try {
+    // Get settings first to check if enabled
+    const settings = await getComponentSettings(workflowId);
   if (!settings.enabled) {
     return { enabled: false, slot1: null, slot2: null, slot3: null };
   }
@@ -155,7 +171,12 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
     await updateRotationState(workflowId, slotNumber, articleTag, selectedComponent.id);
   }
 
-  return result;
+    return result;
+  } catch (err) {
+    // Any error - return disabled state to not break publish flow
+    console.error('[ComponentLibrary] Error selecting components:', err.message);
+    return disabledResult;
+  }
 }
 
 /**
