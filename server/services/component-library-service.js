@@ -194,28 +194,41 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
  * @returns {Object} Next component to use
  */
 async function getNextInRotation(workflowId, slotNumber, tag, components) {
-  // Get current rotation state
-  const stateResult = await sql`
-    SELECT last_used_component_id FROM component_rotation_state
-    WHERE workflow_id = ${workflowId}
-      AND slot_number = ${slotNumber}
-      AND (tag = ${tag} OR (tag IS NULL AND ${tag} IS NULL))
-  `;
+  console.log(`[ComponentLibrary] getNextInRotation called: workflowId=${workflowId}, slot=${slotNumber}, tag=${tag}, componentCount=${components.length}`);
 
-  const lastUsedId = stateResult.length > 0 ? stateResult[0].last_used_component_id : null;
+  try {
+    // Get current rotation state
+    const stateResult = await sql`
+      SELECT last_used_component_id FROM component_rotation_state
+      WHERE workflow_id = ${workflowId}
+        AND slot_number = ${slotNumber}
+        AND (tag = ${tag} OR (tag IS NULL AND ${tag} IS NULL))
+    `;
 
-  // Sort components by sort_order, then by id for consistency
-  const sorted = [...components].sort((a, b) => {
-    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-    return a.id - b.id;
-  });
+    const lastUsedId = stateResult.length > 0 ? stateResult[0].last_used_component_id : null;
+    console.log(`[ComponentLibrary] Rotation state lookup: found=${stateResult.length > 0}, lastUsedId=${lastUsedId}`);
 
-  // Find the last used component's index
-  const lastIndex = sorted.findIndex(c => c.id === lastUsedId);
+    // Sort components by sort_order, then by id for consistency
+    const sorted = [...components].sort((a, b) => {
+      if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+      return a.id - b.id;
+    });
+    console.log(`[ComponentLibrary] Sorted components:`, sorted.map(c => `${c.id}:${c.name}`).join(', '));
 
-  // Return the next one (or first if last was not found or was the last item)
-  const nextIndex = (lastIndex + 1) % sorted.length;
-  return sorted[nextIndex];
+    // Find the last used component's index
+    const lastIndex = sorted.findIndex(c => c.id === lastUsedId);
+    console.log(`[ComponentLibrary] lastIndex=${lastIndex}`);
+
+    // Return the next one (or first if last was not found or was the last item)
+    const nextIndex = (lastIndex + 1) % sorted.length;
+    console.log(`[ComponentLibrary] nextIndex=${nextIndex}, returning: ${sorted[nextIndex]?.name}`);
+
+    return sorted[nextIndex];
+  } catch (err) {
+    console.error(`[ComponentLibrary] ERROR in getNextInRotation:`, err.message);
+    // Return first component as fallback instead of crashing
+    return components[0];
+  }
 }
 
 /**
