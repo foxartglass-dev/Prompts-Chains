@@ -155,7 +155,15 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
       if (data.success) {
         setComponents(data.components || []);
         if (data.settings) {
-          setSettings(data.settings);
+          // Ensure slots array exists
+          setSettings({
+            ...data.settings,
+            slots: data.settings.slots || [
+              { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential' },
+              { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential' },
+              { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential' }
+            ]
+          });
         }
       } else {
         setError(data.error || 'Failed to load components');
@@ -198,7 +206,7 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
   const handleSlotRotationChange = async (slotNumber: number, rotation: 'sequential' | 'random') => {
     if (!workflowId) return;
 
-    const newSlots = settings.slots.map(s =>
+    const newSlots = (settings.slots || []).map(s =>
       s.number === slotNumber ? { ...s, rotation } : s
     );
     const newSettings = { ...settings, slots: newSlots };
@@ -557,7 +565,7 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
           {/* Component Library by Slot */}
           {[1, 2, 3].map(slotNumber => {
             const slotComponents = getComponentsForSlot(slotNumber);
-            const slotConfig = settings.slots.find(s => s.number === slotNumber);
+            const slotConfig = (settings.slots || []).find(s => s.number === slotNumber);
 
             return (
               <div key={slotNumber} className="bg-slate-800/50 rounded-lg p-3">
