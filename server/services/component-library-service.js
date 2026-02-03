@@ -346,16 +346,32 @@ export function detectComponentsFromPageJson(elementorDataJson) {
       }
     }
 
-    // Also check for revolution slider in different widget types
-    if (el.widgetType === 'rev-slider' || el.widgetType === 'revslider' || el.widgetType === 'slider_revolution') {
-      const alias = el.settings?.alias || el.settings?.slider_alias || el.settings?.revslider_alias;
+    // Check for Slider Revolution dedicated widget (many possible widget type names)
+    const revSliderWidgetTypes = [
+      'rev-slider', 'revslider', 'slider_revolution', 'sr6_slider', 'sr7_slider',
+      'sr-slider', 'slider-revolution', 'rev_slider', 'revolution-slider',
+      'themepunch-revslider', 'tp-revslider'
+    ];
+
+    // Also catch any widget type containing 'rev' and 'slider'
+    const isRevSliderWidget = revSliderWidgetTypes.includes(el.widgetType) ||
+      (el.widgetType && el.widgetType.toLowerCase().includes('rev') && el.widgetType.toLowerCase().includes('slider'));
+
+    if (isRevSliderWidget) {
+      // Try multiple possible setting names for the alias
+      const alias = el.settings?.alias || el.settings?.slider_alias || el.settings?.revslider_alias ||
+                    el.settings?.slider || el.settings?.rev_slider || el.settings?.selected_slider ||
+                    el.settings?.slider_id;
       if (alias) {
         sliders.push({
           type: 'slider_revolution',
-          alias: alias,
+          alias: String(alias),
           elementorId: el.id,
           depth
         });
+      } else {
+        // Still log it even without alias so we know we found one
+        console.log('[ComponentLibrary] Found Rev Slider widget but no alias. Settings:', JSON.stringify(el.settings).substring(0, 500));
       }
     }
 
