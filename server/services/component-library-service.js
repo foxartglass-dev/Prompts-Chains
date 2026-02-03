@@ -123,24 +123,33 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
 
     // Process each slot
     for (let slotNumber = 1; slotNumber <= 3; slotNumber++) {
+      console.log(`[ComponentLibrary] --- Processing Slot ${slotNumber} ---`);
       const slotConfig = settings.slots.find(s => s.number === slotNumber);
       const rotationMode = slotConfig?.rotation || 'sequential';
+      console.log(`[ComponentLibrary] Slot ${slotNumber} rotationMode: ${rotationMode}`);
 
       // Get components for this slot
       const slotComponents = allComponents.filter(c => c.slot_number === slotNumber);
+      console.log(`[ComponentLibrary] Slot ${slotNumber} has ${slotComponents.length} total components`);
+      if (slotComponents.length > 0) {
+        console.log(`[ComponentLibrary] Slot ${slotNumber} components:`, slotComponents.map(c => `"${c.name}" [${c.component_type}] tag=${c.tag || 'Global'}`).join(', '));
+      }
 
       // First try to find components matching the article tag
       let matchingComponents = articleTag
         ? slotComponents.filter(c => c.tag === articleTag)
         : [];
+      console.log(`[ComponentLibrary] Slot ${slotNumber} matched by tag "${articleTag}": ${matchingComponents.length}`);
 
       // If no tag-specific components, fall back to Global (null tag)
       if (matchingComponents.length === 0) {
         matchingComponents = slotComponents.filter(c => c.tag === null || c.tag === '');
+        console.log(`[ComponentLibrary] Slot ${slotNumber} fallback to Global: ${matchingComponents.length}`);
       }
 
       // If still no components, skip this slot
       if (matchingComponents.length === 0) {
+        console.log(`[ComponentLibrary] Slot ${slotNumber} -> NO MATCHING COMPONENTS, skipping`);
         continue;
       }
 
