@@ -391,7 +391,8 @@ function formatFAQContent(content, templateStructure = null) {
   for (const line of lines) {
     const trimmed = line.trim();
     // Check if line is a question (ends with ?, possibly in markdown format)
-    const questionMatch = trimmed.match(/^(?:#\s+|\*\*)?(.+\?)(?:\*\*)?$/);
+    // Handle multiple hash symbols (# ## ###) for different heading levels
+    const questionMatch = trimmed.match(/^(?:#+\s*|\*\*)?(.+\?)(?:\*\*)?$/);
 
     if (questionMatch) {
       // Save previous Q&A pair
@@ -401,8 +402,8 @@ function formatFAQContent(content, templateStructure = null) {
           answer: currentAnswer.join('\n').trim()
         });
       }
-      // Start new Q&A pair
-      currentQuestion = questionMatch[1].replace(/^\*\*|\*\*$/g, '').trim();
+      // Start new Q&A pair - remove any markdown formatting (# or **)
+      currentQuestion = questionMatch[1].replace(/^#+\s*|\*\*|\*\*$/g, '').trim();
       currentAnswer = [];
     } else if (currentQuestion && trimmed) {
       // This is answer content
@@ -420,9 +421,9 @@ function formatFAQContent(content, templateStructure = null) {
 
   // If no Q&A pairs found, return original with basic cleanup
   if (qaPairs.length === 0) {
-    // Fallback to basic formatting
+    // Fallback to basic formatting - handle multiple hash levels (# ## ###)
     formatted = content;
-    formatted = formatted.replace(/^#\s+([^\n]+\?)\s*$/gm, '<strong>$1</strong>');
+    formatted = formatted.replace(/^#+\s+([^\n]+\?)\s*$/gm, '<strong>$1</strong>');
     formatted = formatted.replace(/\*\*([^*]+\?)\*\*\s*/g, '<strong>$1</strong>\n');
     return formatted.trim();
   }
