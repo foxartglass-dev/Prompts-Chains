@@ -205,13 +205,17 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
 async function getNextInRotation(workflowId, slotNumber, tag, components) {
   console.log(`[ComponentLibrary] getNextInRotation called: workflowId=${workflowId}, slot=${slotNumber}, tag=${tag}, componentCount=${components.length}`);
 
+  // Use empty string for NULL tags to avoid PostgreSQL NULL comparison issues
+  const tagForDb = tag || '';
+
   try {
     // Get current rotation state
+    // Use COALESCE to handle NULL tags - PostgreSQL treats NULL != NULL
     const stateResult = await sql`
       SELECT last_used_component_id FROM component_rotation_state
       WHERE workflow_id = ${workflowId}
         AND slot_number = ${slotNumber}
-        AND (tag = ${tag} OR (tag IS NULL AND ${tag} IS NULL))
+        AND COALESCE(tag, '') = ${tagForDb}
     `;
 
     const lastUsedId = stateResult.length > 0 ? stateResult[0].last_used_component_id : null;
@@ -248,9 +252,13 @@ async function getNextInRotation(workflowId, slotNumber, tag, components) {
  * @param {number} componentId
  */
 async function updateRotationState(workflowId, slotNumber, tag, componentId) {
+  // Use empty string instead of NULL for tag to make UNIQUE constraint work properly
+  // PostgreSQL UNIQUE treats NULLs as distinct, breaking ON CONFLICT for NULL tags
+  const tagForDb = tag || '';
+
   await sql`
     INSERT INTO component_rotation_state (workflow_id, slot_number, tag, last_used_component_id, last_used_at)
-    VALUES (${workflowId}, ${slotNumber}, ${tag}, ${componentId}, CURRENT_TIMESTAMP)
+    VALUES (${workflowId}, ${slotNumber}, ${tagForDb}, ${componentId}, CURRENT_TIMESTAMP)
     ON CONFLICT (workflow_id, slot_number, tag)
     DO UPDATE SET last_used_component_id = ${componentId}, last_used_at = CURRENT_TIMESTAMP
   `;
