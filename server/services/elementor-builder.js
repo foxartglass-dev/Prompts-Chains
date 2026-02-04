@@ -423,22 +423,22 @@ function buildSliderRevolutionWidget(alias) {
     }
   }
 
-  const shortcode = `[rev_slider alias="${cleanAlias}"]`;
-  console.log('🎰 [SLIDER DEBUG] Final shortcode:', shortcode);
+  console.log('🎰 [SLIDER DEBUG] Using alias:', cleanAlias);
 
-  // Use Elementor's shortcode widget to render the slider
+  // Use the native Slider Revolution 6 Elementor widget (NOT shortcode widget)
+  // Widget type discovered from exported Elementor template: "slider_revolution"
   const widget = {
     id: generateElementId(),
     elType: 'widget',
-    widgetType: 'shortcode',
+    widgetType: 'slider_revolution',  // Native SR6 widget, not 'shortcode'
     isInner: false,
     settings: {
-      shortcode: shortcode
+      alias: cleanAlias  // The slider alias (e.g., "home-1")
     },
     elements: []
   };
 
-  console.log('🎰 [SLIDER DEBUG] Built widget:', JSON.stringify(widget, null, 2));
+  console.log('🎰 [SLIDER DEBUG] Built slider_revolution widget:', JSON.stringify(widget, null, 2));
   return widget;
 }
 
