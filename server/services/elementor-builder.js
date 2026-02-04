@@ -425,17 +425,26 @@ function buildSliderRevolutionWidget(alias) {
 
   // Build the full shortcode string (this is what the native widget expects)
   const shortcode = `[rev_slider alias="${cleanAlias}"][/rev_slider]`;
-  console.log('🎰 [SLIDER DEBUG] Using shortcode:', shortcode);
+
+  // Create a title from the alias (capitalize, replace dashes with spaces)
+  // e.g., "home-1" -> "Home 1", "janitorial-1" -> "Janitorial 1"
+  const sliderTitle = cleanAlias
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+  console.log('🎰 [SLIDER DEBUG] Using shortcode:', shortcode, '| title:', sliderTitle);
 
   // Use the native Slider Revolution 6 Elementor widget (NOT generic shortcode widget)
   // Widget type discovered from exported Elementor template: "slider_revolution"
-  // Settings use "shortcode" property with full shortcode string
+  // Settings need both "revslidertitle" (module name) and "shortcode"
   const widget = {
     id: generateElementId(),
     elType: 'widget',
     widgetType: 'slider_revolution',  // Native SR6 widget, not 'shortcode'
     isInner: false,
     settings: {
+      revslidertitle: sliderTitle,  // The selected module name
       shortcode: shortcode  // Full shortcode string like '[rev_slider alias="home-1"][/rev_slider]'
     },
     elements: []
