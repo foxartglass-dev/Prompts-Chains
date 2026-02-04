@@ -374,10 +374,12 @@ const ArticleManager: React.FC<ArticleManagerProps> = ({
             wpUser,
             wpPassword,
             title: pageTitle,
+            keyword: selectedArticle.keyword, // Include raw keyword for tag extraction
             content: editContent || selectedArticle.final_content,
             status: 'draft',
             includeStatsBar: false,
             articleId: selectedArticle.id,
+            workflowId: selectedArticle.workflow_id, // Include workflowId for component library
             isManualPush: true // Track as manual push from ArticleManager
           })
         });

@@ -233,10 +233,12 @@ async function publishArticle(article) {
         wpUrl: article.wp_url,
         wpUser: article.wp_user,
         wpPassword: article.wp_app_password,
-        title: article.keyword,
+        title: article.keyword, // Note: Should ideally strip tag here
+        keyword: article.keyword, // Include raw keyword for tag extraction
         content: article.final_content,
         status: 'publish', // Publish immediately
-        articleId: articleId
+        articleId: articleId,
+        workflowId: article.workflow_id // Include workflowId for component library
       })
     });
 
