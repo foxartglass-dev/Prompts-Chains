@@ -423,17 +423,20 @@ function buildSliderRevolutionWidget(alias) {
     }
   }
 
-  console.log('🎰 [SLIDER DEBUG] Using alias:', cleanAlias);
+  // Build the full shortcode string (this is what the native widget expects)
+  const shortcode = `[rev_slider alias="${cleanAlias}"][/rev_slider]`;
+  console.log('🎰 [SLIDER DEBUG] Using shortcode:', shortcode);
 
-  // Use the native Slider Revolution 6 Elementor widget (NOT shortcode widget)
+  // Use the native Slider Revolution 6 Elementor widget (NOT generic shortcode widget)
   // Widget type discovered from exported Elementor template: "slider_revolution"
+  // Settings use "shortcode" property with full shortcode string
   const widget = {
     id: generateElementId(),
     elType: 'widget',
     widgetType: 'slider_revolution',  // Native SR6 widget, not 'shortcode'
     isInner: false,
     settings: {
-      alias: cleanAlias  // The slider alias (e.g., "home-1")
+      shortcode: shortcode  // Full shortcode string like '[rev_slider alias="home-1"][/rev_slider]'
     },
     elements: []
   };
