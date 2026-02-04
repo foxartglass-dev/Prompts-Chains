@@ -402,11 +402,12 @@ function buildButtonWidget(text, url, options = {}) {
 /**
  * Build a Slider Revolution widget (shortcode)
  * Used for hero sliders captured from existing pages
- * @param {string} alias - The slider alias (e.g., "residential-1-1")
- * @returns {Object} Elementor shortcode widget
+ * @param {string} alias - The slider alias (e.g., "home-1")
+ * @param {string} moduleName - The slider module name (e.g., "Residential") - from Display Name field
+ * @returns {Object} Elementor slider_revolution widget
  */
-function buildSliderRevolutionWidget(alias) {
-  console.log('🎰 [SLIDER DEBUG] buildSliderRevolutionWidget called with alias:', alias);
+function buildSliderRevolutionWidget(alias, moduleName) {
+  console.log('🎰 [SLIDER DEBUG] buildSliderRevolutionWidget called with alias:', alias, '| moduleName:', moduleName);
 
   // Clean up the alias - extract from shortcode if provided as full shortcode
   let cleanAlias = alias;
@@ -426,14 +427,11 @@ function buildSliderRevolutionWidget(alias) {
   // Build the full shortcode string (this is what the native widget expects)
   const shortcode = `[rev_slider alias="${cleanAlias}"][/rev_slider]`;
 
-  // Create a title from the alias (capitalize, replace dashes with spaces)
-  // e.g., "home-1" -> "Home 1", "janitorial-1" -> "Janitorial 1"
-  const sliderTitle = cleanAlias
-    .split('-')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+  // Use the moduleName (Display Name from Component Library) as the revslidertitle
+  // This should match the actual Slider Revolution module name (e.g., "Residential", "Commercial")
+  const sliderTitle = moduleName || cleanAlias;
 
-  console.log('🎰 [SLIDER DEBUG] Using shortcode:', shortcode, '| title:', sliderTitle);
+  console.log('🎰 [SLIDER DEBUG] Using shortcode:', shortcode, '| revslidertitle:', sliderTitle);
 
   // Use the native Slider Revolution 6 Elementor widget (NOT generic shortcode widget)
   // Widget type discovered from exported Elementor template: "slider_revolution"
@@ -493,7 +491,7 @@ function buildComponentWidget(component) {
 
   if (component.type === 'slider_revolution') {
     console.log('🔧 [buildComponentWidget] -> Matched slider_revolution, calling buildSliderRevolutionWidget');
-    widget = buildSliderRevolutionWidget(component.ref);
+    widget = buildSliderRevolutionWidget(component.ref, component.name);
   } else if (component.type === 'elementor_template') {
     console.log('🔧 [buildComponentWidget] -> Matched elementor_template, calling buildElementorTemplateWidget');
     widget = buildElementorTemplateWidget(component.ref);
