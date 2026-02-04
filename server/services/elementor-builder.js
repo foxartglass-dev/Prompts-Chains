@@ -992,11 +992,7 @@ function getElementorMetaFields(elementorData) {
     _elementor_edit_mode: 'builder',
     _elementor_template_type: 'wp-page',
     _elementor_version: '3.18.0', // Current stable version
-    _wp_page_template: 'elementor_header_footer',
-    // Hide page title - we don't want WordPress titles showing above our content
-    _elementor_page_settings: JSON.stringify({
-      hide_title: 'yes'
-    })
+    _wp_page_template: 'elementor_header_footer'
   };
 }
 
