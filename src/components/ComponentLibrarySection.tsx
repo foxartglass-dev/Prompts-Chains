@@ -32,6 +32,7 @@ interface SlotConfig {
   name: string;
   position: string;
   rotation: 'sequential' | 'random';
+  enabled?: boolean; // Whether this slot is active (default true)
 }
 
 interface ComponentSettings {
@@ -115,9 +116,9 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
   const [settings, setSettings] = useState<ComponentSettings>({
     enabled: false,
     slots: [
-      { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential' },
-      { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential' },
-      { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential' }
+      { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential', enabled: true },
+      { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential', enabled: true },
+      { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential', enabled: true }
     ]
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -156,14 +157,15 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
       if (data.success) {
         setComponents(data.components || []);
         if (data.settings) {
-          // Ensure slots array exists
+          // Ensure slots array exists and has enabled property
+          const slots = (data.settings.slots || [
+            { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential', enabled: true },
+            { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential', enabled: true },
+            { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential', enabled: true }
+          ]).map((s: SlotConfig) => ({ ...s, enabled: s.enabled !== false })); // Default enabled to true
           setSettings({
             ...data.settings,
-            slots: data.settings.slots || [
-              { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential' },
-              { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential' },
-              { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential' }
-            ]
+            slots
           });
         }
       } else {
@@ -221,6 +223,53 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
       setSettings(newSettings);
     } catch (err) {
       // Ignore errors for rotation toggle
+    }
+  };
+
+  // Toggle individual slot enabled/disabled
+  const handleSlotToggle = async (slotNumber: number) => {
+    if (!workflowId) return;
+
+    const newSlots = (settings.slots || []).map(s =>
+      s.number === slotNumber ? { ...s, enabled: !(s.enabled !== false) } : s
+    );
+    const newSettings = { ...settings, slots: newSlots };
+
+    try {
+      await fetch(`/api/component-library/${workflowId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: newSettings })
+      });
+      setSettings(newSettings);
+    } catch (err) {
+      // Ignore errors for slot toggle
+    }
+  };
+
+  // Master toggle - turn all slots on or off
+  const handleMasterSlotToggle = async () => {
+    if (!workflowId) return;
+
+    // Check if ALL slots are currently enabled
+    const allEnabled = (settings.slots || []).every(s => s.enabled !== false);
+    // If all are on, turn all off. Otherwise, turn all on.
+    const newEnabled = !allEnabled;
+
+    const newSlots = (settings.slots || []).map(s => ({ ...s, enabled: newEnabled }));
+    const newSettings = { ...settings, slots: newSlots };
+
+    try {
+      await fetch(`/api/component-library/${workflowId}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: newSettings })
+      });
+      setSettings(newSettings);
+      setSuccessMessage(newEnabled ? 'All slots enabled' : 'All slots disabled');
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (err) {
+      // Ignore errors
     }
   };
 
@@ -581,23 +630,59 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
             )}
           </div>
 
+          {/* Master Slot Toggle */}
+          <div className="flex items-center justify-between bg-slate-700/50 rounded-lg p-2">
+            <span className="text-sm text-gray-300">All Slots</span>
+            <button
+              onClick={handleMasterSlotToggle}
+              className={`relative w-10 h-5 rounded-full transition-colors ${
+                (settings.slots || []).every(s => s.enabled !== false) ? 'bg-brand-cyan' : 'bg-gray-600'
+              }`}
+            >
+              <div
+                className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                  (settings.slots || []).every(s => s.enabled !== false) ? 'left-5' : 'left-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
           {/* Component Library by Slot */}
           {[1, 2, 3].map(slotNumber => {
             const slotComponents = getComponentsForSlot(slotNumber);
             const slotConfig = (settings.slots || []).find(s => s.number === slotNumber);
 
+            const slotEnabled = slotConfig?.enabled !== false;
+
             return (
-              <div key={slotNumber} className="bg-slate-800/50 rounded-lg p-3">
+              <div key={slotNumber} className={`bg-slate-800/50 rounded-lg p-3 ${!slotEnabled ? 'opacity-50' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
-                  <h5 className="text-sm font-medium text-white">
-                    Slot {slotNumber} - {slotConfig?.name || 'Unknown'}
-                    <span className="text-xs text-gray-400 ml-2">({slotConfig?.position})</span>
-                  </h5>
+                  <div className="flex items-center gap-2">
+                    {/* Slot Toggle */}
+                    <button
+                      onClick={() => handleSlotToggle(slotNumber)}
+                      className={`relative w-8 h-4 rounded-full transition-colors ${
+                        slotEnabled ? 'bg-green-500' : 'bg-gray-600'
+                      }`}
+                      title={slotEnabled ? 'Disable slot' : 'Enable slot'}
+                    >
+                      <div
+                        className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${
+                          slotEnabled ? 'left-4' : 'left-0.5'
+                        }`}
+                      />
+                    </button>
+                    <h5 className="text-sm font-medium text-white">
+                      Slot {slotNumber} - {slotConfig?.name || 'Unknown'}
+                      <span className="text-xs text-gray-400 ml-2">({slotConfig?.position})</span>
+                    </h5>
+                  </div>
                   {slotComponents.length > 1 && (
                     <select
                       value={slotConfig?.rotation || 'sequential'}
                       onChange={(e) => handleSlotRotationChange(slotNumber, e.target.value as any)}
                       className="bg-slate-900 border border-gray-600 rounded px-2 py-0.5 text-xs text-gray-300"
+                      disabled={!slotEnabled}
                     >
                       <option value="sequential">Sequential</option>
                       <option value="random">Random</option>

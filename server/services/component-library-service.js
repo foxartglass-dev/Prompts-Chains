@@ -39,9 +39,9 @@ export async function getComponentSettings(workflowId) {
   const defaultSettings = {
     enabled: false,
     slots: [
-      { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential' },
-      { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential' },
-      { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential' }
+      { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential', enabled: true },
+      { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential', enabled: true },
+      { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential', enabled: true }
     ]
   };
 
@@ -128,6 +128,14 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
     for (let slotNumber = 1; slotNumber <= 3; slotNumber++) {
       console.log(`[ComponentLibrary] --- Processing Slot ${slotNumber} ---`);
       const slotConfig = settings.slots.find(s => s.number === slotNumber);
+
+      // Check if this slot is enabled (default to true for backwards compatibility)
+      const slotEnabled = slotConfig?.enabled !== false;
+      if (!slotEnabled) {
+        console.log(`[ComponentLibrary] Slot ${slotNumber} -> DISABLED by toggle, skipping`);
+        continue;
+      }
+
       const rotationMode = slotConfig?.rotation || 'sequential';
       console.log(`[ComponentLibrary] Slot ${slotNumber} rotationMode: ${rotationMode}`);
 
