@@ -1883,6 +1883,41 @@ const stripTagFromKeyword = (keyword: string | null | undefined): string => {
           </div>
         </div>
       </div>
+
+      {/* Rule 18 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-emerald-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-emerald-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">18</div>
+          <div>
+            <h3 className="text-lg font-bold text-emerald-400">H1 titles use em dash (—) not period for separators</h3>
+            <span className="text-xs bg-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded ml-2">Formatting - Feb 4, 2026</span>
+            <p className="text-gray-300 mt-2 text-sm">
+              Page H1 titles should use em dashes to separate location from tagline, not periods.
+              The AI sometimes generates periods which looks wrong.
+            </p>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-red-400 font-medium mb-1">✗ Wrong:</p>
+              <code className="text-xs text-gray-400">"Apartment Cleaning in Hendersonville, TN. Professional Service"</code>
+              <p className="text-xs text-green-400 font-medium mb-1 mt-2">✓ Correct:</p>
+              <code className="text-xs text-gray-400">"Apartment Cleaning in Hendersonville, TN — Professional Service"</code>
+            </div>
+            <div className="mt-3 bg-slate-900 rounded p-3">
+              <p className="text-xs text-emerald-400 font-medium mb-2">Auto-fixed in formatHeadlineWithEmDash():</p>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{`// elementor-builder.js - converts ". " to " — " after state codes
+headline.replace(/,\\s*([A-Z]{2})\\.\\s+/g, ', $1 — ')
+
+// Matches: "TN. ", "FL. ", "CA. " etc.
+// Result: "TN — ", "FL — ", "CA — " etc.`}</pre>
+            </div>
+            <p className="text-gray-400 mt-3 text-xs">
+              <strong>Key file:</strong> server/services/elementor-builder.js (formatHeadlineWithEmDash function)
+            </p>
+            <p className="text-gray-400 mt-2 text-xs">
+              <strong>Applies to:</strong> ALL workflows globally - this is in the core page builder
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
 
     {/* UI Patterns Quick Reference */}

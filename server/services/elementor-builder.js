@@ -598,7 +598,7 @@ function extractHeadlineFromIntro(content) {
 
   if (isHeadline && lines.length > 1) {
     return {
-      headline: firstLine,
+      headline: formatHeadlineWithEmDash(firstLine),
       remainingContent: lines.slice(1).join('\n')
     };
   }
@@ -608,12 +608,34 @@ function extractHeadlineFromIntro(content) {
   const firstSentenceMatch = content.match(/^([^.!?]+[.!?])/);
   if (firstSentenceMatch && firstSentenceMatch[1].length < 150) {
     return {
-      headline: firstSentenceMatch[1].trim(),
+      headline: formatHeadlineWithEmDash(firstSentenceMatch[1].trim()),
       remainingContent: content.slice(firstSentenceMatch[0].length).trim()
     };
   }
 
   return { headline: null, remainingContent: content };
+}
+
+/**
+ * Format headline to use em dash (—) instead of period for title separators
+ * Converts patterns like "Service in City, TN. Tagline" to "Service in City, TN — Tagline"
+ * This applies to ALL workflows globally.
+ *
+ * @param {string} headline - The extracted headline
+ * @returns {string} Headline with em dashes instead of periods for separators
+ */
+function formatHeadlineWithEmDash(headline) {
+  if (!headline) return headline;
+
+  // Pattern: "City, STATE. Rest" -> "City, STATE — Rest"
+  // Matches 2-letter US state abbreviations followed by period and space
+  // Examples: "TN. ", "FL. ", "CA. ", "TX. "
+  let formatted = headline.replace(/,\s*([A-Z]{2})\.\s+/g, ', $1 — ');
+
+  // Also handle "City, STATE." at end of headline (remove trailing period)
+  formatted = formatted.replace(/,\s*([A-Z]{2})\.\s*$/, ', $1');
+
+  return formatted;
 }
 
 /**
