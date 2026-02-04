@@ -39,9 +39,9 @@ export async function getComponentSettings(workflowId) {
   const defaultSettings = {
     enabled: false,
     slots: [
-      { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential' },
-      { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential' },
-      { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential' }
+      { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential', enabled: true },
+      { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential', enabled: true },
+      { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential', enabled: true }
     ]
   };
 
@@ -128,6 +128,14 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
     for (let slotNumber = 1; slotNumber <= 3; slotNumber++) {
       console.log(`[ComponentLibrary] --- Processing Slot ${slotNumber} ---`);
       const slotConfig = settings.slots.find(s => s.number === slotNumber);
+
+      // Check if this slot is enabled (default to true for backwards compatibility)
+      const slotEnabled = slotConfig?.enabled !== false;
+      if (!slotEnabled) {
+        console.log(`[ComponentLibrary] Slot ${slotNumber} -> DISABLED by toggle, skipping`);
+        continue;
+      }
+
       const rotationMode = slotConfig?.rotation || 'sequential';
       console.log(`[ComponentLibrary] Slot ${slotNumber} rotationMode: ${rotationMode}`);
 
@@ -179,6 +187,7 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
       result[slotKey] = {
         type: selectedComponent.component_type,
         ref: selectedComponent.component_ref,
+        moduleName: selectedComponent.module_name,  // SR Module Name for slider_revolution
         name: selectedComponent.name,
         id: selectedComponent.id
       };
@@ -283,6 +292,7 @@ export async function addComponent(component) {
     slotName,
     componentType,
     componentRef,
+    moduleName,  // SR Module Name (only for slider_revolution)
     tag,
     name,
     sourcePageId,
@@ -293,11 +303,11 @@ export async function addComponent(component) {
   const result = await sql`
     INSERT INTO component_library (
       workflow_id, slot_number, slot_name, component_type, component_ref,
-      tag, name, source_page_id, source_page_url, sort_order
+      module_name, tag, name, source_page_id, source_page_url, sort_order
     )
     VALUES (
       ${workflowId}, ${slotNumber}, ${slotName}, ${componentType}, ${componentRef},
-      ${tag || null}, ${name}, ${sourcePageId || null}, ${sourcePageUrl || null}, ${sortOrder}
+      ${moduleName || null}, ${tag || null}, ${name}, ${sourcePageId || null}, ${sourcePageUrl || null}, ${sortOrder}
     )
     RETURNING *
   `;

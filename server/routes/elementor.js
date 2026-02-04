@@ -1755,8 +1755,13 @@ router.post('/publish', async (req, res) => {
 
     if (workflowId && isDatabaseEnabled()) {
       try {
+        // DEBUG: Log keyword before tag extraction
+        console.log('[TAG DEBUG] keyword received:', keyword);
+        console.log('[TAG DEBUG] keyword type:', typeof keyword);
         const tagMatch = keyword?.match(/\(([A-Z])\)/i);
+        console.log('[TAG DEBUG] tagMatch result:', tagMatch);
         const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+        console.log('[TAG DEBUG] articleTag extracted:', articleTag);
 
         console.log('[ComponentLibrary] Calling selectComponentsForArticle with workflowId:', parseInt(workflowId), 'articleTag:', articleTag);
         const componentSelection = await selectComponentsForArticle(parseInt(workflowId), articleTag);

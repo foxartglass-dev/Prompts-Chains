@@ -148,6 +148,7 @@ router.post('/:workflowId/add', async (req, res) => {
       slotName,
       componentType,
       componentRef,
+      moduleName,  // SR Module Name (only for slider_revolution)
       tag,
       name,
       sourcePageId,
@@ -181,6 +182,7 @@ router.post('/:workflowId/add', async (req, res) => {
       slotName: slotName || getDefaultSlotName(slotNumber),
       componentType,
       componentRef,
+      moduleName: componentType === 'slider_revolution' ? moduleName : null,
       tag: tag || null, // null = Global
       name,
       sourcePageId,
@@ -280,7 +282,7 @@ router.put('/:workflowId/:componentId', async (req, res) => {
     }
 
     // Build update query dynamically based on provided fields
-    const allowedFields = ['slot_number', 'slot_name', 'component_type', 'component_ref', 'tag', 'name', 'sort_order'];
+    const allowedFields = ['slot_number', 'slot_name', 'component_type', 'component_ref', 'module_name', 'tag', 'name', 'sort_order'];
     const updateParts = [];
     const values = {};
 
@@ -303,6 +305,7 @@ router.put('/:workflowId/:componentId', async (req, res) => {
       if (field === 'slot_name') await sql`UPDATE component_library SET slot_name = ${value}, updated_at = CURRENT_TIMESTAMP WHERE id = ${parseInt(componentId)}`;
       if (field === 'component_type') await sql`UPDATE component_library SET component_type = ${value}, updated_at = CURRENT_TIMESTAMP WHERE id = ${parseInt(componentId)}`;
       if (field === 'component_ref') await sql`UPDATE component_library SET component_ref = ${value}, updated_at = CURRENT_TIMESTAMP WHERE id = ${parseInt(componentId)}`;
+      if (field === 'module_name') await sql`UPDATE component_library SET module_name = ${value}, updated_at = CURRENT_TIMESTAMP WHERE id = ${parseInt(componentId)}`;
       if (field === 'tag') await sql`UPDATE component_library SET tag = ${value}, updated_at = CURRENT_TIMESTAMP WHERE id = ${parseInt(componentId)}`;
       if (field === 'name') await sql`UPDATE component_library SET name = ${value}, updated_at = CURRENT_TIMESTAMP WHERE id = ${parseInt(componentId)}`;
       if (field === 'sort_order') await sql`UPDATE component_library SET sort_order = ${value}, updated_at = CURRENT_TIMESTAMP WHERE id = ${parseInt(componentId)}`;

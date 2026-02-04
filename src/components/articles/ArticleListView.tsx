@@ -382,6 +382,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           wpUser,
           wpPassword,
           title: stripTagFromKeyword(selectedArticle.keyword),
+          keyword: selectedArticle.keyword, // Include raw keyword for tag extraction
           content: editContent || selectedArticle.final_content,
           status: 'draft',
           articleId: selectedArticle.id,
@@ -469,6 +470,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             wpUser,
             wpPassword,
             title: stripTagFromKeyword(selectedArticle.keyword),
+            keyword: selectedArticle.keyword, // Include raw keyword for tag extraction
             content: editContent || selectedArticle.final_content,
             status: 'draft',
             articleId: selectedArticle.id,
@@ -767,6 +769,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           wpUser,
           wpPassword,
           title: stripTagFromKeyword(selectedArticle.keyword),
+          keyword: selectedArticle.keyword, // Include raw keyword for tag extraction
           content: editContent || selectedArticle.final_content,
           status: 'draft',
           articleId: selectedArticle.id,
