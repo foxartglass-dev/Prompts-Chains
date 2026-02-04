@@ -402,20 +402,54 @@ function buildButtonWidget(text, url, options = {}) {
 /**
  * Build a Slider Revolution widget (shortcode)
  * Used for hero sliders captured from existing pages
- * @param {string} alias - The slider alias (e.g., "residential-1-1")
- * @returns {Object} Elementor shortcode widget
+ * @param {string} alias - The slider alias (e.g., "home-1")
+ * @param {string} moduleName - The slider module name (e.g., "Residential") - from Display Name field
+ * @returns {Object} Elementor slider_revolution widget
  */
-function buildSliderRevolutionWidget(alias) {
-  return {
+function buildSliderRevolutionWidget(alias, moduleName) {
+  console.log('🎰 [SLIDER DEBUG] buildSliderRevolutionWidget called with alias:', alias, '| moduleName:', moduleName);
+
+  // Clean up the alias - extract from shortcode if provided as full shortcode
+  let cleanAlias = alias;
+  if (alias && alias.includes('[rev_slider')) {
+    // Extract alias from shortcode like [rev_slider alias="home-1"]
+    const match = alias.match(/alias=["']([^"']+)["']/);
+    if (match) {
+      cleanAlias = match[1];
+      console.log('🎰 [SLIDER DEBUG] Extracted alias from shortcode:', cleanAlias);
+    } else {
+      // Couldn't extract, remove brackets to get just the alias text
+      cleanAlias = alias.replace(/\[rev_slider\s*/gi, '').replace(/\[\/rev_slider\]/gi, '').replace(/alias=/gi, '').replace(/["'\]]/g, '').trim();
+      console.log('🎰 [SLIDER DEBUG] Cleaned alias (fallback):', cleanAlias);
+    }
+  }
+
+  // Build the full shortcode string (this is what the native widget expects)
+  const shortcode = `[rev_slider alias="${cleanAlias}"][/rev_slider]`;
+
+  // Use the moduleName (Display Name from Component Library) as the revslidertitle
+  // This should match the actual Slider Revolution module name (e.g., "Residential", "Commercial")
+  const sliderTitle = moduleName || cleanAlias;
+
+  console.log('🎰 [SLIDER DEBUG] Using shortcode:', shortcode, '| revslidertitle:', sliderTitle);
+
+  // Use the native Slider Revolution 6 Elementor widget (NOT generic shortcode widget)
+  // Widget type discovered from exported Elementor template: "slider_revolution"
+  // Settings need both "revslidertitle" (module name) and "shortcode"
+  const widget = {
     id: generateElementId(),
     elType: 'widget',
-    widgetType: 'shortcode',
+    widgetType: 'slider_revolution',  // Native SR6 widget, not 'shortcode'
     isInner: false,
     settings: {
-      shortcode: `[rev_slider alias="${alias}"]`
+      revslidertitle: sliderTitle,  // The selected module name
+      shortcode: shortcode  // Full shortcode string like '[rev_slider alias="home-1"][/rev_slider]'
     },
     elements: []
   };
+
+  console.log('🎰 [SLIDER DEBUG] Built slider_revolution widget:', JSON.stringify(widget, null, 2));
+  return widget;
 }
 
 /**
@@ -444,18 +478,45 @@ function buildElementorTemplateWidget(templateId) {
  * @returns {Object|null} Elementor widget or null if invalid
  */
 function buildComponentWidget(component) {
+  console.log('🔧 [buildComponentWidget] CALLED with:', JSON.stringify(component, null, 2));
+
   if (!component || !component.type || !component.ref) {
+    console.log('🔧 [buildComponentWidget] SKIPPED - missing component, type, or ref');
     return null;
   }
 
+  console.log(`🔧 [buildComponentWidget] Processing: type="${component.type}", ref="${component.ref}", name="${component.name}"`);
+
+  let widget = null;
+
   if (component.type === 'slider_revolution') {
-    return buildSliderRevolutionWidget(component.ref);
+    console.log('🔧 [buildComponentWidget] -> Matched slider_revolution, calling buildSliderRevolutionWidget');
+    widget = buildSliderRevolutionWidget(component.ref, component.name);
   } else if (component.type === 'elementor_template') {
-    return buildElementorTemplateWidget(component.ref);
+    console.log('🔧 [buildComponentWidget] -> Matched elementor_template, calling buildElementorTemplateWidget');
+    widget = buildElementorTemplateWidget(component.ref);
+  } else {
+    console.log(`🔧 [buildComponentWidget] -> NO MATCH for type: "${component.type}"`);
   }
 
-  console.warn(`[ElementorBuilder] Unknown component type: ${component.type}`);
-  return null;
+  if (!widget) {
+    console.warn(`[ElementorBuilder] Unknown component type: ${component.type}`);
+    return null;
+  }
+
+  // Wrap component in a full-width container to isolate styles
+  // This mimics how Elementor wraps manually-added templates
+  return {
+    id: generateElementId(),
+    elType: 'container',
+    isInner: false,
+    settings: {
+      content_width: 'full',
+      flex_direction: 'column',
+      padding: { unit: 'px', top: '0', right: '0', bottom: '0', left: '0', isLinked: false }
+    },
+    elements: [widget]
+  };
 }
 
 /**

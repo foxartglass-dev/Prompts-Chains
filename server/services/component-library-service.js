@@ -112,7 +112,10 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
 
     // Get all active components for this workflow
     const allComponents = await getComponentsForWorkflow(workflowId);
-    console.log('[ComponentLibrary] Found', allComponents.length, 'active components');
+    console.log('[ComponentLibrary] Found', allComponents.length, 'active components for workflow', workflowId);
+    console.log('[ComponentLibrary] ALL COMPONENTS IN DB:', allComponents.map(c =>
+      `[Slot ${c.slot_number}] "${c.name}" (${c.component_type}) tag=${c.tag || 'Global'} active=${c.is_active}`
+    ).join(' | '));
 
     const result = {
       enabled: true,
@@ -123,24 +126,33 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
 
     // Process each slot
     for (let slotNumber = 1; slotNumber <= 3; slotNumber++) {
+      console.log(`[ComponentLibrary] --- Processing Slot ${slotNumber} ---`);
       const slotConfig = settings.slots.find(s => s.number === slotNumber);
       const rotationMode = slotConfig?.rotation || 'sequential';
+      console.log(`[ComponentLibrary] Slot ${slotNumber} rotationMode: ${rotationMode}`);
 
       // Get components for this slot
       const slotComponents = allComponents.filter(c => c.slot_number === slotNumber);
+      console.log(`[ComponentLibrary] Slot ${slotNumber} has ${slotComponents.length} total components`);
+      if (slotComponents.length > 0) {
+        console.log(`[ComponentLibrary] Slot ${slotNumber} components:`, slotComponents.map(c => `"${c.name}" [${c.component_type}] tag=${c.tag || 'Global'}`).join(', '));
+      }
 
       // First try to find components matching the article tag
       let matchingComponents = articleTag
         ? slotComponents.filter(c => c.tag === articleTag)
         : [];
+      console.log(`[ComponentLibrary] Slot ${slotNumber} matched by tag "${articleTag}": ${matchingComponents.length}`);
 
       // If no tag-specific components, fall back to Global (null tag)
       if (matchingComponents.length === 0) {
         matchingComponents = slotComponents.filter(c => c.tag === null || c.tag === '');
+        console.log(`[ComponentLibrary] Slot ${slotNumber} fallback to Global: ${matchingComponents.length}`);
       }
 
       // If still no components, skip this slot
       if (matchingComponents.length === 0) {
+        console.log(`[ComponentLibrary] Slot ${slotNumber} -> NO MATCHING COMPONENTS, skipping`);
         continue;
       }
 
@@ -194,28 +206,45 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
  * @returns {Object} Next component to use
  */
 async function getNextInRotation(workflowId, slotNumber, tag, components) {
-  // Get current rotation state
-  const stateResult = await sql`
-    SELECT last_used_component_id FROM component_rotation_state
-    WHERE workflow_id = ${workflowId}
-      AND slot_number = ${slotNumber}
-      AND (tag = ${tag} OR (tag IS NULL AND ${tag} IS NULL))
-  `;
+  console.log(`[ComponentLibrary] getNextInRotation called: workflowId=${workflowId}, slot=${slotNumber}, tag=${tag}, componentCount=${components.length}`);
 
-  const lastUsedId = stateResult.length > 0 ? stateResult[0].last_used_component_id : null;
+  // Use empty string for NULL tags to avoid PostgreSQL NULL comparison issues
+  const tagForDb = tag || '';
 
-  // Sort components by sort_order, then by id for consistency
-  const sorted = [...components].sort((a, b) => {
-    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-    return a.id - b.id;
-  });
+  try {
+    // Get current rotation state
+    // Use COALESCE to handle NULL tags - PostgreSQL treats NULL != NULL
+    const stateResult = await sql`
+      SELECT last_used_component_id FROM component_rotation_state
+      WHERE workflow_id = ${workflowId}
+        AND slot_number = ${slotNumber}
+        AND COALESCE(tag, '') = ${tagForDb}
+    `;
 
-  // Find the last used component's index
-  const lastIndex = sorted.findIndex(c => c.id === lastUsedId);
+    const lastUsedId = stateResult.length > 0 ? stateResult[0].last_used_component_id : null;
+    console.log(`[ComponentLibrary] Rotation state lookup: found=${stateResult.length > 0}, lastUsedId=${lastUsedId}`);
 
-  // Return the next one (or first if last was not found or was the last item)
-  const nextIndex = (lastIndex + 1) % sorted.length;
-  return sorted[nextIndex];
+    // Sort components by sort_order, then by id for consistency
+    const sorted = [...components].sort((a, b) => {
+      if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+      return a.id - b.id;
+    });
+    console.log(`[ComponentLibrary] Sorted components:`, sorted.map(c => `${c.id}:${c.name}`).join(', '));
+
+    // Find the last used component's index
+    const lastIndex = sorted.findIndex(c => c.id === lastUsedId);
+    console.log(`[ComponentLibrary] lastIndex=${lastIndex}`);
+
+    // Return the next one (or first if last was not found or was the last item)
+    const nextIndex = (lastIndex + 1) % sorted.length;
+    console.log(`[ComponentLibrary] nextIndex=${nextIndex}, returning: ${sorted[nextIndex]?.name}`);
+
+    return sorted[nextIndex];
+  } catch (err) {
+    console.error(`[ComponentLibrary] ERROR in getNextInRotation:`, err.message);
+    // Return first component as fallback instead of crashing
+    return components[0];
+  }
 }
 
 /**
@@ -226,9 +255,13 @@ async function getNextInRotation(workflowId, slotNumber, tag, components) {
  * @param {number} componentId
  */
 async function updateRotationState(workflowId, slotNumber, tag, componentId) {
+  // Use empty string instead of NULL for tag to make UNIQUE constraint work properly
+  // PostgreSQL UNIQUE treats NULLs as distinct, breaking ON CONFLICT for NULL tags
+  const tagForDb = tag || '';
+
   await sql`
     INSERT INTO component_rotation_state (workflow_id, slot_number, tag, last_used_component_id, last_used_at)
-    VALUES (${workflowId}, ${slotNumber}, ${tag}, ${componentId}, CURRENT_TIMESTAMP)
+    VALUES (${workflowId}, ${slotNumber}, ${tagForDb}, ${componentId}, CURRENT_TIMESTAMP)
     ON CONFLICT (workflow_id, slot_number, tag)
     DO UPDATE SET last_used_component_id = ${componentId}, last_used_at = CURRENT_TIMESTAMP
   `;
