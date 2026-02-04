@@ -72,8 +72,13 @@ export function fillPrompt(
     filled = filled.replace(regex, p.value);
   });
 
-  // 5. Replace {item_name} with the current item's name
-  filled = filled.replace(/{item_name}/g, item.name);
+  // 5. Replace {item_name} with the current item's name (tag stripped)
+  // IMPORTANT: Strip tag suffixes like (H), (J), (C) from the name before sending to AI
+  // These tags are for internal routing (image matching, component selection) only
+  // The AI should never see them, or it will include them in generated headings
+  // See Blueprint > Known Issues > "Tag Stripping" for full documentation
+  const cleanItemName = item.name.replace(/\s*\([A-Za-z]\)\s*$/, '').trim();
+  filled = filled.replace(/{item_name}/g, cleanItemName);
 
   return filled;
 }

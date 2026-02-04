@@ -1991,9 +1991,92 @@ const KnownIssuesDiagram: React.FC = () => (
 
     {/* Resolved Issues */}
     <div className="bg-green-900/20 rounded-xl p-6 border border-green-500">
-      <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues (Jan 2026)</h3>
+      <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues</h3>
 
       <div className="space-y-4">
+        {/* Feb 4 - Tag stripping in prompt-filler.ts */}
+        <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Tags (H), (J), (C) appearing in AI-generated content headings</span>
+            <span className="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded">CRITICAL - Feb 4, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Tags like "(C)" were appearing in H1/H2 headings on published WordPress pages.
+            "Phase Cleaning Out(C)" showed up everywhere - hero title, all H2 headings, FAQ questions.
+            H and J articles were clean, but C articles had tags throughout.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause:</strong> In <code className="bg-slate-900 px-1 rounded">src/engine/prompt-filler.ts</code> line 76,
+            <code className="bg-slate-900 px-1 rounded">{'{item_name}'}</code> was replaced with <code className="bg-slate-900 px-1 rounded">item.name</code>
+            which included the tag. When prompts said "Write about {'{item_name}'}", the AI received "Phase Cleaning Out(C)"
+            and included it in all generated headings. The tag is for INTERNAL routing (image matching, component selection),
+            not for display.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Modified prompt-filler.ts to strip tag before inserting:
+            <pre className="bg-slate-900 p-2 rounded mt-1 text-xs overflow-x-auto">{`const cleanItemName = item.name.replace(/\\s*\\([A-Za-z]\\)\\s*$/, '').trim();
+filled = filled.replace(/{item_name}/g, cleanItemName);`}</pre>
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Key Files:</strong> src/engine/prompt-filler.ts (line 76-80), server/db/migrations/031_fix_c_article_tags.sql
+          </div>
+          <div className="text-sm text-amber-400 mt-2">
+            <strong>NEVER UNDO:</strong> The tag stripping in prompt-filler.ts is CRITICAL. Tags must stay for internal use
+            (stored in keyword field, used for image/component matching) but must NEVER reach the AI or WordPress.
+          </div>
+        </div>
+
+        {/* Feb 4 - Slider Revolution module name */}
+        <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Slider Revolution widgets showing "alias not found" errors</span>
+            <span className="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded">Feb 4, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> SR sliders appeared on WordPress but showed error messages like "floridahellohome-1 not found".
+            Component Library only had Alias + Display Name fields.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause:</strong> Slider Revolution widgets need TWO settings:
+            <ul className="list-disc ml-4 mt-1">
+              <li><code className="bg-slate-900 px-1 rounded">revslidertitle</code> - Module Name (SR's internal name like "Residential")</li>
+              <li><code className="bg-slate-900 px-1 rounded">shortcode</code> - Alias (like "home-1")</li>
+            </ul>
+            We only had one field, so the module name was wrong.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added <code className="bg-slate-900 px-1 rounded">module_name</code> column (migration 030)
+            and Module Name field in Component Library UI. Updated elementor-builder.js to use both values.
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Key Files:</strong> server/db/migrations/030_add_slider_module_name.sql, ComponentLibrarySection.tsx,
+            component-library-service.js, elementor-builder.js (buildSliderRevolutionWidget)
+          </div>
+        </div>
+
+        {/* Feb 4 - Keyword undefined in publish requests */}
+        <div className="bg-slate-800 rounded-lg p-4 border border-green-500/50">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Component tag matching not working (keyword undefined)</span>
+            <span className="text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded">Feb 4, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Component Library tag matching (H/J/C articles getting matching components) wasn't working.
+            Server logs showed "keyword received: undefined".
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause:</strong> Frontend publish requests weren't sending the <code className="bg-slate-900 px-1 rounded">keyword</code>
+            parameter. The raw keyword (with tag) is needed to extract the tag for component matching.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Added <code className="bg-slate-900 px-1 rounded">keyword: selectedArticle.keyword</code> to ALL publish calls:
+            ArticleListView.tsx (3 places), ArticleManager.tsx (1), drip-feed.js (1), drip-feed-scheduler.js (1).
+          </div>
+        </div>
+
         {/* Jan 20 - Template persistence FULLY FIXED */}
         <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
           <div className="flex items-center gap-2 mb-2">
