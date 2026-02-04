@@ -179,6 +179,7 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
       result[slotKey] = {
         type: selectedComponent.component_type,
         ref: selectedComponent.component_ref,
+        moduleName: selectedComponent.module_name,  // SR Module Name for slider_revolution
         name: selectedComponent.name,
         id: selectedComponent.id
       };
@@ -283,6 +284,7 @@ export async function addComponent(component) {
     slotName,
     componentType,
     componentRef,
+    moduleName,  // SR Module Name (only for slider_revolution)
     tag,
     name,
     sourcePageId,
@@ -293,11 +295,11 @@ export async function addComponent(component) {
   const result = await sql`
     INSERT INTO component_library (
       workflow_id, slot_number, slot_name, component_type, component_ref,
-      tag, name, source_page_id, source_page_url, sort_order
+      module_name, tag, name, source_page_id, source_page_url, sort_order
     )
     VALUES (
       ${workflowId}, ${slotNumber}, ${slotName}, ${componentType}, ${componentRef},
-      ${tag || null}, ${name}, ${sourcePageId || null}, ${sourcePageUrl || null}, ${sortOrder}
+      ${moduleName || null}, ${tag || null}, ${name}, ${sourcePageId || null}, ${sourcePageUrl || null}, ${sortOrder}
     )
     RETURNING *
   `;

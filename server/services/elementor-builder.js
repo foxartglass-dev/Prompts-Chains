@@ -485,13 +485,15 @@ function buildComponentWidget(component) {
     return null;
   }
 
-  console.log(`🔧 [buildComponentWidget] Processing: type="${component.type}", ref="${component.ref}", name="${component.name}"`);
+  console.log(`🔧 [buildComponentWidget] Processing: type="${component.type}", ref="${component.ref}", moduleName="${component.moduleName}", name="${component.name}"`);
 
   let widget = null;
 
   if (component.type === 'slider_revolution') {
-    console.log('🔧 [buildComponentWidget] -> Matched slider_revolution, calling buildSliderRevolutionWidget');
-    widget = buildSliderRevolutionWidget(component.ref, component.name);
+    // Use moduleName (SR's internal name) if available, otherwise fall back to name for backward compatibility
+    const sliderModuleName = component.moduleName || component.name;
+    console.log('🔧 [buildComponentWidget] -> Matched slider_revolution, calling buildSliderRevolutionWidget with moduleName:', sliderModuleName);
+    widget = buildSliderRevolutionWidget(component.ref, sliderModuleName);
   } else if (component.type === 'elementor_template') {
     console.log('🔧 [buildComponentWidget] -> Matched elementor_template, calling buildElementorTemplateWidget');
     widget = buildElementorTemplateWidget(component.ref);

@@ -138,6 +138,7 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
   const [manualForm, setManualForm] = useState({
     componentType: 'slider_revolution' as 'slider_revolution' | 'elementor_template',
     componentRef: '',
+    moduleName: '', // SR Module Name (only for slider_revolution)
     name: '',
     slotNumber: 1,
     tag: '' // Empty string = Global
@@ -307,6 +308,12 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
       return;
     }
 
+    // For slider_revolution, module name is required
+    if (manualForm.componentType === 'slider_revolution' && !manualForm.moduleName) {
+      setError('Module Name is required for Slider Revolution widgets');
+      return;
+    }
+
     try {
       const response = await fetch(`/api/component-library/${workflowId}/add`, {
         method: 'POST',
@@ -314,6 +321,7 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
         body: JSON.stringify({
           componentType: manualForm.componentType,
           componentRef: manualForm.componentRef,
+          moduleName: manualForm.componentType === 'slider_revolution' ? manualForm.moduleName : null,
           name: manualForm.name,
           slotNumber: manualForm.slotNumber,
           tag: manualForm.tag || null
@@ -326,6 +334,7 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
         setManualForm({
           componentType: 'slider_revolution',
           componentRef: '',
+          moduleName: '',
           name: '',
           slotNumber: 1,
           tag: ''
@@ -510,7 +519,7 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <select
                     value={manualForm.componentType}
-                    onChange={(e) => setManualForm({ ...manualForm, componentType: e.target.value as any })}
+                    onChange={(e) => setManualForm({ ...manualForm, componentType: e.target.value as any, moduleName: '' })}
                     className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1.5 text-white text-sm"
                   >
                     <option value="slider_revolution">Slider Revolution</option>
@@ -520,15 +529,25 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
                     type="text"
                     value={manualForm.componentRef}
                     onChange={(e) => setManualForm({ ...manualForm, componentRef: e.target.value })}
-                    placeholder={manualForm.componentType === 'slider_revolution' ? 'Alias' : 'Template ID'}
+                    placeholder={manualForm.componentType === 'slider_revolution' ? 'Alias (e.g., home-1)' : 'Template ID'}
                     className="bg-slate-900 border border-brand-gold/50 rounded px-2 py-1.5 text-white text-sm"
                   />
                 </div>
+                {/* Module Name field - only for Slider Revolution */}
+                {manualForm.componentType === 'slider_revolution' && (
+                  <input
+                    type="text"
+                    value={manualForm.moduleName}
+                    onChange={(e) => setManualForm({ ...manualForm, moduleName: e.target.value })}
+                    placeholder="Module Name (SR's internal name, e.g., Residential)"
+                    className="w-full bg-slate-900 border border-orange-500/50 rounded px-2 py-1.5 text-white text-sm"
+                  />
+                )}
                 <input
                   type="text"
                   value={manualForm.name}
                   onChange={(e) => setManualForm({ ...manualForm, name: e.target.value })}
-                  placeholder="Display Name"
+                  placeholder="Display Name (your label)"
                   className="w-full bg-slate-900 border border-brand-gold/50 rounded px-2 py-1.5 text-white text-sm"
                 />
                 <div className="grid grid-cols-2 gap-2">
