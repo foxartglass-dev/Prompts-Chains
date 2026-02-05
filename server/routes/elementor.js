@@ -572,16 +572,8 @@ router.post('/publish', async (req, res) => {
     let firstReadSmartMatchingConfig = null;
     let firstReadMatchPlurals = true;
 
-    // Skip ALL image-related steps if articleOnly mode OR if client's Image toggle is Off
-    // CRITICAL FIX: Respect the client's useImageBank/generateImages values
-    // Previously, server would override these based on DB settings - ignoring the UI toggle
-    const clientRequestedImages = useImageBank || generateImages;
-    if (!clientRequestedImages) {
-      console.log('[Elementor Publish] Images disabled by client toggle (Image: Off) - skipping all image processing');
-      logImageDecision(articleId, keyword, 'SKIPPED - Client toggle Off');
-    }
-
-    if (!articleOnly && clientRequestedImages && workflowId && isDatabaseEnabled()) {
+    // Skip ALL image-related steps if articleOnly mode
+    if (!articleOnly && workflowId && isDatabaseEnabled()) {
       try {
         // First, lookup the workflow's associated website_id
         let websiteId = null;
