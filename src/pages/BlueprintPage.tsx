@@ -2029,6 +2029,46 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues</h3>
 
       <div className="space-y-4">
+        {/* Feb 5 - Preview/WordPress content mismatch (ARCHITECTURE FIX) */}
+        <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Preview showed different content than WordPress (FAQs, formatting)</span>
+            <span className="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded">ARCHITECTURE - Feb 5, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> The Preview tab showed content formatted differently than WordPress.
+            FAQs appeared as a wall of text in preview but properly formatted on WordPress.
+            Bold, line breaks, paragraph handling all differed between the two.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause:</strong> Two completely separate code paths doing similar-but-different processing:
+            <ul className="list-disc ml-4 mt-1">
+              <li><strong>Preview:</strong> ElementorPreview.tsx → cleanContent() → extractIntro() → splitByH2() → markdownToHtml()</li>
+              <li><strong>WordPress:</strong> content-chunker.js → chunkContent() → elementor-builder.js → contentToHtml()</li>
+            </ul>
+            These were independently coded and did NOT produce identical output.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Created new endpoint <code className="bg-slate-900 px-1 rounded">/api/elementor/preview-html</code> that uses
+            the SAME processing functions as WordPress (chunkContent, contentToHtml). ElementorPreview now calls this endpoint
+            instead of doing its own client-side processing.
+            <pre className="bg-slate-900 p-2 rounded mt-1 text-xs overflow-x-auto">{`// OLD (broken): Preview processes client-side, different from server
+Content → ElementorPreview.tsx (own parsing) → Different output
+
+// NEW (fixed): Preview calls server, uses same processing as WordPress
+Content → /api/elementor/preview-html → chunkContent() + contentToHtml()
+        → Preview displays server-processed HTML (identical to WordPress)`}</pre>
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Key Files:</strong> server/routes/elementor.js (new endpoint), src/components/articles/ElementorPreview.tsx (refactored)
+          </div>
+          <div className="text-sm text-amber-400 mt-2">
+            <strong>ARCHITECTURE RULE:</strong> Never duplicate content processing logic. The server should be the single source
+            of truth for how content is transformed. Preview should display what server produces, not its own interpretation.
+          </div>
+        </div>
+
         {/* Feb 5 - Image toggle Off not respected */}
         <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
           <div className="flex items-center gap-2 mb-2">
