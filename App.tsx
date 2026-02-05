@@ -2232,7 +2232,7 @@ const App: React.FC = () => {
               }}
               currentArticleMode={currentProject?.state?.articlePublishMode || 'draft'}
               currentMetaMode={currentProject?.state?.metaPublishMode || 'draft'}
-              currentImageMode={currentProject?.state?.imagePublishMode || 'draft'}
+              currentImageMode={currentProject?.state?.wpPublishMode || 'draft'}
               availableTags={currentProject?.state?.tags || []}
               workflowId={currentProject?.id}
             />
@@ -4354,10 +4354,10 @@ const App: React.FC = () => {
                             websiteId={currentWebsiteId}
                             showNotification={showNotification}
                             onOpenArticles={() => setIsArticlesPageOpen(true)}
-                            imagePublishMode={currentProject?.state?.imagePublishMode || 'draft'}
+                            imagePublishMode={currentProject?.state?.wpPublishMode || 'draft'}
                             articlePublishMode={currentProject?.state?.articlePublishMode || 'draft'}
                             metaPublishMode={currentProject?.state?.metaPublishMode || 'draft'}
-                            onImagePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, imagePublishMode: mode }))}
+                            onImagePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, wpPublishMode: mode }))}
                             onArticlePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, articlePublishMode: mode }))}
                             onMetaPublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, metaPublishMode: mode }))}
                             onStartWorkflow={(sitePlanItems) => {
