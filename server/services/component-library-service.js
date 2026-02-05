@@ -114,8 +114,11 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
 
     // Get all components for this workflow, then filter to only active ones
     const allComponentsRaw = await getComponentsForWorkflow(workflowId);
-    const allComponents = allComponentsRaw.filter(c => c.is_active !== false);
+    // IMPORTANT: Use strict equality to only include truly active components
+    // This filters out false, null, undefined, and string "false"
+    const allComponents = allComponentsRaw.filter(c => c.is_active === true);
     console.log('[ComponentLibrary] Found', allComponents.length, 'active components for workflow', workflowId, '(', allComponentsRaw.length, 'total)');
+    console.log('[ComponentLibrary] Raw is_active values:', allComponentsRaw.map(c => `${c.name}: ${c.is_active} (${typeof c.is_active})`).join(', '));
     console.log('[ComponentLibrary] ACTIVE COMPONENTS:', allComponents.map(c =>
       `[Slot ${c.slot_number}] "${c.name}" (${c.component_type}) tag=${c.tag || 'Global'}`
     ).join(' | '));
