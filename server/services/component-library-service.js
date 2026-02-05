@@ -7,9 +7,9 @@
 import { sql, isDatabaseEnabled } from '../db/index.js';
 
 /**
- * Get all components for a workflow
+ * Get all ACTIVE components for a workflow (used for publishing)
  * @param {number} workflowId - The workflow ID
- * @returns {Promise<Array>} List of components
+ * @returns {Promise<Array>} List of active components only
  */
 export async function getComponentsForWorkflow(workflowId) {
   if (!isDatabaseEnabled()) {
@@ -28,6 +28,54 @@ export async function getComponentsForWorkflow(workflowId) {
     console.error('[ComponentLibrary] Error fetching components:', err.message);
     return [];
   }
+}
+
+/**
+ * Get ALL components for a workflow (including inactive - used for UI display)
+ * @param {number} workflowId - The workflow ID
+ * @returns {Promise<Array>} List of all components (active and inactive)
+ */
+export async function getAllComponentsForWorkflow(workflowId) {
+  if (!isDatabaseEnabled()) {
+    return [];
+  }
+
+  try {
+    const components = await sql`
+      SELECT * FROM component_library
+      WHERE workflow_id = ${workflowId}
+      ORDER BY slot_number, sort_order, created_at
+    `;
+    return components;
+  } catch (err) {
+    // Table might not exist yet - return empty array
+    console.error('[ComponentLibrary] Error fetching all components:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Toggle a component's is_active state
+ * @param {number} componentId - Component ID
+ * @returns {Promise<Object>} Updated component with id and is_active
+ */
+export async function toggleComponent(componentId) {
+  if (!isDatabaseEnabled()) {
+    throw new Error('Database not enabled');
+  }
+
+  const result = await sql`
+    UPDATE component_library
+    SET is_active = NOT is_active, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${componentId}
+    RETURNING id, is_active
+  `;
+
+  if (result.length === 0) {
+    throw new Error('Component not found');
+  }
+
+  return result[0];
 }
 
 /**
@@ -456,11 +504,13 @@ export function detectComponentsFromPageJson(elementorDataJson) {
 
 export default {
   getComponentsForWorkflow,
+  getAllComponentsForWorkflow,
   getComponentSettings,
   updateComponentSettings,
   selectComponentsForArticle,
   addComponent,
   deleteComponent,
   hardDeleteComponent,
+  toggleComponent,
   detectComponentsFromPageJson
 };

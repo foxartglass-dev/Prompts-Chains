@@ -415,6 +415,29 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
     }
   };
 
+  // Toggle component active state
+  const handleComponentToggle = async (componentId: number) => {
+    if (!workflowId) return;
+
+    try {
+      const response = await fetch(`/api/component-library/${workflowId}/${componentId}/toggle`, {
+        method: 'PATCH'
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        // Update local state
+        setComponents(prev => prev.map(c =>
+          c.id === componentId ? { ...c, is_active: data.is_active } : c
+        ));
+      } else {
+        setError(data.error || 'Failed to toggle component');
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   // Get components for a slot
   const getComponentsForSlot = (slotNumber: number) => {
     return components.filter(c => c.slot_number === slotNumber);
@@ -697,9 +720,25 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
                     {slotComponents.map(comp => (
                       <div
                         key={comp.id}
-                        className="flex items-center justify-between bg-slate-900 rounded px-2 py-1.5"
+                        className={`flex items-center justify-between bg-slate-900 rounded px-2 py-1.5 ${
+                          !comp.is_active ? 'opacity-50' : ''
+                        }`}
                       >
                         <div className="flex items-center gap-2">
+                          {/* Component Toggle - flush left */}
+                          <button
+                            onClick={() => handleComponentToggle(comp.id)}
+                            className={`relative w-8 h-4 rounded-full transition-colors flex-shrink-0 ${
+                              comp.is_active ? 'bg-green-500' : 'bg-gray-600'
+                            }`}
+                            title={comp.is_active ? 'Disable component' : 'Enable component'}
+                          >
+                            <div
+                              className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${
+                                comp.is_active ? 'left-4' : 'left-0.5'
+                              }`}
+                            />
+                          </button>
                           <span
                             className={`px-1.5 py-0.5 rounded text-xs text-white ${getTagColor(comp.tag)}`}
                           >

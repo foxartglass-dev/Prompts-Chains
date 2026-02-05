@@ -7,11 +7,13 @@ import express from 'express';
 import { sql, isDatabaseEnabled } from '../db/index.js';
 import {
   getComponentsForWorkflow,
+  getAllComponentsForWorkflow,
   getComponentSettings,
   updateComponentSettings,
   selectComponentsForArticle,
   addComponent,
   deleteComponent,
+  toggleComponent,
   detectComponentsFromPageJson
 } from '../services/component-library-service.js';
 import { fetchWordPressPage } from '../services/elementor-style-extractor.js';
@@ -20,7 +22,7 @@ const router = express.Router();
 
 /**
  * GET /api/component-library/:workflowId
- * Get all components and settings for a workflow
+ * Get all components and settings for a workflow (includes inactive for UI display)
  */
 router.get('/:workflowId', async (req, res) => {
   try {
@@ -30,7 +32,8 @@ router.get('/:workflowId', async (req, res) => {
       return res.json({ success: true, components: [], settings: { enabled: false } });
     }
 
-    const components = await getComponentsForWorkflow(parseInt(workflowId));
+    // Use getAllComponentsForWorkflow to show both active and inactive in UI
+    const components = await getAllComponentsForWorkflow(parseInt(workflowId));
     const settings = await getComponentSettings(parseInt(workflowId));
 
     // Group components by slot for easier UI rendering
@@ -245,6 +248,23 @@ router.delete('/:workflowId/:componentId', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('[ComponentLibrary] Error deleting component:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * PATCH /api/component-library/:workflowId/:componentId/toggle
+ * Toggle a component's is_active state
+ */
+router.patch('/:workflowId/:componentId/toggle', async (req, res) => {
+  try {
+    const { componentId } = req.params;
+
+    const result = await toggleComponent(parseInt(componentId));
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[ComponentLibrary] Error toggling component:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
