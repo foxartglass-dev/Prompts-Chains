@@ -7,6 +7,12 @@
  * 2. Publishes articles to WordPress (Images → Page → Meta)
  * 3. Creates notifications for errors and first-day monitoring
  * 4. Catches up on missed articles after server restart
+ *
+ * HYBRID APPROACH (Feb 2026):
+ * The cron still ticks every 5 minutes, but does a fast COUNT(*) check first.
+ * If the queue is empty (no pending articles), it logs "sleeping" and returns
+ * immediately - no expensive queries, no timezone calculations, no wasted cycles.
+ * This saves resources during development when drip feed isn't being used.
  */
 
 import cron from 'node-cron';
@@ -15,6 +21,7 @@ import { sql, isDatabaseEnabled } from '../db/index.js';
 let isRunning = false;
 let lastRun = null;
 let schedulerEnabled = true;
+let consecutiveEmptyChecks = 0; // Track how many times we've found an empty queue
 
 // Helper function to get current date and time in a specific timezone
 const getCurrentTimeInTimezone = (timezone = 'America/Chicago') => {
@@ -96,7 +103,25 @@ async function runDripFeedCycle() {
   lastRun = new Date();
 
   try {
-    console.log(`[Drip Feed Scheduler] Running cycle...`);
+    // HYBRID APPROACH: Fast check first - if queue is empty, skip all heavy work
+    const queueCheck = await sql`
+      SELECT COUNT(*) as count FROM drip_feed_schedules WHERE status = 'pending'
+    `;
+    const pendingCount = parseInt(queueCheck[0]?.count || 0);
+
+    if (pendingCount === 0) {
+      consecutiveEmptyChecks++;
+      // Only log every 12 checks (1 hour) to reduce noise
+      if (consecutiveEmptyChecks === 1 || consecutiveEmptyChecks % 12 === 0) {
+        console.log(`[Drip Feed Scheduler] 💤 Queue empty, sleeping (checked ${consecutiveEmptyChecks}x)`);
+      }
+      isRunning = false;
+      return;
+    }
+
+    // Queue has items - reset counter and proceed
+    consecutiveEmptyChecks = 0;
+    console.log(`[Drip Feed Scheduler] Running cycle... (${pendingCount} pending)`);
 
     // Get all pending articles with their timezone settings
     const pendingArticles = await sql`
@@ -384,6 +409,9 @@ async function createNotification({ websiteId, scheduleId, articleId, type, titl
 async function checkPendingNotifications() {
   if (!isDatabaseEnabled()) return;
 
+  // Skip notification checks if queue is empty (no pending articles)
+  if (consecutiveEmptyChecks > 0) return;
+
   try {
     // Check for meta_not_chosen notifications that need to be created
     const now = new Date();
@@ -439,7 +467,9 @@ export function getSchedulerStatus() {
   return {
     enabled: schedulerEnabled,
     isRunning,
-    lastRun
+    lastRun,
+    consecutiveEmptyChecks,
+    sleepingFor: consecutiveEmptyChecks > 0 ? `${consecutiveEmptyChecks * 5} minutes` : null
   };
 }
 
