@@ -46,6 +46,8 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [canRevert, setCanRevert] = useState(false);
+  const [lastAppliedTemplate, setLastAppliedTemplate] = useState<string | null>(null);
 
   // Filters
   const [typeFilter, setTypeFilter] = useState<string>('');
@@ -65,14 +67,32 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     snippets: true,
     settings: true,
     imageCreation: true,
-    sitePlanning: true
+    sitePlanning: true,
+    componentLibrary: true
   });
 
   useEffect(() => {
     if (isOpen) {
       fetchTemplates();
+      // Check if we have a revert point saved for this workflow (database)
+      if (currentWorkflowId) {
+        fetch(`/api/templates/revert-point/${currentWorkflowId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.hasRevertPoint) {
+              setCanRevert(true);
+              setLastAppliedTemplate(data.templateName || 'Unknown template');
+            } else {
+              setCanRevert(false);
+              setLastAppliedTemplate(null);
+            }
+          })
+          .catch(() => {
+            setCanRevert(false);
+          });
+      }
     }
-  }, [isOpen, typeFilter]);
+  }, [isOpen, typeFilter, currentWorkflowId]);
 
   const fetchTemplates = async () => {
     setLoading(true);
@@ -223,6 +243,19 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     setLoading(true);
     setError(null);
     try {
+      // Save current workflow state for revert BEFORE applying (database)
+      try {
+        await fetch(`/api/templates/revert-point/${currentWorkflowId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ templateName: template.name })
+        });
+        console.log('[TemplateLibrary] Saved revert point to database before applying template');
+      } catch (revertErr) {
+        console.warn('[TemplateLibrary] Failed to save revert point:', revertErr);
+        // Continue with apply even if revert point fails
+      }
+
       const res = await fetch(`/api/templates/${template.id}/apply/${currentWorkflowId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -235,6 +268,8 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
         return;
       }
       if (data.workflow) {
+        setCanRevert(true);
+        setLastAppliedTemplate(template.name);
         onApplyTemplate?.(template);
         onClose();
       } else {
@@ -243,6 +278,46 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     } catch (err) {
       console.error('Failed to apply template:', err);
       setError(`Network error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const revertLastApply = async () => {
+    if (!currentWorkflowId) {
+      setError('No workflow selected');
+      return;
+    }
+
+    if (!confirm(`Revert workflow to state before "${lastAppliedTemplate}" was applied?\n\nThis will restore your workflow state, image settings, components, and site plan.`)) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      // Call the database-backed revert endpoint
+      const res = await fetch(`/api/templates/revert/${currentWorkflowId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || `Failed to revert (${res.status})`);
+        return;
+      }
+
+      // Clear revert state
+      setCanRevert(false);
+      setLastAppliedTemplate(null);
+
+      // Notify parent to refresh
+      onApplyTemplate?.(null as any); // Signal to refresh workflow
+      onClose();
+    } catch (err) {
+      console.error('Failed to revert:', err);
+      setError(`Revert failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -328,7 +403,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-slate-900 rounded-lg w-[85vw] h-[80vh] flex flex-col overflow-hidden border border-brand-cyan/30">
+      <div className="bg-slate-900 rounded-lg w-[95vw] h-[90vh] flex flex-col overflow-hidden border border-brand-cyan/30">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
           <div className="flex items-center gap-4">
@@ -343,6 +418,19 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
             )}
           </div>
           <div className="flex items-center gap-3">
+            {viewMode === 'browse' && canRevert && (
+              <button
+                onClick={revertLastApply}
+                disabled={loading}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm text-white font-medium disabled:opacity-50 flex items-center gap-1.5"
+                title={`Revert to state before "${lastAppliedTemplate}" was applied`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+                Revert Last Apply
+              </button>
+            )}
             {viewMode === 'browse' && (
               <button
                 onClick={() => setViewMode('create')}
@@ -465,25 +553,10 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                         <div className="flex gap-2">
                           <button
                             onClick={() => { setSelectedTemplate(template); setViewMode('preview'); }}
-                            className="flex-1 px-2 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white"
+                            className="flex-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
                           >
-                            Preview
+                            Apply / Preview
                           </button>
-                          {template.template_type === 'website_setup' ? (
-                            <button
-                              onClick={() => applyWebsiteTemplate(template)}
-                              className="flex-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
-                            >
-                              Apply to Website
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => applyTemplate(template)}
-                              className="flex-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
-                            >
-                              Apply
-                            </button>
-                          )}
                           <button
                             onClick={() => deleteTemplate(template.id)}
                             className="px-2 py-1.5 border border-brand-cyan rounded text-sm text-brand-cyan hover:bg-brand-cyan/10"
@@ -581,7 +654,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
 
                   <div>
                     <label className="block text-sm text-gray-400 mb-3">Include Sections</label>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       {[
                         { key: 'prompts', label: 'Prompt Templates', desc: 'The prompt chain structure' },
                         { key: 'placeholders', label: 'Placeholders', desc: 'Global and tagged placeholders' },
@@ -590,6 +663,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                         { key: 'settings', label: 'Settings', desc: 'Model, provider, output settings' },
                         { key: 'imageCreation', label: 'Image Creation', desc: 'Image settings, avatars, bank & prompts' },
                         { key: 'sitePlanning', label: 'Site Planning', desc: 'Site structure and page hierarchy' },
+                        { key: 'componentLibrary', label: 'Component Library', desc: 'Sliders, stats bars, reusable components' },
                       ].map(({ key, label, desc }) => (
                         <label
                           key={key}
@@ -750,6 +824,31 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                             <span className="text-gray-500">
                               {w.state?.promptTemplates?.length || 0} prompts
                             </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedTemplate.template_data?.componentLibrary && (
+                    <div className="bg-gray-800 rounded-lg p-4">
+                      <h4 className="text-sm font-medium text-purple-400 mb-3">
+                        Component Library ({selectedTemplate.template_data.componentLibrary.components?.length || 0} components)
+                      </h4>
+                      <div className="space-y-2">
+                        {selectedTemplate.template_data.componentLibrary.settings?.enabled && (
+                          <div className="text-xs text-green-400 mb-2">Injection Enabled</div>
+                        )}
+                        {selectedTemplate.template_data.componentLibrary.components?.map((c: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between text-sm p-2 bg-gray-700 rounded">
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400 text-xs">Slot {c.slot_number}</span>
+                              <span className="text-white">{c.name}</span>
+                              {c.tag && (
+                                <span className="px-1.5 py-0.5 bg-brand-gold/30 rounded text-xs text-brand-gold">{c.tag}</span>
+                              )}
+                            </div>
+                            <span className="text-gray-500 text-xs">{c.component_type}</span>
                           </div>
                         ))}
                       </div>
