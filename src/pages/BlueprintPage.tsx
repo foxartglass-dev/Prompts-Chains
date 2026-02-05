@@ -5797,6 +5797,296 @@ RENAME FOR CLARITY:
       </div>
     </div>
 
+    {/* INVESTIGATION 3: Component Library System */}
+    <div className="bg-slate-800 rounded-xl p-6 border border-brand-gold/50">
+      <div className="flex items-center gap-3 mb-4">
+        <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold">COMPLETE</span>
+        <h3 className="text-xl font-bold text-white">Component Library System</h3>
+        <span className="text-gray-400 text-sm">Feb 2026</span>
+      </div>
+
+      {/* Purpose */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Purpose</h4>
+        <p className="text-gray-300">
+          Automatically inject <strong className="text-white">reusable Elementor components</strong> (hero sliders, stats bars, benefit sections)
+          into generated SEO articles. Components are captured from existing WordPress pages and stored in a library. When publishing articles,
+          the system selects appropriate components based on the article's <strong className="text-brand-gold">audience tag (H, J, C)</strong>
+          and injects them at specific slot positions.
+        </p>
+      </div>
+
+      {/* Architecture */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Architecture</h4>
+        <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs text-gray-300 overflow-x-auto">
+          <pre>{`┌─────────────────────────────────────────────────────────────────────────┐
+│                     COMPONENT LIBRARY FLOW                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  CAPTURE (from WordPress):                                               │
+│  ┌──────────────┐    ┌──────────────────┐    ┌──────────────────────┐   │
+│  │ WP Page ID   │───▶│ Fetch Elementor  │───▶│ Detect Components:   │   │
+│  │ (e.g., 1441) │    │ JSON (_data)     │    │ • slider_revolution  │   │
+│  └──────────────┘    └──────────────────┘    │ • elementor_template │   │
+│                                               └──────────┬───────────┘   │
+│                                                          │               │
+│  STORE (in component_library table):                     ▼               │
+│  ┌────────────────────────────────────────────────────────────────────┐  │
+│  │ id | workflow_id | slot | type | component_ref | module_name | tag │  │
+│  │────┼─────────────┼──────┼──────┼───────────────┼─────────────┼─────│  │
+│  │ 1  | 5           | 1    | SR   | home-1        | Residential | H   │  │
+│  │ 2  | 5           | 2    | ET   | 1134          | NULL        | H   │  │
+│  │ 3  | 5           | 1    | SR   | janitorial-1  | Commercial  | J   │  │
+│  └────────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  INJECT (during publish):                                                │
+│  ┌──────────────┐    ┌──────────────────┐    ┌──────────────────────┐   │
+│  │ Article with │───▶│ selectComponents │───▶│ buildElementorPage   │   │
+│  │ tag="H"      │    │ ForArticle("H")  │    │ with slot1,2,3       │   │
+│  └──────────────┘    └──────────────────┘    └──────────────────────┘   │
+│                                                                          │
+│  SLOT POSITIONS:                                                         │
+│  ┌─────────────────────────────────────────────────────────────────────┐ │
+│  │  SLOT 1 (TOP)     ← Hero slider goes here                           │ │
+│  │  ─────────────────────────────────────────                          │ │
+│  │  [Hero Section]                                                     │ │
+│  │  [Content Chunk 1]                                                  │ │
+│  │  SLOT 2 (MIDDLE)  ← Stats bar goes here                             │ │
+│  │  ─────────────────────────────────────────                          │ │
+│  │  [Content Chunk 2]                                                  │ │
+│  │  [Content Chunk 3]                                                  │ │
+│  │  SLOT 3 (BOTTOM)  ← Benefits section goes here                      │ │
+│  └─────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────┘`}</pre>
+        </div>
+      </div>
+
+      {/* Component Types */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Component Types</h4>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="bg-slate-900 rounded-lg p-4">
+            <span className="text-brand-gold font-bold">slider_revolution</span>
+            <p className="text-gray-400 text-sm mt-1">Premium WordPress slider plugin. Referenced by alias (e.g., "home-1").</p>
+            <div className="mt-2 text-xs">
+              <span className="text-red-400">CRITICAL:</span>
+              <span className="text-gray-300"> Requires BOTH <code>component_ref</code> (alias) AND <code>module_name</code> (display name like "Residential")</span>
+            </div>
+            <div className="bg-slate-800 rounded p-2 mt-2 text-xs font-mono">
+              <span className="text-gray-400">widgetType:</span> <span className="text-green-400">'slider_revolution'</span><br/>
+              <span className="text-gray-400">revslidertitle:</span> <span className="text-green-400">moduleName</span><br/>
+              <span className="text-gray-400">shortcode:</span> <span className="text-green-400">'[rev_slider alias="..."]'</span>
+            </div>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-4">
+            <span className="text-purple-400 font-bold">elementor_template</span>
+            <p className="text-gray-400 text-sm mt-1">Saved Elementor section/template. Referenced by template ID.</p>
+            <div className="bg-slate-800 rounded p-2 mt-2 text-xs font-mono">
+              <span className="text-gray-400">widgetType:</span> <span className="text-green-400">'template'</span><br/>
+              <span className="text-gray-400">template_id:</span> <span className="text-green-400">'1134'</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Database Tables */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Database Schema</h4>
+        <div className="space-y-3 text-sm">
+          <div className="bg-slate-900 rounded-lg p-3">
+            <span className="text-brand-gold font-bold">component_library</span>
+            <span className="text-gray-400 ml-2">Main storage table</span>
+            <div className="text-xs text-gray-500 mt-1">
+              Columns: id, workflow_id, slot_number (1-3), slot_name, component_type, component_ref,
+              <span className="text-yellow-400"> module_name</span> (for SR), tag (H/J/C/NULL), name, source_page_id, source_page_url, sort_order, is_active
+            </div>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3">
+            <span className="text-brand-gold font-bold">component_rotation_state</span>
+            <span className="text-gray-400 ml-2">Tracks sequential rotation</span>
+            <div className="text-xs text-gray-500 mt-1">
+              Columns: workflow_id, slot_number, tag, last_used_component_id
+            </div>
+            <div className="text-xs text-yellow-400 mt-1">
+              ⚠️ NULL tags stored as empty string '' for UNIQUE constraint compatibility
+            </div>
+          </div>
+          <div className="bg-slate-900 rounded-lg p-3">
+            <span className="text-brand-gold font-bold">workflows.component_settings</span>
+            <span className="text-gray-400 ml-2">JSONB column</span>
+            <div className="text-xs text-gray-500 mt-1">
+              Contains: enabled (boolean), slots[] (number, name, position, rotation mode, enabled)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Key Files */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Key Files</h4>
+        <div className="grid md:grid-cols-2 gap-2 text-sm">
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/db/migrations/029_component_library.sql</code>
+            <span className="text-gray-400 block text-xs">Database schema (includes module_name)</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/db/setup-all.mjs</code>
+            <span className="text-gray-400 block text-xs">Auto-migration on deploy (lines 1033-1107)</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/services/component-library-service.js</code>
+            <span className="text-gray-400 block text-xs">Core logic: CRUD, selection, detection</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/routes/component-library.js</code>
+            <span className="text-gray-400 block text-xs">API endpoints</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/services/elementor-builder.js</code>
+            <span className="text-gray-400 block text-xs">buildComponentWidget(), buildSliderRevolutionWidget()</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">server/routes/elementor.js</code>
+            <span className="text-gray-400 block text-xs">Publish flow: selectComponentsForArticle()</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">src/components/ComponentLibrarySection.tsx</code>
+            <span className="text-gray-400 block text-xs">Frontend UI component</span>
+          </div>
+          <div className="bg-slate-900 rounded p-2">
+            <code className="text-brand-gold">docs/COMPONENT_LIBRARY_SPEC.md</code>
+            <span className="text-gray-400 block text-xs">Complete technical specification</span>
+          </div>
+        </div>
+      </div>
+
+      {/* API Endpoints */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">API Endpoints</h4>
+        <div className="bg-slate-900 rounded-lg p-3 text-sm font-mono space-y-1">
+          <div><span className="text-green-400">GET</span> <span className="text-gray-300">/api/component-library/:workflowId</span> <span className="text-gray-500">- Get all components + settings</span></div>
+          <div><span className="text-yellow-400">PUT</span> <span className="text-gray-300">/api/component-library/:workflowId/settings</span> <span className="text-gray-500">- Update settings</span></div>
+          <div><span className="text-blue-400">POST</span> <span className="text-gray-300">/api/component-library/:workflowId/fetch-page</span> <span className="text-gray-500">- Detect from WP page</span></div>
+          <div><span className="text-blue-400">POST</span> <span className="text-gray-300">/api/component-library/:workflowId/add</span> <span className="text-gray-500">- Add single component</span></div>
+          <div><span className="text-blue-400">POST</span> <span className="text-gray-300">/api/component-library/:workflowId/save-batch</span> <span className="text-gray-500">- Save multiple</span></div>
+          <div><span className="text-yellow-400">PUT</span> <span className="text-gray-300">/api/component-library/:workflowId/:componentId</span> <span className="text-gray-500">- Update component</span></div>
+          <div><span className="text-red-400">DELETE</span> <span className="text-gray-300">/api/component-library/:workflowId/:componentId</span> <span className="text-gray-500">- Soft delete</span></div>
+        </div>
+      </div>
+
+      {/* Selection Logic */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Selection Logic</h4>
+        <div className="bg-slate-900 rounded-lg p-4 text-sm">
+          <ol className="list-decimal list-inside space-y-2 text-gray-300">
+            <li>Get all active components for the slot (is_active = true)</li>
+            <li>Filter by article's tag (e.g., if article is "Service (H)", look for H-tagged components)</li>
+            <li>If no tag-specific match, <strong className="text-yellow-400">fall back to Global</strong> (tag = NULL)</li>
+            <li>If multiple matches, use rotation mode:
+              <ul className="list-disc list-inside ml-4 mt-1 text-gray-400">
+                <li><strong>sequential</strong>: Track last_used_component_id, return next in order</li>
+                <li><strong>random</strong>: Pick random from matches</li>
+              </ul>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    {/* INVESTIGATION 4: LLM API Error Handling */}
+    <div className="bg-slate-800 rounded-xl p-6 border border-brand-gold/50">
+      <div className="flex items-center gap-3 mb-4">
+        <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold">COMPLETE</span>
+        <h3 className="text-xl font-bold text-white">LLM API Error Handling (502 Fix)</h3>
+        <span className="text-gray-400 text-sm">Feb 2026</span>
+      </div>
+
+      {/* Purpose */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Purpose</h4>
+        <p className="text-gray-300">
+          Handle <strong className="text-red-400">transient 502/503/504 errors</strong> from the Anthropic API and network timeouts
+          during batch workflow processing. The last item in a batch would sometimes fail with "API error: 502" even when
+          earlier items succeeded.
+        </p>
+      </div>
+
+      {/* The Problem */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">The Problem</h4>
+        <div className="bg-red-900/20 rounded-lg p-4 border border-red-500/30">
+          <p className="text-gray-300 text-sm">
+            When running batch workflows (e.g., 3+ keywords), the <strong className="text-white">last item would fail</strong> with:
+          </p>
+          <code className="block bg-slate-900 rounded p-2 mt-2 text-red-400 text-sm">
+            [Cleaning(C)] Failed: Error: API error: 502
+          </code>
+          <p className="text-gray-400 text-sm mt-2">
+            This happened during long prompts like "Service Page Article" that take 30-60 seconds to generate.
+          </p>
+        </div>
+      </div>
+
+      {/* The Fix */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">The Fix</h4>
+        <div className="bg-slate-900 rounded-lg p-4">
+          <p className="text-gray-300 text-sm mb-3">Improved retry logic in <code className="text-brand-gold">server/providers/anthropic.js</code>:</p>
+          <div className="grid md:grid-cols-2 gap-4 text-sm">
+            <div className="bg-green-900/20 rounded p-3 border border-green-500/30">
+              <span className="text-green-400 font-bold">Before</span>
+              <ul className="list-disc list-inside text-gray-400 mt-2 space-y-1">
+                <li>MAX_RETRIES = 3</li>
+                <li>RETRY_DELAY_MS = 2000</li>
+                <li>Retryable codes: 502, 503, 504, 529</li>
+                <li>Only retried TypeError (network errors)</li>
+              </ul>
+            </div>
+            <div className="bg-blue-900/20 rounded p-3 border border-blue-500/30">
+              <span className="text-blue-400 font-bold">After</span>
+              <ul className="list-disc list-inside text-gray-400 mt-2 space-y-1">
+                <li>MAX_RETRIES = <strong className="text-white">5</strong></li>
+                <li>RETRY_DELAY_MS = <strong className="text-white">3000</strong></li>
+                <li>Retryable codes: 502, 503, 504, 529, <strong className="text-white">500</strong></li>
+                <li>Also retries <strong className="text-white">AbortError</strong> (timeouts)</li>
+                <li>Added detailed error logging</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Key Code */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Key Code Location</h4>
+        <div className="bg-slate-900 rounded-lg p-3 text-sm">
+          <code className="text-brand-gold">server/providers/anthropic.js</code>
+          <span className="text-gray-400 block mt-1">Lines 7-10: Retry configuration constants</span>
+          <span className="text-gray-400 block">Lines 98-127: Error handling with detailed logging</span>
+        </div>
+      </div>
+
+      {/* How to Debug */}
+      <div>
+        <h4 className="text-brand-cyan font-semibold mb-2">How to Debug Future 502s</h4>
+        <div className="bg-slate-900 rounded-lg p-3 text-sm">
+          <ol className="list-decimal list-inside text-gray-300 space-y-2">
+            <li>Check Railway logs for <code className="text-yellow-400">[Anthropic]</code> entries</li>
+            <li>Look for retry attempt messages: <code className="text-gray-400">"attempt 1/5, Retrying in..."</code></li>
+            <li>If all 5 retries fail, you'll see: <code className="text-red-400">"All 5 retries exhausted"</code></li>
+            <li>Common causes:
+              <ul className="list-disc list-inside ml-4 mt-1 text-gray-400">
+                <li>Anthropic API overloaded (temporary)</li>
+                <li>Railway proxy timeout (for very long generations)</li>
+                <li>Rate limiting (too many requests)</li>
+              </ul>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
     {/* Placeholder for future investigations */}
     <div className="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center">
       <p className="text-gray-500 text-lg">More investigations will be added here as systems are mapped.</p>
