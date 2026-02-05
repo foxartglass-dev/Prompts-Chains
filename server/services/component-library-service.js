@@ -161,8 +161,9 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
     // Get all active components for this workflow
     const allComponents = await getComponentsForWorkflow(workflowId);
     console.log('[ComponentLibrary] Found', allComponents.length, 'active components for workflow', workflowId);
+    // Debug: Show is_active types to catch boolean vs string issues
     console.log('[ComponentLibrary] ALL COMPONENTS IN DB:', allComponents.map(c =>
-      `[Slot ${c.slot_number}] "${c.name}" (${c.component_type}) tag=${c.tag || 'Global'} active=${c.is_active}`
+      `[Slot ${c.slot_number}] "${c.name}" (${c.component_type}) tag=${c.tag || 'Global'} active=${c.is_active} (type: ${typeof c.is_active})`
     ).join(' | '));
 
     const result = {
