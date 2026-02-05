@@ -364,6 +364,14 @@ function extractTitle(content) {
 function formatFAQContent(content, templateStructure = null) {
   if (!content) return content;
 
+  // DEBUG: Log incoming FAQ content to diagnose formatting issues
+  const lineCount = (content.match(/\n/g) || []).length;
+  const hasNewlines = lineCount > 0;
+  console.log(`[FAQ Formatter] Input: ${content.length} chars, ${lineCount} newlines, hasNewlines=${hasNewlines}`);
+  if (!hasNewlines && content.length > 100) {
+    console.log(`[FAQ Formatter] WARNING: FAQ content has NO newlines! First 200 chars: "${content.substring(0, 200)}..."`);
+  }
+
   // Get formatting rules from template or use defaults
   const faqRules = templateStructure?.faq || {
     questionFormat: 'bold',
@@ -420,12 +428,15 @@ function formatFAQContent(content, templateStructure = null) {
 
   // If no Q&A pairs found, return original with basic cleanup
   if (qaPairs.length === 0) {
+    console.log(`[FAQ Formatter] WARNING: No Q&A pairs extracted! Falling back to basic cleanup.`);
     // Fallback to basic formatting
     formatted = content;
     formatted = formatted.replace(/^#\s+([^\n]+\?)\s*$/gm, '<strong>$1</strong>');
     formatted = formatted.replace(/\*\*([^*]+\?)\*\*\s*/g, '<strong>$1</strong>\n');
     return formatted.trim();
   }
+
+  console.log(`[FAQ Formatter] Extracted ${qaPairs.length} Q&A pairs`);
 
   // Rebuild content with template formatting rules
   const formattedPairs = qaPairs.map((qa, index) => {
