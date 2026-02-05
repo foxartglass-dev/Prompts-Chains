@@ -183,8 +183,6 @@ function splitByH2(content: string): { heading: string; content: string }[] {
 /**
  * Clean content before parsing
  * Matches server/routes/elementor.js cleanContent()
- *
- * IMPORTANT: No markdown # characters should appear in the preview or on WordPress
  */
 function cleanContent(content: string): string {
   if (!content) return content;
@@ -194,23 +192,13 @@ function cleanContent(content: string): string {
   // Normalize line endings
   cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // Convert FAQ questions (# or ### followed by question ending in ?) to bold FIRST
-  // This must happen before we process other headings
+  // Remove markdown # at the very start (H1) but not ## which is H2
+  // IMPORTANT: Don't remove lines that end with ? (FAQ questions)
+  cleaned = cleaned.replace(/^#\s+([^\n?]+)\n?/gm, '');
+
+  // Convert FAQ questions (# or ### followed by question ending in ?)
+  // to bold format for proper display
   cleaned = cleaned.replace(/^#{1,3}\s+([^\n]+\?)\s*$/gm, '<strong>$1</strong>');
-
-  // Convert ### headings to <h3> (before removing H1s)
-  cleaned = cleaned.replace(/^###\s+([^\n]+)$/gm, '<h3>$1</h3>');
-
-  // Convert #### headings to <h4>
-  cleaned = cleaned.replace(/^####\s+([^\n]+)$/gm, '<h4>$1</h4>');
-
-  // Remove markdown # at the very start (H1) - these are page titles, handled by the component
-  // Note: ## (H2) headings are handled by splitByH2() function
-  cleaned = cleaned.replace(/^#\s+([^\n]+)\n?/gm, '');
-
-  // Safety net: Strip any remaining lone # at start of lines that might slip through
-  // This ensures NO markdown # characters appear in the final output
-  cleaned = cleaned.replace(/^#+\s+/gm, '');
 
   // Remove trailing dashes at end of paragraphs
   cleaned = cleaned.replace(/\s*[-–—]+\s*$/gm, '');
