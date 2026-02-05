@@ -273,6 +273,28 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
     }
   };
 
+  // Toggle individual component enabled/disabled
+  const handleComponentToggle = async (componentId: number) => {
+    if (!workflowId) return;
+
+    try {
+      const response = await fetch(`/api/component-library/${workflowId}/${componentId}/toggle`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        // Update local state - toggle the is_active value
+        setComponents(prev => prev.map(c =>
+          c.id === componentId ? { ...c, is_active: data.is_active } : c
+        ));
+      }
+    } catch (err) {
+      // Ignore errors for component toggle
+    }
+  };
+
   // Fetch page and detect components
   const handleFetchPage = async () => {
     if (!workflowId || !pageIdInput.trim()) {
@@ -697,15 +719,34 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
                     {slotComponents.map(comp => (
                       <div
                         key={comp.id}
-                        className="flex items-center justify-between bg-slate-900 rounded px-2 py-1.5"
+                        className={`flex items-center justify-between bg-slate-900 rounded px-2 py-1.5 ${
+                          comp.is_active === false ? 'opacity-50' : ''
+                        }`}
                       >
                         <div className="flex items-center gap-2">
+                          {/* Component Toggle */}
+                          <button
+                            onClick={() => handleComponentToggle(comp.id)}
+                            className={`w-8 h-4 rounded-full transition-colors relative flex-shrink-0 ${
+                              comp.is_active !== false
+                                ? 'bg-brand-cyan'
+                                : 'bg-gray-600'
+                            }`}
+                          >
+                            <span
+                              className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                                comp.is_active !== false ? 'left-4' : 'left-0.5'
+                              }`}
+                            />
+                          </button>
                           <span
                             className={`px-1.5 py-0.5 rounded text-xs text-white ${getTagColor(comp.tag)}`}
                           >
                             {comp.tag || 'Global'}
                           </span>
-                          <span className="text-sm text-white">{comp.name}</span>
+                          <span className={`text-sm ${comp.is_active !== false ? 'text-white' : 'text-gray-400'}`}>
+                            {comp.name}
+                          </span>
                           <span className="text-xs text-gray-500">
                             [{comp.component_type === 'slider_revolution' ? 'slider' : 'template'}: {comp.component_ref}]
                           </span>
