@@ -994,9 +994,7 @@ const App: React.FC = () => {
 
         addLog(`[${pending.item.name}] AI choosing best option for ${variableKey}...`, LogStatus.WORKING, pending.item.id);
 
-        // Strip tag from item name for AI prompt (prevents (H), (J), (C) in context)
-        const cleanItemNameForSelection = pending.item.name.replace(/\s*\([A-Za-z]\)\s*$/, '').trim();
-        const prompt = `You are selecting the best option from a list. Given this context about "${cleanItemNameForSelection}", choose the single best option from the following numbered list. Reply with ONLY the number (1, 2, 3, etc.) of the best option:\n\n${selection.options.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}`;
+        const prompt = `You are selecting the best option from a list. Given this context about "${pending.item.name}", choose the single best option from the following numbered list. Reply with ONLY the number (1, 2, 3, etc.) of the best option:\n\n${selection.options.map((opt, i) => `${i + 1}. ${opt}`).join('\n')}`;
 
         try {
             const response = await generateLlmContent(
@@ -1136,9 +1134,7 @@ const App: React.FC = () => {
              filledTemplate = filledTemplate.replace(new RegExp(`{${p.key}}`, 'g'), p.value);
         });
 
-        // Strip tag from item name before replacing (prevents (H), (J), (C) in AI output)
-        const cleanItemName = item.name.replace(/\s*\([A-Za-z]\)\s*$/, '').trim();
-        filledTemplate = filledTemplate.replace(/<item_name>/g, cleanItemName);
+        filledTemplate = filledTemplate.replace(/<item_name>/g, item.name);
 
         return filledTemplate;
     };
@@ -1365,10 +1361,8 @@ const App: React.FC = () => {
                                 addLog(`[${itemLabel}] Generating ${optionCount} options for "${varKey}"...`, LogStatus.WORKING, item.id);
 
                                 // Fill the option variable prompt with context
-                                // Strip tag from item name before replacing (prevents (H), (J), (C) in AI output)
                                 let optionPrompt = optionVar.prompt;
-                                const cleanItemNameForOption = item.name.replace(/\s*\([A-Za-z]\)\s*$/, '').trim();
-                                optionPrompt = optionPrompt.replace(/<item_name>/g, cleanItemNameForOption);
+                                optionPrompt = optionPrompt.replace(/<item_name>/g, item.name);
                                 // Add instruction to generate numbered list
                                 optionPrompt += `\n\nGenerate exactly ${optionCount} options. Format as a numbered list:\n1. [option]\n2. [option]\netc.`;
 
