@@ -2922,6 +2922,7 @@ const DripFeedDiagram: React.FC = () => (
           <div className="text-green-400 font-semibold mb-2">Automation</div>
           <ul className="text-xs text-gray-300 space-y-1">
             <li>✓ Cron job every 5 minutes</li>
+            <li>✓ <strong>Hybrid Sleep</strong> - skips heavy work when queue empty</li>
             <li>✓ Auto-publish due articles</li>
             <li>✓ Retry on failure</li>
             <li>✓ Startup catch-up</li>
@@ -2968,6 +2969,42 @@ const DripFeedDiagram: React.FC = () => (
 │                       └──────────────┘                                 │
 └─────────────────────────────────────────────────────────────────────────┘
 `}</pre>
+      </div>
+    </div>
+
+    {/* Hybrid Sleep Optimization (Feb 2026) */}
+    <div className="bg-purple-900/20 rounded-xl p-6 border border-purple-500/50">
+      <h3 className="text-lg font-bold text-purple-400 mb-4 flex items-center gap-2">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+        </svg>
+        Hybrid Sleep Optimization (Feb 2026)
+      </h3>
+      <p className="text-sm text-gray-300 mb-4">
+        The cron still ticks every 5 minutes, but does a fast check first to avoid wasted cycles when queue is empty.
+      </p>
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <pre className="text-xs text-gray-300 overflow-x-auto">{`
+// In drip-feed-scheduler.js runDripFeedCycle()
+
+1. Fast COUNT(*) query: SELECT COUNT(*) FROM drip_feed_schedules WHERE status = 'pending'
+   └─ Takes <1ms, no joins, no timezone calculations
+
+2. If count === 0:
+   └─ Log "💤 Queue empty, sleeping" (only first time, then hourly)
+   └─ Return immediately - skip all heavy work
+   └─ Notification checker also skips via consecutiveEmptyChecks counter
+
+3. If count > 0:
+   └─ Reset counter, proceed with full processing
+   └─ Get pending articles with timezone settings
+   └─ Filter by due date/time
+   └─ Publish due articles (Images → Page → Meta)
+`}</pre>
+      </div>
+      <div className="text-xs text-gray-400">
+        <strong>Why:</strong> Saves Railway resources during development when drip feed isn't being used.
+        The scheduler was firing every 5 minutes with expensive queries even with zero articles queued.
       </div>
     </div>
 
@@ -4603,6 +4640,83 @@ const ChangelogDiagram: React.FC = () => (
     <div className="text-center mb-8">
       <h2 className="text-2xl font-bold text-brand-cyan mb-2">Changelog</h2>
       <p className="text-gray-400">Searchable history of features and fixes</p>
+    </div>
+
+    {/* February 2026 */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">February 2026</h3>
+
+      <div className="space-y-4">
+        {/* Feb 5 - VibeCoder Notepad Image Consolidation + Drip Feed Hybrid + UI Fixes */}
+        <div className="border-l-4 border-purple-500 pl-4">
+          <div className="text-sm text-purple-400 font-semibold">Feb 5, 2026 - VibeCoder Notepad Image Consolidation + Drip Feed Optimization + UI Improvements</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>VibeCoder Notepad: Image Consolidation</strong>
+                <div className="text-xs text-gray-500">
+                  Combines ALL images from pending edits into ONE consolidated image. Uses HTML Canvas to:
+                  <br/>• Group each edit's images in a row with purple numbered circles (1, 2, 3)
+                  <br/>• Purple separator lines between edit sections
+                  <br/>• Image labels (1a, 1b, 2a) overlaid on each image
+                  <br/>• Preview thumbnail before sending
+                  <br/>• Copy to clipboard or download as PNG
+                  <br/>Workflow: Consolidate → Copy text → Paste text → Drag ONE image
+                  <br/>Solves Claude's 5-image limit - now unlimited images in one submission.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">PERF</span>
+              <div>
+                <strong>Drip Feed Scheduler: Hybrid Sleep Approach</strong>
+                <div className="text-xs text-gray-500">
+                  Cron still ticks every 5 minutes, but now does fast COUNT(*) check first.
+                  <br/>• If queue empty → logs "sleeping" and returns immediately (&lt;1ms)
+                  <br/>• Only logs once on first empty, then every hour (reduces noise)
+                  <br/>• Notification checker also skips when queue empty
+                  <br/>• Status endpoint shows sleepingFor duration
+                  <br/>Saves Railway resources during development when drip feed isn't being used.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Toast Notification: Moved to Bottom Right</strong>
+                <div className="text-xs text-gray-500">
+                  "Loaded default workflow" toast was blocking top nav buttons (WordPress, Articles, etc).
+                  Changed from top-5 right-5 to bottom-5 right-20 in App.tsx.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Template Library: Side-by-Side Layout</strong>
+                <div className="text-xs text-gray-500">
+                  Create template form now shows text inputs on left, Include Sections checkboxes on right.
+                  Changed from max-w-2xl to max-w-6xl with flex layout. Eliminates wasted vertical space.
+                </div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-purple-400 font-semibold">Key Files:</span>
+            <span className="text-gray-400 ml-2">
+              src/components/VibeCoderNotepad.tsx (consolidation with Canvas),
+              server/services/drip-feed-scheduler.js (hybrid sleep),
+              App.tsx (toast position),
+              src/components/TemplateLibrary.tsx (side-by-side)
+            </span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-purple-400 font-semibold">Commits:</span>
+            <span className="text-gray-400 ml-2">79efda4, 735d5ac, 29fe4fa, 3602d1d</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     {/* January 2026 */}
