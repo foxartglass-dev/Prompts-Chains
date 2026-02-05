@@ -605,10 +605,55 @@ function extractHeadlineFromIntro(content) {
 
   // If content is one paragraph, try to extract first sentence as headline
   // Look for a natural break point (first sentence that could be a headline)
+  // IMPORTANT: Don't split at state abbreviation periods (e.g., "TN." in "City, TN. Service")
+  // Instead, look for the LAST period that's followed by a capital letter (new sentence start)
+  // or use the whole content if it's a title-like structure
+
+  // First, check if content looks like a title with "STATE. Rest of Title" pattern
+  // This is common: "Service in City, TN. Professional Services"
+  const stateAbbrevPattern = /,\s*[A-Z]{2}\.\s+[A-Z]/;
+  if (stateAbbrevPattern.test(content) && content.length < 150) {
+    // Content has state abbreviation followed by more title text - use whole thing as headline
+    return {
+      headline: formatHeadlineWithEmDash(content.trim()),
+      remainingContent: ''
+    };
+  }
+
+  // Otherwise, try to find first sentence (but skip state abbreviation periods)
+  // Look for period followed by space and lowercase letter (actual sentence end)
+  // or period at end of content
   const firstSentenceMatch = content.match(/^([^.!?]+[.!?])/);
   if (firstSentenceMatch && firstSentenceMatch[1].length < 150) {
+    // Check if this looks like it stopped at a state abbreviation
+    const potentialHeadline = firstSentenceMatch[1].trim();
+    const endsWithStateAbbrev = /,\s*[A-Z]{2}\.$/.test(potentialHeadline);
+
+    if (endsWithStateAbbrev) {
+      // Don't split here - the period is part of a state abbreviation
+      // Try to find the next sentence boundary instead
+      const remainingAfterState = content.slice(firstSentenceMatch[0].length);
+      const nextSentenceMatch = remainingAfterState.match(/^([^.!?]+[.!?])/);
+      if (nextSentenceMatch) {
+        // Combine the state abbreviation part with the next part as the headline
+        const fullHeadline = (potentialHeadline + ' ' + nextSentenceMatch[1]).trim();
+        if (fullHeadline.length < 200) {
+          return {
+            headline: formatHeadlineWithEmDash(fullHeadline),
+            remainingContent: remainingAfterState.slice(nextSentenceMatch[0].length).trim()
+          };
+        }
+      } else if (content.length < 150) {
+        // No more sentences - use the whole content as headline
+        return {
+          headline: formatHeadlineWithEmDash(content.trim()),
+          remainingContent: ''
+        };
+      }
+    }
+
     return {
-      headline: formatHeadlineWithEmDash(firstSentenceMatch[1].trim()),
+      headline: formatHeadlineWithEmDash(potentialHeadline),
       remainingContent: content.slice(firstSentenceMatch[0].length).trim()
     };
   }
@@ -664,7 +709,8 @@ function buildHeroSection(title, introChunk, options = {}) {
     introContent = remainingContent;
   } else if (title && !introContent.toLowerCase().startsWith(title.toLowerCase())) {
     // Fallback: only use title as H1 if intro doesn't already contain it
-    textElements.push(buildHeadingWidget(title, 'h1', { align: 'center' }));
+    // Apply em dash formatting to title as well (same as headline path)
+    textElements.push(buildHeadingWidget(formatHeadlineWithEmDash(title), 'h1', { align: 'center' }));
   }
 
   // Add remaining intro text
