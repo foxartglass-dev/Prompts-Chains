@@ -319,7 +319,8 @@ export async function addComponent(component) {
 }
 
 /**
- * Delete a component (soft delete by setting is_active = false)
+ * Delete a component (hard delete - removes from database)
+ * Use toggle to temporarily disable components instead
  * @param {number} componentId - Component ID
  * @returns {Promise<boolean>} Success
  */
@@ -329,8 +330,7 @@ export async function deleteComponent(componentId) {
   }
 
   await sql`
-    UPDATE component_library
-    SET is_active = false, updated_at = CURRENT_TIMESTAMP
+    DELETE FROM component_library
     WHERE id = ${componentId}
   `;
 
