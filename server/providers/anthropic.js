@@ -5,9 +5,9 @@ const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
 
 // Retry configuration for transient errors (502, 503, 504, 529)
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 2000; // Start with 2 seconds
-const RETRYABLE_STATUS_CODES = [502, 503, 504, 529];
+const MAX_RETRIES = 5;  // Increased from 3 to handle rate limits better
+const RETRY_DELAY_MS = 3000; // Start with 3 seconds (increased from 2)
+const RETRYABLE_STATUS_CODES = [502, 503, 504, 529, 500];  // Added 500
 
 // Timeout for API requests (5 minutes to handle long generations)
 const REQUEST_TIMEOUT_MS = 300000;
@@ -98,12 +98,26 @@ export const anthropicProvider = {
       } catch (error) {
         lastError = error;
 
-        // For network errors (not HTTP errors), also retry
-        if (error.name === 'TypeError' && attempt < MAX_RETRIES) {
+        // Log detailed error info for debugging
+        console.error(`[Anthropic] Request failed on attempt ${attempt}/${MAX_RETRIES}:`, {
+          errorName: error.name,
+          errorMessage: error.message,
+          isAbortError: error.name === 'AbortError',
+          isTypeError: error.name === 'TypeError'
+        });
+
+        // For network errors or abort errors (timeout), also retry
+        const isRetryableError = error.name === 'TypeError' || error.name === 'AbortError';
+        if (isRetryableError && attempt < MAX_RETRIES) {
           const delay = RETRY_DELAY_MS * Math.pow(2, attempt - 1);
-          console.log(`[Anthropic] Network error, attempt ${attempt}/${MAX_RETRIES}. Retrying in ${delay}ms...`);
+          console.log(`[Anthropic] ${error.name} error, attempt ${attempt}/${MAX_RETRIES}. Retrying in ${delay}ms...`);
           await sleep(delay);
           continue;
+        }
+
+        // If we exhausted retries, log final error
+        if (attempt >= MAX_RETRIES) {
+          console.error(`[Anthropic] All ${MAX_RETRIES} retries exhausted. Final error:`, error.message);
         }
 
         throw error;
