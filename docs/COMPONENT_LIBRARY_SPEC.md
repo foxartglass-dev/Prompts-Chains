@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS component_rotation_state (
 );
 ```
 
+> **Implementation Note:** The `tag` column uses empty string `''` instead of NULL for global/untagged rotation states. This is because PostgreSQL treats NULL values as distinct in UNIQUE constraints, which would allow duplicate (workflow_id, slot_number, NULL) rows. The service layer converts NULL → `''` on write and `''` → NULL on read.
+
 ### Column on `workflows` table: `component_settings`
 
 ```sql
@@ -238,6 +240,42 @@ Add a component to the library.
 
 ### DELETE `/api/component-library/:workflowId/:componentId`
 Remove a component (soft delete sets is_active = false).
+
+### PUT `/api/component-library/:workflowId/:componentId`
+Update a single component's properties.
+
+**Body:** Any combination of:
+```json
+{
+  "slot_number": 1,
+  "slot_name": "Hero Slider",
+  "component_type": "slider_revolution",
+  "component_ref": "home-1",
+  "module_name": "Residential",
+  "tag": "H",
+  "name": "Updated Component Name",
+  "sort_order": 0
+}
+```
+
+**Response:** `{ "success": true, "component": {...} }`
+
+### POST `/api/component-library/:workflowId/save-batch`
+Save multiple components at once from page detection.
+
+**Body:**
+```json
+{
+  "components": [
+    { "slotNumber": 1, "componentType": "slider_revolution", "componentRef": "home-1", ... },
+    { "slotNumber": 2, "componentType": "elementor_template", "componentRef": "1134", ... }
+  ],
+  "sourcePageId": 1441,
+  "sourcePageUrl": "https://example.com/page"
+}
+```
+
+**Response:** `{ "success": true, "components": [...], "count": 2 }`
 
 ### GET `/api/component-library/:workflowId/select/:articleTag`
 Test endpoint - shows what components would be selected for a given tag.
@@ -423,7 +461,8 @@ Sequential rotation works by:
    - `updateComponentSettings()`
    - `selectComponentsForArticle()`
    - `addComponent()`
-   - `deleteComponent()`
+   - `deleteComponent()` (soft delete - sets is_active = false)
+   - `hardDeleteComponent()` (permanent delete - removes row from database)
    - `detectComponentsFromPageJson()`
 4. [ ] Create API routes
 5. [ ] Add `buildSliderRevolutionWidget()` to elementor-builder

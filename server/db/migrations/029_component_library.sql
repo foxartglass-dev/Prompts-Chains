@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS component_library (
   -- 'elementor_template' = template widget with template_id
   component_type VARCHAR(50) NOT NULL,
   component_ref VARCHAR(200) NOT NULL,  -- alias for sliders, template_id for templates
+  module_name VARCHAR(200),  -- SR Module Name (display name in Slider Revolution)
 
   -- Audience tagging (H, J, C, or NULL for global)
   tag VARCHAR(10),
