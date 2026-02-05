@@ -85,11 +85,10 @@ function consolidateFAQSection(content) {
   const beforeFaq = result.substring(0, faqMatch.index + faqMatch[0].length);
   let faqContent = result.substring(faqStartIndex);
 
-  // Convert ## Question? to **Question?** (bold) within FAQ section
-  // Pattern: ## followed by text ending with ?
+  // Convert markdown heading questions to **Question?** (bold) within FAQ section
+  // Handle ###, ##, and # headings (H3, H2, H1 style questions)
+  faqContent = faqContent.replace(/^###\s*([^\n]+\?)\s*$/gm, '**$1**');
   faqContent = faqContent.replace(/^##\s*([^\n]+\?)\s*$/gm, '**$1**');
-
-  // Also handle # Question? (H1 style questions)
   faqContent = faqContent.replace(/^#\s+([^\n]+\?)\s*$/gm, '**$1**');
 
   result = beforeFaq + faqContent;
@@ -364,6 +363,14 @@ function extractTitle(content) {
 function formatFAQContent(content, templateStructure = null) {
   if (!content) return content;
 
+  // DEBUG: Log incoming FAQ content to diagnose formatting issues
+  const lineCount = (content.match(/\n/g) || []).length;
+  const hasNewlines = lineCount > 0;
+  console.log(`[FAQ Formatter] Input: ${content.length} chars, ${lineCount} newlines, hasNewlines=${hasNewlines}`);
+  if (!hasNewlines && content.length > 100) {
+    console.log(`[FAQ Formatter] WARNING: FAQ content has NO newlines! First 200 chars: "${content.substring(0, 200)}..."`);
+  }
+
   // Get formatting rules from template or use defaults
   const faqRules = templateStructure?.faq || {
     questionFormat: 'bold',
@@ -391,7 +398,8 @@ function formatFAQContent(content, templateStructure = null) {
   for (const line of lines) {
     const trimmed = line.trim();
     // Check if line is a question (ends with ?, possibly in markdown format)
-    const questionMatch = trimmed.match(/^(?:#\s+|\*\*)?(.+\?)(?:\*\*)?$/);
+    // Supports: # Question?, ## Question?, ### Question?, **Question?**, plain Question?
+    const questionMatch = trimmed.match(/^(?:#{1,3}\s+|\*\*)?(.+\?)(?:\*\*)?$/);
 
     if (questionMatch) {
       // Save previous Q&A pair
@@ -420,12 +428,15 @@ function formatFAQContent(content, templateStructure = null) {
 
   // If no Q&A pairs found, return original with basic cleanup
   if (qaPairs.length === 0) {
-    // Fallback to basic formatting
+    console.log(`[FAQ Formatter] WARNING: No Q&A pairs extracted! Falling back to basic cleanup.`);
+    // Fallback to basic formatting - handle #, ##, ### headings
     formatted = content;
-    formatted = formatted.replace(/^#\s+([^\n]+\?)\s*$/gm, '<strong>$1</strong>');
+    formatted = formatted.replace(/^#{1,3}\s+([^\n]+\?)\s*$/gm, '<strong>$1</strong>');
     formatted = formatted.replace(/\*\*([^*]+\?)\*\*\s*/g, '<strong>$1</strong>\n');
     return formatted.trim();
   }
+
+  console.log(`[FAQ Formatter] Extracted ${qaPairs.length} Q&A pairs`);
 
   // Rebuild content with template formatting rules
   const formattedPairs = qaPairs.map((qa, index) => {

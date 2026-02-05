@@ -12,6 +12,7 @@ import {
   selectComponentsForArticle,
   addComponent,
   deleteComponent,
+  toggleComponent,
   detectComponentsFromPageJson
 } from '../services/component-library-service.js';
 import { fetchWordPressPage } from '../services/elementor-style-extractor.js';
@@ -245,6 +246,23 @@ router.delete('/:workflowId/:componentId', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('[ComponentLibrary] Error deleting component:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * PATCH /api/component-library/:workflowId/:componentId/toggle
+ * Toggle a component's enabled/disabled state
+ */
+router.patch('/:workflowId/:componentId/toggle', async (req, res) => {
+  try {
+    const { componentId } = req.params;
+
+    const result = await toggleComponent(parseInt(componentId));
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[ComponentLibrary] Error toggling component:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

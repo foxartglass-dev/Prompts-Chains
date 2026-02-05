@@ -17,10 +17,12 @@ export async function getComponentsForWorkflow(workflowId) {
   }
 
   try {
+    // Return ALL components (including disabled) for UI display
+    // The selectComponentsForArticle function filters by is_active for actual injection
     const components = await sql`
       SELECT * FROM component_library
-      WHERE workflow_id = ${workflowId} AND is_active = true
-      ORDER BY slot_number, sort_order, created_at
+      WHERE workflow_id = ${workflowId}
+      ORDER BY slot_number, is_active DESC, sort_order, created_at
     `;
     return components;
   } catch (err) {
@@ -110,11 +112,15 @@ export async function selectComponentsForArticle(workflowId, articleTag) {
       return { enabled: false, slot1: null, slot2: null, slot3: null };
     }
 
-    // Get all active components for this workflow
-    const allComponents = await getComponentsForWorkflow(workflowId);
-    console.log('[ComponentLibrary] Found', allComponents.length, 'active components for workflow', workflowId);
-    console.log('[ComponentLibrary] ALL COMPONENTS IN DB:', allComponents.map(c =>
-      `[Slot ${c.slot_number}] "${c.name}" (${c.component_type}) tag=${c.tag || 'Global'} active=${c.is_active}`
+    // Get all components for this workflow, then filter to only active ones
+    const allComponentsRaw = await getComponentsForWorkflow(workflowId);
+    // IMPORTANT: Use strict equality to only include truly active components
+    // This filters out false, null, undefined, and string "false"
+    const allComponents = allComponentsRaw.filter(c => c.is_active === true);
+    console.log('[ComponentLibrary] Found', allComponents.length, 'active components for workflow', workflowId, '(', allComponentsRaw.length, 'total)');
+    console.log('[ComponentLibrary] Raw is_active values:', allComponentsRaw.map(c => `${c.name}: ${c.is_active} (${typeof c.is_active})`).join(', '));
+    console.log('[ComponentLibrary] ACTIVE COMPONENTS:', allComponents.map(c =>
+      `[Slot ${c.slot_number}] "${c.name}" (${c.component_type}) tag=${c.tag || 'Global'}`
     ).join(' | '));
 
     const result = {
@@ -316,7 +322,8 @@ export async function addComponent(component) {
 }
 
 /**
- * Delete a component (soft delete by setting is_active = false)
+ * Delete a component (hard delete - removes from database)
+ * Use toggle to temporarily disable components instead
  * @param {number} componentId - Component ID
  * @returns {Promise<boolean>} Success
  */
@@ -326,12 +333,36 @@ export async function deleteComponent(componentId) {
   }
 
   await sql`
-    UPDATE component_library
-    SET is_active = false, updated_at = CURRENT_TIMESTAMP
+    DELETE FROM component_library
     WHERE id = ${componentId}
   `;
 
   return true;
+}
+
+/**
+ * Toggle a component's enabled/disabled state
+ * @param {number} componentId - Component ID
+ * @returns {Promise<Object>} Updated component with new is_active value
+ */
+export async function toggleComponent(componentId) {
+  if (!isDatabaseEnabled()) {
+    throw new Error('Database not enabled');
+  }
+
+  // Toggle is_active and return the new value
+  const result = await sql`
+    UPDATE component_library
+    SET is_active = NOT is_active, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ${componentId}
+    RETURNING id, is_active
+  `;
+
+  if (result.length === 0) {
+    throw new Error('Component not found');
+  }
+
+  return result[0];
 }
 
 /**
