@@ -193,7 +193,12 @@ function cleanContent(content: string): string {
   cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
   // Remove markdown # at the very start (H1) but not ## which is H2
-  cleaned = cleaned.replace(/^#\s+[^\n]+\n?/gm, '');
+  // IMPORTANT: Don't remove lines that end with ? (FAQ questions)
+  cleaned = cleaned.replace(/^#\s+([^\n?]+)\n?/gm, '');
+
+  // Convert FAQ questions (# or ### followed by question ending in ?)
+  // to bold format for proper display
+  cleaned = cleaned.replace(/^#{1,3}\s+([^\n]+\?)\s*$/gm, '<strong>$1</strong>');
 
   // Remove trailing dashes at end of paragraphs
   cleaned = cleaned.replace(/\s*[-–—]+\s*$/gm, '');
