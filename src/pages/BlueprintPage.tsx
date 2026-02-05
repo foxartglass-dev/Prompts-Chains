@@ -2029,6 +2029,80 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues</h3>
 
       <div className="space-y-4">
+        {/* Feb 5 - Image toggle Off not respected */}
+        <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Image toggle "Off" ignored - images still processed</span>
+            <span className="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded">CRITICAL - Feb 5, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Setting the Image toggle to "Off" in Publishing to WordPress section didn't stop
+            image processing. Images were still being generated/matched even with toggle showing "Off".
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause:</strong> Field name mismatch between components:
+            <ul className="list-disc ml-4 mt-1">
+              <li>Main UI toggle updates <code className="bg-slate-900 px-1 rounded">wpPublishMode</code> ✓</li>
+              <li><code className="bg-slate-900 px-1 rounded">processWorkflow()</code> reads from <code className="bg-slate-900 px-1 rounded">wpPublishMode</code> ✓</li>
+              <li>SitePlanningSection was reading/writing <code className="bg-slate-900 px-1 rounded">imagePublishMode</code> ✗</li>
+              <li>TestRunnerPopup was reading <code className="bg-slate-900 px-1 rounded">imagePublishMode</code> ✗</li>
+            </ul>
+            Two different state fields! Changes in SitePlanningSection didn't affect what processWorkflow read.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong> Changed SitePlanningSection and TestRunnerPopup to use <code className="bg-slate-900 px-1 rounded">wpPublishMode</code>:
+            <pre className="bg-slate-900 p-2 rounded mt-1 text-xs overflow-x-auto">{`// App.tsx - SitePlanningSection props (was imagePublishMode)
+imagePublishMode={currentProject?.state?.wpPublishMode || 'draft'}
+onImagePublishModeChange={(mode) => setCurrentProjectState(prev => ({ ...prev, wpPublishMode: mode }))}
+
+// App.tsx - TestRunnerPopup props (was imagePublishMode)
+currentImageMode={currentProject?.state?.wpPublishMode || 'draft'}`}</pre>
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Key Files:</strong> App.tsx (lines 2235, 4357, 4360)
+          </div>
+          <div className="text-sm text-amber-400 mt-2">
+            <strong>REMEMBER:</strong> The canonical field for image toggle is <code className="bg-slate-900 px-1 rounded">wpPublishMode</code>
+            (values: 'off' | 'draft' | 'wordpress'). Never use imagePublishMode - it's a legacy field that causes this bug.
+          </div>
+        </div>
+
+        {/* Feb 5 - Em dash formatting in titles */}
+        <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">H1 titles showing "TN." instead of "TN —" (em dash)</span>
+            <span className="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded">Feb 5, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Page titles like "House Cleaning in Hendersonville, TN. Professional Services"
+            should show "TN —" (em dash) but were showing "TN." (period).
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause:</strong> Two issues in <code className="bg-slate-900 px-1 rounded">elementor-builder.js</code>:
+            <ul className="list-disc ml-4 mt-1">
+              <li>Title fallback path (line 713) didn't call <code className="bg-slate-900 px-1 rounded">formatHeadlineWithEmDash()</code></li>
+              <li>First sentence extraction regex split titles at state abbreviation periods (e.g., "TN.")</li>
+            </ul>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix:</strong>
+            <ul className="list-disc ml-4 mt-1">
+              <li>Added <code className="bg-slate-900 px-1 rounded">formatHeadlineWithEmDash(title)</code> to fallback path</li>
+              <li>Added state abbreviation detection to prevent splitting at ", STATE." patterns</li>
+            </ul>
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Key Files:</strong> server/services/elementor-builder.js (lines 606-660, 713)
+          </div>
+          <div className="text-sm text-amber-400 mt-2">
+            <strong>Pattern:</strong> <code className="bg-slate-900 px-1 rounded">,\\s*[A-Z]{'{2}'}\\.\\s+</code> matches ", TN. "
+            and replaces with ", TN — ". The <code className="bg-slate-900 px-1 rounded">formatHeadlineWithEmDash()</code> function
+            handles this globally.
+          </div>
+        </div>
+
         {/* Feb 4 - Tag stripping in prompt-filler.ts */}
         <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
           <div className="flex items-center gap-2 mb-2">
