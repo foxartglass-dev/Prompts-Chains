@@ -1044,6 +1044,7 @@ async function setup() {
             slot_name VARCHAR(100),
             component_type VARCHAR(50) NOT NULL,
             component_ref VARCHAR(200) NOT NULL,
+            module_name VARCHAR(200),
             tag VARCHAR(10),
             name VARCHAR(200) NOT NULL,
             source_page_id INTEGER,
@@ -1059,6 +1060,15 @@ async function setup() {
         console.log('  ✓ Created component_library table');
       } else {
         console.log('  - component_library table already exists');
+        // Check if module_name column exists, add if missing
+        const hasModuleName = await sql`
+          SELECT column_name FROM information_schema.columns
+          WHERE table_name = 'component_library' AND column_name = 'module_name'
+        `;
+        if (hasModuleName.length === 0) {
+          await sql`ALTER TABLE component_library ADD COLUMN module_name VARCHAR(200)`;
+          console.log('  ✓ Added module_name column to component_library');
+        }
       }
     } catch (err) {
       console.error('  ✗ Error with component_library table:', err.message);
