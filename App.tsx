@@ -224,7 +224,9 @@ const App: React.FC = () => {
     const [selectedHistoryRun, setSelectedHistoryRun] = useState<ProcessingRun | null>(null); // Selected run to view details
     const [logSortOrder, setLogSortOrder] = useState<'newest' | 'oldest'>('newest'); // Sort order for logs
     const [logSortDropdownOpen, setLogSortDropdownOpen] = useState(false); // Sorting dropdown visibility
-    const [logGroupBy, setLogGroupBy] = useState<'none' | 'article' | 'session'>('none'); // Group logs by article or session
+    const [logGroupBy, setLogGroupBy] = useState<'none' | 'article' | 'session' | 'summary'>('summary'); // Group logs by article or session
+    const [selectedLogArticle, setSelectedLogArticle] = useState<string | null>(null); // Selected article in summary view
+    const [showSystemLogs, setShowSystemLogs] = useState(false); // Show system/error logs in summary view
     const [showLogTimestamps, setShowLogTimestamps] = useState(true); // Show timestamps in logs
 
     // Image Path Log state (simple decision log)
@@ -1705,7 +1707,7 @@ const App: React.FC = () => {
         const currentLogs = [...logsRef.current, completionLog];
         const historyRun: ProcessingRun = {
             id: `run-${Date.now()}`,
-            projectName: currentProject?.state?.name || 'Unnamed Project',
+            projectName: `${now.toLocaleDateString()} • ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })} • ${itemsToProcess.length} articles`,
             date: now.toISOString().split('T')[0],
             time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
             itemCount: itemsToProcess.length,
@@ -3834,6 +3836,13 @@ const App: React.FC = () => {
                                             <div className="border-t border-slate-700 my-1"></div>
                                             <div className="px-3 py-1.5 text-xs text-slate-400 font-semibold uppercase tracking-wider">Group By</div>
                                             <button
+                                                onClick={() => { setLogGroupBy('summary'); setSelectedLogArticle(null); setShowSystemLogs(false); }}
+                                                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition flex items-center justify-between ${logGroupBy === 'summary' ? 'text-brand-cyan' : 'text-white'}`}
+                                            >
+                                                <span>Summary</span>
+                                                {logGroupBy === 'summary' && <span className="text-brand-cyan">✓</span>}
+                                            </button>
+                                            <button
                                                 onClick={() => { setLogGroupBy('none'); }}
                                                 className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition flex items-center justify-between ${logGroupBy === 'none' ? 'text-brand-cyan' : 'text-white'}`}
                                             >
@@ -3894,6 +3903,7 @@ const App: React.FC = () => {
                                                 onClick={() => {
                                                     setSelectedHistoryRun(run);
                                                     setShowHistory(false);
+                                                    setSelectedLogArticle(null);
                                                     // Load the run's logs into the current view
                                                     setLogs(run.logs);
                                                 }}
@@ -3912,8 +3922,19 @@ const App: React.FC = () => {
                                                     <span>•</span>
                                                     <span>{run.time}</span>
                                                 </div>
-                                                <div className="mt-1 text-xs text-slate-500 truncate">
-                                                    {run.itemNames.slice(0, 3).join(', ')}{run.itemNames.length > 3 ? ` +${run.itemNames.length - 3} more` : ''}
+                                                <div className="mt-2 flex flex-wrap gap-1">
+                                                    {run.itemNames.map((name, idx) => {
+                                                        // Derive status from logs for this item
+                                                        const itemLogs = run.logs.filter(l => l.message.includes(`[${name}]`));
+                                                        const hasError = itemLogs.some(l => l.status === LogStatus.ERROR);
+                                                        const hasSuccess = itemLogs.some(l => l.status === LogStatus.SUCCESS);
+                                                        const pillColor = hasError ? 'border-red-500/50 bg-red-500/10 text-red-400' : hasSuccess ? 'border-green-500/50 bg-green-500/10 text-green-400' : 'border-slate-600 bg-slate-800 text-slate-400';
+                                                        return (
+                                                            <span key={idx} className={`text-xs px-1.5 py-0.5 rounded border ${pillColor}`}>
+                                                                {hasError ? '✗ ' : hasSuccess ? '✓ ' : ''}{stripTagFromName(name)}
+                                                            </span>
+                                                        );
+                                                    })}
                                                 </div>
                                             </button>
                                         ))}
@@ -3970,6 +3991,7 @@ const App: React.FC = () => {
                                     <button
                                         onClick={() => {
                                             setSelectedHistoryRun(null);
+                                            setSelectedLogArticle(null);
                                             setLogs([]);
                                         }}
                                         className="text-xs text-brand-cyan hover:text-brand-cyan/80"
@@ -3981,6 +4003,146 @@ const App: React.FC = () => {
                             <div ref={logContainerRef} className="max-h-[600px] min-h-[200px] bg-slate-900 rounded-lg p-4 overflow-y-auto font-mono text-sm space-y-2 border border-brand-gold/50">
                                 {(() => {
                                     const sortedLogs = logSortOrder === 'oldest' ? logs : [...logs].reverse();
+
+                                    if (logGroupBy === 'summary') {
+                                        // Summary view: keyword grid with clickable pills + detail drill-down
+                                        // Get item names from history run or extract from logs
+                                        const itemNames: string[] = selectedHistoryRun?.itemNames || (() => {
+                                            const names = new Set<string>();
+                                            logs.forEach(log => {
+                                                const match = log.message.match(/^\[([^\]]+)\]/);
+                                                if (match) names.add(match[1]);
+                                            });
+                                            return Array.from(names);
+                                        })();
+
+                                        // Group logs by article name
+                                        const logsByArticle: Record<string, LogEntry[]> = {};
+                                        const systemLogs: LogEntry[] = [];
+                                        logs.forEach(log => {
+                                            const match = log.message.match(/^\[([^\]]+)\]/);
+                                            if (match) {
+                                                const name = match[1];
+                                                if (!logsByArticle[name]) logsByArticle[name] = [];
+                                                logsByArticle[name].push(log);
+                                            } else {
+                                                systemLogs.push(log);
+                                            }
+                                        });
+
+                                        // Derive status for each article
+                                        const getStatus = (articleLogs: LogEntry[] | undefined): 'success' | 'error' | 'working' | 'pending' => {
+                                            if (!articleLogs || articleLogs.length === 0) return 'pending';
+                                            if (articleLogs.some(l => l.status === LogStatus.ERROR)) return 'error';
+                                            if (articleLogs.some(l => l.status === LogStatus.SUCCESS)) return 'success';
+                                            if (articleLogs.some(l => l.status === LogStatus.WORKING)) return 'working';
+                                            return 'pending';
+                                        };
+
+                                        const statusStyles: Record<string, string> = {
+                                            success: 'border-green-500/50 bg-green-500/10 text-green-400',
+                                            error: 'border-red-500/50 bg-red-500/10 text-red-400',
+                                            working: 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 animate-pulse',
+                                            pending: 'border-slate-600 bg-slate-800 text-slate-400',
+                                        };
+
+                                        const statusIcons: Record<string, string> = {
+                                            success: '✓ ', error: '✗ ', working: '⟳ ', pending: ''
+                                        };
+
+                                        const successCount = itemNames.filter(n => getStatus(logsByArticle[n]) === 'success').length;
+                                        const errorCount = itemNames.filter(n => getStatus(logsByArticle[n]) === 'error').length;
+                                        const workingCount = itemNames.filter(n => getStatus(logsByArticle[n]) === 'working').length;
+
+                                        // Get selected article's logs (sorted)
+                                        const selectedLogs = selectedLogArticle ? (logsByArticle[selectedLogArticle] || []) : [];
+
+                                        return (
+                                            <div className="space-y-3">
+                                                {/* Run header */}
+                                                {selectedHistoryRun && (
+                                                    <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-700">
+                                                        <span>{selectedHistoryRun.date} • {selectedHistoryRun.time}</span>
+                                                        <span>{selectedHistoryRun.itemCount} articles</span>
+                                                    </div>
+                                                )}
+
+                                                {/* Keyword Grid */}
+                                                {itemNames.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {itemNames.map((name, idx) => {
+                                                            const status = getStatus(logsByArticle[name]);
+                                                            const isSelected = selectedLogArticle === name;
+                                                            return (
+                                                                <button
+                                                                    key={idx}
+                                                                    onClick={() => setSelectedLogArticle(isSelected ? null : name)}
+                                                                    className={`px-2 py-1 text-xs rounded-lg border cursor-pointer hover:brightness-125 transition ${statusStyles[status]} ${isSelected ? 'ring-2 ring-brand-cyan' : ''}`}
+                                                                >
+                                                                    {statusIcons[status]}{stripTagFromName(name)}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+
+                                                {/* Selected Article Detail Log */}
+                                                {selectedLogArticle && selectedLogs.length > 0 && (
+                                                    <div className="border border-slate-700 rounded-lg overflow-hidden">
+                                                        <div className="bg-slate-800 px-3 py-2 flex items-center justify-between">
+                                                            <span className="text-brand-cyan font-semibold text-xs">{stripTagFromName(selectedLogArticle)} — Detail Log</span>
+                                                            <span className="text-xs text-slate-500">{selectedLogs.length} entries</span>
+                                                        </div>
+                                                        <div className="p-2 space-y-1">
+                                                            {selectedLogs.map(log => (
+                                                                <div key={log.id} className={`flex items-start text-xs ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400'}[log.status]}`}>
+                                                                    {{ [LogStatus.INFO]: <Icon type="info" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-3 w-3 mr-1.5 flex-shrink-0"/>}[log.status]}
+                                                                    <span className="flex-1">{showLogTimestamps && <span className="text-gray-600 mr-1">{log.timestamp}</span>}{log.message}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* System & Error Logs */}
+                                                {systemLogs.length > 0 && (
+                                                    <div className="border border-slate-700 rounded-lg overflow-hidden">
+                                                        <button
+                                                            onClick={() => setShowSystemLogs(!showSystemLogs)}
+                                                            className="w-full bg-slate-800 px-3 py-2 flex items-center justify-between hover:bg-slate-700/50 transition"
+                                                        >
+                                                            <span className="text-amber-400 font-semibold text-xs">System & Error Logs ({systemLogs.length})</span>
+                                                            <svg className={`w-3 h-3 text-slate-400 transition-transform ${showSystemLogs ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                                            </svg>
+                                                        </button>
+                                                        {showSystemLogs && (
+                                                            <div className="p-2 space-y-1">
+                                                                {systemLogs.map(log => (
+                                                                    <div key={log.id} className={`flex items-start text-xs ${{ [LogStatus.INFO]: 'text-blue-400', [LogStatus.SUCCESS]: 'text-green-400', [LogStatus.ERROR]: 'text-red-400', [LogStatus.WORKING]: 'text-yellow-400'}[log.status]}`}>
+                                                                        {{ [LogStatus.INFO]: <Icon type="info" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.SUCCESS]: <Icon type="success" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.ERROR]: <Icon type="error" className="h-3 w-3 mr-1.5 flex-shrink-0"/>, [LogStatus.WORKING]: <Icon type="working" className="h-3 w-3 mr-1.5 flex-shrink-0"/>}[log.status]}
+                                                                        <span className="flex-1">{showLogTimestamps && <span className="text-gray-600 mr-1">{log.timestamp}</span>}{log.message}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Summary Stats Bar */}
+                                                {itemNames.length > 0 && (
+                                                    <div className="flex items-center gap-3 text-xs pt-2 border-t border-slate-700">
+                                                        {successCount > 0 && <span className="text-green-400">{successCount} ✓ succeeded</span>}
+                                                        {errorCount > 0 && <span className="text-red-400">{errorCount} ✗ failed</span>}
+                                                        {workingCount > 0 && <span className="text-yellow-400">{workingCount} in progress</span>}
+                                                        {itemNames.length - successCount - errorCount - workingCount > 0 && (
+                                                            <span className="text-slate-400">{itemNames.length - successCount - errorCount - workingCount} pending</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    }
 
                                     if (logGroupBy === 'none') {
                                         return sortedLogs.map(log => (
