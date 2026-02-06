@@ -18,6 +18,7 @@ import WebsitesPage from './src/components/WebsitesPage';
 import Analytics from './src/components/Analytics';
 import PendingMetaNotification from './src/components/PendingMetaNotification';
 import IdeasBacklog from './src/components/IdeasBacklog';
+import VisionBoard from './src/components/VisionBoard';
 import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components/DefaultWorkflowSelector';
 import WordPressSettings from './src/components/WordPressSettings';
 import ArticlesPage from './src/pages/ArticlesPage';
@@ -253,6 +254,7 @@ const App: React.FC = () => {
     const [isWebsitesOpen, setIsWebsitesOpen] = useState(false);
     const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
     const [isIdeasOpen, setIsIdeasOpen] = useState(false);
+    const [isVisionBoardOpen, setIsVisionBoardOpen] = useState(false);
     const [isWordPressOpen, setIsWordPressOpen] = useState(false);
     const [isArticlesPageOpen, setIsArticlesPageOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -2202,6 +2204,7 @@ const App: React.FC = () => {
 
             {/* Ideas Backlog */}
             <IdeasBacklog isOpen={isIdeasOpen} onClose={() => setIsIdeasOpen(false)} />
+            <VisionBoard isOpen={isVisionBoardOpen} onClose={() => setIsVisionBoardOpen(false)} />
             <WordPressSettings isOpen={isWordPressOpen} onClose={() => setIsWordPressOpen(false)} />
             <ArticlesPage
               isOpen={isArticlesPageOpen}
@@ -2735,7 +2738,7 @@ const App: React.FC = () => {
                             <span className="text-[10px] md:text-sm whitespace-nowrap">Results</span>
                         </button>
                         <button
-                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsWordPressOpen(true); }}
+                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsVisionBoardOpen(false); setIsWordPressOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 bg-slate-900 text-brand-gold font-semibold py-1 px-1 md:py-1.5 md:px-2.5 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="WordPress Settings"
                         >
@@ -2745,7 +2748,7 @@ const App: React.FC = () => {
                             <span className="text-[10px] md:text-sm">WordPress</span>
                         </button>
                         <button
-                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsWordPressOpen(false); setIsArticlesPageOpen(true); }}
+                            onClick={() => { setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsVisionBoardOpen(false); setIsWordPressOpen(false); setIsArticlesPageOpen(true); }}
                             className="flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 bg-slate-900 text-brand-gold font-semibold py-1 px-1 md:py-1.5 md:px-2.5 rounded-lg transition hover:shadow-glow-gold btn-press border border-brand-gold md:border-2"
                             title="WordPress Articles Management"
                         >
@@ -2789,7 +2792,7 @@ const App: React.FC = () => {
                                         <span className="text-sm font-medium">Templates</span>
                                     </button>
                                     <button
-                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsIdeasOpen(false); setIsAnalyticsOpen(true); }}
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsIdeasOpen(false); setIsVisionBoardOpen(false); setIsAnalyticsOpen(true); }}
                                         className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition"
                                     >
                                         <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2798,7 +2801,7 @@ const App: React.FC = () => {
                                         <span className="text-sm font-medium">Analytics</span>
                                     </button>
                                     <button
-                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(true); }}
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsVisionBoardOpen(false); setIsIdeasOpen(true); }}
                                         className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition"
                                     >
                                         <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2807,7 +2810,16 @@ const App: React.FC = () => {
                                         <span className="text-sm font-medium">Ideas</span>
                                     </button>
                                     <button
-                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsBlueprintOpen(true); }}
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsVisionBoardOpen(true); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition"
+                                    >
+                                        <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                        </svg>
+                                        <span className="text-sm font-medium">Vision Board</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsVisionBoardOpen(false); setIsBlueprintOpen(true); }}
                                         className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition rounded-b-lg"
                                     >
                                         <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
