@@ -35,7 +35,7 @@ function logImageDecision(articleId, keyword, decision) {
   }
 }
 // === END IMAGE PATH LOG ===
-import buildElementorPage, { getElementorMetaFields } from '../services/elementor-builder.js';
+import buildElementorPage, { getElementorMetaFields, contentToHtml } from '../services/elementor-builder.js';
 import {
   createElementorPage,
   updatePage,
@@ -349,6 +349,54 @@ router.post('/chunk-content', async (req, res) => {
     });
   } catch (error) {
     console.error('Chunk content error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/elementor/preview-html
+ * Returns processed HTML exactly as WordPress will render it
+ * This ensures preview matches WordPress output (no duplicate processing logic)
+ */
+router.post('/preview-html', async (req, res) => {
+  try {
+    const { content, maxWords = 300 } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ error: 'Content is required' });
+    }
+
+    // Step 1: Chunk content using the SAME function WordPress uses
+    // This handles: FAQ consolidation, H2 splitting, word limit chunking
+    const chunked = chunkContent(content, { maxWords });
+    const title = extractTitle(content);
+
+    // Step 2: Convert each chunk's content to HTML using the SAME function WordPress uses
+    // This handles: paragraph wrapping, FAQ line breaks, etc.
+    const introHtml = chunked.intro
+      ? contentToHtml(chunked.intro.content, chunked.intro.isFAQ || false)
+      : null;
+
+    const chunksHtml = chunked.chunks.map(chunk => ({
+      heading: chunk.heading,
+      html: contentToHtml(chunk.content, chunk.isFAQ || false),
+      isFAQ: chunk.isFAQ || false,
+      wordCount: chunk.wordCount
+    }));
+
+    res.json({
+      success: true,
+      title,
+      intro: introHtml ? {
+        html: introHtml,
+        wordCount: chunked.intro?.wordCount || 0
+      } : null,
+      sections: chunksHtml,
+      totalWords: chunked.totalWords,
+      sectionCount: chunked.chunkCount
+    });
+  } catch (error) {
+    console.error('Preview HTML error:', error);
     res.status(500).json({ error: error.message });
   }
 });

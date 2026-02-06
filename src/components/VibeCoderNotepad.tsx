@@ -148,6 +148,191 @@ const getEditsBatch = (edits: Edit[], maxImages: number = 5): { batch: Edit[], r
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// IMAGE CONSOLIDATION - Combine all images into one with numbered sections
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface ConsolidatedImage {
+  dataUrl: string;
+  width: number;
+  height: number;
+  editCount: number;
+  imageCount: number;
+}
+
+/**
+ * Load an image from a data URL and return its dimensions
+ */
+const loadImage = (dataUrl: string): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+};
+
+/**
+ * Create a consolidated image from all pending edits
+ * - Each edit's images shown in a row
+ * - Horizontal lines between edit sections
+ * - Number overlay on each section (①, ②, ③)
+ */
+const createConsolidatedImage = async (edits: Edit[]): Promise<ConsolidatedImage | null> => {
+  const editsWithImages = edits.filter(e => e.images.length > 0);
+  if (editsWithImages.length === 0) return null;
+
+  // Settings
+  const SECTION_PADDING = 20;
+  const LINE_HEIGHT = 4;
+  const NUMBER_SIZE = 48;
+  const MAX_IMAGE_HEIGHT = 400; // Max height per image row
+  const GAP_BETWEEN_IMAGES = 10;
+
+  // Load all images first to get dimensions
+  const editImageData: { edit: Edit; images: HTMLImageElement[] }[] = [];
+
+  for (const edit of editsWithImages) {
+    const loadedImages: HTMLImageElement[] = [];
+    for (const img of edit.images) {
+      try {
+        const loaded = await loadImage(img.dataUrl);
+        loadedImages.push(loaded);
+      } catch (e) {
+        console.error('Failed to load image:', e);
+      }
+    }
+    if (loadedImages.length > 0) {
+      editImageData.push({ edit, images: loadedImages });
+    }
+  }
+
+  if (editImageData.length === 0) return null;
+
+  // Calculate canvas dimensions
+  let totalHeight = SECTION_PADDING; // Top padding
+  let maxWidth = 800; // Minimum width
+
+  const sectionHeights: number[] = [];
+
+  for (const { images } of editImageData) {
+    // Calculate row width and height for this edit's images
+    let rowWidth = SECTION_PADDING * 2 + NUMBER_SIZE + GAP_BETWEEN_IMAGES; // Left padding + number + gap
+    let rowHeight = 0;
+
+    for (const img of images) {
+      // Scale image to fit max height while preserving aspect ratio
+      const scale = Math.min(1, MAX_IMAGE_HEIGHT / img.height);
+      const scaledWidth = img.width * scale;
+      const scaledHeight = img.height * scale;
+
+      rowWidth += scaledWidth + GAP_BETWEEN_IMAGES;
+      rowHeight = Math.max(rowHeight, scaledHeight);
+    }
+
+    maxWidth = Math.max(maxWidth, rowWidth);
+    sectionHeights.push(rowHeight + SECTION_PADDING * 2);
+    totalHeight += rowHeight + SECTION_PADDING * 2;
+
+    // Add line height between sections (except after last)
+    if (editImageData.indexOf({ edit: editImageData[editImageData.length - 1].edit, images }) === -1) {
+      totalHeight += LINE_HEIGHT;
+    }
+  }
+
+  // Add separators
+  totalHeight += (editImageData.length - 1) * LINE_HEIGHT;
+  totalHeight += SECTION_PADDING; // Bottom padding
+
+  // Create canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = maxWidth;
+  canvas.height = totalHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  // Fill background
+  ctx.fillStyle = '#1e293b'; // slate-800
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Draw each section
+  let currentY = SECTION_PADDING;
+  const circledNumbers = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+
+  for (let i = 0; i < editImageData.length; i++) {
+    const { edit, images } = editImageData[i];
+    const sectionHeight = sectionHeights[i];
+
+    // Draw section background (slightly lighter)
+    ctx.fillStyle = '#334155'; // slate-700
+    ctx.fillRect(0, currentY, canvas.width, sectionHeight);
+
+    // Draw number circle
+    const numberX = SECTION_PADDING + NUMBER_SIZE / 2;
+    const numberY = currentY + sectionHeight / 2;
+
+    // Circle background
+    ctx.beginPath();
+    ctx.arc(numberX, numberY, NUMBER_SIZE / 2, 0, Math.PI * 2);
+    ctx.fillStyle = '#7c3aed'; // purple-600
+    ctx.fill();
+
+    // Number text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${NUMBER_SIZE * 0.6}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(edit.number), numberX, numberY);
+
+    // Draw images
+    let imageX = SECTION_PADDING + NUMBER_SIZE + GAP_BETWEEN_IMAGES * 2;
+
+    for (let j = 0; j < images.length; j++) {
+      const img = images[j];
+      const scale = Math.min(1, MAX_IMAGE_HEIGHT / img.height);
+      const scaledWidth = img.width * scale;
+      const scaledHeight = img.height * scale;
+
+      const imageY = currentY + (sectionHeight - scaledHeight) / 2;
+
+      // Draw image
+      ctx.drawImage(img, imageX, imageY, scaledWidth, scaledHeight);
+
+      // Draw image label (1a, 1b, etc.)
+      const label = getImageLabel(edit.number, j);
+      ctx.fillStyle = 'rgba(124, 58, 237, 0.9)'; // purple with transparency
+      ctx.fillRect(imageX, imageY, 30, 20);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px Arial';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(label, imageX + 4, imageY + 4);
+
+      imageX += scaledWidth + GAP_BETWEEN_IMAGES;
+    }
+
+    currentY += sectionHeight;
+
+    // Draw separator line (except after last section)
+    if (i < editImageData.length - 1) {
+      ctx.fillStyle = '#7c3aed'; // purple-600
+      ctx.fillRect(0, currentY, canvas.width, LINE_HEIGHT);
+      currentY += LINE_HEIGHT;
+    }
+  }
+
+  // Export as PNG
+  const dataUrl = canvas.toDataURL('image/png');
+
+  return {
+    dataUrl,
+    width: canvas.width,
+    height: canvas.height,
+    editCount: editImageData.length,
+    imageCount: editImageData.reduce((sum, e) => sum + e.images.length, 0)
+  };
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -161,12 +346,19 @@ export const VibeCoderNotepad: React.FC<VibeCoderNotepadProps> = ({ isOpen, onCl
   const [activeTab, setActiveTab] = useState<'edits' | 'index' | 'ideas'>('edits');
   const [expandedEdit, setExpandedEdit] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+  const [consolidatedImage, setConsolidatedImage] = useState<ConsolidatedImage | null>(null);
+  const [isConsolidating, setIsConsolidating] = useState(false);
   const pasteAreaRef = useRef<HTMLDivElement>(null);
 
   // Save state on change
   useEffect(() => {
     saveState(state);
   }, [state]);
+
+  // Clear consolidated image when edits change
+  useEffect(() => {
+    setConsolidatedImage(null);
+  }, [state.edits]);
 
   // Show notification
   const showNotification = (message: string) => {
@@ -361,18 +553,19 @@ export const VibeCoderNotepad: React.FC<VibeCoderNotepadProps> = ({ isOpen, onCl
   };
 
   // Copy batch for Claude
-  const copyBatchForClaude = () => {
-    const { batch, remaining } = getEditsBatch(state.edits);
-    const markdown = generateMarkdown(batch);
+  const copyBatchForClaude = (useConsolidated: boolean = false) => {
+    const pendingEdits = state.edits.filter(e => e.status === 'pending');
+    const markdown = generateMarkdown(pendingEdits);
 
     let message = markdown;
-    if (remaining.length > 0) {
-      message += `\n> Note: ${remaining.length} more edit(s) queued for next submission.\n`;
-    }
 
-    const totalImages = countImages(batch);
+    const totalImages = countImages(pendingEdits);
     if (totalImages > 0) {
-      message += `\n> Attach ${Math.min(totalImages, 5)} image(s) after pasting this text.\n`;
+      if (useConsolidated && consolidatedImage) {
+        message += `\n> ONE consolidated image attached - sections numbered to match edits above.\n`;
+      } else {
+        message += `\n> Attach ${totalImages} image(s) after pasting this text.\n`;
+      }
     }
 
     copyToClipboard(message);
@@ -381,12 +574,69 @@ export const VibeCoderNotepad: React.FC<VibeCoderNotepadProps> = ({ isOpen, onCl
     setState(prev => ({
       ...prev,
       edits: prev.edits.map(edit => {
-        if (batch.find(b => b.id === edit.id)) {
+        if (edit.status === 'pending') {
           return { ...edit, status: 'submitted', submittedAt: Date.now() };
         }
         return edit;
       })
     }));
+  };
+
+  // Generate consolidated image
+  const handleConsolidate = async () => {
+    const pendingEdits = state.edits.filter(e => e.status === 'pending');
+    if (pendingEdits.length === 0) {
+      showNotification('No edits with images to consolidate');
+      return;
+    }
+
+    setIsConsolidating(true);
+    try {
+      const result = await createConsolidatedImage(pendingEdits);
+      if (result) {
+        setConsolidatedImage(result);
+        showNotification(`Consolidated ${result.imageCount} images from ${result.editCount} edits!`);
+      } else {
+        showNotification('No images to consolidate');
+      }
+    } catch (e) {
+      console.error('Consolidation error:', e);
+      showNotification('Failed to consolidate images');
+    } finally {
+      setIsConsolidating(false);
+    }
+  };
+
+  // Download consolidated image
+  const downloadConsolidatedImage = () => {
+    if (!consolidatedImage) return;
+
+    const link = document.createElement('a');
+    link.href = consolidatedImage.dataUrl;
+    link.download = `edits-consolidated-${Date.now()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showNotification('Image downloaded!');
+  };
+
+  // Copy consolidated image to clipboard
+  const copyConsolidatedImage = async () => {
+    if (!consolidatedImage) return;
+
+    try {
+      // Convert data URL to blob
+      const response = await fetch(consolidatedImage.dataUrl);
+      const blob = await response.blob();
+
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+      showNotification('Image copied to clipboard!');
+    } catch (e) {
+      console.error('Failed to copy image:', e);
+      showNotification('Copy failed - use download instead');
+    }
   };
 
   // Add to codebase index
@@ -676,40 +926,102 @@ export const VibeCoderNotepad: React.FC<VibeCoderNotepadProps> = ({ isOpen, onCl
 
       {/* Footer - Submit Section */}
       {activeTab === 'edits' && pendingEdits.length > 0 && (
-        <div className="border-t border-slate-700 p-4 bg-slate-800/50">
-          <div className="flex items-center justify-between mb-2 text-xs">
+        <div className="border-t border-slate-700 p-3 bg-slate-800/50 space-y-3">
+          {/* Stats */}
+          <div className="flex items-center justify-between text-xs">
             <span className="text-slate-400">
-              Batch: {batch.length} edit(s), {countImages(batch)} image(s)
+              {pendingEdits.length} edit(s), {totalPendingImages} image(s)
             </span>
-            {remaining.length > 0 && (
-              <span className="text-amber-400">+{remaining.length} queued</span>
+            {totalPendingImages > 5 && !consolidatedImage && (
+              <span className="text-amber-400">⚠️ Over 5 images - consolidate!</span>
             )}
           </div>
 
+          {/* Consolidated Image Preview */}
+          {consolidatedImage && (
+            <div className="bg-slate-900 rounded-lg p-2 border border-green-500/50">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-green-400 font-medium">
+                  ✓ Consolidated: {consolidatedImage.editCount} edits, {consolidatedImage.imageCount} images
+                </span>
+                <button
+                  onClick={() => setConsolidatedImage(null)}
+                  className="text-slate-500 hover:text-red-400 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+              <img
+                src={consolidatedImage.dataUrl}
+                alt="Consolidated preview"
+                className="w-full max-h-32 object-contain rounded border border-slate-700"
+              />
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={copyConsolidatedImage}
+                  className="flex-1 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded text-xs font-medium transition"
+                >
+                  Copy Image
+                </button>
+                <button
+                  onClick={downloadConsolidatedImage}
+                  className="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs font-medium transition"
+                >
+                  Download
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
           <div className="flex gap-2">
+            {/* Consolidate Button */}
+            {totalPendingImages > 0 && (
+              <button
+                onClick={handleConsolidate}
+                disabled={isConsolidating}
+                className={`flex-1 py-2 rounded font-medium text-sm transition flex items-center justify-center gap-2 ${
+                  consolidatedImage
+                    ? 'bg-green-700 hover:bg-green-600 text-white'
+                    : 'bg-amber-600 hover:bg-amber-500 text-white'
+                }`}
+              >
+                {isConsolidating ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    {consolidatedImage ? 'Reconsolidate' : 'Consolidate Images'}
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Copy Text Button */}
             <button
-              onClick={copyBatchForClaude}
+              onClick={() => copyBatchForClaude(!!consolidatedImage)}
               className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded font-medium text-sm transition flex items-center justify-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
               </svg>
-              Copy for Claude
+              Copy Text
             </button>
-
-            {totalPendingImages > 5 && (
-              <button
-                onClick={() => showNotification(`Will need ${Math.ceil(totalPendingImages / 5)} submissions for all images`)}
-                className="px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded text-sm transition"
-                title="Images exceed limit"
-              >
-                ⚠️
-              </button>
-            )}
           </div>
 
-          <p className="text-[10px] text-slate-500 mt-2 text-center">
-            After copying, paste text in Claude → then paste/attach images
+          {/* Instructions */}
+          <p className="text-[10px] text-slate-500 text-center">
+            {consolidatedImage
+              ? '1. Copy text → 2. Paste in Claude → 3. Drag/paste consolidated image'
+              : '1. Consolidate images → 2. Copy text → 3. Paste both in Claude'}
           </p>
         </div>
       )}

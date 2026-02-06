@@ -46,6 +46,8 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [canRevert, setCanRevert] = useState(false);
+  const [lastAppliedTemplate, setLastAppliedTemplate] = useState<string | null>(null);
 
   // Filters
   const [typeFilter, setTypeFilter] = useState<string>('');
@@ -65,14 +67,32 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     snippets: true,
     settings: true,
     imageCreation: true,
-    sitePlanning: true
+    sitePlanning: true,
+    componentLibrary: true
   });
 
   useEffect(() => {
     if (isOpen) {
       fetchTemplates();
+      // Check if we have a revert point saved for this workflow (database)
+      if (currentWorkflowId) {
+        fetch(`/api/templates/revert-point/${currentWorkflowId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.hasRevertPoint) {
+              setCanRevert(true);
+              setLastAppliedTemplate(data.templateName || 'Unknown template');
+            } else {
+              setCanRevert(false);
+              setLastAppliedTemplate(null);
+            }
+          })
+          .catch(() => {
+            setCanRevert(false);
+          });
+      }
     }
-  }, [isOpen, typeFilter]);
+  }, [isOpen, typeFilter, currentWorkflowId]);
 
   const fetchTemplates = async () => {
     setLoading(true);
@@ -223,6 +243,19 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     setLoading(true);
     setError(null);
     try {
+      // Save current workflow state for revert BEFORE applying (database)
+      try {
+        await fetch(`/api/templates/revert-point/${currentWorkflowId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ templateName: template.name })
+        });
+        console.log('[TemplateLibrary] Saved revert point to database before applying template');
+      } catch (revertErr) {
+        console.warn('[TemplateLibrary] Failed to save revert point:', revertErr);
+        // Continue with apply even if revert point fails
+      }
+
       const res = await fetch(`/api/templates/${template.id}/apply/${currentWorkflowId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -235,6 +268,8 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
         return;
       }
       if (data.workflow) {
+        setCanRevert(true);
+        setLastAppliedTemplate(template.name);
         onApplyTemplate?.(template);
         onClose();
       } else {
@@ -243,6 +278,46 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
     } catch (err) {
       console.error('Failed to apply template:', err);
       setError(`Network error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const revertLastApply = async () => {
+    if (!currentWorkflowId) {
+      setError('No workflow selected');
+      return;
+    }
+
+    if (!confirm(`Revert workflow to state before "${lastAppliedTemplate}" was applied?\n\nThis will restore your workflow state, image settings, components, and site plan.`)) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      // Call the database-backed revert endpoint
+      const res = await fetch(`/api/templates/revert/${currentWorkflowId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || `Failed to revert (${res.status})`);
+        return;
+      }
+
+      // Clear revert state
+      setCanRevert(false);
+      setLastAppliedTemplate(null);
+
+      // Notify parent to refresh
+      onApplyTemplate?.(null as any); // Signal to refresh workflow
+      onClose();
+    } catch (err) {
+      console.error('Failed to revert:', err);
+      setError(`Revert failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -328,7 +403,7 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-slate-900 rounded-lg w-[85vw] h-[80vh] flex flex-col overflow-hidden border border-brand-cyan/30">
+      <div className="bg-slate-900 rounded-lg w-[95vw] h-[90vh] flex flex-col overflow-hidden border border-brand-cyan/30">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-brand-cyan/30">
           <div className="flex items-center gap-4">
@@ -343,6 +418,19 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
             )}
           </div>
           <div className="flex items-center gap-3">
+            {viewMode === 'browse' && canRevert && (
+              <button
+                onClick={revertLastApply}
+                disabled={loading}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm text-white font-medium disabled:opacity-50 flex items-center gap-1.5"
+                title={`Revert to state before "${lastAppliedTemplate}" was applied`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+                Revert Last Apply
+              </button>
+            )}
             {viewMode === 'browse' && (
               <button
                 onClick={() => setViewMode('create')}
@@ -465,25 +553,10 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                         <div className="flex gap-2">
                           <button
                             onClick={() => { setSelectedTemplate(template); setViewMode('preview'); }}
-                            className="flex-1 px-2 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white"
+                            className="flex-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
                           >
-                            Preview
+                            Apply / Preview
                           </button>
-                          {template.template_type === 'website_setup' ? (
-                            <button
-                              onClick={() => applyWebsiteTemplate(template)}
-                              className="flex-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
-                            >
-                              Apply to Website
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => applyTemplate(template)}
-                              className="flex-1 px-2 py-1.5 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-sm text-slate-900 font-medium"
-                            >
-                              Apply
-                            </button>
-                          )}
                           <button
                             onClick={() => deleteTemplate(template.id)}
                             className="px-2 py-1.5 border border-brand-cyan rounded text-sm text-brand-cyan hover:bg-brand-cyan/10"
@@ -501,99 +574,129 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
 
           {viewMode === 'create' && (
             <div className="flex-1 p-6 overflow-auto">
-              <div className="max-w-2xl mx-auto">
-                <h3 className="text-lg font-medium text-white mb-6">Save Current Workflow as Template</h3>
+              <div className="max-w-6xl mx-auto">
+                <h3 className="text-lg font-medium text-white mb-4">Save Current Workflow as Template</h3>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Template Name *</label>
-                    <input
-                      type="text"
-                      value={createForm.name}
-                      onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                      placeholder="e.g., Single Audience SEO Workflow"
-                      className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
-                    />
-                  </div>
+                {/* Side-by-side layout */}
+                <div className="flex gap-6">
+                  {/* Left side: Form inputs */}
+                  <div className="flex-1 space-y-4">
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Template Name *</label>
+                      <input
+                        type="text"
+                        value={createForm.name}
+                        onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                        placeholder="e.g., Single Audience SEO Workflow"
+                        className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Description</label>
-                    <textarea
-                      value={createForm.description}
-                      onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                      placeholder="Describe what this template is for..."
-                      rows={3}
-                      className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white resize-none"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Description</label>
+                      <textarea
+                        value={createForm.description}
+                        onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                        placeholder="Describe what this template is for..."
+                        rows={2}
+                        className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white resize-none"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Tags (comma-separated)</label>
-                    <input
-                      type="text"
-                      value={createForm.tags}
-                      onChange={(e) => setCreateForm({ ...createForm, tags: e.target.value })}
-                      placeholder="e.g., seo, single-audience, local-business"
-                      className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1">Tags (comma-separated)</label>
+                      <input
+                        type="text"
+                        value={createForm.tags}
+                        onChange={(e) => setCreateForm({ ...createForm, tags: e.target.value })}
+                        placeholder="e.g., seo, single-audience, local-business"
+                        className="w-full bg-gray-800 border border-brand-cyan/30 rounded px-3 py-2 text-white"
+                      />
+                    </div>
 
-                  {/* Phase 4: Template Scope Toggle */}
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">Template Scope</label>
-                    <div className="flex gap-2">
+                    {/* Template Scope */}
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-2">Template Scope</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCreateForm({ ...createForm, scope: 'website' })}
+                          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition border ${
+                            createForm.scope === 'website'
+                              ? 'bg-brand-gold text-slate-900 border-brand-gold'
+                              : 'bg-gray-800 text-gray-300 border-gray-600 hover:border-brand-gold/50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                            </svg>
+                            Website
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCreateForm({ ...createForm, scope: 'app' })}
+                          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition border ${
+                            createForm.scope === 'app'
+                              ? 'bg-brand-cyan text-slate-900 border-brand-cyan'
+                              : 'bg-gray-800 text-gray-300 border-gray-600 hover:border-brand-cyan/50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            App Global
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Buttons */}
+                    <div className="flex gap-3 pt-2">
                       <button
-                        type="button"
-                        onClick={() => setCreateForm({ ...createForm, scope: 'website' })}
-                        className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition border ${
-                          createForm.scope === 'website'
-                            ? 'bg-brand-gold text-slate-900 border-brand-gold'
-                            : 'bg-gray-800 text-gray-300 border-gray-600 hover:border-brand-gold/50'
-                        }`}
+                        onClick={createTemplateFromWorkflow}
+                        disabled={!createForm.name || loading}
+                        className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 font-medium disabled:opacity-50"
                       >
-                        <div className="flex items-center justify-center gap-2">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                          </svg>
-                          Website Global
-                        </div>
-                        <div className="text-[10px] mt-0.5 opacity-70">Only for this website</div>
+                        {loading ? 'Saving...' : 'Save Workflow Template'}
                       </button>
+                      {currentWebsiteId && (
+                        <button
+                          onClick={createTemplateFromWebsite}
+                          disabled={!createForm.name || loading}
+                          className="px-4 py-2 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-slate-900 font-medium disabled:opacity-50"
+                        >
+                          Save All Website Workflows
+                        </button>
+                      )}
                       <button
-                        type="button"
-                        onClick={() => setCreateForm({ ...createForm, scope: 'app' })}
-                        className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition border ${
-                          createForm.scope === 'app'
-                            ? 'bg-brand-cyan text-slate-900 border-brand-cyan'
-                            : 'bg-gray-800 text-gray-300 border-gray-600 hover:border-brand-cyan/50'
-                        }`}
+                        onClick={() => setViewMode('browse')}
+                        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white"
                       >
-                        <div className="flex items-center justify-center gap-2">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          App Global
-                        </div>
-                        <div className="text-[10px] mt-0.5 opacity-70">Available to all websites</div>
+                        Cancel
                       </button>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-3">Include Sections</label>
-                    <div className="grid grid-cols-2 gap-3">
+                  {/* Right side: Include Sections */}
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-400 mb-2">Include Sections</label>
+                    <div className="grid grid-cols-2 gap-2">
                       {[
-                        { key: 'prompts', label: 'Prompt Templates', desc: 'The prompt chain structure' },
-                        { key: 'placeholders', label: 'Placeholders', desc: 'Global and tagged placeholders' },
-                        { key: 'tags', label: 'Tags', desc: 'Audience tags (B, E, G, etc.)' },
-                        { key: 'snippets', label: 'Tagged Snippets', desc: 'Large reusable text blocks' },
-                        { key: 'settings', label: 'Settings', desc: 'Model, provider, output settings' },
-                        { key: 'imageCreation', label: 'Image Creation', desc: 'Image settings, avatars, bank & prompts' },
-                        { key: 'sitePlanning', label: 'Site Planning', desc: 'Site structure and page hierarchy' },
+                        { key: 'prompts', label: 'Prompt Templates', desc: 'Prompt chain structure' },
+                        { key: 'placeholders', label: 'Placeholders', desc: 'Global & tagged' },
+                        { key: 'tags', label: 'Tags', desc: 'Audience tags (B, E, G)' },
+                        { key: 'snippets', label: 'Tagged Snippets', desc: 'Reusable text blocks' },
+                        { key: 'settings', label: 'Settings', desc: 'Model, provider, output' },
+                        { key: 'imageCreation', label: 'Image Creation', desc: 'Avatars, bank, prompts' },
+                        { key: 'sitePlanning', label: 'Site Planning', desc: 'Site structure' },
+                        { key: 'componentLibrary', label: 'Component Library', desc: 'Sliders, stats bars' },
                       ].map(({ key, label, desc }) => (
                         <label
                           key={key}
-                          className={`flex items-start gap-3 p-3 rounded cursor-pointer ${
+                          className={`flex items-start gap-2 p-2 rounded cursor-pointer ${
                             includes[key as keyof typeof includes]
                               ? 'bg-brand-cyan/20 border border-brand-cyan'
                               : 'bg-gray-800 border border-brand-cyan/30'
@@ -603,40 +706,15 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                             type="checkbox"
                             checked={includes[key as keyof typeof includes]}
                             onChange={(e) => setIncludes({ ...includes, [key]: e.target.checked })}
-                            className="mt-1"
+                            className="mt-0.5"
                           />
                           <div>
-                            <div className="text-white text-sm font-medium">{label}</div>
+                            <div className="text-white text-sm font-medium leading-tight">{label}</div>
                             <div className="text-gray-400 text-xs">{desc}</div>
                           </div>
                         </label>
                       ))}
                     </div>
-                  </div>
-
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      onClick={createTemplateFromWorkflow}
-                      disabled={!createForm.name || loading}
-                      className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark hover:shadow-glow-cyan rounded text-slate-900 font-medium disabled:opacity-50"
-                    >
-                      {loading ? 'Saving...' : 'Save Workflow Template'}
-                    </button>
-                    {currentWebsiteId && (
-                      <button
-                        onClick={createTemplateFromWebsite}
-                        disabled={!createForm.name || loading}
-                        className="px-4 py-2 bg-brand-gold hover:bg-brand-gold-dark hover:shadow-glow-gold rounded text-slate-900 font-medium disabled:opacity-50"
-                      >
-                        Save All Website Workflows
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setViewMode('browse')}
-                      className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-white"
-                    >
-                      Cancel
-                    </button>
                   </div>
                 </div>
               </div>
@@ -750,6 +828,31 @@ const TemplateLibrary: React.FC<TemplateLibraryProps> = ({
                             <span className="text-gray-500">
                               {w.state?.promptTemplates?.length || 0} prompts
                             </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedTemplate.template_data?.componentLibrary && (
+                    <div className="bg-gray-800 rounded-lg p-4">
+                      <h4 className="text-sm font-medium text-purple-400 mb-3">
+                        Component Library ({selectedTemplate.template_data.componentLibrary.components?.length || 0} components)
+                      </h4>
+                      <div className="space-y-2">
+                        {selectedTemplate.template_data.componentLibrary.settings?.enabled && (
+                          <div className="text-xs text-green-400 mb-2">Injection Enabled</div>
+                        )}
+                        {selectedTemplate.template_data.componentLibrary.components?.map((c: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between text-sm p-2 bg-gray-700 rounded">
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-400 text-xs">Slot {c.slot_number}</span>
+                              <span className="text-white">{c.name}</span>
+                              {c.tag && (
+                                <span className="px-1.5 py-0.5 bg-brand-gold/30 rounded text-xs text-brand-gold">{c.tag}</span>
+                              )}
+                            </div>
+                            <span className="text-gray-500 text-xs">{c.component_type}</span>
                           </div>
                         ))}
                       </div>

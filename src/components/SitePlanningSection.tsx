@@ -1111,7 +1111,7 @@ const SitePlanningSection: React.FC<Props> = ({
             {plan.total_pages} pages · {plan.max_depth + 1} levels deep
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {/* Sync status */}
           {plan.sync_status && plan.sync_status !== 'unknown' && (
             <span className={`px-2 py-1 rounded text-xs ${plan.sync_status === 'synced' ? 'bg-green-600' : 'bg-orange-600'} text-white`}>
@@ -1119,195 +1119,184 @@ const SitePlanningSection: React.FC<Props> = ({
             </span>
           )}
 
-          {/* PHASE 2: Assign Prompts Mode Toggle */}
-          <div className="flex items-center gap-2 border-r border-slate-600 pr-4 mr-2">
+          {/* === UNIFIED BUTTON STYLE === */}
+          {/* All buttons now use consistent styling: bg-slate-800 border border-brand-gold/30 text-brand-gold */}
+
+          {/* Assign Prompts */}
+          <button
+            onClick={() => {
+              setShowAssignmentMode(!showAssignmentMode);
+              if (!showAssignmentMode) {
+                setSelectionMode(false);
+                setSelectedNodes(new Set());
+              }
+            }}
+            className={`px-2.5 py-1.5 rounded border text-xs font-medium transition flex items-center gap-1 ${
+              showAssignmentMode
+                ? 'bg-brand-gold text-slate-900 border-brand-gold'
+                : 'bg-slate-800 border-brand-gold/30 text-brand-gold hover:border-brand-gold hover:shadow-glow-gold'
+            }`}
+            title="Assign prompts to pages"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <span className="hidden sm:inline">{showAssignmentMode ? 'Exit' : 'Assign'}</span>
+          </button>
+
+          {/* Save/Run when in assignment mode */}
+          {showAssignmentMode && pendingAssignments.size > 0 && (
             <button
-              onClick={() => {
-                setShowAssignmentMode(!showAssignmentMode);
-                if (!showAssignmentMode) {
-                  // Entering assignment mode - cancel selection mode
-                  setSelectionMode(false);
-                  setSelectedNodes(new Set());
-                }
-              }}
-              className={`px-3 py-1.5 rounded text-white text-sm transition flex items-center gap-1 ${
-                showAssignmentMode ? 'bg-amber-600' : 'bg-slate-600 hover:bg-slate-500'
-              }`}
-              title="Assign prompts to pages for batch execution"
+              onClick={saveAssignments}
+              className="px-2.5 py-1.5 bg-green-600 hover:bg-green-500 rounded border border-green-500 text-white text-xs font-medium transition flex items-center gap-1"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
               </svg>
-              {showAssignmentMode ? 'Exit Assign' : 'Assign Prompts'}
+              Save ({pendingAssignments.size})
             </button>
-
-            {/* Save/Run when in assignment mode */}
-            {showAssignmentMode && (
-              <>
-                {pendingAssignments.size > 0 && (
-                  <button
-                    onClick={saveAssignments}
-                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white text-sm transition flex items-center gap-1"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    Save ({pendingAssignments.size})
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowRunBatchModal(true)}
-                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition flex items-center gap-1"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  </svg>
-                  Run Batches
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* UNIFIED START BUTTON - Respects toggle settings */}
-          <div className="flex items-center gap-2 border-r border-slate-600 pr-4 mr-2">
-            {/* Toggle Selection Mode */}
+          )}
+          {showAssignmentMode && (
             <button
-              onClick={() => {
-                setSelectionMode(!selectionMode);
-                if (selectionMode) setSelectedNodes(new Set());
-                // Exit assignment mode when entering selection mode
-                if (!selectionMode) setShowAssignmentMode(false);
-              }}
-              className={`px-3 py-1.5 rounded text-white text-sm transition flex items-center gap-1 ${
-                selectionMode ? 'bg-blue-600' : 'bg-slate-600 hover:bg-slate-500'
-              }`}
+              onClick={() => setShowRunBatchModal(true)}
+              className="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-500 rounded border border-purple-500 text-white text-xs font-medium transition flex items-center gap-1"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {selectionMode ? 'Cancel' : 'Select'}
+              Run Batches
             </button>
+          )}
 
-            {/* Select All (when in selection mode) */}
-            {selectionMode && (
-              <button
-                onClick={toggleSelectAll}
-                className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-white text-sm transition"
-              >
-                {selectedNodes.size === flatNodes.length ? 'Deselect All' : 'Select All'}
-              </button>
-            )}
+          {/* Divider */}
+          <div className="w-px h-6 bg-slate-600 mx-1" />
 
-            {/* Start Selected (when in selection mode with items selected) */}
-            {selectionMode && selectedNodes.size > 0 && (
-              <button
-                onClick={generateSelected}
-                disabled={!onStartWorkflow}
-                className={`px-4 py-1.5 rounded text-white text-sm font-semibold transition flex items-center gap-2 ${
-                  articlePublishMode === 'wordpress'
-                    ? 'bg-green-600 hover:bg-green-700'
-                    : 'bg-purple-600 hover:bg-purple-700'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Start {selectedNodes.size}
-              </button>
-            )}
+          {/* Select */}
+          <button
+            onClick={() => {
+              setSelectionMode(!selectionMode);
+              if (selectionMode) setSelectedNodes(new Set());
+              if (!selectionMode) setShowAssignmentMode(false);
+            }}
+            className={`px-2.5 py-1.5 rounded border text-xs font-medium transition flex items-center gap-1 ${
+              selectionMode
+                ? 'bg-brand-cyan text-slate-900 border-brand-cyan'
+                : 'bg-slate-800 border-brand-gold/30 text-brand-gold hover:border-brand-gold hover:shadow-glow-gold'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {selectionMode ? 'Cancel' : 'Select'}
+          </button>
 
-            {/* Main START Button (when not in selection mode) */}
-            {!selectionMode && (
-              <button
-                onClick={generateAll}
-                disabled={flatNodes.length === 0 || !onStartWorkflow}
-                className={`px-5 py-2 rounded text-white font-bold transition flex items-center gap-2 shadow-lg ${
-                  articlePublishMode === 'wordpress'
-                    ? 'bg-green-600 hover:bg-green-700 disabled:bg-slate-600'
-                    : 'bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600'
-                }`}
-                title="Adds items to workflow and starts processing through the Processing Log"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                START ({flatNodes.length})
-              </button>
-            )}
-          </div>
+          {/* Select All (when in selection mode) */}
+          {selectionMode && (
+            <button
+              onClick={toggleSelectAll}
+              className="px-2.5 py-1.5 bg-slate-800 border border-brand-gold/30 text-brand-gold hover:border-brand-gold rounded text-xs font-medium transition"
+            >
+              {selectedNodes.size === flatNodes.length ? 'None' : 'All'}
+            </button>
+          )}
 
-          {/* Check sync button */}
+          {/* START Button */}
+          <button
+            onClick={selectionMode && selectedNodes.size > 0 ? generateSelected : generateAll}
+            disabled={flatNodes.length === 0 || !onStartWorkflow || (selectionMode && selectedNodes.size === 0)}
+            className={`px-3 py-1.5 rounded border text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+              articlePublishMode === 'wordpress'
+                ? 'bg-green-600 hover:bg-green-500 border-green-500 text-white'
+                : 'bg-brand-gold hover:bg-brand-gold-light border-brand-gold text-slate-900'
+            }`}
+            title="Start processing selected pages"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            START {selectionMode && selectedNodes.size > 0 ? `(${selectedNodes.size})` : `(${flatNodes.length})`}
+          </button>
+
+          {/* Divider */}
+          <div className="w-px h-6 bg-slate-600 mx-1" />
+
+          {/* Check WP Sync */}
           <button
             onClick={checkSync}
             disabled={syncing}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm transition disabled:opacity-50"
+            className="px-2.5 py-1.5 bg-slate-800 border border-brand-gold/30 text-brand-gold hover:border-brand-gold hover:shadow-glow-gold rounded text-xs font-medium transition disabled:opacity-50 flex items-center gap-1"
+            title="Check WordPress sync status"
           >
-            {syncing ? 'Checking...' : 'Check WP Sync'}
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span className="hidden sm:inline">{syncing ? 'Sync...' : 'WP Sync'}</span>
           </button>
 
-          {/* Tab Import button */}
+          {/* Import List */}
           <button
             onClick={() => setShowTabImportModal(true)}
-            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white text-sm transition flex items-center gap-1"
+            className="px-2.5 py-1.5 bg-slate-800 border border-brand-gold/30 text-brand-gold hover:border-brand-gold hover:shadow-glow-gold rounded text-xs font-medium transition flex items-center gap-1"
+            title="Import pages from list"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
-            Import List
+            <span className="hidden sm:inline">Import</span>
           </button>
 
-          {/* Multi-location button */}
+          {/* + Location */}
           <button
             onClick={() => setShowLocationModal(true)}
-            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 rounded text-white text-sm transition flex items-center gap-1"
+            className="px-2.5 py-1.5 bg-slate-800 border border-brand-gold/30 text-brand-gold hover:border-brand-gold hover:shadow-glow-gold rounded text-xs font-medium transition flex items-center gap-1"
+            title="Add location"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            + Location
+            <span className="hidden sm:inline">+Loc</span>
           </button>
 
-          {/* Gap Analysis button */}
+          {/* Neighborhoods */}
           <button
             onClick={() => { setShowGapModal(true); analyzeGaps(); }}
-            className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 rounded text-white text-sm transition flex items-center gap-1"
+            className="px-2.5 py-1.5 bg-slate-800 border border-brand-gold/30 text-brand-gold hover:border-brand-gold hover:shadow-glow-gold rounded text-xs font-medium transition flex items-center gap-1"
+            title="Neighborhood gap analysis"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
             </svg>
-            Neighborhoods
+            <span className="hidden sm:inline">Areas</span>
           </button>
 
-          {/* Import CSV button */}
+          {/* CSV */}
           <button
             onClick={() => setShowImportModal(true)}
-            className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 rounded text-white text-sm transition"
+            className="px-2.5 py-1.5 bg-slate-800 border border-brand-gold/30 text-brand-gold hover:border-brand-gold hover:shadow-glow-gold rounded text-xs font-medium transition"
+            title="Import from CSV"
           >
             CSV
           </button>
 
-          {/* Export Site Plan button */}
+          {/* Export */}
           <button
             onClick={exportSitePlan}
             disabled={flatNodes.length === 0}
-            className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:bg-slate-600 disabled:opacity-50 rounded text-white text-sm transition flex items-center gap-1"
-            title="Export site plan as JSON"
+            className="px-2.5 py-1.5 bg-slate-800 border border-brand-gold/30 text-brand-gold hover:border-brand-gold hover:shadow-glow-gold disabled:opacity-50 rounded text-xs font-medium transition flex items-center gap-1"
+            title="Export site plan"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            Export
+            <span className="hidden sm:inline">Export</span>
           </button>
 
-          {/* Add root page */}
+          {/* + Add Page */}
           <button
             onClick={() => setAddingToParent(0)}
-            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white text-sm transition"
+            className="px-2.5 py-1.5 bg-slate-800 border border-brand-gold/30 text-brand-gold hover:border-brand-gold hover:shadow-glow-gold rounded text-xs font-medium transition"
+            title="Add new page"
           >
-            + Add Page
+            + Page
           </button>
         </div>
       </div>

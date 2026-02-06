@@ -216,7 +216,7 @@ router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
     // Build template data based on selected sections
     const templateData = {};
     const warnings = []; // Track partial save issues
-    const selectedIncludes = includes || { prompts: true, placeholders: true, tags: true, snippets: true, settings: true, imageCreation: true, sitePlanning: true };
+    const selectedIncludes = includes || { prompts: true, placeholders: true, tags: true, snippets: true, settings: true, imageCreation: true, sitePlanning: true, componentLibrary: true };
 
     if (selectedIncludes.prompts && state.promptTemplates) {
       templateData.promptTemplates = state.promptTemplates;
@@ -315,6 +315,58 @@ router.post('/from-workflow/:workflowId', requireDb, async (req, res) => {
       } catch (err) {
         console.error('[Template] Failed to load site planning:', err.message);
         warnings.push(`Site Planning: ${err.message}`);
+      }
+    }
+
+    // Include Component Library if selected
+    if (selectedIncludes.componentLibrary) {
+      try {
+        // Get components from component_library table
+        const components = await sql`
+          SELECT slot_number, slot_name, component_type, component_ref, module_name,
+                 tag, name, source_page_id, source_page_url, sort_order, is_active
+          FROM component_library
+          WHERE workflow_id = ${workflowId} AND is_active = true
+          ORDER BY slot_number, sort_order
+        `;
+
+        // Get component settings from workflow
+        const workflowSettings = await sql`
+          SELECT component_settings FROM workflows WHERE id = ${workflowId}
+        `;
+        const componentSettings = workflowSettings[0]?.component_settings || {
+          enabled: false,
+          slots: [
+            { number: 1, name: 'Hero/Slider', position: 'top', rotation: 'sequential', enabled: true },
+            { number: 2, name: 'Stats Bar', position: 'middle', rotation: 'sequential', enabled: true },
+            { number: 3, name: 'Benefits', position: 'bottom', rotation: 'sequential', enabled: true }
+          ]
+        };
+
+        if (components.length > 0 || componentSettings.enabled) {
+          templateData.componentLibrary = {
+            settings: componentSettings,
+            components: components.map(c => ({
+              slot_number: c.slot_number,
+              slot_name: c.slot_name,
+              component_type: c.component_type,
+              component_ref: c.component_ref,
+              module_name: c.module_name,
+              tag: c.tag,
+              name: c.name,
+              source_page_id: c.source_page_id,
+              source_page_url: c.source_page_url,
+              sort_order: c.sort_order
+            }))
+          };
+          console.log('[Template] Included component library with', components.length, 'components');
+        } else {
+          console.log('[Template] No component library data found for workflow', workflowId);
+          warnings.push('Component Library: No components found for this workflow');
+        }
+      } catch (err) {
+        console.error('[Template] Failed to load component library:', err.message);
+        warnings.push(`Component Library: ${err.message}`);
       }
     }
 
@@ -639,6 +691,88 @@ router.post('/:id/apply/:workflowId', requireDb, async (req, res) => {
       }
     }
 
+    // Apply Component Library if included
+    if (includes.componentLibrary && templateData.componentLibrary) {
+      try {
+        const compData = templateData.componentLibrary;
+
+        if (!merge) {
+          // Replace mode: Delete existing components for this workflow
+          await sql`DELETE FROM component_library WHERE workflow_id = ${workflowId}`;
+          // Reset rotation state
+          await sql`DELETE FROM component_rotation_state WHERE workflow_id = ${workflowId}`;
+        }
+
+        // Insert components from template
+        const components = compData.components || [];
+        for (const comp of components) {
+          if (merge) {
+            // Merge mode: Check if component with same ref already exists
+            const existing = await sql`
+              SELECT id FROM component_library
+              WHERE workflow_id = ${workflowId}
+                AND component_type = ${comp.component_type}
+                AND component_ref = ${comp.component_ref}
+                AND COALESCE(tag, '') = COALESCE(${comp.tag}, '')
+            `;
+            if (existing.length > 0) {
+              // Skip existing component
+              continue;
+            }
+          }
+
+          await sql`
+            INSERT INTO component_library (
+              workflow_id, slot_number, slot_name, component_type, component_ref,
+              module_name, tag, name, source_page_id, source_page_url, sort_order, is_active
+            ) VALUES (
+              ${workflowId},
+              ${comp.slot_number},
+              ${comp.slot_name || null},
+              ${comp.component_type},
+              ${comp.component_ref},
+              ${comp.module_name || null},
+              ${comp.tag || null},
+              ${comp.name},
+              ${comp.source_page_id || null},
+              ${comp.source_page_url || null},
+              ${comp.sort_order || 0},
+              true
+            )
+          `;
+        }
+
+        // Update component settings on workflow
+        if (compData.settings) {
+          if (merge) {
+            // Merge mode: Only enable if template enables it, keep existing slot config
+            const currentSettings = await sql`SELECT component_settings FROM workflows WHERE id = ${workflowId}`;
+            const existingSettings = currentSettings[0]?.component_settings || { enabled: false, slots: [] };
+            const mergedSettings = {
+              ...existingSettings,
+              enabled: existingSettings.enabled || compData.settings.enabled
+            };
+            await sql`
+              UPDATE workflows
+              SET component_settings = ${JSON.stringify(mergedSettings)}, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${workflowId}
+            `;
+          } else {
+            // Replace mode: Use template settings
+            await sql`
+              UPDATE workflows
+              SET component_settings = ${JSON.stringify(compData.settings)}, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${workflowId}
+            `;
+          }
+        }
+
+        console.log('[Templates] Applied component library to workflow:', workflowId, '- Added', components.length, 'components');
+      } catch (compErr) {
+        console.error('[Templates] Failed to apply component library:', compErr.message);
+      }
+    }
+
     res.json({ workflow: result[0] });
   } catch (error) {
     console.error('Error applying template:', error);
@@ -740,6 +874,290 @@ router.delete('/:id', requireDb, async (req, res) => {
     res.json({ deleted: result[0] });
   } catch (error) {
     console.error('Error deleting template:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// REVERT POINT ENDPOINTS
+// Stores workflow state before template application
+// so users can undo accidental template applies
+// ============================================
+
+// GET check if revert point exists for workflow
+router.get('/revert-point/:workflowId', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+
+    // Check if workflow has a revert point stored
+    const result = await sql`
+      SELECT revert_point, revert_template_name, revert_created_at
+      FROM workflows WHERE id = ${workflowId}
+    `;
+
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Workflow not found' });
+    }
+
+    const workflow = result[0];
+    if (workflow.revert_point) {
+      res.json({
+        hasRevertPoint: true,
+        templateName: workflow.revert_template_name,
+        createdAt: workflow.revert_created_at
+      });
+    } else {
+      res.json({ hasRevertPoint: false });
+    }
+  } catch (error) {
+    // Column might not exist yet - return no revert point
+    console.error('Error checking revert point:', error);
+    res.json({ hasRevertPoint: false });
+  }
+});
+
+// POST save current workflow state as revert point
+router.post('/revert-point/:workflowId', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+    const { templateName } = req.body;
+
+    // Get current workflow state
+    const workflows = await sql`SELECT * FROM workflows WHERE id = ${workflowId}`;
+    if (workflows.length === 0) {
+      return res.status(404).json({ error: 'Workflow not found' });
+    }
+
+    const workflow = workflows[0];
+
+    // Also get current image creation settings
+    let imageCreationSettings = null;
+    try {
+      const imgSettings = await sql`SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
+      if (imgSettings.length > 0) {
+        imageCreationSettings = imgSettings[0];
+      }
+    } catch (e) {
+      // Ignore if table doesn't exist
+    }
+
+    // Get current component library
+    let componentLibrary = null;
+    try {
+      const components = await sql`SELECT * FROM component_library WHERE workflow_id = ${workflowId}`;
+      componentLibrary = components;
+    } catch (e) {
+      // Ignore if table doesn't exist
+    }
+
+    // Get current site planning
+    let sitePlanning = null;
+    try {
+      const plans = await sql`SELECT * FROM site_plans WHERE workflow_id = ${workflowId}`;
+      if (plans.length > 0) {
+        const nodes = await sql`SELECT * FROM site_plan_nodes WHERE site_plan_id = ${plans[0].id}`;
+        sitePlanning = { plan: plans[0], nodes };
+      }
+    } catch (e) {
+      // Ignore if table doesn't exist
+    }
+
+    // Store everything as revert point
+    const revertPoint = {
+      state: workflow.state,
+      component_settings: workflow.component_settings,
+      imageCreationSettings,
+      componentLibrary,
+      sitePlanning
+    };
+
+    // Ensure revert columns exist (migration)
+    try {
+      await sql`
+        ALTER TABLE workflows
+        ADD COLUMN IF NOT EXISTS revert_point JSONB,
+        ADD COLUMN IF NOT EXISTS revert_template_name TEXT,
+        ADD COLUMN IF NOT EXISTS revert_created_at TIMESTAMP
+      `;
+    } catch (e) {
+      // Columns might already exist or migration might fail - continue anyway
+    }
+
+    await sql`
+      UPDATE workflows
+      SET revert_point = ${JSON.stringify(revertPoint)},
+          revert_template_name = ${templateName || 'Unknown template'},
+          revert_created_at = CURRENT_TIMESTAMP
+      WHERE id = ${workflowId}
+    `;
+
+    console.log('[Templates] Saved revert point for workflow:', workflowId);
+    res.json({ success: true, message: 'Revert point saved' });
+  } catch (error) {
+    console.error('Error saving revert point:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST restore workflow from revert point
+router.post('/revert/:workflowId', requireDb, async (req, res) => {
+  try {
+    const { workflowId } = req.params;
+
+    // Get workflow with revert point
+    const workflows = await sql`SELECT * FROM workflows WHERE id = ${workflowId}`;
+    if (workflows.length === 0) {
+      return res.status(404).json({ error: 'Workflow not found' });
+    }
+
+    const workflow = workflows[0];
+    if (!workflow.revert_point) {
+      return res.status(400).json({ error: 'No revert point found' });
+    }
+
+    const revertData = workflow.revert_point;
+
+    // Restore workflow state
+    await sql`
+      UPDATE workflows
+      SET state = ${JSON.stringify(revertData.state || {})},
+          component_settings = ${JSON.stringify(revertData.component_settings || {})},
+          revert_point = NULL,
+          revert_template_name = NULL,
+          revert_created_at = NULL,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${workflowId}
+    `;
+
+    // Restore image creation settings if present
+    if (revertData.imageCreationSettings) {
+      const img = revertData.imageCreationSettings;
+      const existingImg = await sql`SELECT id FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
+      if (existingImg.length > 0) {
+        await sql`
+          UPDATE image_creation_settings
+          SET enabled = ${img.enabled},
+              prompt_assistant_model = ${img.prompt_assistant_model},
+              image_generation_model = ${img.image_generation_model},
+              image_quality = ${img.image_quality},
+              reference_images = ${JSON.stringify(img.reference_images || [])},
+              logo_images = ${JSON.stringify(img.logo_images || [])},
+              audience_avatars = ${JSON.stringify(img.audience_avatars || [])},
+              image_bank = ${JSON.stringify(img.image_bank || [])},
+              image_categories = ${JSON.stringify(img.image_categories || [])},
+              auto_tag_enabled = ${img.auto_tag_enabled},
+              smart_matching_enabled = ${img.smart_matching_enabled},
+              fallback_to_live = ${img.fallback_to_live},
+              variation_order_mode = ${img.variation_order_mode},
+              updated_at = CURRENT_TIMESTAMP
+          WHERE workflow_id = ${workflowId}
+        `;
+      }
+    }
+
+    // Restore component library if present
+    if (revertData.componentLibrary && Array.isArray(revertData.componentLibrary)) {
+      // Delete current components
+      await sql`DELETE FROM component_library WHERE workflow_id = ${workflowId}`;
+      await sql`DELETE FROM component_rotation_state WHERE workflow_id = ${workflowId}`;
+
+      // Restore components
+      for (const comp of revertData.componentLibrary) {
+        await sql`
+          INSERT INTO component_library (
+            workflow_id, slot_number, slot_name, component_type, component_ref,
+            module_name, tag, name, source_page_id, source_page_url, sort_order, is_active
+          ) VALUES (
+            ${workflowId},
+            ${comp.slot_number},
+            ${comp.slot_name},
+            ${comp.component_type},
+            ${comp.component_ref},
+            ${comp.module_name},
+            ${comp.tag},
+            ${comp.name},
+            ${comp.source_page_id},
+            ${comp.source_page_url},
+            ${comp.sort_order},
+            ${comp.is_active}
+          )
+        `;
+      }
+    }
+
+    // Restore site planning if present
+    if (revertData.sitePlanning) {
+      // Delete current site plan
+      const existingPlans = await sql`SELECT id FROM site_plans WHERE workflow_id = ${workflowId}`;
+      for (const plan of existingPlans) {
+        await sql`DELETE FROM site_plan_nodes WHERE site_plan_id = ${plan.id}`;
+        await sql`DELETE FROM site_plans WHERE id = ${plan.id}`;
+      }
+
+      // Restore site plan
+      const planData = revertData.sitePlanning.plan;
+      if (planData) {
+        const newPlan = await sql`
+          INSERT INTO site_plans (website_id, workflow_id, name, description, auto_sync_check, total_pages, max_depth)
+          VALUES (
+            ${planData.website_id},
+            ${workflowId},
+            ${planData.name},
+            ${planData.description},
+            ${planData.auto_sync_check},
+            ${planData.total_pages || 0},
+            ${planData.max_depth || 0}
+          )
+          RETURNING *
+        `;
+
+        // Restore nodes
+        const nodes = revertData.sitePlanning.nodes || [];
+        const oldIdToNewId = {};
+
+        for (const node of nodes) {
+          const newNode = await sql`
+            INSERT INTO site_plan_nodes (
+              site_plan_id, title, slug, page_type, target_keyword,
+              meta_title, meta_description, content_brief, sort_order,
+              depth, is_pillar_page, is_in_menu, menu_order
+            ) VALUES (
+              ${newPlan[0].id},
+              ${node.title},
+              ${node.slug},
+              ${node.page_type},
+              ${node.target_keyword},
+              ${node.meta_title},
+              ${node.meta_description},
+              ${node.content_brief},
+              ${node.sort_order},
+              ${node.depth},
+              ${node.is_pillar_page},
+              ${node.is_in_menu},
+              ${node.menu_order}
+            )
+            RETURNING *
+          `;
+          oldIdToNewId[node.id] = newNode[0].id;
+        }
+
+        // Update parent relationships
+        for (const node of nodes) {
+          if (node.parent_id && oldIdToNewId[node.parent_id]) {
+            await sql`
+              UPDATE site_plan_nodes
+              SET parent_id = ${oldIdToNewId[node.parent_id]}
+              WHERE id = ${oldIdToNewId[node.id]}
+            `;
+          }
+        }
+      }
+    }
+
+    console.log('[Templates] Reverted workflow:', workflowId);
+    res.json({ success: true, message: 'Workflow reverted successfully' });
+  } catch (error) {
+    console.error('Error reverting workflow:', error);
     res.status(500).json({ error: error.message });
   }
 });
