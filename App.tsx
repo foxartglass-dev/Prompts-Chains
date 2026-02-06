@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import useProjectManager, {
   PromptTemplate, Placeholder, TaggedSnippet, Tag, WpContentType, Project, OptionVariable
 } from './src/hooks/useProjectManager';
-import { generateLlmContent } from './src/services/llm-service';
+import { generateLlmContent, retryFetch } from './src/services/llm-service';
 import { checkAiScore } from './src/services/zerogpt-service';
 import { parseCsv, downloadFile, downloadProjectConfig, loadProjectConfigFromFile } from './src/services/file-utils';
 import Icon from './src/components/Icon';
@@ -496,7 +496,7 @@ const App: React.FC = () => {
         const data = await res.json();
         setImagePathLog(data.entries || []);
       } catch (error) {
-        console.error('Error fetching image path log:', error);
+        console.error('Error fetching image path log:', error instanceof Error ? error.message : JSON.stringify(error));
       } finally {
         setImagePathLogLoading(false);
       }
@@ -1438,24 +1438,27 @@ const App: React.FC = () => {
                         // Save article to database and capture the article ID
                         let savedArticleId: string | null = null;
                         try {
-                            const articleResponse = await fetch('/api/articles', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    workflowId: currentWorkflowId || null,
-                                    websiteId: currentWebsiteId || null,
-                                    keyword: item.name,
-                                    tag: item.tag,
-                                    model: activeModel,
-                                    finalContent: finalOutput,
-                                    metaTitles,
-                                    metaDescriptions,
-                                    chainOutputs: promptOutputs,
-                                    aiScore,
-                                    wordCount,
-                                    status: status.toLowerCase()
-                                })
-                            });
+                            const articleResponse = await retryFetch(
+                                () => fetch('/api/articles', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        workflowId: currentWorkflowId || null,
+                                        websiteId: currentWebsiteId || null,
+                                        keyword: item.name,
+                                        tag: item.tag,
+                                        model: activeModel,
+                                        finalContent: finalOutput,
+                                        metaTitles,
+                                        metaDescriptions,
+                                        chainOutputs: promptOutputs,
+                                        aiScore,
+                                        wordCount,
+                                        status: status.toLowerCase()
+                                    })
+                                }),
+                                { label: `Save article ${item.name}` }
+                            );
                             if (articleResponse.ok) {
                                 const articleData = await articleResponse.json();
                                 savedArticleId = articleData.article?.id || null;
@@ -1463,7 +1466,7 @@ const App: React.FC = () => {
                             addLog(`[${itemLabel}] Article saved to database.`, LogStatus.INFO, item.id);
                         } catch (saveError) {
                             // Don't fail the whole process if saving fails
-                            console.error('Failed to save article:', saveError);
+                            console.error('Failed to save article:', saveError instanceof Error ? saveError.message : JSON.stringify(saveError));
                         }
 
                         // Process images and/or publish to WordPress based on modes:
@@ -1518,31 +1521,34 @@ const App: React.FC = () => {
                                     if (includeImages) {
                                         addLog(`[${itemLabel}] Processing images...`, LogStatus.WORKING, item.id);
                                     }
-                                    const publishResponse = await fetch('/api/elementor/publish', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            wpUrl: url,
-                                            wpUser: user,
-                                            wpPassword: password,
-                                            title: title,
-                                            content: finalOutput,
-                                            status: 'draft',
-                                            includeStatsBar: false,
-                                            // Image Bank integration - only if Image toggle is not 'off'
-                                            workflowId: currentWorkflowId,
-                                            keyword: item.name, // Contains tag like "Standard Cleaning(H)"
-                                            useImageBank: includeImages,
-                                            generateImages: includeImages, // Generate images if enabled (draft mode saves but doesn't embed)
-                                            maxImages: includeImages ? 4 : 0,
-                                            // Pass article ID so generated images are saved to the article record
-                                            articleId: savedArticleId,
-                                            // Image Draft Mode: match images and save to article, but DON'T embed in WP page
-                                            imageDraftMode: effectiveWpPublishMode === 'draft',
-                                            // Skip WP page creation when Article is on draft (just process images)
-                                            skipWpPageCreation: !shouldPublishToWP,
+                                    const publishResponse = await retryFetch(
+                                        () => fetch('/api/elementor/publish', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                wpUrl: url,
+                                                wpUser: user,
+                                                wpPassword: password,
+                                                title: title,
+                                                content: finalOutput,
+                                                status: 'draft',
+                                                includeStatsBar: false,
+                                                // Image Bank integration - only if Image toggle is not 'off'
+                                                workflowId: currentWorkflowId,
+                                                keyword: item.name, // Contains tag like "Standard Cleaning(H)"
+                                                useImageBank: includeImages,
+                                                generateImages: includeImages, // Generate images if enabled (draft mode saves but doesn't embed)
+                                                maxImages: includeImages ? 4 : 0,
+                                                // Pass article ID so generated images are saved to the article record
+                                                articleId: savedArticleId,
+                                                // Image Draft Mode: match images and save to article, but DON'T embed in WP page
+                                                imageDraftMode: effectiveWpPublishMode === 'draft',
+                                                // Skip WP page creation when Article is on draft (just process images)
+                                                skipWpPageCreation: !shouldPublishToWP,
+                                            }),
                                         }),
-                                    });
+                                        { label: `WP publish ${item.name}` }
+                                    );
                                     const publishData = await publishResponse.json();
 
                                     // Success conditions:
