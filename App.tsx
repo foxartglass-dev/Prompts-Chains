@@ -32,6 +32,7 @@ import LogViewer from './src/components/LogViewer';
 import TestRunnerPopup from './src/components/TestRunnerPopup';
 import ElementorTemplateSection from './src/components/ElementorTemplateSection';
 import ComponentLibrarySection from './src/components/ComponentLibrarySection';
+import ArticleCommandCenter from './src/components/articles/ArticleCommandCenter';
 
 // Types for workflow
 interface WorkflowItem {
@@ -262,6 +263,7 @@ const App: React.FC = () => {
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
     const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
     const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
+    const [isArticleEditorOpen, setIsArticleEditorOpen] = useState(false);
     const [isTestRunnerOpen, setIsTestRunnerOpen] = useState(false);
     const [testQueue, setTestQueue] = useState<Array<{
       articleMode: 'draft' | 'wordpress';
@@ -2214,6 +2216,13 @@ const App: React.FC = () => {
             <BlueprintPage
               isOpen={isBlueprintOpen}
               onClose={() => setIsBlueprintOpen(false)}
+            />
+
+            {/* Article Editor - The Desk (full-page overlay) */}
+            <ArticleCommandCenter
+              websiteId={currentWebsiteId}
+              isOpen={isArticleEditorOpen}
+              onClose={() => setIsArticleEditorOpen(false)}
             />
 
             {/* Test Runner Popup */}
@@ -4257,6 +4266,25 @@ const App: React.FC = () => {
                             )}
                         </div>
                         )}
+                    </div>
+
+                    {/* Article Editor - The Desk (full-page overlay trigger) */}
+                    <div className="bg-card rounded-xl shadow-glow-cyan card-3d border-2 border-brand-gold relative z-10">
+                        <button
+                            onClick={() => setIsArticleEditorOpen(true)}
+                            className="w-full p-5 text-xl font-bold flex items-center text-brand-gold hover:text-brand-gold/80 transition-colors"
+                        >
+                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            <span className="ml-3">Article Editor</span>
+                            <span className="ml-2 text-xs bg-brand-gold/20 text-brand-gold px-2 py-0.5 rounded-full font-normal">
+                                The Desk
+                            </span>
+                            <svg className="w-5 h-5 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                        </button>
                     </div>
 
                     {renderSection('6. Prompt Workflow', 'prompts', <Icon type="document" className="h-6 w-6"/>,
