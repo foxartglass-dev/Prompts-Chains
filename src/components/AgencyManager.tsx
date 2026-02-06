@@ -93,7 +93,8 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   });
   const [websiteForm, setWebsiteForm] = useState({
     name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '',
-    local_viking_location_id: ''  // API key is now in global settings
+    local_viking_location_id: '',  // API key is now in global settings
+    elementor_cta_text: '', elementor_cta_url: ''
   });
   const [projectForm, setProjectForm] = useState({ name: '', description: '' });
 
@@ -270,7 +271,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
         body: JSON.stringify({ ...websiteForm, client_id: selectedClient.id })
       });
       if (res.ok) {
-        setWebsiteForm({ name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '' });
+        setWebsiteForm({ name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '', local_viking_location_id: '', elementor_cta_text: '', elementor_cta_url: '' });
         setShowWebsiteForm(false);
         fetchWebsites(selectedClient.id);
       }
@@ -309,7 +310,9 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
       wp_url: website.wp_url || '',
       wp_user: website.wp_user || '',
       wp_app_password: website.wp_app_password || '',
-      local_viking_location_id: website.local_viking_location_id || ''
+      local_viking_location_id: website.local_viking_location_id || '',
+      elementor_cta_text: website.elementor_cta_text || '',
+      elementor_cta_url: website.elementor_cta_url || ''
     });
     setShowWebsiteForm(true);
   };
@@ -361,7 +364,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
         body: JSON.stringify(websiteForm)
       });
       if (res.ok) {
-        setWebsiteForm({ name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '' });
+        setWebsiteForm({ name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '', local_viking_location_id: '', elementor_cta_text: '', elementor_cta_url: '' });
         setShowWebsiteForm(false);
         setEditingWebsiteId(null);
         fetchWebsites(selectedClient.id);
@@ -386,7 +389,7 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
   const cancelWebsiteForm = () => {
     setShowWebsiteForm(false);
     setEditingWebsiteId(null);
-    setWebsiteForm({ name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '', local_viking_location_id: '' });
+    setWebsiteForm({ name: '', url: '', wp_url: '', wp_user: '', wp_app_password: '', local_viking_location_id: '', elementor_cta_text: '', elementor_cta_url: '' });
   };
 
   const deleteClient = async (id: number) => {
@@ -1103,6 +1106,32 @@ const AgencyManager: React.FC<AgencyManagerProps> = ({ isOpen, onClose, onSelect
                                 className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
                               />
                             </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="border-t border-gray-700 pt-4 mt-4">
+                        <p className="text-sm text-brand-cyan font-medium mb-3">CTA Button Settings</p>
+                        <p className="text-xs text-gray-500 mb-3">Configure the call-to-action button that appears on published pages.</p>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-sm text-gray-400 mb-1">CTA Button Text</label>
+                            <input
+                              type="text"
+                              placeholder="Book Now!"
+                              value={websiteForm.elementor_cta_text}
+                              onChange={(e) => setWebsiteForm({ ...websiteForm, elementor_cta_text: e.target.value })}
+                              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm text-gray-400 mb-1">CTA Button URL</label>
+                            <input
+                              type="text"
+                              placeholder="https://..."
+                              value={websiteForm.elementor_cta_url}
+                              onChange={(e) => setWebsiteForm({ ...websiteForm, elementor_cta_url: e.target.value })}
+                              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:border-brand-cyan focus:outline-none"
+                            />
                           </div>
                         </div>
                       </div>

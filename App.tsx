@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import useProjectManager, {
   PromptTemplate, Placeholder, TaggedSnippet, Tag, WpContentType, Project, OptionVariable
 } from './src/hooks/useProjectManager';
-import { generateLlmContent } from './src/services/llm-service';
+import { generateLlmContent, retryFetch } from './src/services/llm-service';
 import { checkAiScore } from './src/services/zerogpt-service';
 import { parseCsv, downloadFile, downloadProjectConfig, loadProjectConfigFromFile } from './src/services/file-utils';
 import Icon from './src/components/Icon';
@@ -212,6 +212,8 @@ const App: React.FC = () => {
 
     // UI State
     const [isProcessing, setIsProcessing] = useState(false);
+    const [batchRemainingItems, setBatchRemainingItems] = useState<WorkflowItem[]>([]);
+    const [batchCompletedIds, setBatchCompletedIds] = useState<Set<number>>(new Set());
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const logsRef = useRef<LogEntry[]>([]); // Ref to always have current logs (for history saving)
     const [processingLogCollapsed, setProcessingLogCollapsed] = useState(true);
@@ -278,6 +280,8 @@ const App: React.FC = () => {
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
     const [currentWebsiteSeoPlugin, setCurrentWebsiteSeoPlugin] = useState<string>('rankmath');
+    const [currentWebsiteCtaText, setCurrentWebsiteCtaText] = useState<string>('');
+    const [currentWebsiteCtaUrl, setCurrentWebsiteCtaUrl] = useState<string>('');
     const [filterByClientId, setFilterByClientId] = useState<number | undefined>(undefined);
     const [currentWorkflowContext, setCurrentWorkflowContext] = useState<{
       workflowName?: string;
@@ -496,7 +500,7 @@ const App: React.FC = () => {
         const data = await res.json();
         setImagePathLog(data.entries || []);
       } catch (error) {
-        console.error('Error fetching image path log:', error);
+        console.error('Error fetching image path log:', error instanceof Error ? error.message : JSON.stringify(error));
       } finally {
         setImagePathLogLoading(false);
       }
@@ -644,7 +648,7 @@ const App: React.FC = () => {
         }
     }, [currentProject]);
 
-    // Fetch website's SEO plugin when website changes
+    // Fetch website settings (SEO plugin, CTA) when website changes
     useEffect(() => {
         if (currentWebsiteId) {
             fetch(`/api/websites/${currentWebsiteId}`)
@@ -653,8 +657,10 @@ const App: React.FC = () => {
                     if (data.website?.seo_plugin) {
                         setCurrentWebsiteSeoPlugin(data.website.seo_plugin);
                     }
+                    setCurrentWebsiteCtaText(data.website?.elementor_cta_text || '');
+                    setCurrentWebsiteCtaUrl(data.website?.elementor_cta_url || '');
                 })
-                .catch(err => console.error('Failed to fetch website SEO plugin:', err));
+                .catch(err => console.error('Failed to fetch website settings:', err));
         }
     }, [currentWebsiteId]);
 
@@ -1282,6 +1288,8 @@ const App: React.FC = () => {
         setResults([]);
         setLogs([]);
         setBatchImageCounts({ fromBank: 0, fromLive: 0 }); // Reset image counts for new batch
+        setBatchCompletedIds(new Set());
+        setBatchRemainingItems([...itemsToProcess]);
 
         const modelNames = activeModels.map(m => m.model.split('-').slice(0, 2).join('-')).join(', ');
         addLog(`Starting batch processing for ${itemsToProcess.length} items using ${activeModels.length} model(s): ${modelNames}...`, LogStatus.INFO);
@@ -1438,24 +1446,27 @@ const App: React.FC = () => {
                         // Save article to database and capture the article ID
                         let savedArticleId: string | null = null;
                         try {
-                            const articleResponse = await fetch('/api/articles', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    workflowId: currentWorkflowId || null,
-                                    websiteId: currentWebsiteId || null,
-                                    keyword: item.name,
-                                    tag: item.tag,
-                                    model: activeModel,
-                                    finalContent: finalOutput,
-                                    metaTitles,
-                                    metaDescriptions,
-                                    chainOutputs: promptOutputs,
-                                    aiScore,
-                                    wordCount,
-                                    status: status.toLowerCase()
-                                })
-                            });
+                            const articleResponse = await retryFetch(
+                                () => fetch('/api/articles', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        workflowId: currentWorkflowId || null,
+                                        websiteId: currentWebsiteId || null,
+                                        keyword: item.name,
+                                        tag: item.tag,
+                                        model: activeModel,
+                                        finalContent: finalOutput,
+                                        metaTitles,
+                                        metaDescriptions,
+                                        chainOutputs: promptOutputs,
+                                        aiScore,
+                                        wordCount,
+                                        status: status.toLowerCase()
+                                    })
+                                }),
+                                { label: `Save article ${item.name}` }
+                            );
                             if (articleResponse.ok) {
                                 const articleData = await articleResponse.json();
                                 savedArticleId = articleData.article?.id || null;
@@ -1463,7 +1474,7 @@ const App: React.FC = () => {
                             addLog(`[${itemLabel}] Article saved to database.`, LogStatus.INFO, item.id);
                         } catch (saveError) {
                             // Don't fail the whole process if saving fails
-                            console.error('Failed to save article:', saveError);
+                            console.error('Failed to save article:', saveError instanceof Error ? saveError.message : JSON.stringify(saveError));
                         }
 
                         // Process images and/or publish to WordPress based on modes:
@@ -1518,31 +1529,37 @@ const App: React.FC = () => {
                                     if (includeImages) {
                                         addLog(`[${itemLabel}] Processing images...`, LogStatus.WORKING, item.id);
                                     }
-                                    const publishResponse = await fetch('/api/elementor/publish', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({
-                                            wpUrl: url,
-                                            wpUser: user,
-                                            wpPassword: password,
-                                            title: title,
-                                            content: finalOutput,
-                                            status: 'draft',
-                                            includeStatsBar: false,
-                                            // Image Bank integration - only if Image toggle is not 'off'
-                                            workflowId: currentWorkflowId,
-                                            keyword: item.name, // Contains tag like "Standard Cleaning(H)"
-                                            useImageBank: includeImages,
-                                            generateImages: includeImages, // Generate images if enabled (draft mode saves but doesn't embed)
-                                            maxImages: includeImages ? 4 : 0,
-                                            // Pass article ID so generated images are saved to the article record
-                                            articleId: savedArticleId,
-                                            // Image Draft Mode: match images and save to article, but DON'T embed in WP page
-                                            imageDraftMode: effectiveWpPublishMode === 'draft',
-                                            // Skip WP page creation when Article is on draft (just process images)
-                                            skipWpPageCreation: !shouldPublishToWP,
+                                    const publishResponse = await retryFetch(
+                                        () => fetch('/api/elementor/publish', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                wpUrl: url,
+                                                wpUser: user,
+                                                wpPassword: password,
+                                                title: title,
+                                                content: finalOutput,
+                                                status: 'draft',
+                                                includeStatsBar: false,
+                                                // Image Bank integration - only if Image toggle is not 'off'
+                                                workflowId: currentWorkflowId,
+                                                keyword: item.name, // Contains tag like "Standard Cleaning(H)"
+                                                useImageBank: includeImages,
+                                                generateImages: includeImages, // Generate images if enabled (draft mode saves but doesn't embed)
+                                                maxImages: includeImages ? 4 : 0,
+                                                // Pass article ID so generated images are saved to the article record
+                                                articleId: savedArticleId,
+                                                // Image Draft Mode: match images and save to article, but DON'T embed in WP page
+                                                imageDraftMode: effectiveWpPublishMode === 'draft',
+                                                // Skip WP page creation when Article is on draft (just process images)
+                                                skipWpPageCreation: !shouldPublishToWP,
+                                                // CTA button settings from website config
+                                                ctaText: currentWebsiteCtaText || undefined,
+                                                ctaUrl: currentWebsiteCtaUrl || undefined,
+                                            }),
                                         }),
-                                    });
+                                        { label: `WP publish ${item.name}` }
+                                    );
                                     const publishData = await publishResponse.json();
 
                                     // Success conditions:
@@ -1672,11 +1689,15 @@ const App: React.FC = () => {
                     addLog(`[${itemLabel}] Failed: ${errorMessage}`, LogStatus.ERROR, item.id);
                 }
             }
+            // Track completed item and remove from remaining
+            setBatchCompletedIds(prev => new Set([...prev, item.id]));
+            setBatchRemainingItems(prev => prev.filter(i => i.id !== item.id));
         }
-        
+
         const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(2);
         addLog(`Batch processing complete in ${duration} minutes.`, LogStatus.SUCCESS);
         setIsProcessing(false);
+        setBatchRemainingItems([]);
 
         // Save run to processing history (use logsRef.current to get actual current logs)
         const now = new Date();
@@ -3168,6 +3189,15 @@ const App: React.FC = () => {
                                 {isProcessing ? <Icon type="working" className="h-5 w-5 animate-spin mr-2" /> : <Icon type="play" className="h-5 w-5 mr-2" />}
                                 {getRunButtonText()}
                             </button>
+                            {batchRemainingItems.length > 0 && !isProcessing && (
+                                <button
+                                    onClick={() => processWorkflow(batchRemainingItems)}
+                                    className="w-full flex items-center justify-center font-bold py-3 px-6 rounded-xl transition-all btn-press border-2 mt-2 bg-slate-900 border-amber-500 text-amber-400 hover:bg-amber-500/10 hover:shadow-glow-amber"
+                                >
+                                    <Icon type="play" className="h-5 w-5 mr-2" />
+                                    Resume ({batchRemainingItems.length} remaining)
+                                </button>
+                            )}
                         </div>
                     , true,
                     <>

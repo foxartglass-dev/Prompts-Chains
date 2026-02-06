@@ -2029,6 +2029,43 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues</h3>
 
       <div className="space-y-4">
+        {/* Feb 6 - Batch retry logic & error logging */}
+        <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-400">✓</span>
+            <span className="font-semibold text-white">Batch processing fails with no retry on server restart</span>
+            <span className="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded">CRITICAL - Feb 6, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Problem:</strong> Batch of 27 articles failed after article 8 when Railway server became unreachable.
+            All 19 remaining articles instantly failed with "Failed to fetch" - zero retry logic existed.
+            Additionally, three error logging spots output {'{}'} instead of actual error messages.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Root cause:</strong> Single fetch attempts with no retry mechanism. Server restarts or temporary
+            network issues would cause immediate failure of all remaining batch items.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix (v1):</strong> Added <code className="bg-slate-900 px-1 rounded">retryFetch()</code> wrapper in llm-service.ts.
+            Only retries on network errors, 502, 503, 429. Does NOT retry on 400/401/403/404.
+            Pings /api/health before each retry to check server status.
+            Applied to: LLM generate, article save, and WP publish fetches.
+            Fixed error logging to use <code className="bg-slate-900 px-1 rounded">error.message</code> instead of raw error objects.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix (v2 - enhanced):</strong> Upgraded to 3-phase escalating retry that never gives up:
+            Phase 1 (Quick recovery): 30s, 60s, 120s (~3.5 min).
+            Phase 2 (Patient wait): 5min intervals x6 (~30 min).
+            Phase 3 (Chill mode): 1 hour intervals forever.
+            Health check pings before each wait - if server is back, retries immediately.
+            Added Resume button: shows "Resume (N remaining)" after a batch stops, allowing
+            users to continue from where they left off without re-running completed items.
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Key Files:</strong> src/services/llm-service.ts (retryFetch), App.tsx (resume state + button + article save + WP publish), src/services/zerogpt-service.ts (error log)
+          </div>
+        </div>
+
         {/* Feb 5 - Preview/WordPress content mismatch (ARCHITECTURE FIX) */}
         <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
           <div className="flex items-center gap-2 mb-2">

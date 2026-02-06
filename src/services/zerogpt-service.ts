@@ -35,7 +35,7 @@ export async function checkAiScore(apiKey: string, text: string): Promise<AiScor
       wordCount: data.wordCount || wordCount,
     };
   } catch (error) {
-    console.error('ZeroGPT API error:', error);
+    console.error('ZeroGPT API error:', error instanceof Error ? error.message : JSON.stringify(error));
     return { score: 0, wordCount };
   }
 }

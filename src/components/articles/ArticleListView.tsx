@@ -65,6 +65,8 @@ interface Article {
   wp_user?: string;
   wp_app_password?: string;
   seo_plugin?: string;
+  elementor_cta_text?: string;
+  elementor_cta_url?: string;
   selected_meta_title?: string | null;
   selected_meta_description?: string | null;
   images?: ArticleImage[];
@@ -141,6 +143,8 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     return tomorrow.toISOString().split('T')[0];
   });
   const [dripFeedMode, setDripFeedMode] = useState<'schedule_now' | 'queue_behind' | 'schedule_later'>('schedule_now');
+  const [updatingCta, setUpdatingCta] = useState(false);
+  const [showCtaConfirm, setShowCtaConfirm] = useState(false);
 
   useEffect(() => {
     fetchArticles();
@@ -387,7 +391,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           status: 'draft',
           articleId: selectedArticle.id,
           workflowId: selectedArticle.workflow_id,
-          isManualPush: true
+          isManualPush: true,
+          ctaText: selectedArticle.elementor_cta_text || undefined,
+          ctaUrl: selectedArticle.elementor_cta_url || undefined
         })
       });
 
@@ -475,7 +481,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             status: 'draft',
             articleId: selectedArticle.id,
             workflowId: selectedArticle.workflow_id,
-            isManualPush: true
+            isManualPush: true,
+            ctaText: selectedArticle.elementor_cta_text || undefined,
+            ctaUrl: selectedArticle.elementor_cta_url || undefined
           })
         });
         const articleData = await articleRes.json();
@@ -583,6 +591,59 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       setError('Failed to delete some articles');
     } finally {
       setBulkDeleting(false);
+    }
+  };
+
+  // Bulk update CTA on all published pages for this website
+  const bulkUpdateCta = async () => {
+    if (!websiteId) return;
+    setShowCtaConfirm(false);
+    setUpdatingCta(true);
+    setError(null);
+
+    try {
+      // Fetch website to get CTA settings and WP credentials
+      const wsRes = await fetch(`/api/websites/${websiteId}`);
+      const wsData = await wsRes.json();
+      const website = wsData.website;
+
+      if (!website) {
+        setError('Could not load website settings');
+        return;
+      }
+      if (!website.wp_url || !website.wp_user || !website.wp_app_password) {
+        setError('WordPress credentials not configured for this website');
+        return;
+      }
+      if (!website.elementor_cta_url || website.elementor_cta_url === '#') {
+        setError('Set a CTA URL in website settings first (Agency > edit website > CTA Button Settings)');
+        return;
+      }
+
+      const res = await fetch('/api/elementor/bulk-update-cta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          websiteId,
+          ctaText: website.elementor_cta_text || 'Book Now!',
+          ctaUrl: website.elementor_cta_url,
+          wpUrl: website.wp_url,
+          wpUser: website.wp_user,
+          wpPassword: website.wp_app_password
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        fetchArticles();
+        alert(`CTA updated on ${data.updated} page${data.updated !== 1 ? 's' : ''}${data.failed ? `, ${data.failed} failed` : ''}`);
+      } else {
+        setError(data.error || 'Failed to update CTA');
+      }
+    } catch (err) {
+      setError('Failed to update CTA on published pages');
+    } finally {
+      setUpdatingCta(false);
     }
   };
 
@@ -775,6 +836,8 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           articleId: selectedArticle.id,
           workflowId: selectedArticle.workflow_id,
           isManualPush: true,
+          ctaText: selectedArticle.elementor_cta_text || undefined,
+          ctaUrl: selectedArticle.elementor_cta_url || undefined,
           // ARTICLE ONLY MODE - skip ALL image processing
           articleOnly: true
         })
@@ -875,6 +938,52 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           <option value="published">Published</option>
         </select>
       </div>
+
+      {/* Update CTA Button - website-level action */}
+      {websiteId && articles.some(a => a.wp_post_id) && (
+        <div className="flex items-center gap-3 mb-2">
+          <button
+            onClick={() => setShowCtaConfirm(true)}
+            disabled={updatingCta}
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-sm font-medium transition disabled:opacity-50 flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {updatingCta ? 'Updating CTA...' : `Update CTA on Published Pages (${articles.filter(a => a.wp_post_id).length})`}
+          </button>
+        </div>
+      )}
+
+      {/* CTA Update Confirmation Modal */}
+      {showCtaConfirm && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-slate-900 rounded-xl p-6 w-full max-w-md border border-amber-500/30">
+            <h3 className="text-xl font-bold text-amber-400 mb-4">Update CTA on All Published Pages</h3>
+            <p className="text-gray-300 text-sm mb-4">
+              This will rebuild {articles.filter(a => a.wp_post_id).length} published page{articles.filter(a => a.wp_post_id).length !== 1 ? 's' : ''} with
+              the CTA button URL from website settings. Page slugs/URLs will be preserved.
+            </p>
+            <p className="text-amber-400 text-xs mb-4">
+              Each page will be deleted and recreated. This preserves the URL but resets the page to draft status.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={bulkUpdateCta}
+                className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded text-white font-medium transition"
+              >
+                Update All Pages
+              </button>
+              <button
+                onClick={() => setShowCtaConfirm(false)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-gray-300 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bulk Action Bar */}
       {selectedIds.size > 0 && (
