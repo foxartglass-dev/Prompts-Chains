@@ -8,16 +8,19 @@
 
 ## Problem
 
-The Processing Log shows every detail line from every article in one continuous scroll (~20 lines per article). After a 46-article batch:
-- 900+ lines of undifferentiated scroll
-- No way to tell which articles were processed at a glance
-- No visual break between articles (unless you manually set "Group By Article" in Sorting)
-- To find what failed, you scroll through hundreds of lines
-- When diagnosing failures (like the batch crash at article 8), finding the exact failure point takes forever
+The Processing Log has two issues:
+
+**1. History entries say "Unnamed Project"** — useless. When you click History, you see 4 entries all called "Unnamed Project" with truncated keyword lists ("Airbnb Cleaning(H), Vacation Home Cleaning(H)... +17 more"). No way to distinguish them at a glance.
+
+**2. Clicking a history run dumps raw log firehose** — 302 lines of chronological detail with no structure. To find what happened with one specific article, you scroll through hundreds of lines looking for `[Sticker Removal(C)]` in the noise.
 
 ## Goal
 
-Add a **Summary View** as the default view for the Processing Log. Shows a clean, scannable list of articles with status/time. Tap any article to expand its detail logs. Get to the problem in seconds, not minutes.
+Transform the Processing Log into a **two-level drill-down**:
+
+**Level 1: History** — Shows runs with date/time + article count + ALL keywords visible in a grid (no truncation).
+
+**Level 2: Inside a run** — Shows ALL keywords in a clickable grid. Click any keyword → its detail logs drop down below the grid. Click another keyword → swaps to that one's details. Non-article logs (errors, system messages) get their own section.
 
 ---
 
@@ -25,383 +28,294 @@ Add a **Summary View** as the default view for the Processing Log. Shows a clean
 
 **File:** `/home/user/Prompted-Flows/App.tsx`
 
-### Existing Data Structures
+### Key Data Structures
 
 ```typescript
-// Line 43-48
-enum LogStatus {
-  INFO = 'INFO',
-  SUCCESS = 'SUCCESS',
-  ERROR = 'ERROR',
-  WORKING = 'WORKING',
-}
+enum LogStatus { INFO, SUCCESS, ERROR, WORKING }
 
-// Line 50-56
 interface LogEntry {
   id: number;
-  itemId?: number;     // ← KEY: Links log to specific article
+  itemId?: number;     // Links log to specific article
   message: string;
   status: LogStatus;
   timestamp: string;
 }
 
-// Line 58-68
 interface ProcessingRun {
   id: string;
-  projectName: string;
-  date: string;
-  time: string;
-  itemCount: number;
-  itemNames: string[];
+  projectName: string;    // Currently "Unnamed Project" — FIX THIS
+  date: string;           // ISO date string "2026-02-06"
+  time: string;           // "01:45 PM"
+  itemCount: number;      // 20, 27, etc
+  itemNames: string[];    // ["Airbnb Cleaning(H)", "Vacation Home Cleaning(H)", ...]
   logs: LogEntry[];
   results: Result[];
 }
 ```
 
-### Existing Features (Don't Break These)
-- **Sorting dropdown** (line 3777-3838): Newest/Oldest, Group By None/Article/Session, Show Timestamps
-- **Group By Article** (line 3964-3992): Already groups logs by `itemId` with headers, but still shows ALL detail lines
-- **History panel** (line 3846-3906): Shows past processing runs, click to load logs
-- **Mode indicators** (line 3907-3933): Article: WP/Draft, Meta: WP/Draft, Image: WP/Draft/Off
-- **Auto-expand** on new log entry (line 320-321)
-- **Auto-scroll** to bottom (line 325)
-- **localStorage persistence** for history (line 392-408)
+### Key UI Locations
 
-### How Articles Are Identified in Logs
+| What | Line | Description |
+|------|------|-------------|
+| State declarations | 214-222 | `isProcessing`, `processingLogCollapsed`, `processingHistory`, etc. |
+| `addLog()` function | 319-328 | Adds log entries with auto-expand and auto-scroll |
+| History run creation | 1685-1695 | Creates `ProcessingRun` at end of batch |
+| Processing Log header | 3752-3769 | Collapsible section with entry count badge |
+| History panel | 3846-3906 | Shows past runs as clickable cards |
+| Sorting dropdown | 3777-3838 | Time Order, Group By, Display options |
+| Log display | 3951-4050 | Raw log rendering with optional grouping |
+| History run card | 3862-3888 | "Unnamed Project" + truncated item names |
 
-Each log entry from a batch run includes `itemId` (the article/item ID). The article name is extracted from the log message via regex: `log.message.match(/\[([^\]]+)\]/)?.[1]` (line 3974).
+### How Runs Are Named (The Problem)
 
-Log messages follow the pattern:
-```
-[Kitchen Remodeling in Nashville(H)] Starting prompt chain...
-[Kitchen Remodeling in Nashville(H)] Model: gpt-4o, generating content...
-[Kitchen Remodeling in Nashville(H)] Content generated successfully (1,247 words)
-[Kitchen Remodeling in Nashville(H)] Publishing to WordPress...
-[Kitchen Remodeling in Nashville(H)] ✅ Published successfully (wp_post_id: 4523)
+Line 1685-1695 — when batch completes:
+```javascript
+const historyRun: ProcessingRun = {
+  id: now.toISOString(),
+  projectName: currentProject?.projectName || 'Unnamed Project',  // ← ALWAYS "Unnamed Project"
+  date: now.toLocaleDateString(),
+  time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  itemCount: itemsToProcess.length,
+  itemNames: itemsToProcess.map(i => i.name),
+  logs: [...logsRef.current, completionLog],
+  results: currentResults
+};
 ```
 
-System messages (batch start/end) have no `itemId`:
-```
-Starting batch processing for 46 items using 1 model(s): gpt-4o...
-Batch processing complete in 12.5 minutes.
-```
+`currentProject?.projectName` is never set → always falls back to "Unnamed Project".
 
 ---
 
 ## What to Build
 
-### New View Mode: "Summary" (Default)
+### Fix 1: Better Run Names (Replace "Unnamed Project")
 
-Add a new option to the existing Group By dropdown in the Sorting menu:
+**Change the `projectName` to use date + time + count:**
 
-```
-Group By:
-  ○ No Grouping      (existing - raw log stream)
-  ○ By Article        (existing - grouped with all details showing)
-  ○ By Session        (existing - grouped by batch run)
-  ● Summary           (NEW - default - article list with expand/collapse)
-```
-
-**Make "Summary" the default** instead of "No Grouping".
-
-### Summary View Layout
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ Processing Log                      [History] [Sorting ▼]        │
-│ 46 entries                                                       │
-├──────────────────────────────────────────────────────────────────┤
-│ Article: WP  Meta: WP  Image: Off  📦 Bank: 0  ⚡ Live: 0      │
-├──────────────────────────────────────────────────────────────────┤
-│ Current Session                                                  │
-│                                                                  │
-│  ℹ Starting batch processing for 46 items...            2:30 AM │
-│                                                                  │
-│  ✅ Kitchen Remodeling in Nashville(H)         2:31 — 2:33 AM   │
-│  ✅ Bathroom Renovation in Franklin(H)         2:33 — 2:35 AM   │
-│  ✅ Flooring Guide in Brentwood(C)             2:35 — 2:37 AM   │
-│  ✅ Plumbing Services in Lebanon(J)            2:37 — 2:38 AM   │
-│  ✅ HVAC Installation Nashville(H)             2:38 — 2:40 AM   │
-│  ✅ Roof Repair in Hendersonville(C)           2:40 — 2:42 AM   │
-│  ✅ Window Cleaning in Gallatin(J)             2:42 — 2:43 AM   │
-│  ✅ Gutter Cleaning in Mt Juliet(H)            2:43 — 2:45 AM   │
-│  ❌ Demolition Cleanup Henderson(C)            2:45 AM  FAILED  │
-│  ❌ Post Construction Cleaning(C)              2:45 AM  FAILED  │
-│  ❌ Sticker Removal(C)                         2:45 AM  FAILED  │
-│  ... (35 more failed)                                            │
-│                                                                  │
-│  ℹ Batch processing complete in 15.2 minutes.          2:45 AM  │
-│                                                                  │
-│  Summary: 8 succeeded, 38 failed                                 │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### Expand/Collapse Per Article
-
-Click any article row to expand its detail logs:
-
-```
-│  ✅ Kitchen Remodeling in Nashville(H)         2:31 — 2:33 AM   │
-│  ▼ Bathroom Renovation in Franklin(H)          2:33 — 2:35 AM   │
-│    ├─ [2:33:02] Starting prompt chain...                         │
-│    ├─ [2:33:05] Model: gpt-4o, generating content...             │
-│    ├─ [2:33:45] Content generated successfully (1,247 words)     │
-│    ├─ [2:34:01] Publishing to WordPress...                       │
-│    ├─ [2:34:15] Processing images...                             │
-│    └─ [2:35:02] ✅ Published (wp_post_id: 4523)                 │
-│  ✅ Flooring Guide in Brentwood(C)             2:35 — 2:37 AM   │
-│  ▼ Demolition Cleanup Henderson(C)             2:45 AM  FAILED  │
-│    ├─ [2:45:01] Starting prompt chain...                         │
-│    ├─ [2:45:03] Model: gpt-4o, generating content...             │
-│    └─ [2:45:04] ❌ ERROR: Failed to fetch                       │
-│  ❌ Post Construction Cleaning(C)              2:45 AM  FAILED  │
-```
-
-### Summary Stats Bar (Bottom)
-
-After all articles, show a quick summary:
-
-```
-Summary: 8 succeeded ✅ | 38 failed ❌ | Duration: 15.2 min
-```
-
-### System Messages
-
-Non-article log entries (batch start, batch end, system info) are shown inline between articles, styled differently:
-
-```
-│  ℹ Starting batch processing for 46 items using gpt-4o...   │  ← System (blue, italic)
-│  ✅ Kitchen Remodeling in Nashville(H)      2:31 — 2:33 AM  │  ← Article (green)
-```
-
----
-
-## Implementation
-
-### Step 1: Build the Summary Grouping Logic
-
-Add to `App.tsx` after the existing `logGroupBy === 'session'` block (~line 3995):
-
-```typescript
-if (logGroupBy === 'summary') {
-  // Group logs by itemId, compute per-article status
-  const articleGroups: Array<{
-    key: string;
-    name: string;
-    itemId: number | undefined;
-    logs: LogEntry[];
-    status: 'success' | 'error' | 'working' | 'info';
-    startTime: string;
-    endTime: string;
-  }> = [];
-
-  let currentGroup: typeof articleGroups[0] | null = null;
-
-  // Process logs in chronological order
-  const chronoLogs = [...logs]; // already chronological
-  chronoLogs.forEach(log => {
-    if (!log.itemId) {
-      // System message — push as its own "group"
-      articleGroups.push({
-        key: `system-${log.id}`,
-        name: log.message,
-        itemId: undefined,
-        logs: [log],
-        status: log.status === LogStatus.ERROR ? 'error' : 'info',
-        startTime: log.timestamp,
-        endTime: log.timestamp,
-      });
-      currentGroup = null;
-    } else if (!currentGroup || currentGroup.itemId !== log.itemId) {
-      // New article group
-      currentGroup = {
-        key: `article-${log.itemId}-${log.id}`,
-        name: log.message.match(/\[([^\]]+)\]/)?.[1] || `Article #${log.itemId}`,
-        itemId: log.itemId,
-        logs: [log],
-        status: 'working',
-        startTime: log.timestamp,
-        endTime: log.timestamp,
-      };
-      articleGroups.push(currentGroup);
-    } else {
-      // Same article, add to current group
-      currentGroup.logs.push(log);
-      currentGroup.endTime = log.timestamp;
-      // Update status based on last significant log
-      if (log.status === LogStatus.ERROR) currentGroup.status = 'error';
-      else if (log.status === LogStatus.SUCCESS) currentGroup.status = 'success';
-    }
-  });
-
-  // Render summary view
-  return articleGroups.map(group => {
-    if (!group.itemId) {
-      // System message — render inline
-      return (/* system message row */);
-    }
-    // Article row with expand/collapse
-    return (/* article summary row with onClick toggle */);
-  });
-}
-```
-
-### Step 2: Add Expand/Collapse State
-
-```typescript
-const [expandedArticles, setExpandedArticles] = useState<Set<string>>(new Set());
-
-const toggleArticleExpand = (key: string) => {
-  setExpandedArticles(prev => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    return next;
-  });
-};
-```
-
-### Step 3: Add Summary Stats Calculation
-
-```typescript
-const summaryStats = useMemo(() => {
-  if (logGroupBy !== 'summary') return null;
-  // ... compute succeeded/failed/total counts from articleGroups
-}, [logs, logGroupBy]);
-```
-
-### Step 4: Make "Summary" the Default
-
-Change line 217:
-```typescript
-// BEFORE:
-const [logGroupBy, setLogGroupBy] = useState<string>('none');
+```javascript
+// BEFORE (line ~1688):
+projectName: currentProject?.projectName || 'Unnamed Project',
 
 // AFTER:
-const [logGroupBy, setLogGroupBy] = useState<string>('summary');
+projectName: `${now.toLocaleDateString()} • ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • ${itemsToProcess.length} articles`,
 ```
 
-### Step 5: Add "Summary" Option to Sorting Dropdown
+**Or even simpler** — just drop the `projectName` display entirely and use the `date`, `time`, and `itemCount` fields that already exist. The History card already shows date/time (line 3880-3883), so the "Unnamed Project" title is redundant.
 
-Add after the "By Session" button (around line 3820-3826):
+### Fix 2: Show ALL Keywords in History Cards
 
+**Currently (line 3885-3887):**
 ```jsx
-<button
-  onClick={() => { setLogGroupBy('summary'); }}
-  className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-700 transition flex items-center justify-between ${logGroupBy === 'summary' ? 'text-brand-cyan' : 'text-white'}`}
->
-  <span>Summary</span>
-  {logGroupBy === 'summary' && <span className="text-brand-cyan">✓</span>}
-</button>
-```
-
----
-
-## Styling
-
-### Article Row (Collapsed)
-
-```jsx
-<div
-  className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer hover:bg-slate-800/50 transition ${
-    group.status === 'success' ? 'text-green-400' :
-    group.status === 'error' ? 'text-red-400' :
-    group.status === 'working' ? 'text-yellow-400 animate-pulse' :
-    'text-blue-400'
-  }`}
-  onClick={() => toggleArticleExpand(group.key)}
->
-  <div className="flex items-center gap-2">
-    {/* Status icon */}
-    {group.status === 'success' && <span>✅</span>}
-    {group.status === 'error' && <span>❌</span>}
-    {group.status === 'working' && <span className="animate-spin">⟳</span>}
-    {/* Article name */}
-    <span className="font-medium text-sm">{group.name}</span>
-  </div>
-  <div className="flex items-center gap-2 text-xs text-slate-400">
-    {/* Time range */}
-    <span>{group.startTime}{group.endTime !== group.startTime ? ` — ${group.endTime}` : ''}</span>
-    {/* Failed badge */}
-    {group.status === 'error' && <span className="bg-red-600/30 text-red-400 px-1.5 py-0.5 rounded text-xs font-semibold">FAILED</span>}
-    {/* Expand indicator */}
-    <svg className={`w-3 h-3 transition-transform ${expandedArticles.has(group.key) ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-    </svg>
-  </div>
+<div className="mt-1 text-xs text-slate-500 truncate">
+  {run.itemNames.slice(0, 3).join(', ')}{run.itemNames.length > 3 ? ` +${run.itemNames.length - 3} more` : ''}
 </div>
 ```
 
-### Article Row (Expanded)
+**Replace with a keyword grid — all keywords visible, multi-column:**
 
 ```jsx
-{expandedArticles.has(group.key) && (
-  <div className="ml-6 pl-3 border-l border-slate-700 space-y-1 pb-2">
-    {group.logs.map(log => (
-      <div key={log.id} className={`flex items-start text-xs ${/* status color */}`}>
-        {/* Same detail display as existing "Group By Article" */}
-        <span className="text-gray-600 mr-1 font-mono">[{log.timestamp}]</span>
-        <span>{log.message}</span>
-      </div>
-    ))}
-  </div>
-)}
+<div className="mt-2 flex flex-wrap gap-1">
+  {run.itemNames.map((name, idx) => (
+    <span key={idx} className="text-xs bg-slate-700/50 text-slate-300 px-1.5 py-0.5 rounded">
+      {name}
+    </span>
+  ))}
+</div>
 ```
 
-### Summary Stats Bar
+This uses flex-wrap to fill the available horizontal space with keyword pills. 20 keywords in a grid is scannable; "+17 more" is not.
+
+### Fix 3: Keyword Grid View (When Viewing a Run)
+
+When you click a history run (or when viewing the current session), instead of showing the raw log firehose, show:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ 2026-02-06 • 01:45 PM                          20 articles      │
+│                                                                  │
+│  ┌─────────────────────┐ ┌─────────────────────┐ ┌────────────┐│
+│  │✅ Airbnb Cleaning(H)│ │✅ Vacation Home(H)  │ │✅ Daily(J) ││
+│  └─────────────────────┘ └─────────────────────┘ └────────────┘│
+│  ┌─────────────────────┐ ┌─────────────────────┐ ┌────────────┐│
+│  │✅ Move In/Out(H)    │ │✅ Deep Cleaning(H)  │ │✅ Office(J)││
+│  └─────────────────────┘ └─────────────────────┘ └────────────┘│
+│  ┌─────────────────────┐ ┌─────────────────────┐ ┌────────────┐│
+│  │❌ Sticker Remove(C) │ │❌ Post Construct(C) │ │❌ Demo(C)  ││
+│  └─────────────────────┘ └─────────────────────┘ └────────────┘│
+│  ... (more keyword pills in rows)                                │
+│                                                                  │
+│  ⚠ System & Error Logs (3)                        [expand ▼]   │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│ ▼ Sticker Removal(C) — Detail Log                               │
+│   1:43:51 PM  Article saved to database.                         │
+│   1:43:52 PM  Publishing to WordPress...                         │
+│   1:43:52 PM  STATUS: Article ✗ | Draft Bank ✗ | Website ✅     │
+│   1:43:53 PM  Running prompt: "1.Service Pages..."               │
+│   1:43:58 PM  Running prompt: "Service Page Outline"...          │
+│   1:44:34 PM  Running prompt: "Service Page Article"...          │
+│   1:45:21 PM  Generated final content.                           │
+│   1:45:21 PM  Generating SEO meta...                             │
+│   1:45:26 PM  Checking AI score with ZeroGPT...                  │
+│   1:45:27 PM  AI score: 0%, Word count: 1049                     │
+│   1:45:27 PM  Process finished. Status: PASSED                   │
+│   1:45:27 PM  Publishing to WordPress...                         │
+│   1:45:27 PM  Article saved to database.                         │
+│   1:45:29 PM  STATUS: Article ✗ | Draft Bank ✗ | Website ✅     │
+│   1:45:29 PM  Auto-pushing SEO meta...                           │
+│   1:45:29 PM  SEO meta pushed successfully!                      │
+│                                                                  │
+│ Summary: 17 ✅ succeeded | 3 ❌ failed                          │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### How the Keyword Grid Works
+
+1. **Each keyword is a clickable pill** — colored by status:
+   - ✅ Green border/bg for SUCCESS
+   - ❌ Red border/bg for ERROR
+   - ⟳ Yellow/pulsing for WORKING (still processing)
+   - Gray for articles with no logs yet
+
+2. **Click a keyword pill** → detail log section appears BELOW the grid, showing that article's processing log lines (filtered by `itemId`). The clicked pill gets highlighted.
+
+3. **Click a different keyword** → detail section swaps to that article's logs. Only one article's details shown at a time (not multiple expandables — keeps it clean).
+
+4. **Click the same keyword again** → collapses the detail section.
+
+5. **"System & Error Logs" section** at the bottom of the grid — collapsible. Contains any log entries with no `itemId` (batch start, batch end, errors without article context). This is where you'd find issues like "Failed to fetch" that aren't tied to a specific article.
+
+### Keyword Pill Component
 
 ```jsx
-{logGroupBy === 'summary' && summaryStats && (
-  <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-700 text-xs">
-    <span className="text-green-400 font-semibold">✅ {summaryStats.succeeded} succeeded</span>
-    {summaryStats.failed > 0 && <span className="text-red-400 font-semibold">❌ {summaryStats.failed} failed</span>}
-    {summaryStats.working > 0 && <span className="text-yellow-400 font-semibold animate-pulse">⟳ {summaryStats.working} processing</span>}
-    <span className="text-slate-400">Total: {summaryStats.total} articles</span>
-  </div>
-)}
+function KeywordPill({ name, status, isSelected, onClick }) {
+  const statusStyles = {
+    success: 'border-green-500/50 bg-green-500/10 text-green-400',
+    error: 'border-red-500/50 bg-red-500/10 text-red-400',
+    working: 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400 animate-pulse',
+    pending: 'border-slate-600 bg-slate-800 text-slate-400',
+  };
+
+  const selectedRing = isSelected ? 'ring-2 ring-brand-cyan' : '';
+
+  return (
+    <button
+      onClick={onClick}
+      className={`px-2 py-1 text-xs rounded-lg border cursor-pointer hover:brightness-125 transition ${statusStyles[status]} ${selectedRing}`}
+    >
+      {status === 'success' && '✅ '}
+      {status === 'error' && '❌ '}
+      {status === 'working' && '⟳ '}
+      {name}
+    </button>
+  );
+}
+```
+
+### Deriving Article Status from Logs
+
+```typescript
+function getArticleStatus(logs: LogEntry[]): 'success' | 'error' | 'working' | 'pending' {
+  if (logs.length === 0) return 'pending';
+  const lastLog = logs[logs.length - 1];
+  if (logs.some(l => l.status === LogStatus.ERROR)) return 'error';
+  if (logs.some(l => l.status === LogStatus.SUCCESS)) return 'success';
+  if (logs.some(l => l.status === LogStatus.WORKING)) return 'working';
+  return 'pending';
+}
 ```
 
 ---
 
-## Golden Rules
+## Implementation Steps
 
-| Rule | Relevance |
-|------|-----------|
-| **#9 Never swallow errors** | Failed articles must be clearly visible (red, FAILED badge) |
-| **#17 Strip H/J/C tags** | Article names in the summary should strip tags for clean display (or leave them — they're useful for debugging) |
+### Step 1: Fix Run Names
+
+**File:** `App.tsx` (~line 1688)
+
+Replace `projectName: currentProject?.projectName || 'Unnamed Project'` with either:
+- Just remove the "Unnamed Project" fallback and show date/time/count instead
+- Or auto-generate: `projectName: \`Batch ${itemsToProcess.length} articles\``
+
+### Step 2: Show All Keywords in History Cards
+
+**File:** `App.tsx` (~line 3885-3887)
+
+Replace the truncated `slice(0, 3).join(', ')` with a flex-wrap grid of keyword pills. Each pill colored by status (derive from the run's logs + results).
+
+### Step 3: Add "Summary" View Mode
+
+**File:** `App.tsx` (~line 3951-4050)
+
+Add new `logGroupBy === 'summary'` rendering that shows:
+1. Run header (date, time, article count)
+2. Keyword grid (all keywords as clickable pills)
+3. Selected article's detail log (below grid, if any selected)
+4. System & Error Logs collapsible section
+5. Summary stats bar (X succeeded, Y failed)
+
+Make `'summary'` the default value for `logGroupBy` (line ~217).
+
+### Step 4: Add Expand/Collapse State for Selected Article
+
+```typescript
+const [selectedLogArticle, setSelectedLogArticle] = useState<string | null>(null);
+const [showSystemLogs, setShowSystemLogs] = useState(false);
+```
+
+### Step 5: Add "Summary" to Sorting Dropdown
+
+**File:** `App.tsx` (~line 3805-3826)
+
+Add a "Summary" option to the "Group By" section of the dropdown.
+
+---
+
+## Existing Features to Preserve
+
+- **Sorting dropdown** — all existing options (No Grouping, By Article, By Session) still work
+- **History panel** — still shows past runs, now with better names and full keyword grids
+- **Mode indicators** — Article: WP, Meta: WP, Image: Off badges unchanged
+- **Auto-expand** on new log entry
+- **Auto-scroll** to bottom during processing
+- **localStorage persistence** for history
+- **Copy/Clear** functionality
 
 ## What NOT to Do
 
-- Do NOT remove or modify the existing view modes (No Grouping, By Article, By Session). Add Summary alongside them.
-- Do NOT change the `LogEntry` interface — it already has everything we need (`itemId`, `status`, `timestamp`)
-- Do NOT change how `addLog()` works — the data collection is fine, we're just changing the display
-- Do NOT break the History panel — it should work with Summary view too
-- Do NOT add any new API calls — this is purely a frontend display change
-- Do NOT change localStorage persistence format — existing history data should still work
+- Do NOT remove existing view modes (No Grouping, By Article, By Session)
+- Do NOT change the `LogEntry` interface — it has everything needed
+- Do NOT change `addLog()` — data collection is fine, only changing display
+- Do NOT add new API calls — this is purely frontend
+- Do NOT change localStorage format — existing history data must still load
+- Do NOT break the History panel — enhance it with better names + keyword grids
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `App.tsx` (~line 3777-3838) | Add "Summary" option to Sorting dropdown |
-| `App.tsx` (~line 3951-4050) | Add summary view rendering after existing group-by blocks |
-| `App.tsx` (~line 217) | Change default `logGroupBy` from 'none' to 'summary' |
-| `App.tsx` (state section) | Add `expandedArticles` state for expand/collapse |
-| `App.tsx` (state section) | Add `summaryStats` useMemo for counts |
+| `App.tsx` (~line 1688) | Fix "Unnamed Project" → meaningful run name |
+| `App.tsx` (~line 3862-3888) | History cards: show all keywords in grid, better header |
+| `App.tsx` (~line 3805-3826) | Add "Summary" to Sorting dropdown |
+| `App.tsx` (~line 3951+) | Add summary view with keyword grid + detail dropdown |
+| `App.tsx` (~line 217) | Change default `logGroupBy` to 'summary' |
+| `App.tsx` (state section) | Add `selectedLogArticle` and `showSystemLogs` state |
 
 ## Database Changes
 
-None. This is purely a frontend display improvement.
+None. Purely frontend display improvement.
 
 ## Testing
 
-1. Run a batch of articles → verify summary shows article list with checkmarks
-2. Click an article → verify detail logs expand below it
-3. Click again → verify it collapses
-4. Verify failed articles show red with FAILED badge
-5. Verify system messages (batch start/end) show inline
-6. Verify summary stats bar shows correct counts
-7. Verify switching to other view modes (No Grouping, By Article, By Session) still works
-8. Verify History panel still loads past runs correctly in summary view
-9. Verify auto-scroll still works during live processing
-10. Verify auto-expand still works when new logs arrive
+1. Run a batch → verify keyword grid appears with status pills
+2. Click a keyword → verify detail logs appear below grid
+3. Click a different keyword → verify it swaps to that article's details
+4. Click same keyword → verify it collapses
+5. Verify failed articles show red pills
+6. Click "System & Error Logs" → verify non-article logs show
+7. Open History → verify runs show date/time/count (no "Unnamed Project")
+8. Verify history cards show ALL keywords as pills (no truncation)
+9. Click a history run → verify keyword grid loads with that run's data
+10. Switch to other view modes → verify they still work
+11. Verify auto-scroll and auto-expand during live processing
+12. Verify localStorage history still loads correctly
