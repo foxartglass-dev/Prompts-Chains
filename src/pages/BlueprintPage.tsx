@@ -2046,14 +2046,23 @@ const KnownIssuesDiagram: React.FC = () => (
             network issues would cause immediate failure of all remaining batch items.
           </div>
           <div className="text-sm text-gray-400 mt-2">
-            <strong>Fix:</strong> Added <code className="bg-slate-900 px-1 rounded">retryFetch()</code> wrapper in llm-service.ts.
-            Retries up to 3 times with 30s/60s/120s backoff. Only retries on network errors, 502, 503, 429.
-            Does NOT retry on 400/401/403/404. Pings /api/health before each retry to check server status.
+            <strong>Fix (v1):</strong> Added <code className="bg-slate-900 px-1 rounded">retryFetch()</code> wrapper in llm-service.ts.
+            Only retries on network errors, 502, 503, 429. Does NOT retry on 400/401/403/404.
+            Pings /api/health before each retry to check server status.
             Applied to: LLM generate, article save, and WP publish fetches.
             Fixed error logging to use <code className="bg-slate-900 px-1 rounded">error.message</code> instead of raw error objects.
           </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix (v2 - enhanced):</strong> Upgraded to 3-phase escalating retry that never gives up:
+            Phase 1 (Quick recovery): 30s, 60s, 120s (~3.5 min).
+            Phase 2 (Patient wait): 5min intervals x6 (~30 min).
+            Phase 3 (Chill mode): 1 hour intervals forever.
+            Health check pings before each wait - if server is back, retries immediately.
+            Added Resume button: shows "Resume (N remaining)" after a batch stops, allowing
+            users to continue from where they left off without re-running completed items.
+          </div>
           <div className="text-sm text-green-400 mt-2">
-            <strong>Key Files:</strong> src/services/llm-service.ts (retryFetch), App.tsx (article save + WP publish), src/services/zerogpt-service.ts (error log)
+            <strong>Key Files:</strong> src/services/llm-service.ts (retryFetch), App.tsx (resume state + button + article save + WP publish), src/services/zerogpt-service.ts (error log)
           </div>
         </div>
 

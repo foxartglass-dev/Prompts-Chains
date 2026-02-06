@@ -212,6 +212,8 @@ const App: React.FC = () => {
 
     // UI State
     const [isProcessing, setIsProcessing] = useState(false);
+    const [batchRemainingItems, setBatchRemainingItems] = useState<WorkflowItem[]>([]);
+    const [batchCompletedIds, setBatchCompletedIds] = useState<Set<number>>(new Set());
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const logsRef = useRef<LogEntry[]>([]); // Ref to always have current logs (for history saving)
     const [processingLogCollapsed, setProcessingLogCollapsed] = useState(true);
@@ -1282,6 +1284,8 @@ const App: React.FC = () => {
         setResults([]);
         setLogs([]);
         setBatchImageCounts({ fromBank: 0, fromLive: 0 }); // Reset image counts for new batch
+        setBatchCompletedIds(new Set());
+        setBatchRemainingItems([...itemsToProcess]);
 
         const modelNames = activeModels.map(m => m.model.split('-').slice(0, 2).join('-')).join(', ');
         addLog(`Starting batch processing for ${itemsToProcess.length} items using ${activeModels.length} model(s): ${modelNames}...`, LogStatus.INFO);
@@ -1678,11 +1682,15 @@ const App: React.FC = () => {
                     addLog(`[${itemLabel}] Failed: ${errorMessage}`, LogStatus.ERROR, item.id);
                 }
             }
+            // Track completed item and remove from remaining
+            setBatchCompletedIds(prev => new Set([...prev, item.id]));
+            setBatchRemainingItems(prev => prev.filter(i => i.id !== item.id));
         }
-        
+
         const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(2);
         addLog(`Batch processing complete in ${duration} minutes.`, LogStatus.SUCCESS);
         setIsProcessing(false);
+        setBatchRemainingItems([]);
 
         // Save run to processing history (use logsRef.current to get actual current logs)
         const now = new Date();
@@ -3174,6 +3182,15 @@ const App: React.FC = () => {
                                 {isProcessing ? <Icon type="working" className="h-5 w-5 animate-spin mr-2" /> : <Icon type="play" className="h-5 w-5 mr-2" />}
                                 {getRunButtonText()}
                             </button>
+                            {batchRemainingItems.length > 0 && !isProcessing && (
+                                <button
+                                    onClick={() => processWorkflow(batchRemainingItems)}
+                                    className="w-full flex items-center justify-center font-bold py-3 px-6 rounded-xl transition-all btn-press border-2 mt-2 bg-slate-900 border-amber-500 text-amber-400 hover:bg-amber-500/10 hover:shadow-glow-amber"
+                                >
+                                    <Icon type="play" className="h-5 w-5 mr-2" />
+                                    Resume ({batchRemainingItems.length} remaining)
+                                </button>
+                            )}
                         </div>
                     , true,
                     <>
