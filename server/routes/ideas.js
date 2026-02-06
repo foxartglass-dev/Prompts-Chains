@@ -84,6 +84,146 @@ Similar to how Canny, UserVoice, or ProductBoard work.`,
     source: 'Claude suggestion',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
+  },
+  {
+    id: 'idea_seed_6',
+    title: 'Enterprise Agency Platform',
+    description: `Evolve PromptFlow from a prompting/SEO tool into a full multi-platform CMS for agencies.
+
+The path: Prompting Tool → SEO/WordPress → Content Editor → Multi-Platform CMS.
+
+Key expansions:
+- White-label for agencies
+- Multi-platform beyond Elementor — Shopify, other page builders, partner's new lightweight platform
+- Bulletproof agency dashboard handling different customers/websites/platforms
+- Enterprise-grade reliable — zero bugs, zero crashes, zero data loss
+- Even agencies that don't use AI articles still need the content editing/publishing workflow
+
+Adoption path: agencies test with a couple clients → see results → transfer entire business in.
+Target: $1K+/mo for 50+ client agencies. Each new platform integration is ~couple weeks with Claude.`,
+    tags: ['Enterprise', 'Agency', 'SaaS', 'Vision'],
+    priority: 1,
+    status: 'planned',
+    source: 'Founder vision',
+    created_at: '2026-02-06T00:00:00.000Z',
+    updated_at: '2026-02-06T00:00:00.000Z'
+  },
+  {
+    id: 'idea_seed_7',
+    title: 'Supporting Content Automation Engine',
+    description: `Fully automate the SEO supporting content cycle using Viking heat maps integration.
+
+Strategy:
+1. Build 30 core pages → wait for them to index and settle in rankings (1-100)
+2. Viking heat maps track ranking positions — visualize as horse race / EQ board
+3. Algorithm identifies pages closest to Google 3-pack
+4. Auto-generates supporting content (People Also Ask questions)
+5. Pushes articles → monitors movement → repeats until all pages dominate 3-pack
+
+The 3-pack magnetically pulls the rest up — more you get in, more it draws from behind.
+
+Also includes Viking GBP (Google Business Profile) automation: auto-post images/updates.
+
+Cost advantage: ~30 cents/article vs competitors at $2K/mo manual work. Could do all 200 pages in one day instead of drip-feeding over 18 months. Data from iterations reveals exact supporting page count needed per keyword.
+
+This is "beach mode" — the algorithm runs the entire SEO strategy autonomously.`,
+    tags: ['Automation', 'SEO', 'Viking', 'Algorithm'],
+    priority: 1,
+    status: 'idea',
+    source: 'Founder vision',
+    created_at: '2026-02-06T00:00:00.000Z',
+    updated_at: '2026-02-06T00:00:00.000Z'
+  },
+  {
+    id: 'idea_seed_8',
+    title: 'Tiered Agency Pricing',
+    description: `Stage platform features into pricing tiers for agency customers.
+
+Tier 1 (~$1K/mo): Editing/publishing features (The Desk, content management)
+Tier 2 (~$2K/mo): + Core page generation + image pipeline
+Tier 3 (~$3.5K+/mo): + Full automation engine (supporting content algorithm, Viking heat maps, auto-boost to 3-pack, GBP posting)
+
+Top tier = "Sipping Pina Coladas on the Beach" package — fully automated agency where you just check your phone.
+
+More automation layers = higher price = more sticky revenue.
+Agencies just need a sales team + this platform = fully automated business.
+Future: Claude-powered AI agent coordinates all in-between work.`,
+    tags: ['Pricing', 'SaaS', 'Business'],
+    priority: 2,
+    status: 'idea',
+    source: 'Founder vision',
+    created_at: '2026-02-06T00:00:00.000Z',
+    updated_at: '2026-02-06T00:00:00.000Z'
+  },
+  {
+    id: 'idea_seed_9',
+    title: 'The Desk / Command Center',
+    description: `Single editing workspace that replaces individual article pages. PRD written: PRD-COMMAND-CENTER.md
+
+- Dropdown section that goes full-page (React Portal overlay)
+- Always-live contenteditable editing — NO separate review/edit mode
+- Swipe/arrow navigation between articles
+- Find & Replace across articles
+- Clickable keyword tabs
+- Revert button for safety (snapshot before any save/push)
+- Long-term: becomes center of the app alongside Prompt Flows and Image Prompts desktops
+- 3-Desktop Architecture: Prompt Flows (factory) | Image Prompts (art studio) | The Desk (editing/shipping)`,
+    tags: ['UI', 'Editor', 'PRD Ready'],
+    priority: 1,
+    status: 'planned',
+    source: 'PRD written',
+    created_at: '2026-02-06T00:00:00.000Z',
+    updated_at: '2026-02-06T00:00:00.000Z'
+  },
+  {
+    id: 'idea_seed_10',
+    title: 'Post-Publish Visual Control',
+    description: `Full system for managing already-published WordPress pages. PRD written: PRD-POST-PUBLISH-VISUAL-CONTROL.md
+
+Phase 1: Push/Replace article images on existing pages
+Phase 2: Replace article content on existing pages
+Phase 3: Component graphics control (swap headers, CTAs, etc.)
+Phase 4: Unified page rebuild service
+
+Uses delete-and-recreate pattern (already proven in push-images endpoint). Shared rebuildPage() service for all post-publish operations.`,
+    tags: ['WordPress', 'Publishing', 'PRD Ready'],
+    priority: 1,
+    status: 'planned',
+    source: 'PRD written',
+    created_at: '2026-02-06T00:00:00.000Z',
+    updated_at: '2026-02-06T00:00:00.000Z'
+  },
+  {
+    id: 'idea_seed_11',
+    title: 'CTA Button URL Configuration',
+    description: `Wire up existing CTA button infrastructure with UI. PRD written: PRD-CTA-BUTTON-URL.md
+
+DB columns already exist (elementor_cta_text, elementor_cta_url). API endpoints already accept values. Builder already uses ctaText/ctaUrl params.
+
+Missing: UI fields in AgencyManager.tsx, frontend wiring during publish, bulk update endpoint for existing pages.`,
+    tags: ['CTA', 'UI', 'PRD Ready'],
+    priority: 2,
+    status: 'planned',
+    source: 'PRD written',
+    created_at: '2026-02-06T00:00:00.000Z',
+    updated_at: '2026-02-06T00:00:00.000Z'
+  },
+  {
+    id: 'idea_seed_12',
+    title: 'Processing Log Summary',
+    description: `Transform the Processing Log from a raw firehose into a two-level drill-down. PRD written: PRD-PROCESSING-LOG-SUMMARY.md
+
+- Fix "Unnamed Project" naming → use date/time/count
+- Show ALL keywords in flex-wrap grid (keyword pills with status colors)
+- Clickable pills → detail logs drop down below grid for selected article
+- System & Error Logs in separate collapsible section
+- Summary stats bar at bottom`,
+    tags: ['UI', 'Logs', 'PRD Ready'],
+    priority: 2,
+    status: 'planned',
+    source: 'PRD written',
+    created_at: '2026-02-06T00:00:00.000Z',
+    updated_at: '2026-02-06T00:00:00.000Z'
   }
 ];
 
