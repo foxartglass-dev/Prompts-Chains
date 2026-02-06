@@ -33,4 +33,20 @@ Capture ideas here without getting distracted. Review weekly to prioritize.
 
 ---
 
+### 2026-02-06 - Supporting Content Automation Engine
+**Category:** Feature
+**Description:** Fully automate the SEO supporting content cycle. Strategy: 30 core pages → index → Viking heat maps track ranking positions → algorithm identifies pages closest to Google 3-pack → auto-generates supporting content (People Also Ask questions) → pushes articles → monitors movement → repeats until all pages dominate 3-pack. Visualize as horse race / EQ board (left=start, right=3-pack). Viking GBP integration for auto-posting images/updates to Google Business Profile. Cost advantage: ~30 cents/article vs competitors at $2K/mo manual. Could do 200 pages in one day. Data from iterations reveals exact supporting page count needed per keyword.
+**Priority:** High
+**Notes:** Viking heat maps already integrated. This is the "beach mode" automation — the algorithm runs the entire SEO strategy autonomously. Massive competitive advantage over manual agencies.
+
+---
+
+### 2026-02-06 - Tiered Agency Pricing / Product Packaging
+**Category:** Feature
+**Description:** Stage platform features into pricing tiers. Tier 1 (~$1K/mo): editing/publishing features (The Desk, content management). Tier 2 (~$2K/mo): + core page generation + image pipeline. Tier 3 (~$3.5K+/mo): + full automation engine (supporting content algorithm, Viking heat maps, auto-boost to 3-pack, GBP posting). Top tier = "Sipping Pina Coladas on the Beach" package — fully automated agency, just check your phone. Future: Claude-powered AI agent coordinates all in-between work.
+**Priority:** Medium
+**Notes:** Pricing depends on how much value/automation each tier delivers. More automation layers = higher price = more sticky revenue. Agencies just need a sales team + this platform = fully automated business.
+
+---
+
 <!-- Add new ideas above this line -->
