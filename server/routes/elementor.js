@@ -2751,4 +2751,180 @@ router.delete('/image-path-log', async (req, res) => {
   }
 });
 
+// Bulk update CTA button on all published pages for a website/workflow
+// Uses delete-and-recreate pattern (same as push-images in articles.js)
+// because WordPress/Elementor can't reliably update _elementor_data in-place
+router.post('/bulk-update-cta', async (req, res) => {
+  try {
+    const { websiteId, workflowId, ctaText, ctaUrl, wpUrl, wpUser, wpPassword } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'WordPress credentials are required' });
+    }
+    if (!ctaText && !ctaUrl) {
+      return res.status(400).json({ error: 'ctaText or ctaUrl is required' });
+    }
+
+    // Get all published articles for this website/workflow
+    const conditions = [];
+    if (websiteId) conditions.push(sql`a.website_id = ${websiteId}`);
+    if (workflowId) conditions.push(sql`a.workflow_id = ${workflowId}`);
+
+    if (conditions.length === 0) {
+      return res.status(400).json({ error: 'websiteId or workflowId is required' });
+    }
+
+    const whereClause = conditions.reduce((acc, cond, idx) => {
+      return idx === 0 ? cond : sql`${acc} AND ${cond}`;
+    });
+
+    const articles = await sql`
+      SELECT a.id, a.keyword, a.final_content, a.wp_post_id, a.generated_images
+      FROM articles a
+      WHERE a.wp_post_id IS NOT NULL
+        AND a.final_content IS NOT NULL
+        AND ${whereClause}
+    `;
+
+    if (articles.length === 0) {
+      return res.json({ success: true, updated: 0, message: 'No published articles found' });
+    }
+
+    console.log(`[Bulk CTA] Found ${articles.length} published articles to update`);
+
+    const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
+    const auth = Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const article of articles) {
+      try {
+        console.log(`[Bulk CTA] Processing article ${article.id}: ${article.keyword}`);
+
+        // Step 1: Get existing page slug to preserve URL
+        let existingSlug = null;
+        try {
+          const existingPage = await getPage(wpCredentials, article.wp_post_id);
+          existingSlug = existingPage.slug;
+        } catch (err) {
+          console.warn(`[Bulk CTA] Could not get slug for page ${article.wp_post_id}`);
+        }
+
+        // Step 2: Chunk content
+        const chunked = chunkContent(article.final_content, { maxWords: 300 });
+
+        // Step 3: Re-embed any existing images into chunks
+        const images = article.generated_images || [];
+        if (images.length > 0) {
+          const sortedImages = [...images].sort((a, b) => {
+            if (a.placement === 'hero') return -1;
+            if (b.placement === 'hero') return 1;
+            const aNum = parseInt(a.placement?.replace('section-', '') || '99');
+            const bNum = parseInt(b.placement?.replace('section-', '') || '99');
+            return aNum - bNum;
+          });
+
+          sortedImages.forEach(img => {
+            const imageUrl = img.wpMediaUrl || img.url;
+            if (imageUrl?.startsWith('data:')) return;
+
+            const isHero = img.placement === 'hero';
+            const imageData = {
+              url: imageUrl,
+              wpUrl: img.wpMediaUrl || img.url,
+              wpMediaId: img.wpMediaId || null,
+              alt: img.prompt?.substring(0, 50) || 'Article image',
+              width: isHero ? 400 : 380,
+              height: isHero ? 500 : 475,
+              side: img.side || (isHero ? 'right' : 'left'),
+              orientation: 'vertical'
+            };
+
+            if (isHero && chunked.intro) {
+              chunked.intro.imageData = imageData;
+            } else {
+              const sectionMatch = img.placement?.match(/section-(\d+)/);
+              if (sectionMatch) {
+                const sectionIdx = parseInt(sectionMatch[1]) - 1;
+                if (chunked.chunks[sectionIdx]) {
+                  chunked.chunks[sectionIdx].imageData = imageData;
+                }
+              }
+            }
+          });
+        }
+
+        // Step 4: Build new Elementor page with updated CTA
+        const elementorData = buildElementorPage(chunked, {
+          title: article.keyword || 'Article',
+          ctaText: ctaText || 'Book Now!',
+          ctaUrl: ctaUrl || '#',
+          heroImageSide: images.find(i => i.placement === 'hero')?.side || 'right'
+        });
+
+        const elementorMeta = getElementorMetaFields(elementorData);
+
+        // Step 5: Delete old page
+        if (existingSlug) {
+          try {
+            const deleteUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages/${article.wp_post_id}?force=true`;
+            const deleteRes = await fetch(deleteUrl, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Basic ${auth}` }
+            });
+            if (!deleteRes.ok) {
+              existingSlug = existingSlug + '-updated';
+            }
+          } catch {
+            existingSlug = existingSlug + '-updated';
+          }
+        }
+
+        // Step 6: Create new page with same slug
+        const newPage = await createElementorPage(wpCredentials, {
+          title: article.keyword || 'Article',
+          slug: existingSlug,
+          elementorMeta,
+          status: 'draft'
+        });
+
+        if (newPage.success || newPage.id) {
+          // Step 7: Update article record
+          await sql`
+            UPDATE articles
+            SET wp_post_id = ${newPage.id},
+                wp_post_url = ${newPage.link},
+                wp_published_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${article.id}
+          `;
+          successCount++;
+          results.push({ articleId: article.id, keyword: article.keyword, status: 'updated', newPageId: newPage.id });
+          console.log(`[Bulk CTA] ✅ Updated article ${article.id}`);
+        } else {
+          failCount++;
+          results.push({ articleId: article.id, keyword: article.keyword, status: 'failed', error: 'Page creation failed' });
+        }
+      } catch (articleError) {
+        failCount++;
+        results.push({ articleId: article.id, keyword: article.keyword, status: 'failed', error: articleError.message });
+        console.error(`[Bulk CTA] ❌ Failed article ${article.id}:`, articleError.message);
+      }
+    }
+
+    console.log(`[Bulk CTA] Done: ${successCount} updated, ${failCount} failed`);
+    res.json({
+      success: true,
+      updated: successCount,
+      failed: failCount,
+      total: articles.length,
+      results
+    });
+  } catch (error) {
+    console.error('[Bulk CTA] ❌ ERROR:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

@@ -280,6 +280,8 @@ const App: React.FC = () => {
     const [currentWorkflowId, setCurrentWorkflowId] = useState<number | undefined>(undefined);
     const [currentWebsiteId, setCurrentWebsiteId] = useState<number | undefined>(undefined);
     const [currentWebsiteSeoPlugin, setCurrentWebsiteSeoPlugin] = useState<string>('rankmath');
+    const [currentWebsiteCtaText, setCurrentWebsiteCtaText] = useState<string>('');
+    const [currentWebsiteCtaUrl, setCurrentWebsiteCtaUrl] = useState<string>('');
     const [filterByClientId, setFilterByClientId] = useState<number | undefined>(undefined);
     const [currentWorkflowContext, setCurrentWorkflowContext] = useState<{
       workflowName?: string;
@@ -646,7 +648,7 @@ const App: React.FC = () => {
         }
     }, [currentProject]);
 
-    // Fetch website's SEO plugin when website changes
+    // Fetch website settings (SEO plugin, CTA) when website changes
     useEffect(() => {
         if (currentWebsiteId) {
             fetch(`/api/websites/${currentWebsiteId}`)
@@ -655,8 +657,10 @@ const App: React.FC = () => {
                     if (data.website?.seo_plugin) {
                         setCurrentWebsiteSeoPlugin(data.website.seo_plugin);
                     }
+                    setCurrentWebsiteCtaText(data.website?.elementor_cta_text || '');
+                    setCurrentWebsiteCtaUrl(data.website?.elementor_cta_url || '');
                 })
-                .catch(err => console.error('Failed to fetch website SEO plugin:', err));
+                .catch(err => console.error('Failed to fetch website settings:', err));
         }
     }, [currentWebsiteId]);
 
@@ -1549,6 +1553,9 @@ const App: React.FC = () => {
                                                 imageDraftMode: effectiveWpPublishMode === 'draft',
                                                 // Skip WP page creation when Article is on draft (just process images)
                                                 skipWpPageCreation: !shouldPublishToWP,
+                                                // CTA button settings from website config
+                                                ctaText: currentWebsiteCtaText || undefined,
+                                                ctaUrl: currentWebsiteCtaUrl || undefined,
                                             }),
                                         }),
                                         { label: `WP publish ${item.name}` }
