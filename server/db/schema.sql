@@ -530,6 +530,39 @@ CREATE TABLE IF NOT EXISTS draft_image_bank_stats (
 );
 
 -- ============================================
+-- LINK POOL (SEO Link Management - Phase 7)
+-- ============================================
+
+-- Link Pool - stores all outbound and internal links per website
+CREATE TABLE IF NOT EXISTS link_pool (
+  id SERIAL PRIMARY KEY,
+  website_id INTEGER NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
+  url VARCHAR(500) NOT NULL,
+  anchor_text VARCHAR(255),
+  description TEXT,
+  link_type VARCHAR(20) DEFAULT 'outbound',
+  status VARCHAR(20) DEFAULT 'pending',
+  assigned_article_id INTEGER REFERENCES articles(id),
+  used_on_article_id INTEGER REFERENCES articles(id),
+  rel_attribute VARCHAR(50) DEFAULT 'noopener',
+  target VARCHAR(20) DEFAULT '_blank',
+  discovery_run INTEGER,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  used_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_link_pool_website ON link_pool(website_id);
+CREATE INDEX IF NOT EXISTS idx_link_pool_status ON link_pool(status);
+CREATE INDEX IF NOT EXISTS idx_link_pool_assigned ON link_pool(assigned_article_id);
+
+-- Link discovery settings on websites table
+-- ALTER TABLE websites ADD COLUMN link_discovery_prompt TEXT;
+-- ALTER TABLE websites ADD COLUMN link_discovery_model VARCHAR(100) DEFAULT 'claude-sonnet-4-5-20250929';
+-- ALTER TABLE websites ADD COLUMN link_discovery_count INTEGER DEFAULT 70;
+-- ALTER TABLE websites ADD COLUMN links_per_page INTEGER DEFAULT 1;
+-- ALTER TABLE websites ADD COLUMN link_discovery_runs INTEGER DEFAULT 0;
+
+-- ============================================
 -- INDEXES
 -- ============================================
 

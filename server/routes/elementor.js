@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { sql, isDatabaseEnabled } from '../db/index.js';
 import chunkContent, { extractTitle, countWords } from '../services/content-chunker.js';
+import { injectLinks, findAnchorText, getParentPageLink, getAssignedLinks } from '../services/link-injector.js';
 
 // === SIMPLE IMAGE PATH LOG ===
 // This creates a dedicated log file just for tracking image source decisions
@@ -557,8 +558,62 @@ router.post('/publish', async (req, res) => {
       }
     }
 
+    // Step 0.7: Link Injection (Phase 7) - inject parent + outbound links BEFORE chunking
+    // Links are <a> tags in the HTML, and the chunker preserves HTML
+    let contentWithLinks = cleanedContent;
+    let injectedLinkCount = 0;
+    if (articleId && isDatabaseEnabled() && !articleOnly) {
+      try {
+        const linksToInject = [];
+
+        // 1. Get parent page link (automated from wp_page_hierarchy)
+        const parentLink = await getParentPageLink(articleId);
+        if (parentLink) {
+          const anchorText = findAnchorText(cleanedContent, { parentTitle: parentLink.parentTitle });
+          if (anchorText) {
+            linksToInject.push({
+              url: parentLink.url,
+              anchorText,
+              type: 'internal',
+              rel: '',
+              target: '_self'
+            });
+          }
+        }
+
+        // 2. Get outbound links from pool (assigned or auto-distributed)
+        const outboundLinks = await getAssignedLinks(articleId);
+        for (const link of outboundLinks) {
+          const anchorText = link.anchor_text || findAnchorText(cleanedContent, { linkDescription: link.description });
+          if (anchorText) {
+            linksToInject.push({
+              url: link.url,
+              anchorText,
+              type: 'outbound',
+              rel: link.rel_attribute || 'noopener',
+              target: link.target || '_blank'
+            });
+          }
+        }
+
+        // 3. Inject links into content
+        if (linksToInject.length > 0) {
+          contentWithLinks = injectLinks(cleanedContent, linksToInject);
+          injectedLinkCount = linksToInject.length;
+          console.log(`[Elementor Publish] Injected ${injectedLinkCount} link(s) into content`);
+          sessionLogger.logInfo('LINKS', `Injected ${injectedLinkCount} link(s)`, {
+            parent: parentLink ? true : false,
+            outbound: outboundLinks.length
+          });
+        }
+      } catch (linkErr) {
+        console.error('[Elementor Publish] Link injection failed (non-fatal):', linkErr.message);
+        // Link injection is optional - continue without links
+      }
+    }
+
     // Step 1: Chunk the content first - pass template structure for formatting rules
-    let chunked = chunkContent(cleanedContent, {
+    let chunked = chunkContent(contentWithLinks, {
       maxWords,
       templateStructure: templateStyles?.structure || null
     });

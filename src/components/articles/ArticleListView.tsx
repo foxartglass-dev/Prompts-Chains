@@ -2969,6 +2969,8 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           wpPassword={selectedArticle.wp_app_password || ''}
           pageId={selectedArticle.wp_post_id}
           articleKeyword={selectedArticle.keyword}
+          articleId={selectedArticle.id}
+          websiteId={selectedArticle.website_id || undefined}
           onClose={() => setShowPageEditor(false)}
           showNotification={(msg, type) => {
             if (type === 'error') {
