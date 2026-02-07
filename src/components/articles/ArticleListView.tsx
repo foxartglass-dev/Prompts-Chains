@@ -163,6 +163,16 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     complete: boolean;
   } | null>(null);
 
+  // Full Page Rebuild state
+  const [showRebuildModal, setShowRebuildModal] = useState(false);
+  const [rebuildOptions, setRebuildOptions] = useState({
+    updateContent: true,
+    regenerateImages: false,
+    updateCta: true,
+    refreshComponents: true,
+    resetRotation: false
+  });
+
   useEffect(() => {
     fetchArticles();
   }, [websiteId, statusFilter]);
@@ -669,6 +679,114 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       setError('Failed to update CTA on published pages');
     } finally {
       setUpdatingCta(false);
+    }
+  };
+
+  // Full Page Rebuild — "nuclear option" via SSE
+  const bulkRebuildPages = async () => {
+    if (!websiteId) return;
+    setShowRebuildModal(false);
+
+    const publishedCount = articles.filter(a => a.wp_post_id).length;
+    setBulkImageProgress({
+      active: true,
+      mode: 'rebuild',
+      total: publishedCount,
+      current: 0,
+      succeeded: 0,
+      failed: 0,
+      currentKeyword: '',
+      errors: [],
+      complete: false
+    });
+
+    try {
+      // Fetch website for WP credentials
+      const wsRes = await fetch(`/api/websites/${websiteId}`);
+      const wsData = await wsRes.json();
+      const website = wsData.website;
+
+      if (!website?.wp_url || !website?.wp_user || !website?.wp_app_password) {
+        throw new Error('WordPress credentials not configured for this website');
+      }
+
+      // Get workflowId from first article
+      const firstArticle = articles.find(a => a.workflow_id);
+      const workflowId = firstArticle?.workflow_id;
+
+      const res = await fetch('/api/elementor/bulk-rebuild-pages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflowId,
+          websiteId,
+          wpUrl: website.wp_url,
+          wpUser: website.wp_user,
+          wpPassword: website.wp_app_password,
+          options: rebuildOptions
+        })
+      });
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === 'progress') {
+                setBulkImageProgress(prev => prev ? {
+                  ...prev,
+                  current: data.current || prev.current,
+                  total: data.total || prev.total,
+                  currentKeyword: data.keyword || data.message || '',
+                  succeeded: data.succeeded ?? prev.succeeded,
+                  failed: data.failed ?? prev.failed
+                } : null);
+              } else if (data.type === 'complete') {
+                setBulkImageProgress(prev => prev ? {
+                  ...prev,
+                  total: data.total,
+                  succeeded: data.succeeded,
+                  failed: data.failed,
+                  errors: data.errors?.map((e: any) => `${e.keyword}: ${e.error}`) || prev.errors,
+                  complete: true
+                } : null);
+              } else if (data.type === 'error') {
+                setBulkImageProgress(prev => prev ? {
+                  ...prev,
+                  errors: [...prev.errors, data.message || data.error || 'Unknown error'],
+                  complete: true
+                } : null);
+              }
+            } catch (parseErr) {
+              // Skip malformed SSE data
+            }
+          }
+        }
+      }
+
+      await fetchArticles();
+    } catch (err: any) {
+      setBulkImageProgress(prev => prev ? {
+        ...prev,
+        errors: [...prev.errors, err.message || 'Full rebuild failed'],
+        complete: true
+      } : null);
     }
   };
 
@@ -1193,7 +1311,122 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
               </div>
             )}
           </div>
+
+          {/* Full Page Rebuild Button */}
+          {articles.some(a => a.wp_post_id) && (
+            <button
+              onClick={() => setShowRebuildModal(true)}
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-white text-sm font-medium transition flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Full Page Rebuild...
+            </button>
+          )}
         </div>
+      )}
+
+      {/* Full Page Rebuild Options Modal — React Portal (Golden Rule #7) */}
+      {showRebuildModal && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-xl w-full max-w-lg border border-red-500/30 shadow-2xl">
+            <div className="p-6">
+              <h3 className="text-xl font-bold text-red-400 mb-4">Full Page Rebuild</h3>
+              <p className="text-gray-300 text-sm mb-4">
+                Rebuild {articles.filter(a => a.wp_post_id).length} published page{articles.filter(a => a.wp_post_id).length !== 1 ? 's' : ''} with selected updates:
+              </p>
+
+              <div className="space-y-3 mb-4">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={rebuildOptions.updateContent}
+                    onChange={(e) => setRebuildOptions(prev => ({ ...prev, updateContent: e.target.checked }))}
+                    className="w-4 h-4 rounded border-slate-500 bg-slate-700 text-purple-500 focus:ring-purple-500"
+                  />
+                  <div>
+                    <div className="text-sm text-white group-hover:text-purple-300 transition">Update content from database</div>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={rebuildOptions.regenerateImages}
+                    onChange={(e) => setRebuildOptions(prev => ({ ...prev, regenerateImages: e.target.checked }))}
+                    className="w-4 h-4 rounded border-slate-500 bg-slate-700 text-purple-500 focus:ring-purple-500"
+                  />
+                  <div>
+                    <div className="text-sm text-white group-hover:text-purple-300 transition">Regenerate images</div>
+                    <div className="text-xs text-gray-500">Slow — makes API calls for each article</div>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={rebuildOptions.updateCta}
+                    onChange={(e) => setRebuildOptions(prev => ({ ...prev, updateCta: e.target.checked }))}
+                    className="w-4 h-4 rounded border-slate-500 bg-slate-700 text-purple-500 focus:ring-purple-500"
+                  />
+                  <div>
+                    <div className="text-sm text-white group-hover:text-purple-300 transition">Apply current CTA settings</div>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={rebuildOptions.refreshComponents}
+                    onChange={(e) => setRebuildOptions(prev => ({ ...prev, refreshComponents: e.target.checked, resetRotation: e.target.checked ? prev.resetRotation : false }))}
+                    className="w-4 h-4 rounded border-slate-500 bg-slate-700 text-purple-500 focus:ring-purple-500"
+                  />
+                  <div>
+                    <div className="text-sm text-white group-hover:text-purple-300 transition">Refresh component assignments</div>
+                  </div>
+                </label>
+
+                {rebuildOptions.refreshComponents && (
+                  <label className="flex items-center gap-3 cursor-pointer group ml-7">
+                    <input
+                      type="checkbox"
+                      checked={rebuildOptions.resetRotation}
+                      onChange={(e) => setRebuildOptions(prev => ({ ...prev, resetRotation: e.target.checked }))}
+                      className="w-4 h-4 rounded border-slate-500 bg-slate-700 text-purple-500 focus:ring-purple-500"
+                    />
+                    <div>
+                      <div className="text-sm text-gray-300 group-hover:text-purple-300 transition">Reset rotation (distribute evenly)</div>
+                    </div>
+                  </label>
+                )}
+              </div>
+
+              <div className="bg-amber-900/20 border border-amber-500/30 rounded-lg p-3 mb-4">
+                <p className="text-xs text-amber-400">
+                  This will rebuild every published page. URLs will be preserved. Each page is deleted and recreated with the same slug.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={bulkRebuildPages}
+                  disabled={!rebuildOptions.updateContent && !rebuildOptions.regenerateImages && !rebuildOptions.updateCta && !rebuildOptions.refreshComponents}
+                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed rounded text-white font-medium transition"
+                >
+                  Rebuild All Pages
+                </button>
+                <button
+                  onClick={() => setShowRebuildModal(false)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-gray-300 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* CTA Update Confirmation Modal */}
@@ -2602,14 +2835,17 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       {/* Bulk Image Progress Modal — React Portal (Golden Rule #7) */}
       {bulkImageProgress?.active && createPortal(
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-xl w-full max-w-lg border border-purple-500/30 shadow-2xl">
+          <div className={`bg-slate-900 rounded-xl w-full max-w-lg shadow-2xl border ${bulkImageProgress.mode === 'rebuild' ? 'border-red-500/30' : 'border-purple-500/30'}`}>
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  <svg className={`w-5 h-5 ${bulkImageProgress.mode === 'rebuild' ? 'text-red-400' : 'text-purple-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {bulkImageProgress.mode === 'rebuild'
+                      ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    }
                   </svg>
-                  Bulk Image Generation
+                  {bulkImageProgress.mode === 'rebuild' ? 'Full Page Rebuild' : 'Bulk Image Generation'}
                 </h3>
                 {bulkImageProgress.complete && (
                   <button
@@ -2623,7 +2859,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
 
               <div className="mb-1 flex items-center justify-between text-sm">
                 <span className="text-gray-400">
-                  {bulkImageProgress.mode === 'missing' ? 'Generating missing images' : 'Regenerating all images'}
+                  {bulkImageProgress.mode === 'missing' ? 'Generating missing images' : bulkImageProgress.mode === 'rebuild' ? 'Rebuilding pages' : 'Regenerating all images'}
                 </span>
                 <span className="text-white font-medium">
                   {bulkImageProgress.current} / {bulkImageProgress.total}
@@ -2636,7 +2872,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                   className={`h-3 rounded-full transition-all duration-300 ${
                     bulkImageProgress.complete
                       ? bulkImageProgress.failed > 0 ? 'bg-amber-500' : 'bg-green-500'
-                      : 'bg-purple-500'
+                      : bulkImageProgress.mode === 'rebuild' ? 'bg-red-500' : 'bg-purple-500'
                   }`}
                   style={{ width: `${bulkImageProgress.total > 0 ? (bulkImageProgress.current / bulkImageProgress.total) * 100 : 0}%` }}
                 />

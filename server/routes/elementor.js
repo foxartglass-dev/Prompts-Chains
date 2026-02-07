@@ -64,6 +64,8 @@ import { addBatchToDraftBank } from '../services/draft-image-bank.js';
 import githubLogger from '../services/github-logger.js';
 import { getImageBank } from '../services/image-bank.js';
 import { selectComponentsForArticle } from '../services/component-library-service.js';
+import { rebuildPage, bulkRebuildPages } from '../services/page-rebuild-service.js';
+import { setupSSE } from '../services/sse-progress.js';
 
 const router = express.Router();
 
@@ -2793,137 +2795,339 @@ router.post('/bulk-update-cta', async (req, res) => {
     console.log(`[Bulk CTA] Found ${articles.length} published articles to update`);
 
     const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
-    const auth = Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
-    const results = [];
-    let successCount = 0;
-    let failCount = 0;
 
-    for (const article of articles) {
-      try {
-        console.log(`[Bulk CTA] Processing article ${article.id}: ${article.keyword}`);
+    // Use shared rebuild service — replaces ~120 lines of inline rebuild logic
+    // Note: bulkRebuildPages handles per-article error collection (Golden Rule #9)
+    const bulkResult = await bulkRebuildPages(articles, wpCredentials, {
+      ctaText: ctaText || 'Book Now!',
+      ctaUrl: ctaUrl || '#'
+    }, (progress) => {
+      // progressCallback — used for logging only (NOT SSE, frontend expects JSON response)
+      console.log(`[Bulk CTA] Progress: ${progress.succeeded + progress.failed}/${progress.total} — current: ${progress.currentKeyword}`);
+    });
 
-        // Step 1: Get existing page slug to preserve URL
-        let existingSlug = null;
-        try {
-          const existingPage = await getPage(wpCredentials, article.wp_post_id);
-          existingSlug = existingPage.slug;
-        } catch (err) {
-          console.warn(`[Bulk CTA] Could not get slug for page ${article.wp_post_id}`);
-        }
-
-        // Step 2: Chunk content
-        const chunked = chunkContent(article.final_content, { maxWords: 300 });
-
-        // Step 3: Re-embed any existing images into chunks
-        const images = article.generated_images || [];
-        if (images.length > 0) {
-          const sortedImages = [...images].sort((a, b) => {
-            if (a.placement === 'hero') return -1;
-            if (b.placement === 'hero') return 1;
-            const aNum = parseInt(a.placement?.replace('section-', '') || '99');
-            const bNum = parseInt(b.placement?.replace('section-', '') || '99');
-            return aNum - bNum;
-          });
-
-          sortedImages.forEach(img => {
-            const imageUrl = img.wpMediaUrl || img.url;
-            if (imageUrl?.startsWith('data:')) return;
-
-            const isHero = img.placement === 'hero';
-            const imageData = {
-              url: imageUrl,
-              wpUrl: img.wpMediaUrl || img.url,
-              wpMediaId: img.wpMediaId || null,
-              alt: img.prompt?.substring(0, 50) || 'Article image',
-              width: isHero ? 400 : 380,
-              height: isHero ? 500 : 475,
-              side: img.side || (isHero ? 'right' : 'left'),
-              orientation: 'vertical'
-            };
-
-            if (isHero && chunked.intro) {
-              chunked.intro.imageData = imageData;
-            } else {
-              const sectionMatch = img.placement?.match(/section-(\d+)/);
-              if (sectionMatch) {
-                const sectionIdx = parseInt(sectionMatch[1]) - 1;
-                if (chunked.chunks[sectionIdx]) {
-                  chunked.chunks[sectionIdx].imageData = imageData;
-                }
-              }
-            }
-          });
-        }
-
-        // Step 4: Build new Elementor page with updated CTA
-        const elementorData = buildElementorPage(chunked, {
-          title: article.keyword || 'Article',
-          ctaText: ctaText || 'Book Now!',
-          ctaUrl: ctaUrl || '#',
-          heroImageSide: images.find(i => i.placement === 'hero')?.side || 'right'
-        });
-
-        const elementorMeta = getElementorMetaFields(elementorData);
-
-        // Step 5: Delete old page
-        if (existingSlug) {
-          try {
-            const deleteUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages/${article.wp_post_id}?force=true`;
-            const deleteRes = await fetch(deleteUrl, {
-              method: 'DELETE',
-              headers: { 'Authorization': `Basic ${auth}` }
-            });
-            if (!deleteRes.ok) {
-              existingSlug = existingSlug + '-updated';
-            }
-          } catch {
-            existingSlug = existingSlug + '-updated';
-          }
-        }
-
-        // Step 6: Create new page with same slug
-        const newPage = await createElementorPage(wpCredentials, {
-          title: article.keyword || 'Article',
-          slug: existingSlug,
-          elementorMeta,
-          status: 'draft'
-        });
-
-        if (newPage.success || newPage.id) {
-          // Step 7: Update article record
-          await sql`
-            UPDATE articles
-            SET wp_post_id = ${newPage.id},
-                wp_post_url = ${newPage.link},
-                wp_published_at = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${article.id}
-          `;
-          successCount++;
-          results.push({ articleId: article.id, keyword: article.keyword, status: 'updated', newPageId: newPage.id });
-          console.log(`[Bulk CTA] ✅ Updated article ${article.id}`);
-        } else {
-          failCount++;
-          results.push({ articleId: article.id, keyword: article.keyword, status: 'failed', error: 'Page creation failed' });
-        }
-      } catch (articleError) {
-        failCount++;
-        results.push({ articleId: article.id, keyword: article.keyword, status: 'failed', error: articleError.message });
-        console.error(`[Bulk CTA] ❌ Failed article ${article.id}:`, articleError.message);
-      }
-    }
-
-    console.log(`[Bulk CTA] Done: ${successCount} updated, ${failCount} failed`);
+    console.log(`[Bulk CTA] Done: ${bulkResult.succeeded} updated, ${bulkResult.failed} failed`);
     res.json({
       success: true,
-      updated: successCount,
-      failed: failCount,
-      total: articles.length,
-      results
+      updated: bulkResult.succeeded,
+      failed: bulkResult.failed,
+      total: bulkResult.total,
+      results: bulkResult.errors.length > 0
+        ? bulkResult.errors.map(e => ({ articleId: e.articleId, keyword: e.keyword, status: 'failed', error: e.error }))
+        : []
     });
   } catch (error) {
     console.error('[Bulk CTA] ❌ ERROR:', error.message);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Full Page Rebuild — "nuclear option" to rebuild all published pages
+// with any combination of: updated content, regenerated images, new CTA, refreshed components
+// Uses SSE for streaming progress
+router.post('/bulk-rebuild-pages', async (req, res) => {
+  try {
+    const {
+      workflowId,
+      websiteId,
+      wpUrl,
+      wpUser,
+      wpPassword,
+      options = {}
+    } = req.body;
+
+    const {
+      updateContent = true,
+      regenerateImages = false,
+      updateCta = true,
+      refreshComponents = true,
+      resetRotation = false
+    } = options;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'WordPress credentials are required' });
+    }
+    if (!workflowId && !websiteId) {
+      return res.status(400).json({ error: 'workflowId or websiteId is required' });
+    }
+
+    // Validate WP credentials before starting
+    try {
+      const testRes = await testConnection({ url: wpUrl, user: wpUser, password: wpPassword });
+      if (!testRes.success) {
+        return res.status(400).json({ error: 'WordPress credentials invalid — check URL, username, and app password' });
+      }
+    } catch (connErr) {
+      return res.status(400).json({ error: `WordPress connection failed: ${connErr.message}` });
+    }
+
+    // Set up SSE for streaming progress
+    const { sendProgress, sendComplete, sendError } = setupSSE(res);
+
+    // Fetch all published articles with wp_post_id
+    const conditions = [];
+    if (websiteId) conditions.push(sql`a.website_id = ${websiteId}`);
+    if (workflowId) conditions.push(sql`a.workflow_id = ${workflowId}`);
+
+    const whereClause = conditions.reduce((acc, cond, idx) => {
+      return idx === 0 ? cond : sql`${acc} AND ${cond}`;
+    });
+
+    const articles = await sql`
+      SELECT a.id, a.keyword, a.final_content, a.wp_post_id, a.generated_images,
+             a.workflow_id, a.website_id
+      FROM articles a
+      WHERE a.wp_post_id IS NOT NULL
+        AND a.final_content IS NOT NULL
+        AND ${whereClause}
+    `;
+
+    if (articles.length === 0) {
+      sendComplete({ total: 0, succeeded: 0, failed: 0, errors: [], message: 'No published articles found' });
+      return;
+    }
+
+    console.log(`[Full Rebuild] Starting rebuild of ${articles.length} articles`);
+    console.log(`[Full Rebuild] Options: content=${updateContent}, images=${regenerateImages}, cta=${updateCta}, components=${refreshComponents}, resetRotation=${resetRotation}`);
+
+    sendProgress({ current: 0, total: articles.length, message: `Starting rebuild of ${articles.length} pages...` });
+
+    // Fetch website settings (for CTA if needed)
+    let ctaText = null;
+    let ctaUrl = null;
+    if (updateCta && websiteId) {
+      try {
+        const [website] = await sql`SELECT elementor_cta_text, elementor_cta_url FROM websites WHERE id = ${websiteId}`;
+        if (website) {
+          ctaText = website.elementor_cta_text || 'Book Now!';
+          ctaUrl = website.elementor_cta_url || '#';
+          console.log(`[Full Rebuild] CTA: "${ctaText}" → ${ctaUrl}`);
+        }
+      } catch (ctaErr) {
+        console.warn(`[Full Rebuild] Could not fetch CTA settings: ${ctaErr.message}`);
+      }
+    }
+
+    // Fetch template styles
+    const activeWorkflowId = workflowId || articles[0]?.workflow_id;
+    let templateStyles = null;
+    if (activeWorkflowId) {
+      try {
+        const [styleRecord] = await sql`
+          SELECT extracted_styles
+          FROM workflow_elementor_styles
+          WHERE workflow_id = ${activeWorkflowId}
+            AND status = 'active'
+          LIMIT 1
+        `;
+        if (styleRecord?.extracted_styles) {
+          templateStyles = styleRecord.extracted_styles;
+        }
+      } catch (styleErr) {
+        console.warn(`[Full Rebuild] Could not fetch template styles: ${styleErr.message}`);
+      }
+    }
+
+    // Reset component rotation if requested
+    if (resetRotation && activeWorkflowId) {
+      try {
+        await sql`
+          DELETE FROM component_rotation_state
+          WHERE workflow_id = ${activeWorkflowId}
+        `;
+        console.log(`[Full Rebuild] Reset component rotation for workflow ${activeWorkflowId}`);
+      } catch (rotErr) {
+        console.warn(`[Full Rebuild] Could not reset rotation: ${rotErr.message}`);
+      }
+    }
+
+    // Fetch image generation settings if regenerating images
+    let imageSettings = null;
+    if (regenerateImages) {
+      try {
+        const settingsQuery = websiteId
+          ? sql`SELECT * FROM image_creation_settings WHERE website_id = ${websiteId} LIMIT 1`
+          : sql`SELECT * FROM image_creation_settings WHERE workflow_id = ${activeWorkflowId} LIMIT 1`;
+        const [settings] = await settingsQuery;
+        imageSettings = settings;
+      } catch (imgSettingsErr) {
+        console.warn(`[Full Rebuild] Could not fetch image settings: ${imgSettingsErr.message}`);
+      }
+    }
+
+    const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
+    const results = { total: articles.length, succeeded: 0, failed: 0, errors: [] };
+
+    // Process articles SEQUENTIALLY (not parallel — avoids API rate limits)
+    for (let i = 0; i < articles.length; i++) {
+      const article = articles[i];
+
+      try {
+        // Step A: Regenerate images if requested (Golden Rule #1: images BEFORE page)
+        if (regenerateImages) {
+          sendProgress({
+            current: i,
+            total: articles.length,
+            keyword: article.keyword,
+            message: `Generating images for: ${article.keyword}`
+          });
+
+          try {
+            // Build image pipeline options
+            const pipelineOptions = {
+              keyword: article.keyword,
+              wpCredentials,
+              maxImages: imageSettings?.max_images || 4,
+              heroImage: true,
+              model: imageSettings?.image_generation_model || 'flux-1.1-pro',
+              quality: imageSettings?.image_quality || 'low',
+              livePromptMode: imageSettings?.live_prompt_mode || 'main_prompt'
+            };
+
+            // Add API keys from settings
+            if (imageSettings?.openai_api_key) pipelineOptions.openaiApiKey = imageSettings.openai_api_key;
+            if (imageSettings?.replicate_api_key) pipelineOptions.replicateApiKey = imageSettings.replicate_api_key;
+            if (imageSettings?.anthropic_api_key) pipelineOptions.anthropicApiKey = imageSettings.anthropic_api_key;
+
+            // Add avatar if available
+            if (imageSettings?.audience_avatars?.length > 0) {
+              const tagMatch = article.keyword?.match(/\(([A-Z])\)/i);
+              const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+              const avatars = imageSettings.audience_avatars;
+              const matchingAvatars = avatars.filter(a =>
+                (a.tag === articleTag && !a.isGlobal) ||
+                (a.isGlobal && a.appliesTo?.includes(articleTag))
+              );
+              pipelineOptions.targetAvatar = matchingAvatars.length > 0
+                ? matchingAvatars[Math.floor(Math.random() * matchingAvatars.length)]
+                : avatars[0];
+            }
+
+            const pipelineResult = await processArticleWithImages(article.final_content, pipelineOptions);
+
+            // Extract images from pipeline result and save to article
+            const newImages = [];
+            if (pipelineResult.chunks?.intro?.imageData) {
+              const img = pipelineResult.chunks.intro.imageData;
+              newImages.push({
+                id: `hero-${Date.now()}`,
+                placement: 'hero',
+                url: img.url || img.wpUrl,
+                wpMediaUrl: img.wpUrl,
+                wpMediaId: img.wpMediaId,
+                prompt: pipelineResult.chunks.intro.imagePrompt || '',
+                side: img.side || 'right',
+                pushedToWp: !!img.wpMediaId,
+                createdAt: new Date().toISOString()
+              });
+            }
+            if (pipelineResult.chunks?.chunks) {
+              pipelineResult.chunks.chunks.forEach((chunk, idx) => {
+                if (chunk.imageData) {
+                  newImages.push({
+                    id: `section-${idx + 1}-${Date.now()}`,
+                    placement: `section-${idx + 1}`,
+                    url: chunk.imageData.url || chunk.imageData.wpUrl,
+                    wpMediaUrl: chunk.imageData.wpUrl,
+                    wpMediaId: chunk.imageData.wpMediaId,
+                    prompt: chunk.imagePrompt || '',
+                    side: chunk.imageSide || (idx % 2 === 0 ? 'left' : 'right'),
+                    pushedToWp: !!chunk.imageData.wpMediaId,
+                    createdAt: new Date().toISOString()
+                  });
+                }
+              });
+            }
+
+            if (newImages.length > 0) {
+              // Save new images to article record
+              await sql`
+                UPDATE articles
+                SET generated_images = ${JSON.stringify(newImages)},
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${article.id}
+              `;
+              article.generated_images = newImages;
+              console.log(`[Full Rebuild] Generated ${newImages.length} images for article ${article.id}`);
+            }
+          } catch (imgErr) {
+            console.error(`[Full Rebuild] Image generation failed for article ${article.id}: ${imgErr.message}`);
+            // Continue with existing images (or none)
+          }
+        }
+
+        // Step B: Build rebuild options
+        const rebuildOptions = {
+          templateStyles,
+          ctaText: updateCta ? ctaText : null,
+          ctaUrl: updateCta ? ctaUrl : null,
+        };
+
+        // Images: use article's current generated_images (which may have just been regenerated)
+        rebuildOptions.images = article.generated_images || null;
+
+        // Components: pass null to force re-selection, or fetch current to keep them
+        if (refreshComponents) {
+          rebuildOptions.components = null; // Will call selectComponentsForArticle inside rebuildPage
+        } else {
+          // Fetch existing component assignments to preserve them
+          try {
+            const tagMatch = article.keyword?.match(/\(([A-Z])\)/i);
+            const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+            const existingComponents = await selectComponentsForArticle(article.workflow_id, articleTag);
+            if (existingComponents.enabled) {
+              rebuildOptions.components = existingComponents;
+            }
+          } catch (compErr) {
+            console.warn(`[Full Rebuild] Could not fetch components for article ${article.id}: ${compErr.message}`);
+          }
+        }
+
+        // Step C: Call rebuildPage
+        sendProgress({
+          current: i,
+          total: articles.length,
+          keyword: article.keyword,
+          message: `Rebuilding page: ${article.keyword}`
+        });
+
+        await rebuildPage(article, wpCredentials, rebuildOptions);
+        results.succeeded++;
+
+        console.log(`[Full Rebuild] Rebuilt article ${article.id}: "${article.keyword}"`);
+
+      } catch (articleErr) {
+        results.failed++;
+        results.errors.push({
+          articleId: article.id,
+          keyword: article.keyword,
+          error: articleErr.message
+        });
+        console.error(`[Full Rebuild] Failed article ${article.id}: ${articleErr.message}`);
+      }
+
+      // Send progress after each article
+      sendProgress({
+        current: i + 1,
+        total: articles.length,
+        keyword: article.keyword,
+        succeeded: results.succeeded,
+        failed: results.failed
+      });
+    }
+
+    console.log(`[Full Rebuild] Complete: ${results.succeeded} succeeded, ${results.failed} failed out of ${results.total}`);
+    sendComplete(results);
+
+  } catch (error) {
+    console.error('[Full Rebuild] Fatal error:', error.message);
+    // If SSE headers already sent, use sendError pattern
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: error.message })}\n\n`);
+      res.end();
+    } else {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
