@@ -5,6 +5,115 @@ import { megaImageStatus, trackImagesLoaded, trackApiResponse, banner, log, warn
 import chunkContent from '../services/content-chunker.js';
 import buildElementorPage, { getElementorMetaFields } from '../services/elementor-builder.js';
 import { updatePage, getPage, createElementorPage, uploadMedia } from '../services/wordpress-publisher.js';
+import { processArticleWithImages } from '../services/image-pipeline.js';
+
+/**
+ * Select avatar for a given tag from the audience_avatars array.
+ * Matches tag-specific avatars and global avatars that apply to the tag.
+ * Randomly selects one if multiple match.
+ */
+function selectAvatarForTag(avatars, targetTag) {
+  if (!avatars || avatars.length === 0) return null;
+  if (!targetTag) return avatars[0];
+
+  const matchingAvatars = avatars.filter(avatar => {
+    if (avatar.tag === targetTag && !avatar.isGlobal) return true;
+    if (avatar.isGlobal && avatar.appliesTo?.includes(targetTag)) return true;
+    return false;
+  });
+
+  if (matchingAvatars.length === 0) {
+    return avatars[0];
+  }
+
+  return matchingAvatars[Math.floor(Math.random() * matchingAvatars.length)];
+}
+
+/**
+ * Fetch image creation settings for a given workflow.
+ * Tries website-level settings first, falls back to workflow-level.
+ * Returns the config object or null if not found.
+ */
+async function fetchImageSettings(workflowId) {
+  if (!workflowId || !isDatabaseEnabled()) return null;
+
+  // Look up the workflow's associated website_id
+  let websiteId = null;
+  try {
+    const workflowResult = await sql`SELECT website_id FROM workflows WHERE id = ${workflowId}`;
+    if (workflowResult.length > 0 && workflowResult[0].website_id) {
+      websiteId = workflowResult[0].website_id;
+    }
+  } catch (err) {
+    console.log('[fetchImageSettings] Could not lookup website:', err.message);
+  }
+
+  // Try website-level settings first
+  let settingsResult = [];
+  if (websiteId) {
+    try {
+      settingsResult = await sql`SELECT * FROM image_creation_settings WHERE website_id = ${websiteId}`;
+    } catch (err) {
+      console.log('[fetchImageSettings] website_id column not available');
+    }
+  }
+
+  // Fall back to workflow-level settings
+  if (settingsResult.length === 0) {
+    settingsResult = await sql`SELECT * FROM image_creation_settings WHERE workflow_id = ${workflowId}`;
+  }
+
+  return settingsResult.length > 0 ? settingsResult[0] : null;
+}
+
+/**
+ * Build pipeline options from image creation settings config and article data.
+ */
+function buildPipelineOptions(config, article) {
+  const keyword = article.keyword || '';
+  const tagMatch = keyword.match(/\(([A-Z])\)/i);
+  const articleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+
+  const avatars = config.audience_avatars || [];
+  const targetAvatar = selectAvatarForTag(avatars, articleTag);
+
+  const livePromptMode = config.live_prompt_mode || 'main_prompt';
+  const smartPromptGuidance = config.smart_prompt_guidance || '';
+
+  // Build guardrails
+  const baseGuardrails = config.guided_guardrails || {};
+  const perTagDescription = articleTag && config.guided_guardrails_by_tag?.[articleTag]
+    ? config.guided_guardrails_by_tag[articleTag]
+    : '';
+  const guidedGuardrails = perTagDescription ? {
+    ...baseGuardrails,
+    instructions: `${baseGuardrails.instructions || ''}\n\nContext for this audience (${articleTag}): ${perTagDescription}`.trim()
+  } : baseGuardrails;
+
+  const smartMatchingConfig = config.smart_matching_config || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 };
+  const matchPlurals = config.match_plurals !== false;
+
+  return {
+    title: keyword.replace(/\s*\([A-Za-z]\)\s*$/, '').trim(),
+    keyword,
+    openaiApiKey: process.env.OPENAI_API_KEY,
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+    geminiApiKey: process.env.GEMINI_API_KEY,
+    replicateApiKey: process.env.REPLICATE_API_TOKEN,
+    maxImages: 4,
+    maxWords: 300,
+    model: config.image_generation_model || 'gpt-image-1.5',
+    quality: config.image_quality || 'low',
+    livePromptMode,
+    targetAvatar,
+    smartPromptGuidance,
+    matchPlurals,
+    heroImageSide: 'right',
+    smartMatchingConfig,
+    guidedGuardrails,
+    guidedModel: config.guided_model || 'gpt-4o'
+  };
+}
 
 const router = express.Router();
 
@@ -844,6 +953,497 @@ router.post('/:articleId/regenerate-image', requireDb, async (req, res) => {
   } catch (error) {
     console.error('[Regenerate Image] Error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// POST generate images for an article that has content but no images
+// Use case: Article was published without images, now image prompts are ready
+router.post('/:articleId/generate-images', requireDb, async (req, res) => {
+  try {
+    const { articleId } = req.params;
+    const { workflowId } = req.body;
+
+    console.log(`[Generate Images] Starting for article ${articleId}`);
+
+    // 1. Fetch article
+    const articles = await sql`SELECT * FROM articles WHERE id = ${articleId}`;
+    if (articles.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    const article = articles[0];
+
+    if (!article.final_content) {
+      return res.status(400).json({ error: 'Article has no content to generate images for' });
+    }
+
+    // Check if article already has images (use regenerate-all-images for replacement)
+    const existingImages = article.generated_images || [];
+    if (Array.isArray(existingImages) && existingImages.length > 0) {
+      return res.status(400).json({ error: 'Article already has images. Use regenerate-all-images to replace them.' });
+    }
+
+    // 2. Fetch image settings
+    const effectiveWorkflowId = workflowId || article.workflow_id;
+    const config = await fetchImageSettings(effectiveWorkflowId);
+    if (!config) {
+      return res.status(400).json({ error: 'No image creation settings found for this workflow/website' });
+    }
+
+    // 3. Build pipeline options
+    const pipelineOptions = buildPipelineOptions(config, article);
+
+    console.log(`[Generate Images] Pipeline options: model=${pipelineOptions.model}, mode=${pipelineOptions.livePromptMode}, avatar=${pipelineOptions.targetAvatar?.name || 'none'}`);
+
+    // 4. Get WP credentials for uploading images to WordPress
+    // Try to get from article's website first
+    let wpCredentials = null;
+    if (article.website_id) {
+      const websiteResult = await sql`SELECT wp_url, wp_user, wp_app_password FROM websites WHERE id = ${article.website_id}`;
+      if (websiteResult.length > 0 && websiteResult[0].wp_url) {
+        wpCredentials = {
+          url: websiteResult[0].wp_url,
+          user: websiteResult[0].wp_user,
+          password: websiteResult[0].wp_app_password
+        };
+      }
+    }
+
+    // Fall back to staging credentials if no website credentials
+    if (!wpCredentials) {
+      const stagingResult = await sql`SELECT staging_wp_url, staging_wp_user, staging_wp_password FROM global_settings WHERE id = 1`;
+      if (stagingResult.length > 0 && stagingResult[0].staging_wp_url) {
+        wpCredentials = {
+          url: stagingResult[0].staging_wp_url,
+          user: stagingResult[0].staging_wp_user,
+          password: stagingResult[0].staging_wp_password
+        };
+      }
+    }
+
+    // Pass WP credentials to pipeline so images upload during generation
+    pipelineOptions.wpCredentials = wpCredentials;
+
+    // 5. Run image pipeline
+    const pipelineResult = await processArticleWithImages(article.final_content, pipelineOptions);
+
+    // 6. Extract images from pipeline result and build generated_images array
+    const generatedImages = [];
+    let imageIndex = 0;
+
+    // Hero image from intro
+    if (pipelineResult.chunks.intro?.imageData) {
+      const imgData = pipelineResult.chunks.intro.imageData;
+      generatedImages.push({
+        id: `img-${Date.now()}-hero`,
+        url: imgData.wpUrl || imgData.url,
+        prompt: pipelineResult.chunks.intro.imagePrompt || '',
+        placement: 'hero',
+        side: imgData.side || 'right',
+        wpMediaId: imgData.wpMediaId || null,
+        wpMediaUrl: imgData.wpUrl || null,
+        pushedToWp: !!imgData.wpMediaId,
+        createdAt: new Date().toISOString()
+      });
+      imageIndex++;
+    }
+
+    // Section images from chunks
+    if (pipelineResult.chunks.chunks) {
+      pipelineResult.chunks.chunks.forEach((chunk, idx) => {
+        if (chunk.imageData) {
+          const imgData = chunk.imageData;
+          generatedImages.push({
+            id: `img-${Date.now()}-section-${idx + 1}`,
+            url: imgData.wpUrl || imgData.url,
+            prompt: chunk.imagePrompt || '',
+            placement: `section-${idx + 1}`,
+            side: imgData.side || (idx % 2 === 0 ? 'left' : 'right'),
+            wpMediaId: imgData.wpMediaId || null,
+            wpMediaUrl: imgData.wpUrl || null,
+            pushedToWp: !!imgData.wpMediaId,
+            createdAt: new Date().toISOString()
+          });
+          imageIndex++;
+        }
+      });
+    }
+
+    console.log(`[Generate Images] Generated ${generatedImages.length} images`);
+
+    // 7. Save to article (intentionally setting generated_images)
+    await sql`
+      UPDATE articles
+      SET generated_images = ${JSON.stringify(generatedImages)},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${articleId}
+    `;
+
+    res.json({
+      success: true,
+      images: generatedImages,
+      imagesGenerated: generatedImages.length,
+      message: `Generated ${generatedImages.length} images for article`
+    });
+
+  } catch (error) {
+    console.error('[Generate Images] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST regenerate ALL images for an article (replace existing images with fresh set)
+// Use case: Better prompts discovered, want to replace all images
+router.post('/:articleId/regenerate-all-images', requireDb, async (req, res) => {
+  try {
+    const { articleId } = req.params;
+    const { workflowId } = req.body;
+
+    console.log(`[Regenerate All Images] Starting for article ${articleId}`);
+
+    // 1. Fetch article
+    const articles = await sql`SELECT * FROM articles WHERE id = ${articleId}`;
+    if (articles.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    const article = articles[0];
+
+    if (!article.final_content) {
+      return res.status(400).json({ error: 'Article has no content to generate images for' });
+    }
+
+    // 2. Fetch image settings
+    const effectiveWorkflowId = workflowId || article.workflow_id;
+    const config = await fetchImageSettings(effectiveWorkflowId);
+    if (!config) {
+      return res.status(400).json({ error: 'No image creation settings found for this workflow/website' });
+    }
+
+    // 3. Build pipeline options
+    const pipelineOptions = buildPipelineOptions(config, article);
+
+    console.log(`[Regenerate All Images] Pipeline options: model=${pipelineOptions.model}, mode=${pipelineOptions.livePromptMode}, forceReplace=true`);
+
+    // 4. Get WP credentials
+    let wpCredentials = null;
+    if (article.website_id) {
+      const websiteResult = await sql`SELECT wp_url, wp_user, wp_app_password FROM websites WHERE id = ${article.website_id}`;
+      if (websiteResult.length > 0 && websiteResult[0].wp_url) {
+        wpCredentials = {
+          url: websiteResult[0].wp_url,
+          user: websiteResult[0].wp_user,
+          password: websiteResult[0].wp_app_password
+        };
+      }
+    }
+
+    if (!wpCredentials) {
+      const stagingResult = await sql`SELECT staging_wp_url, staging_wp_user, staging_wp_password FROM global_settings WHERE id = 1`;
+      if (stagingResult.length > 0 && stagingResult[0].staging_wp_url) {
+        wpCredentials = {
+          url: stagingResult[0].staging_wp_url,
+          user: stagingResult[0].staging_wp_user,
+          password: stagingResult[0].staging_wp_password
+        };
+      }
+    }
+
+    pipelineOptions.wpCredentials = wpCredentials;
+
+    // 5. Run image pipeline (generates completely new set)
+    const pipelineResult = await processArticleWithImages(article.final_content, pipelineOptions);
+
+    // 6. Extract images from pipeline result
+    const generatedImages = [];
+
+    if (pipelineResult.chunks.intro?.imageData) {
+      const imgData = pipelineResult.chunks.intro.imageData;
+      generatedImages.push({
+        id: `img-${Date.now()}-hero`,
+        url: imgData.wpUrl || imgData.url,
+        prompt: pipelineResult.chunks.intro.imagePrompt || '',
+        placement: 'hero',
+        side: imgData.side || 'right',
+        wpMediaId: imgData.wpMediaId || null,
+        wpMediaUrl: imgData.wpUrl || null,
+        pushedToWp: !!imgData.wpMediaId,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    if (pipelineResult.chunks.chunks) {
+      pipelineResult.chunks.chunks.forEach((chunk, idx) => {
+        if (chunk.imageData) {
+          const imgData = chunk.imageData;
+          generatedImages.push({
+            id: `img-${Date.now()}-section-${idx + 1}`,
+            url: imgData.wpUrl || imgData.url,
+            prompt: chunk.imagePrompt || '',
+            placement: `section-${idx + 1}`,
+            side: imgData.side || (idx % 2 === 0 ? 'left' : 'right'),
+            wpMediaId: imgData.wpMediaId || null,
+            wpMediaUrl: imgData.wpUrl || null,
+            pushedToWp: !!imgData.wpMediaId,
+            createdAt: new Date().toISOString()
+          });
+        }
+      });
+    }
+
+    console.log(`[Regenerate All Images] Generated ${generatedImages.length} new images (replacing old set)`);
+
+    // 7. Save to article — INTENTIONAL overwrite with forceReplace pattern
+    // Old images preserved in WP Media Library (not deleted)
+    await sql`
+      UPDATE articles
+      SET generated_images = ${JSON.stringify(generatedImages)},
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${articleId}
+    `;
+
+    res.json({
+      success: true,
+      images: generatedImages,
+      imagesGenerated: generatedImages.length,
+      message: `Regenerated ${generatedImages.length} images (old images preserved in WP Media Library)`
+    });
+
+  } catch (error) {
+    console.error('[Regenerate All Images] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST bulk generate images for multiple articles in a workflow
+// Supports SSE for progress reporting
+router.post('/bulk-generate-images', requireDb, async (req, res) => {
+  try {
+    const { workflowId, websiteId, mode = 'missing', articleIds } = req.body;
+    // mode: 'missing' (only articles without images) or 'all' (regenerate everything)
+
+    if (!workflowId && !websiteId && !articleIds) {
+      return res.status(400).json({ error: 'Must provide workflowId, websiteId, or articleIds' });
+    }
+
+    console.log(`[Bulk Generate Images] mode=${mode}, workflowId=${workflowId}, websiteId=${websiteId}`);
+
+    // Set up SSE for progress reporting
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    });
+
+    const sendProgress = (data) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    // 1. Fetch articles based on filters
+    let articles;
+    if (articleIds && Array.isArray(articleIds) && articleIds.length > 0) {
+      articles = await sql`SELECT * FROM articles WHERE id = ANY(${articleIds})`;
+    } else if (workflowId) {
+      if (mode === 'missing') {
+        articles = await sql`
+          SELECT * FROM articles
+          WHERE workflow_id = ${workflowId}
+            AND final_content IS NOT NULL
+            AND (generated_images IS NULL OR generated_images = '[]' OR generated_images = 'null')
+          ORDER BY created_at ASC
+        `;
+      } else {
+        articles = await sql`
+          SELECT * FROM articles
+          WHERE workflow_id = ${workflowId}
+            AND final_content IS NOT NULL
+          ORDER BY created_at ASC
+        `;
+      }
+    } else if (websiteId) {
+      if (mode === 'missing') {
+        articles = await sql`
+          SELECT * FROM articles
+          WHERE website_id = ${websiteId}
+            AND final_content IS NOT NULL
+            AND (generated_images IS NULL OR generated_images = '[]' OR generated_images = 'null')
+          ORDER BY created_at ASC
+        `;
+      } else {
+        articles = await sql`
+          SELECT * FROM articles
+          WHERE website_id = ${websiteId}
+            AND final_content IS NOT NULL
+          ORDER BY created_at ASC
+        `;
+      }
+    }
+
+    if (!articles || articles.length === 0) {
+      sendProgress({ type: 'complete', total: 0, succeeded: 0, failed: 0, message: 'No articles found matching criteria' });
+      res.end();
+      return;
+    }
+
+    // 2. Fetch image settings (once, shared across all articles)
+    const effectiveWorkflowId = workflowId || articles[0].workflow_id;
+    const config = await fetchImageSettings(effectiveWorkflowId);
+    if (!config) {
+      sendProgress({ type: 'error', message: 'No image creation settings found for this workflow/website' });
+      res.end();
+      return;
+    }
+
+    // 3. Get WP credentials
+    let wpCredentials = null;
+    const effectiveWebsiteId = websiteId || articles[0].website_id;
+    if (effectiveWebsiteId) {
+      const websiteResult = await sql`SELECT wp_url, wp_user, wp_app_password FROM websites WHERE id = ${effectiveWebsiteId}`;
+      if (websiteResult.length > 0 && websiteResult[0].wp_url) {
+        wpCredentials = {
+          url: websiteResult[0].wp_url,
+          user: websiteResult[0].wp_user,
+          password: websiteResult[0].wp_app_password
+        };
+      }
+    }
+
+    if (!wpCredentials) {
+      const stagingResult = await sql`SELECT staging_wp_url, staging_wp_user, staging_wp_password FROM global_settings WHERE id = 1`;
+      if (stagingResult.length > 0 && stagingResult[0].staging_wp_url) {
+        wpCredentials = {
+          url: stagingResult[0].staging_wp_url,
+          user: stagingResult[0].staging_wp_user,
+          password: stagingResult[0].staging_wp_password
+        };
+      }
+    }
+
+    const total = articles.length;
+    let succeeded = 0;
+    let failed = 0;
+    const errors = [];
+
+    sendProgress({ type: 'start', total, mode });
+
+    // 4. Process articles SEQUENTIALLY (API rate limits)
+    for (let i = 0; i < articles.length; i++) {
+      const article = articles[i];
+
+      sendProgress({
+        type: 'progress',
+        current: i + 1,
+        total,
+        articleId: article.id,
+        keyword: article.keyword,
+        succeeded,
+        failed
+      });
+
+      try {
+        // Build per-article pipeline options
+        const pipelineOptions = buildPipelineOptions(config, article);
+        pipelineOptions.wpCredentials = wpCredentials;
+
+        // Run pipeline
+        const pipelineResult = await processArticleWithImages(article.final_content, pipelineOptions);
+
+        // Extract images
+        const generatedImages = [];
+
+        if (pipelineResult.chunks.intro?.imageData) {
+          const imgData = pipelineResult.chunks.intro.imageData;
+          generatedImages.push({
+            id: `img-${Date.now()}-hero`,
+            url: imgData.wpUrl || imgData.url,
+            prompt: pipelineResult.chunks.intro.imagePrompt || '',
+            placement: 'hero',
+            side: imgData.side || 'right',
+            wpMediaId: imgData.wpMediaId || null,
+            wpMediaUrl: imgData.wpUrl || null,
+            pushedToWp: !!imgData.wpMediaId,
+            createdAt: new Date().toISOString()
+          });
+        }
+
+        if (pipelineResult.chunks.chunks) {
+          pipelineResult.chunks.chunks.forEach((chunk, idx) => {
+            if (chunk.imageData) {
+              const imgData = chunk.imageData;
+              generatedImages.push({
+                id: `img-${Date.now()}-section-${idx + 1}`,
+                url: imgData.wpUrl || imgData.url,
+                prompt: chunk.imagePrompt || '',
+                placement: `section-${idx + 1}`,
+                side: imgData.side || (idx % 2 === 0 ? 'left' : 'right'),
+                wpMediaId: imgData.wpMediaId || null,
+                wpMediaUrl: imgData.wpUrl || null,
+                pushedToWp: !!imgData.wpMediaId,
+                createdAt: new Date().toISOString()
+              });
+            }
+          });
+        }
+
+        // Save to article
+        await sql`
+          UPDATE articles
+          SET generated_images = ${JSON.stringify(generatedImages)},
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${article.id}
+        `;
+
+        succeeded++;
+        sendProgress({
+          type: 'article_complete',
+          current: i + 1,
+          total,
+          articleId: article.id,
+          keyword: article.keyword,
+          imagesGenerated: generatedImages.length,
+          succeeded,
+          failed
+        });
+
+      } catch (articleError) {
+        failed++;
+        const errorMsg = `Article ${article.id} (${article.keyword}): ${articleError.message}`;
+        errors.push(errorMsg);
+        console.error(`[Bulk Generate Images] ${errorMsg}`);
+
+        sendProgress({
+          type: 'article_error',
+          current: i + 1,
+          total,
+          articleId: article.id,
+          keyword: article.keyword,
+          error: articleError.message,
+          succeeded,
+          failed
+        });
+      }
+    }
+
+    // 5. Send completion
+    sendProgress({
+      type: 'complete',
+      total,
+      succeeded,
+      failed,
+      errors,
+      message: `Bulk image generation complete: ${succeeded}/${total} succeeded, ${failed} failed`
+    });
+    res.end();
+
+  } catch (error) {
+    console.error('[Bulk Generate Images] Error:', error);
+    // If SSE headers already sent, send error event
+    try {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: error.message })}\n\n`);
+      res.end();
+    } catch (writeError) {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
