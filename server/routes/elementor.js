@@ -66,6 +66,12 @@ import { getImageBank } from '../services/image-bank.js';
 import { selectComponentsForArticle } from '../services/component-library-service.js';
 import { rebuildPage, bulkRebuildPages } from '../services/page-rebuild-service.js';
 import { setupSSE } from '../services/sse-progress.js';
+import {
+  parseElementorPage,
+  applyTextEdits,
+  applyImageSwaps,
+  createPageAudit
+} from '../services/elementor-page-parser.js';
 
 const router = express.Router();
 
@@ -3128,6 +3134,622 @@ router.post('/bulk-rebuild-pages', async (req, res) => {
     } else {
       res.status(500).json({ error: error.message });
     }
+  }
+});
+
+// ============================================================
+// Phase 6: Surgical Page Editing Endpoints
+// Edit ANY Elementor page in-place without changing structure
+// ============================================================
+
+/**
+ * Helper: Fetch a page with _elementor_data from WordPress.
+ * Uses ?context=edit to access meta fields.
+ * @param {Object} wpCredentials - { url, user, password }
+ * @param {number} pageId - WordPress page ID
+ * @returns {Promise<Object>} { pageData, elementorData }
+ */
+async function fetchPageWithElementorData(wpCredentials, pageId) {
+  const { url, user, password } = wpCredentials;
+  const endpoint = `${url.replace(/\/$/, '')}/wp-json/wp/v2/pages/${pageId}?context=edit`;
+
+  const response = await fetch(endpoint, {
+    headers: {
+      'Authorization': 'Basic ' + Buffer.from(`${user}:${password}`).toString('base64')
+    }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch page ${pageId}: ${response.status} - ${errorText}`);
+  }
+
+  const pageData = await response.json();
+
+  // Extract _elementor_data from meta
+  let elementorDataRaw = pageData.meta?._elementor_data;
+
+  if (!elementorDataRaw) {
+    throw new Error(
+      `Page ${pageId} does not have _elementor_data. ` +
+      `This may not be an Elementor page, or meta fields may not be exposed via REST API. ` +
+      `Check Elementor settings and REST API permissions.`
+    );
+  }
+
+  // Parse if it's a string
+  let elementorData;
+  if (typeof elementorDataRaw === 'string') {
+    try {
+      elementorData = JSON.parse(elementorDataRaw);
+    } catch (e) {
+      throw new Error(`Failed to parse _elementor_data JSON for page ${pageId}: ${e.message}`);
+    }
+  } else {
+    elementorData = elementorDataRaw;
+  }
+
+  if (!Array.isArray(elementorData)) {
+    throw new Error(`_elementor_data for page ${pageId} is not an array. Got: ${typeof elementorData}`);
+  }
+
+  return { pageData, elementorData };
+}
+
+/**
+ * Helper: Push modified _elementor_data back to WordPress.
+ * @param {Object} wpCredentials - { url, user, password }
+ * @param {number} pageId - WordPress page ID
+ * @param {Array} modifiedElementorData - The modified elementor data array
+ * @returns {Promise<Object>} Update result
+ */
+async function pushElementorData(wpCredentials, pageId, modifiedElementorData) {
+  const { url, user, password } = wpCredentials;
+  const endpoint = `${url.replace(/\/$/, '')}/wp-json/wp/v2/pages/${pageId}`;
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Basic ' + Buffer.from(`${user}:${password}`).toString('base64'),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      meta: {
+        _elementor_data: JSON.stringify(modifiedElementorData)
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to update page ${pageId}: ${response.status} - ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * POST /api/elementor/audit-page
+ * Pull a page and return its full content inventory.
+ * Use this before making any changes to see what's on the page.
+ */
+router.post('/audit-page', async (req, res) => {
+  try {
+    const { wpUrl, wpUser, wpPassword, pageId } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'WordPress credentials required (wpUrl, wpUser, wpPassword)' });
+    }
+    if (!pageId) {
+      return res.status(400).json({ error: 'pageId is required' });
+    }
+
+    console.log(`[PageParser] Auditing page ${pageId} on ${wpUrl}`);
+
+    const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
+    const { pageData, elementorData } = await fetchPageWithElementorData(wpCredentials, pageId);
+
+    const parsedContent = parseElementorPage(elementorData);
+    const audit = createPageAudit(pageData, parsedContent);
+
+    console.log(`[PageParser] Audit complete: ${audit.summary.totalWidgets} widgets found`);
+
+    res.json({
+      success: true,
+      audit,
+      widgets: parsedContent.all,
+      pageTitle: pageData.title?.rendered || pageData.title?.raw || '',
+      pageSlug: pageData.slug,
+      pageStatus: pageData.status,
+      pageUrl: pageData.link,
+    });
+  } catch (error) {
+    console.error('[PageParser] Audit error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/elementor/surgical-edit
+ * Apply text and/or image edits to an existing page without changing structure.
+ */
+router.post('/surgical-edit', async (req, res) => {
+  try {
+    const {
+      wpUrl, wpUser, wpPassword,
+      pageId,
+      textEdits = [],      // [{ widgetId, newContent }]
+      headingEdits = [],    // [{ widgetId, newTitle }]
+      imageSwaps = [],      // [{ widgetId, newUrl, newMediaId }]
+      buttonEdits = [],     // [{ widgetId, newText, newUrl }]
+      createAudit: shouldCreateAudit = true
+    } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'WordPress credentials required' });
+    }
+    if (!pageId) {
+      return res.status(400).json({ error: 'pageId is required' });
+    }
+
+    const allEdits = [...textEdits, ...headingEdits, ...buttonEdits];
+    if (allEdits.length === 0 && imageSwaps.length === 0) {
+      return res.status(400).json({ error: 'No edits provided. Include textEdits, headingEdits, imageSwaps, or buttonEdits.' });
+    }
+
+    console.log(`[SurgicalEdit] Editing page ${pageId}: ${allEdits.length} text edits, ${imageSwaps.length} image swaps`);
+
+    const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
+    const { pageData, elementorData } = await fetchPageWithElementorData(wpCredentials, pageId);
+
+    // Create audit before making changes
+    let audit = null;
+    if (shouldCreateAudit) {
+      const parsedContent = parseElementorPage(elementorData);
+      audit = createPageAudit(pageData, parsedContent);
+    }
+
+    // Apply text edits (text-editor, heading, button all go through applyTextEdits)
+    let modified = applyTextEdits(elementorData, allEdits);
+
+    // Apply image swaps
+    modified = applyImageSwaps(modified, imageSwaps);
+
+    // Push back to WordPress
+    await pushElementorData(wpCredentials, pageId, modified);
+
+    const widgetsModified = allEdits.length + imageSwaps.length;
+    console.log(`[SurgicalEdit] Successfully modified ${widgetsModified} widgets on page ${pageId}`);
+
+    res.json({
+      success: true,
+      audit,
+      widgetsModified,
+      pageId,
+      message: `${widgetsModified} widget(s) updated. Page structure preserved.`
+    });
+  } catch (error) {
+    console.error('[SurgicalEdit] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/elementor/bulk-surgical-edit
+ * Apply text edits across multiple pages using SSE for progress.
+ */
+router.post('/bulk-surgical-edit', async (req, res) => {
+  try {
+    const {
+      wpUrl, wpUser, wpPassword,
+      editsPerPage = {},  // { pageId: { textEdits: [...], imageSwaps: [...] } }
+      createAudits = true
+    } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'WordPress credentials required' });
+    }
+
+    const pageIds = Object.keys(editsPerPage).map(Number);
+    if (pageIds.length === 0) {
+      return res.status(400).json({ error: 'editsPerPage is required with at least one page' });
+    }
+
+    const { sendProgress, sendComplete, sendError } = setupSSE(res);
+    const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
+
+    const results = {
+      total: pageIds.length,
+      succeeded: 0,
+      failed: 0,
+      errors: [],
+      audits: []
+    };
+
+    for (let i = 0; i < pageIds.length; i++) {
+      const pageId = pageIds[i];
+      const edits = editsPerPage[pageId];
+
+      try {
+        sendProgress({
+          current: i + 1,
+          total: pageIds.length,
+          message: `Editing page ${pageId}...`
+        });
+
+        const { pageData, elementorData } = await fetchPageWithElementorData(wpCredentials, pageId);
+
+        // Create audit if requested
+        if (createAudits) {
+          const parsedContent = parseElementorPage(elementorData);
+          const audit = createPageAudit(pageData, parsedContent);
+          results.audits.push(audit);
+        }
+
+        // Apply edits
+        const allTextEdits = [
+          ...(edits.textEdits || []),
+          ...(edits.headingEdits || []),
+          ...(edits.buttonEdits || [])
+        ];
+        let modified = applyTextEdits(elementorData, allTextEdits);
+        modified = applyImageSwaps(modified, edits.imageSwaps || []);
+
+        // Push back
+        await pushElementorData(wpCredentials, pageId, modified);
+        results.succeeded++;
+
+      } catch (pageErr) {
+        results.failed++;
+        results.errors.push({
+          pageId,
+          error: pageErr.message
+        });
+        console.error(`[BulkSurgical] Failed page ${pageId}: ${pageErr.message}`);
+      }
+    }
+
+    sendComplete(results);
+  } catch (error) {
+    console.error('[BulkSurgical] Fatal error:', error.message);
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: error.message })}\n\n`);
+      res.end();
+    } else {
+      res.status(500).json({ error: error.message });
+    }
+  }
+});
+
+/**
+ * POST /api/elementor/replace-all-text
+ * Replace ALL text content on a page with new content.
+ * Automatically maps content chunks to existing text widgets.
+ */
+router.post('/replace-all-text', async (req, res) => {
+  try {
+    const {
+      wpUrl, wpUser, wpPassword,
+      pageId,
+      newContent,
+      createAudit: shouldCreateAudit = true
+    } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'WordPress credentials required' });
+    }
+    if (!pageId) {
+      return res.status(400).json({ error: 'pageId is required' });
+    }
+    if (!newContent) {
+      return res.status(400).json({ error: 'newContent is required' });
+    }
+
+    console.log(`[ReplaceAllText] Replacing text on page ${pageId}`);
+
+    const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
+    const { pageData, elementorData } = await fetchPageWithElementorData(wpCredentials, pageId);
+
+    const parsedContent = parseElementorPage(elementorData);
+
+    // Create audit before changes
+    let audit = null;
+    if (shouldCreateAudit) {
+      audit = createPageAudit(pageData, parsedContent);
+    }
+
+    // Split new content into chunks (using the existing chunker)
+    const chunked = chunkContent(newContent, { maxWords: 300 });
+    const allChunks = [];
+
+    // Collect intro + body chunks
+    if (chunked.intro) {
+      allChunks.push(chunked.intro.content);
+    }
+    for (const chunk of chunked.chunks) {
+      // If chunk has a heading, prepend it as an H2
+      if (chunk.heading) {
+        allChunks.push(chunk.heading);
+      }
+      allChunks.push(chunk.content);
+    }
+
+    // Map chunks to text widgets + heading widgets
+    const textWidgets = parsedContent.texts;
+    const headingWidgets = parsedContent.headings;
+    const textEdits = [];
+    const headingEdits = [];
+
+    // Map heading chunks to heading widgets
+    const headingsFromContent = chunked.chunks
+      .filter(c => c.heading)
+      .map(c => c.heading);
+
+    for (let i = 0; i < Math.min(headingsFromContent.length, headingWidgets.length); i++) {
+      headingEdits.push({
+        widgetId: headingWidgets[i].id,
+        newTitle: headingsFromContent[i]
+      });
+    }
+
+    // Map text content to text widgets
+    const textChunks = [];
+    if (chunked.intro && chunked.intro.content) {
+      textChunks.push(chunked.intro.content);
+    }
+    for (const chunk of chunked.chunks) {
+      textChunks.push(chunk.content);
+    }
+
+    for (let i = 0; i < textWidgets.length; i++) {
+      if (i < textChunks.length) {
+        textEdits.push({
+          widgetId: textWidgets[i].id,
+          newContent: textChunks[i]
+        });
+      } else if (i === textWidgets.length - 1 && textChunks.length > textWidgets.length) {
+        // More chunks than widgets: merge remaining into last widget
+        const remaining = textChunks.slice(i).join('\n\n');
+        textEdits.push({
+          widgetId: textWidgets[i].id,
+          newContent: remaining
+        });
+      }
+      // If more widgets than chunks, leave extra widgets unchanged
+    }
+
+    // Handle case where more chunks than widgets - merge overflow into last
+    if (textChunks.length > textWidgets.length && textWidgets.length > 0) {
+      const lastEditIndex = textEdits.length - 1;
+      if (lastEditIndex >= 0) {
+        const overflow = textChunks.slice(textWidgets.length);
+        textEdits[lastEditIndex].newContent += '\n\n' + overflow.join('\n\n');
+      }
+    }
+
+    // Apply edits
+    let modified = applyTextEdits(elementorData, [...textEdits, ...headingEdits]);
+
+    // Push back to WordPress
+    await pushElementorData(wpCredentials, pageId, modified);
+
+    const widgetsModified = textEdits.length + headingEdits.length;
+    const unmappedChunks = Math.max(0, textChunks.length - textWidgets.length);
+
+    console.log(`[ReplaceAllText] Modified ${widgetsModified} widgets, ${unmappedChunks} unmapped chunks`);
+
+    res.json({
+      success: true,
+      audit,
+      widgetsModified,
+      unmappedChunks,
+      textWidgetsFound: textWidgets.length,
+      chunksCreated: textChunks.length,
+      message: `Text replaced across ${textEdits.length} text widget(s) and ${headingEdits.length} heading(s).`
+    });
+  } catch (error) {
+    console.error('[ReplaceAllText] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/elementor/generate-images-for-page
+ * Generate contextually-matched images for any page's content
+ * using the existing image pipeline, then return the mapping.
+ * Does NOT push changes — returns pending swaps for user approval.
+ */
+router.post('/generate-images-for-page', async (req, res) => {
+  try {
+    const {
+      wpUrl, wpUser, wpPassword,
+      pageId,
+      workflowId,
+      textOverride = null
+    } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'WordPress credentials required' });
+    }
+    if (!pageId) {
+      return res.status(400).json({ error: 'pageId is required' });
+    }
+
+    console.log(`[GenImagesForPage] Generating images for page ${pageId}`);
+
+    const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
+    const { pageData, elementorData } = await fetchPageWithElementorData(wpCredentials, pageId);
+
+    const parsedContent = parseElementorPage(elementorData);
+
+    // Get the text to generate images from
+    let articleText = textOverride;
+    if (!articleText) {
+      // Concatenate all text widget content in page order
+      const textParts = parsedContent.texts.map(t => t.content);
+      const headingParts = parsedContent.headings.map(h => h.text);
+      articleText = [...headingParts, ...textParts].join('\n\n');
+    }
+
+    if (!articleText || articleText.trim().length < 50) {
+      return res.status(400).json({ error: 'Not enough text content on page to generate images from' });
+    }
+
+    // Fetch image settings from workflow if provided
+    let pipelineOptions = {
+      title: pageData.title?.rendered || pageData.title?.raw || '',
+      keyword: pageData.title?.rendered || pageData.title?.raw || '',
+      wpCredentials,
+      maxImages: parsedContent.images.length || 4,
+      heroImage: true
+    };
+
+    if (workflowId && isDatabaseEnabled()) {
+      try {
+        // Try website-level settings first, then workflow-level
+        const settingsResult = await sql`
+          SELECT ics.*, w.url as website_url
+          FROM image_creation_settings ics
+          LEFT JOIN websites w ON w.id = ics.website_id
+          WHERE ics.workflow_id = ${workflowId}
+          LIMIT 1
+        `;
+
+        if (settingsResult.length > 0) {
+          const config = settingsResult[0];
+          pipelineOptions.livePromptMode = config.live_prompt_mode || 'smart_prompt';
+          pipelineOptions.model = config.image_model || 'flux-1.1-pro';
+          pipelineOptions.quality = config.image_quality || 'low';
+
+          // Parse audience avatars for target avatar
+          if (config.audience_avatars) {
+            const avatars = typeof config.audience_avatars === 'string'
+              ? JSON.parse(config.audience_avatars)
+              : config.audience_avatars;
+            if (Array.isArray(avatars) && avatars.length > 0) {
+              pipelineOptions.targetAvatar = avatars[0];
+            }
+          }
+        }
+      } catch (dbErr) {
+        console.warn(`[GenImagesForPage] Could not fetch image settings: ${dbErr.message}`);
+      }
+    }
+
+    // Add API keys from environment
+    pipelineOptions.openaiApiKey = process.env.OPENAI_API_KEY;
+    pipelineOptions.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+    pipelineOptions.replicateApiKey = process.env.REPLICATE_API_TOKEN;
+
+    // Call the image pipeline
+    const result = await processArticleWithImages(articleText, pipelineOptions);
+
+    // Map generated images to existing image widget slots
+    const imageWidgets = parsedContent.images;
+    const generatedImages = [];
+
+    // Collect images from pipeline result
+    if (result.chunks?.intro?.imageData?.wpUrl) {
+      generatedImages.push(result.chunks.intro.imageData);
+    }
+    if (result.chunks?.chunks) {
+      for (const chunk of result.chunks.chunks) {
+        if (chunk.imageData?.wpUrl) {
+          generatedImages.push(chunk.imageData);
+        }
+      }
+    }
+
+    // Map generated images to widget slots
+    const mappedImages = [];
+    const unmappedSlots = [];
+    const extraImages = [];
+
+    for (let i = 0; i < Math.max(imageWidgets.length, generatedImages.length); i++) {
+      if (i < imageWidgets.length && i < generatedImages.length) {
+        mappedImages.push({
+          widgetId: imageWidgets[i].id,
+          newUrl: generatedImages[i].wpUrl || generatedImages[i].url,
+          newMediaId: generatedImages[i].wpMediaId || null,
+          placement: i === 0 ? 'hero' : `inline-${i}`,
+          oldUrl: imageWidgets[i].url
+        });
+      } else if (i >= generatedImages.length) {
+        unmappedSlots.push(imageWidgets[i]);
+      } else {
+        extraImages.push(generatedImages[i]);
+      }
+    }
+
+    console.log(`[GenImagesForPage] Generated ${generatedImages.length} images, mapped to ${mappedImages.length} slots`);
+
+    res.json({
+      success: true,
+      images: mappedImages,
+      unmappedSlots,
+      extraImages,
+      totalGenerated: generatedImages.length,
+      totalSlots: imageWidgets.length
+    });
+  } catch (error) {
+    console.error('[GenImagesForPage] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/elementor/generate-content-for-page
+ * Run keyword through the prompt chain and return mapped edits
+ * for the Page Editor to display as pending changes.
+ * Does NOT push changes — returns the mapping for user approval.
+ */
+router.post('/generate-content-for-page', async (req, res) => {
+  try {
+    const {
+      wpUrl, wpUser, wpPassword,
+      pageId,
+      keyword,
+      workflowId,
+      websiteId
+    } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'WordPress credentials required' });
+    }
+    if (!pageId) {
+      return res.status(400).json({ error: 'pageId is required' });
+    }
+    if (!keyword) {
+      return res.status(400).json({ error: 'keyword is required' });
+    }
+
+    console.log(`[GenContentForPage] Generating content for page ${pageId} with keyword "${keyword}"`);
+
+    const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
+    const { pageData, elementorData } = await fetchPageWithElementorData(wpCredentials, pageId);
+
+    const parsedContent = parseElementorPage(elementorData);
+
+    // For now, return the page structure so the frontend can use
+    // the existing prompt chain logic (which runs in App.tsx)
+    // and then call replace-all-text with the result.
+    // Full server-side prompt chain integration would require
+    // duplicating the App.tsx batch processing logic here.
+
+    res.json({
+      success: true,
+      pageId,
+      keyword,
+      pageTitle: pageData.title?.rendered || pageData.title?.raw || '',
+      textWidgetCount: parsedContent.texts.length,
+      headingWidgetCount: parsedContent.headings.length,
+      imageWidgetCount: parsedContent.images.length,
+      widgets: parsedContent.all,
+      message: 'Page structure analyzed. Use the prompt chain to generate content, then call /replace-all-text to inject it.'
+    });
+  } catch (error) {
+    console.error('[GenContentForPage] Error:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 

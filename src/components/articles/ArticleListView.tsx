@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import ElementorPreview from './ElementorPreview';
+import PageEditor from '../PageEditor';
 
 interface ArticleImage {
   id: string;
@@ -146,6 +147,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const [dripFeedMode, setDripFeedMode] = useState<'schedule_now' | 'queue_behind' | 'schedule_later'>('schedule_now');
   const [updatingCta, setUpdatingCta] = useState(false);
   const [showCtaConfirm, setShowCtaConfirm] = useState(false);
+
+  // Page Editor state (Phase 6: Surgical Page Editing)
+  const [showPageEditor, setShowPageEditor] = useState(false);
 
   // Post-publish image generation state
   const [generatingImages, setGeneratingImages] = useState(false);
@@ -2134,6 +2138,19 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     <span className="hidden sm:inline">View on WP</span>
                   </a>
                 )}
+                {/* Edit Live Page button (Phase 6: Surgical Page Editing) */}
+                {selectedArticle.wp_post_id && selectedArticle.wp_url && (
+                  <button
+                    onClick={() => setShowPageEditor(true)}
+                    className="px-2 sm:px-3 py-1 sm:py-1.5 bg-orange-600 hover:bg-orange-500 rounded text-white text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 transition"
+                    title="Edit this page's widgets directly on WordPress"
+                  >
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span className="hidden sm:inline">Edit Page</span>
+                  </button>
+                )}
                 <button
                   onClick={closeModal}
                   className="text-gray-400 hover:text-white text-xl sm:text-2xl ml-1 sm:ml-2 flex-shrink-0"
@@ -2942,6 +2959,25 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Page Editor Modal (Phase 6: Surgical Page Editing) */}
+      {showPageEditor && selectedArticle?.wp_post_id && selectedArticle?.wp_url && (
+        <PageEditor
+          wpUrl={selectedArticle.wp_url}
+          wpUser={selectedArticle.wp_user || ''}
+          wpPassword={selectedArticle.wp_app_password || ''}
+          pageId={selectedArticle.wp_post_id}
+          articleKeyword={selectedArticle.keyword}
+          onClose={() => setShowPageEditor(false)}
+          showNotification={(msg, type) => {
+            if (type === 'error') {
+              alert('Error: ' + msg);
+            } else {
+              alert(msg);
+            }
+          }}
+        />
       )}
     </div>
   );
