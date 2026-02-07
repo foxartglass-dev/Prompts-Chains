@@ -650,13 +650,77 @@ When clicked:
 At the top of the editor, offer these power actions:
 
 ```
-[Replace All Text ↻]        — Paste new article content, auto-distributes across text widgets
+[Generate New Article ✦]     — Run keyword through prompt chain, inject result into text widgets
+[Replace All Text ↻]        — Paste content manually, auto-distributes across text widgets
 [Generate Images from Text]  — AI generates contextual images from the page text
 [Upload Images]              — Manually upload client-provided images to swap in
 ```
 
-**Replace All Text:**
-Opens a textarea to paste new article content. Auto-maps to text widgets using `chunkContent()`. Calls `POST /api/elementor/replace-all-text`. This is the SEO rewrite power feature.
+**Generate New Article (THE PRIMARY WORKFLOW):**
+This is the main way existing pages get rewritten. It runs the page's keyword through the SAME prompt chain used for brand new articles — same prompts, same rules, same output. The result gets injected into the existing page's text widget slots.
+
+```
+Flow:
+1. User clicks "Generate New Article"
+2. System pre-fills keyword from the page title (user can edit if needed)
+3. User confirms keyword and selects workflow (for prompt chain settings)
+4. System runs the keyword through the prompt chain:
+   - Same chain as new articles (App.tsx batch processing)
+   - Same prompt sequence, same LLM calls
+   - Takes a few minutes (show progress indicator)
+5. Prompt chain returns final_content (the full new article)
+6. System chunks the article via chunkContent()
+7. Auto-maps chunks to existing text widget slots (in order)
+8. All text widget cards update to show new content (badge: MODIFIED)
+9. User reviews each text widget — can edit further, revert individual ones
+10. User optionally clicks "Generate Images from Text" to get matching images
+11. Push all changes when satisfied
+```
+
+**This is the same action as creating a new article — the difference is the destination:**
+- New article → builds a brand new Elementor page from scratch
+- Existing page → injects the text into the existing page's text widgets via surgical edit
+
+The prompt chain doesn't care about the destination. It takes a keyword, runs through the prompts, outputs an article. What happens AFTER is where the two paths diverge.
+
+**New endpoint:** `POST /api/elementor/generate-content-for-page`
+
+```
+Accept: {
+  wpUrl, wpUser, wpPassword,
+  pageId,
+  keyword,              // page title or custom keyword
+  workflowId,           // which workflow's prompt chain to use
+  websiteId             // for website-level settings
+}
+
+Flow:
+1. Fetch page, parse _elementor_data to get text widget count
+2. Run keyword through the prompt chain (same as batch processing)
+   - This calls the same chain: research → outline → draft → final
+   - Returns final_content
+3. Chunk the article via chunkContent()
+4. Map chunks to existing text widget slots (parseElementorPage() order):
+   - Chunk 1 → first text widget
+   - Chunk 2 → second text widget
+   - If more chunks than widgets: merge remaining into last widget
+   - If more widgets than chunks: leave remaining unchanged
+5. Also update heading widgets if the article has section headings:
+   - Match article H2s to existing heading widgets (in order)
+6. Return {
+     mappedEdits: [{ widgetId, widgetType, newContent }],
+     fullArticle: finalContent,    // the complete article for reference
+     unmappedWidgets: [...],       // widgets that got no content
+     keyword: keyword
+   }
+```
+
+This does NOT push changes — it returns the mapped edits for the Page Editor to display as pending changes. The user reviews and approves before pushing.
+
+**Important:** The prompt chain is async and can take minutes. Use SSE or polling to show progress ("Running prompt 3 of 5..."). The Page Editor should show a loading state with progress while the chain runs.
+
+**Replace All Text (Manual Alternative):**
+Opens a textarea to paste new article content. Auto-maps to text widgets using `chunkContent()`. Calls `POST /api/elementor/replace-all-text`. Use this when you already HAVE the text (maybe from another tool, or hand-written) and just want to inject it.
 
 **Generate Images from Text:**
 Uses the SAME image generation pipeline (`processArticleWithImages()`) that we use for our own articles — but pointed at this page's content. Flow:
@@ -766,7 +830,7 @@ PageEditor (modal, React Portal)
 
 | File | Change |
 |---|---|
-| `server/routes/elementor.js` | Add `audit-page`, `surgical-edit`, `bulk-surgical-edit`, `replace-all-text`, `generate-images-for-page` endpoints |
+| `server/routes/elementor.js` | Add `audit-page`, `surgical-edit`, `bulk-surgical-edit`, `replace-all-text`, `generate-images-for-page`, `generate-content-for-page` endpoints |
 | `src/components/articles/ArticleListView.tsx` | Add "Edit Live Page" button that opens PageEditor modal |
 
 ---
@@ -821,10 +885,19 @@ These limitations should be communicated to the user in the UI (tooltip, info te
 16. **Replace All Text:** Paste new article → verify it auto-distributes across text widgets → push → verify on WP
 17. **Template widgets:** Verify they show as read-only with info message, no edit controls
 
+### Prompt Chain + Image Pipeline Integration
+18. **Generate New Article:** Enter keyword → prompt chain runs → new text appears in text widget cards as MODIFIED
+19. **Generate New Article + Images:** Generate article → then Generate Images → both text and images show as pending → push once
+20. **Generate Images only (keep existing text):** Don't change text → Generate Images reads current text → images appear as pending swaps
+21. **Full takeover flow:** Generate Article → review text → Generate Images → review images → upload owner's photo for hero → push all
+
 ### Edge Cases
-18. Page with no text widgets → editor shows only image/heading/button cards, "Replace All Text" disabled
-19. Page with mixed widget types we don't handle → skip unknown types, show known ones
-20. Invalid `_elementor_data` → fail gracefully with descriptive error
-21. Elementor data not accessible via REST API → clear error about permissions/configuration
-22. Very large page (50+ widgets) → editor should scroll smoothly, not lag
-23. Image upload fails → show error on that card, don't lose other edits in progress
+22. Page with no text widgets → editor shows only image/heading/button cards, "Replace All Text" and "Generate Article" disabled
+23. Page with mixed widget types we don't handle → skip unknown types, show known ones
+24. Invalid `_elementor_data` → fail gracefully with descriptive error
+25. Elementor data not accessible via REST API → clear error about permissions/configuration
+26. Very large page (50+ widgets) → editor should scroll smoothly, not lag
+27. Image upload fails → show error on that card, don't lose other edits in progress
+28. Prompt chain fails mid-way → show error, don't lose any manual edits user already made
+29. More text chunks than text widgets → merge overflow into last widget
+30. More text widgets than chunks → leave extra widgets unchanged (user can edit manually)
