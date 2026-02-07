@@ -2,7 +2,7 @@
 
 **Priority:** HIGH
 **Date:** 2026-02-07 (revised)
-**Status:** Phase 1 COMPLETE. Phases 2-7 pending.
+**Status:** Phase 1 COMPLETE. Phases 2-8 pending.
 
 ---
 
@@ -21,17 +21,19 @@ Once articles are published to WordPress, everything is frozen. Users can't upda
 | **5** | [PRD-phase-5-full-rebuild.md](PRD-phase-5-full-rebuild.md) | "Nuclear option" full rebuild + refactor existing endpoints | Phases 2-4 |
 | **6** | [PRD-phase-6-surgical-editing.md](PRD-phase-6-surgical-editing.md) | Surgical editing of pages we didn't create (in-place text/image swaps) | Phase 2 (loosely) |
 | **7** | [PRD-phase-7-link-management.md](PRD-phase-7-link-management.md) | SEO link management — link pool, auto parent links, outbound distribution | Phases 2 + 6 |
+| **8** | [PRD-phase-8-schema-injection.md](PRD-phase-8-schema-injection.md) | Schema/JSON-LD injection — bulk + custom page schema, mu-plugin approach | Pages published |
 
 **Each phase is a self-contained document.** Copy-paste the phase document to an agent and they have everything they need — architecture context, function names, file locations, golden rules, validation steps.
 
 **Context budget:** Each phase designed to complete under 40% context window.
 
-**Phase 3, 4, and 6 are independent** — they all only depend on Phase 2, so they can run in parallel if desired. Phase 5 requires Phases 2-4. Phase 6 can run anytime after Phase 2. Phase 7 depends on Phases 2 and 6.
+**Phase 3, 4, and 6 are independent** — they all only depend on Phase 2, so they can run in parallel if desired. Phase 5 requires Phases 2-4. Phase 6 can run anytime after Phase 2. Phase 7 depends on Phases 2 and 6. **Phase 8 is fully independent** — it only needs published pages (wp_post_id), no dependency on other phases.
 
 **Three major capabilities in this system:**
 - **Phases 2-5 (Rebuild):** Delete page, recreate from scratch. For pages WE built with PromptFlow.
 - **Phase 6 (Surgical Edit):** Modify widget values in-place via REST API. For pages we DIDN'T build, or pages where external edits must be preserved. Changes text and images only — cannot alter page structure/layout.
 - **Phase 7 (Link Management):** SEO link injection for BOTH new and existing pages. Auto internal links to parent pages, managed outbound link pool with human review and auto-distribution.
+- **Phase 8 (Schema Injection):** JSON-LD structured data on every page. Two-track system: bulk schema (LLM identifies applicable types per page) + custom schema (designated pages with their own prompts). Injected via WordPress mu-plugin, independent of SEO plugins.
 
 ## What Phase 1 Delivered (Already Complete)
 
