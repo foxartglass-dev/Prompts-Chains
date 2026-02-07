@@ -444,6 +444,44 @@ Flow:
 
 This is the "rewrite the page" endpoint — you give it the new text and it distributes it across the existing text widgets.
 
+#### `POST /api/elementor/generate-images-for-page`
+
+Use the existing image pipeline to generate contextually-matched images for any page's content, then map them to the page's image widget slots.
+
+```
+Accept: {
+  wpUrl, wpUser, wpPassword,
+  pageId,
+  workflowId,           // for image settings (prompt mode, style DNA, avatar, etc.)
+  textOverride: null     // optional: use this text instead of page's current text
+}
+
+Flow:
+1. Fetch page from WordPress, parse _elementor_data
+2. Call parseElementorPage() to get text widgets and image widgets
+3. If textOverride provided, use that. Otherwise concatenate all text widget content
+   into a single article string (in page order, separated by newlines)
+4. Fetch image settings from workflow/website:
+   - live_prompt_mode, style_dna, avatar settings
+   - WP credentials for upload (same as input credentials)
+5. Call processArticleWithImages(articleString, pipelineOptions)
+   - This is the SAME pipeline used for our own articles
+   - It reads the text, generates contextual images
+   - Uploads them to WP Media Library automatically
+6. Map generated images to existing image widget slots:
+   - Get list of image widgets from parseElementorPage() (in page order)
+   - Match: generated image 1 → first image widget, image 2 → second, etc.
+   - If more images generated than widget slots: extras noted but not used
+   - If more widget slots than images: remaining slots left unchanged
+7. Return {
+     images: [{ widgetId, newUrl, newMediaId, placement, oldUrl }],
+     unmappedSlots: [...],  // image widgets with no generated match
+     extraImages: [...]     // generated images with no widget slot
+   }
+```
+
+This endpoint does NOT push changes — it just generates images and returns the mapping. The Page Editor UI shows the results as pending swaps that the user can approve/reject before pushing.
+
 ### 6C. Frontend — Interactive Page Editor
 
 **New file:** `src/components/PageEditor.tsx` (dedicated component — this is complex enough to warrant its own file)
@@ -607,20 +645,87 @@ When clicked:
 4. Show success/error result
 5. On success: update all widget cards to show new content as the baseline
 
-#### Quick Actions (Optional Toolbar)
+#### Quick Actions (Toolbar at Top of Editor)
 
-At the top of the editor, offer shortcut actions:
+At the top of the editor, offer these power actions:
 
 ```
-[Replace All Text ↻]  — Opens a textarea to paste new article content.
-                        Auto-maps to text widgets using chunkContent().
-                        Calls POST /api/elementor/replace-all-text
-
-[Swap All Images ↻]   — Opens image upload/select for each image slot.
-                        Batch swap all images at once.
+[Replace All Text ↻]        — Paste new article content, auto-distributes across text widgets
+[Generate Images from Text]  — AI generates contextual images from the page text
+[Upload Images]              — Manually upload client-provided images to swap in
 ```
 
-"Replace All Text" is the power feature for SEO rewrites — paste in the new AI-generated article and it distributes across all existing text widgets automatically.
+**Replace All Text:**
+Opens a textarea to paste new article content. Auto-maps to text widgets using `chunkContent()`. Calls `POST /api/elementor/replace-all-text`. This is the SEO rewrite power feature.
+
+**Generate Images from Text:**
+Uses the SAME image generation pipeline (`processArticleWithImages()`) that we use for our own articles — but pointed at this page's content. Flow:
+
+```
+1. Grab all text from the page's text widgets (current text, or edited text if user already made changes)
+2. Concatenate into a single "article" string
+3. Fetch image settings from the current workflow/website (prompt mode, style DNA, avatar, etc.)
+4. Call processArticleWithImages(concatenatedText, pipelineOptions)
+5. Pipeline reads the text, generates contextually-matched images
+   (e.g., "we clean the counters and sink" → worker cleaning a sink)
+6. Images uploaded to WP Media Library (standard pipeline behavior)
+7. Auto-map generated images to existing image widget slots:
+   - Generated hero image → first image widget on page
+   - Generated section-1 image → second image widget
+   - etc.
+8. Image widget cards update to show new AI-generated images
+   with thumbnails and "was: old.jpg" labels
+9. User reviews each one — can keep, revert, or manually swap individual images
+10. Push all changes when satisfied
+```
+
+This lets the user do a full page takeover in one session: replace all text + generate matching images + push. Or they can just generate images without changing text — the pipeline reads whatever text is currently on the page.
+
+**New endpoint for this:** `POST /api/elementor/generate-images-for-page`
+
+```
+Accept: {
+  wpUrl, wpUser, wpPassword,
+  pageId,
+  workflowId,          // for image settings (prompt mode, style DNA, etc.)
+  useEditedText: false  // if true, use text from pending edits instead of live page
+}
+
+Flow:
+1. Fetch page, parse _elementor_data
+2. Extract all text widget content, concatenate into article string
+3. Fetch image settings from workflow/website
+4. Call processArticleWithImages(articleString, pipelineOptions)
+5. Upload generated images to WP Media Library
+6. Map images to existing image widget positions
+7. Return { images: [{ widgetId, newUrl, newMediaId, placement }] }
+```
+
+The frontend receives the mapped images and applies them to the image widget cards as pending swaps. User can review and approve/reject each one before pushing.
+
+**Upload Images (Manual):**
+For when the client has their own photos they want on the page. Flow:
+
+```
+1. User clicks "Upload Images"
+2. Shows image widget slots with current images
+3. User uploads a file for any slot they want to replace
+4. Each upload goes to WP Media Library via POST /api/elementor/upload-media
+5. Gets back { wpMediaId, wpMediaUrl }
+6. Image widget card updates with new thumbnail
+7. User can mix: upload custom images for some slots, keep existing for others
+8. Push all changes
+```
+
+This works alongside the AI generation — user could generate images for most slots but upload the owner's headshot for the hero image, for example.
+
+**All three approaches can be mixed in a single session:**
+- Replace some text manually (edit individual widget cards)
+- Replace All Text for the body content
+- Generate AI images for sections 1-3
+- Upload the owner's photo for the hero
+- Keep the existing footer image
+- Push everything at once
 
 #### Component Architecture
 
@@ -643,9 +748,11 @@ PageEditor (modal, React Portal)
 | File | What to Look For |
 |---|---|
 | `server/services/wordpress-publisher.js` | `getPage()` — how pages are fetched, what fields are available |
+| `server/services/image-pipeline.js` | `processArticleWithImages()` — the image generation pipeline |
 | `server/services/sse-progress.js` | `setupSSE()` for bulk operations |
 | `server/services/content-chunker.js` | `chunkContent()` for splitting new content |
 | `server/routes/elementor.js` | Existing endpoint patterns, how WP auth is handled |
+| `server/routes/articles.js` | How generate-images/regenerate endpoints call the pipeline (lines 961-1216) |
 | `src/components/articles/ArticleListView.tsx` | Where to add audit/edit UI |
 
 ## Files to Create
@@ -659,7 +766,7 @@ PageEditor (modal, React Portal)
 
 | File | Change |
 |---|---|
-| `server/routes/elementor.js` | Add `audit-page`, `surgical-edit`, `bulk-surgical-edit`, `replace-all-text` endpoints |
+| `server/routes/elementor.js` | Add `audit-page`, `surgical-edit`, `bulk-surgical-edit`, `replace-all-text`, `generate-images-for-page` endpoints |
 | `src/components/articles/ArticleListView.tsx` | Add "Edit Live Page" button that opens PageEditor modal |
 
 ---
