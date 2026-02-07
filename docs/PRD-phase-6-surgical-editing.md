@@ -4,7 +4,9 @@
 **Priority:** HIGH — Enables SEO work on existing client sites
 **Scope:** New service for parsing/editing Elementor pages in-place + endpoints + UI
 **Prerequisite:** Phase 2 (rebuild service) should be complete, but this phase is architecturally independent — it uses a different editing approach (in-place vs delete-and-recreate).
-**Context Budget:** Should complete under 40% context window.
+**Context Budget:** This is the largest phase. If context gets tight, split into two sessions:
+- **Session A:** Parser service (`elementor-page-parser.js`) + all backend endpoints
+- **Session B:** Frontend (`PageEditor.tsx`) + wiring to ArticleListView
 
 ---
 
@@ -442,35 +444,197 @@ Flow:
 
 This is the "rewrite the page" endpoint — you give it the new text and it distributes it across the existing text widgets.
 
-### 6C. Frontend
+### 6C. Frontend — Interactive Page Editor
 
-**File:** `src/components/articles/ArticleListView.tsx` (or a new component if cleaner)
+**New file:** `src/components/PageEditor.tsx` (dedicated component — this is complex enough to warrant its own file)
 
-#### Page Audit View
+This is the core UI feature. When a user pulls a page from WordPress, they see an ordered visual representation of every editable widget on the page. They can selectively edit any widget — change text here, swap an image there, leave everything else untouched — then push only the changes back.
 
-When a user selects an article that has `wp_post_id`, add an option to audit the current WordPress page:
+#### Entry Point
+
+Add a **"Edit Live Page"** button in the article detail area (ArticleListView.tsx). Visible when article has `wp_post_id`. Opens the Page Editor as a modal (React Portal).
+
+Also add a standalone entry point for pages NOT tied to a PromptFlow article — e.g., a "Page Editor" tool accessible from the website/workflow level where the user can enter any WordPress page ID or URL.
+
+#### Page Editor Flow
 
 ```
-[Audit Live Page] → calls POST /api/elementor/audit-page
+1. User clicks "Edit Live Page"
+2. System calls POST /api/elementor/audit-page
+3. Loading state while fetching
+4. Page Editor modal opens with the widget list
+5. User edits widgets selectively
+6. User clicks "Push Changes"
+7. System calls POST /api/elementor/surgical-edit with only changed widgets
+8. Success/error feedback
 ```
 
-Shows results in a panel:
-- List of text widgets with content previews
-- List of images with URLs (thumbnails if possible)
-- List of headings
-- List of buttons with URLs
+#### Widget Card Layout
 
-#### Surgical Edit UI
+The page editor displays widgets as a vertical list of cards, in the exact order they appear on the page. Each card shows the widget type, current content, and action controls.
 
-After auditing, user can:
-1. See all text widgets listed
-2. Click to expand and edit any widget's content
-3. Click "Push Edits to Page" to apply changes
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Edit Live Page: "Best Plumber in Austin TX"                         │
+│ Page ID: 4521  •  URL: example.com/best-plumber-austin  •  Status: published │
+│                                                                     │
+│ ┌─────────────────────────────────────────────────────────────────┐ │
+│ │ HEADING (H1)                                          [Keep ✓] │ │
+│ │ "Best Plumber in Austin TX"                                    │ │
+│ │                                              [Edit] [Revert]   │ │
+│ └─────────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│ ┌─────────────────────────────────────────────────────────────────┐ │
+│ │ IMAGE                                                 [Keep ✓] │ │
+│ │ ┌──────────┐  plumber-hero.jpg                                 │ │
+│ │ │ (thumb)  │  ID: #4522  •  800x600                            │ │
+│ │ └──────────┘                                                   │ │
+│ │                                      [Swap Image] [Revert]     │ │
+│ └─────────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│ ┌─────────────────────────────────────────────────────────────────┐ │
+│ │ TEXT                                             [✎ MODIFIED]  │ │
+│ │ ┌───────────────────────────────────────────────────────────┐   │ │
+│ │ │ When you need a reliable plumber in Austin, our team...  │   │ │
+│ │ │ (editable text area — expanded)                          │   │ │
+│ │ │                                                          │   │ │
+│ │ └───────────────────────────────────────────────────────────┘   │ │
+│ │                                              [Save] [Revert]   │ │
+│ └─────────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│ ┌─────────────────────────────────────────────────────────────────┐ │
+│ │ TEMPLATE                                              [— N/A]  │ │
+│ │ Elementor Template #456 (Stats Bar)                            │ │
+│ │ ⓘ Templates can't be edited here — update the template in WP  │ │
+│ └─────────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│ ┌─────────────────────────────────────────────────────────────────┐ │
+│ │ IMAGE                                          [✎ SWAPPED]     │ │
+│ │ ┌──────────┐  NEW: team-photo-v2.jpg                           │ │
+│ │ │ (thumb)  │  (was: team-photo.jpg)                            │ │
+│ │ └──────────┘                                                   │ │
+│ │                                      [Swap Image] [Revert]     │ │
+│ └─────────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│ ┌─────────────────────────────────────────────────────────────────┐ │
+│ │ TEXT                                                 [Keep ✓]  │ │
+│ │ "Our services include emergency repairs, pipe fitting..."      │ │
+│ │ (collapsed preview — click Edit to expand)                     │ │
+│ │                                              [Edit] [Revert]   │ │
+│ └─────────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│ ┌─────────────────────────────────────────────────────────────────┐ │
+│ │ BUTTON                                                [Keep ✓] │ │
+│ │ "Book Now!"  →  https://example.com/book                       │ │
+│ │                                              [Edit] [Revert]   │ │
+│ └─────────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│ ─────────────────────────────────────────────────────────────────── │
+│ Summary: 7 widgets  •  2 modified  •  5 unchanged                   │
+│                                                                     │
+│ [Push 2 Changes to Page]                              [Cancel]      │
+│                                                                     │
+│ ⓘ Page structure will be preserved. Only modified widgets change.   │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-OR for a full content replacement:
-1. The article's `final_content` is the new text
-2. Click "Replace Text on Live Page" → uses the replace-all-text endpoint
-3. Confirmation: "This will replace text on the live WordPress page. Layout and images will be preserved."
+#### Widget Card States
+
+Each widget card has three possible states:
+
+1. **Keep** (default) — showing current content, collapsed. Badge: `[Keep ✓]` (green)
+2. **Editing** — expanded with editable content. Badge: `[✎ MODIFIED]` (amber)
+3. **Reverted** — user clicked Revert after editing, back to original. Badge: `[Keep ✓]`
+
+#### Per-Widget-Type Editing
+
+**Text Editor widgets:**
+- Collapsed: shows first ~150 chars of content as preview
+- Click "Edit" → expands to a textarea (or rich text editor if available)
+- User types new content
+- Click "Save" to confirm edit (stays expanded, badge changes to MODIFIED)
+- Click "Revert" to discard changes and collapse back
+
+**Heading widgets:**
+- Shows heading text and tag level (H1, H2, etc.)
+- Click "Edit" → inline text input appears
+- Tag level is displayed but NOT editable (that would be structural)
+
+**Image widgets:**
+- Shows thumbnail of current image (loaded from the `url` in the widget)
+- Shows filename and dimensions if available
+- Click "Swap Image" → shows either:
+  - File upload input (upload new image to WP Media Library first)
+  - OR media library browser (select from existing WP media)
+- After swap: shows "was: old-file.jpg" label so user can see what changed
+
+**Button widgets:**
+- Shows button text and URL
+- Click "Edit" → two inline inputs: text field and URL field
+
+**Template/Shortcode widgets:**
+- Displayed with info icon: "Templates can't be edited here"
+- Shows template ID or shortcode alias for reference
+- No edit controls — these are structural
+
+#### Image Swap Flow
+
+When user clicks "Swap Image" on an image widget:
+
+```
+1. Show file picker OR "Choose from Media Library" option
+2. If file upload:
+   a. Upload image to WP Media Library via POST /api/elementor/upload-media
+   b. Get back { wpMediaId, wpMediaUrl }
+   c. Show new thumbnail in the card
+   d. Store { widgetId, newUrl: wpMediaUrl, newMediaId: wpMediaId } in the edits list
+3. If media library:
+   a. Show a simple media browser (list of existing WP media images)
+   b. User selects one
+   c. Same result — store the swap in edits list
+```
+
+**Important:** Images must be in the WP Media Library before they can be swapped in. The swap is just changing which media library item the widget points to.
+
+#### "Push Changes" Button
+
+Only active when at least one widget has been modified. Shows count: "Push 2 Changes to Page"
+
+When clicked:
+1. Show confirmation: "This will modify 2 widgets on the live page. Structure preserved."
+2. Build the edits payload from all modified widgets
+3. Call `POST /api/elementor/surgical-edit`
+4. Show success/error result
+5. On success: update all widget cards to show new content as the baseline
+
+#### Quick Actions (Optional Toolbar)
+
+At the top of the editor, offer shortcut actions:
+
+```
+[Replace All Text ↻]  — Opens a textarea to paste new article content.
+                        Auto-maps to text widgets using chunkContent().
+                        Calls POST /api/elementor/replace-all-text
+
+[Swap All Images ↻]   — Opens image upload/select for each image slot.
+                        Batch swap all images at once.
+```
+
+"Replace All Text" is the power feature for SEO rewrites — paste in the new AI-generated article and it distributes across all existing text widgets automatically.
+
+#### Component Architecture
+
+```
+PageEditor (modal, React Portal)
+├── PageEditorHeader (page info, quick actions toolbar)
+├── WidgetCardList (scrollable list of widget cards)
+│   ├── TextWidgetCard (text-editor widgets)
+│   ├── HeadingWidgetCard (heading widgets)
+│   ├── ImageWidgetCard (image widgets, with swap UI)
+│   ├── ButtonWidgetCard (button widgets)
+│   └── TemplateWidgetCard (templates/shortcodes, read-only)
+├── PageEditorFooter (summary, Push Changes button, Cancel)
+└── ImageSwapModal (file upload or media library picker)
 
 ---
 
@@ -489,13 +653,14 @@ OR for a full content replacement:
 | File | Purpose |
 |---|---|
 | `server/services/elementor-page-parser.js` | `parseElementorPage()`, `applyTextEdits()`, `applyImageSwaps()`, `createPageAudit()` |
+| `src/components/PageEditor.tsx` | Interactive page editor modal with widget cards, editing, image swap UI |
 
 ## Files to Modify
 
 | File | Change |
 |---|---|
 | `server/routes/elementor.js` | Add `audit-page`, `surgical-edit`, `bulk-surgical-edit`, `replace-all-text` endpoints |
-| `src/components/articles/ArticleListView.tsx` | Add audit view, surgical edit UI, replace text button |
+| `src/components/articles/ArticleListView.tsx` | Add "Edit Live Page" button that opens PageEditor modal |
 
 ---
 
@@ -528,6 +693,7 @@ These limitations should be communicated to the user in the UI (tooltip, info te
 
 ## Validation
 
+### Backend
 1. **Audit a page we created:** Verify parseElementorPage finds all widgets correctly
 2. **Audit a page we didn't create:** Verify it still parses (different structure, possibly different widget types)
 3. **Surgical text edit — single widget:** Change one text widget's content, verify on WordPress
@@ -536,8 +702,22 @@ These limitations should be communicated to the user in the UI (tooltip, info te
 6. **Replace all text:** Give full new article text, verify it distributes across existing text widgets correctly
 7. **Bulk surgical edit:** Edit 3 pages, verify SSE progress and all pages updated
 8. **Audit creation:** Verify before-snapshot is saved and contains accurate inventory
-9. **Edge cases:**
-   - Page with no text widgets → return meaningful error
-   - Page with mixed widget types we don't handle → skip unknown types, edit known ones
-   - Invalid _elementor_data → fail gracefully with descriptive error
-   - Elementor data not accessible via REST API → clear error about permissions/configuration
+
+### Frontend — Page Editor
+9. **Widget card rendering:** Pull a page, verify all widgets appear as cards in correct order
+10. **Widget type identification:** Verify text, heading, image, button, template cards render with correct type badges
+11. **Text editing:** Click Edit on a text card → textarea expands → type new text → Save → badge shows MODIFIED
+12. **Image swap:** Click Swap on an image card → upload new image → thumbnail updates → shows "was: old.jpg"
+13. **Selective editing:** Edit 2 widgets, keep 5 unchanged → Push → verify only 2 changed on WordPress
+14. **Revert:** Edit a widget → click Revert → verify it returns to original content and shows Keep badge
+15. **Push Changes button:** Verify it shows correct count ("Push 2 Changes"), is disabled when nothing modified
+16. **Replace All Text:** Paste new article → verify it auto-distributes across text widgets → push → verify on WP
+17. **Template widgets:** Verify they show as read-only with info message, no edit controls
+
+### Edge Cases
+18. Page with no text widgets → editor shows only image/heading/button cards, "Replace All Text" disabled
+19. Page with mixed widget types we don't handle → skip unknown types, show known ones
+20. Invalid `_elementor_data` → fail gracefully with descriptive error
+21. Elementor data not accessible via REST API → clear error about permissions/configuration
+22. Very large page (50+ widgets) → editor should scroll smoothly, not lag
+23. Image upload fails → show error on that card, don't lose other edits in progress
