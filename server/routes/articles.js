@@ -702,10 +702,9 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
           }
         }
 
-        // Re-read article from DB with updated images
-        const [freshArticle] = await sql`SELECT * FROM articles WHERE id = ${articleId}`;
-
-        const rebuildResult = await rebuildPage(freshArticle, wpCredentials, {
+        // Use the original article object — images are explicitly passed so
+        // rebuildPage won't fall back to article.generated_images
+        const rebuildResult = await rebuildPage(article, wpCredentials, {
           images: updatedImages,
           templateStyles
         });

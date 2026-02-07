@@ -3091,10 +3091,10 @@ router.post('/bulk-rebuild-pages', async (req, res) => {
           message: `Rebuilding page: ${article.keyword}`
         });
 
-        await rebuildPage(article, wpCredentials, rebuildOptions);
+        const rebuildResult = await rebuildPage(article, wpCredentials, rebuildOptions);
         results.succeeded++;
 
-        console.log(`[Full Rebuild] Rebuilt article ${article.id}: "${article.keyword}"`);
+        console.log(`[Full Rebuild] Rebuilt article ${article.id}: "${article.keyword}" (old: ${rebuildResult.oldPageId}, new: ${rebuildResult.newPageId})`);
 
       } catch (articleErr) {
         results.failed++;
@@ -3123,7 +3123,7 @@ router.post('/bulk-rebuild-pages', async (req, res) => {
     console.error('[Full Rebuild] Fatal error:', error.message);
     // If SSE headers already sent, use sendError pattern
     if (res.headersSent) {
-      res.write(`data: ${JSON.stringify({ type: 'error', message: error.message })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
       res.end();
     } else {
       res.status(500).json({ error: error.message });
