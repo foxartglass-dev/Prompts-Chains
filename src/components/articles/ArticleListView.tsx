@@ -196,6 +196,14 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     return () => document.removeEventListener('click', handler);
   }, [showBulkImageMenu]);
 
+  // Click-outside handler for bulk content push dropdown
+  useEffect(() => {
+    if (!showBulkContentMenu) return;
+    const handler = () => setShowBulkContentMenu(false);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [showBulkContentMenu]);
+
   const fetchArticles = async () => {
     setLoading(true);
     try {
@@ -1185,6 +1193,12 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         body: JSON.stringify(body)
       });
 
+      // Check for non-SSE error responses (e.g. 400 before SSE headers were set)
+      if (!res.ok && res.headers.get('content-type')?.includes('application/json')) {
+        const errData = await res.json();
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+
       const reader = res.body?.getReader();
       if (!reader) {
         throw new Error('No response body');
@@ -1220,7 +1234,8 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
               } else if (data.type === 'complete') {
                 setBulkContentProgress(prev => prev ? {
                   ...prev,
-                  total: data.total,
+                  total: data.total || prev.total,
+                  current: (data.succeeded || 0) + (data.failed || 0),
                   succeeded: data.succeeded,
                   failed: data.failed,
                   errors: data.errors || prev.errors,
@@ -3014,9 +3029,11 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     ? 'bg-green-600/20 text-green-400'
                     : 'bg-amber-600/20 text-amber-400'
                 }`}>
-                  {bulkContentProgress.failed === 0
-                    ? `All ${bulkContentProgress.succeeded} pages rebuilt successfully!`
-                    : `Done: ${bulkContentProgress.succeeded} succeeded, ${bulkContentProgress.failed} failed`
+                  {bulkContentProgress.total === 0
+                    ? 'No articles found matching criteria'
+                    : bulkContentProgress.failed === 0
+                      ? `All ${bulkContentProgress.succeeded} pages rebuilt successfully!`
+                      : `Done: ${bulkContentProgress.succeeded} succeeded, ${bulkContentProgress.failed} failed`
                   }
                 </div>
               )}

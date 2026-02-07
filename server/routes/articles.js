@@ -1548,12 +1548,15 @@ router.post('/:articleId/push-content', requireDb, async (req, res) => {
     console.log('[Push Content] ========== STARTING ==========');
     console.log('[Push Content] Article ID:', articleId);
 
-    // Fetch article with website credentials (same pattern as publish-article in elementor.js:2291-2312)
+    // Fetch article with website credentials + CTA settings
+    // (same pattern as publish-article in elementor.js:2291-2312)
     const articles = await sql`
       SELECT a.*,
              ws.wp_url as website_wp_url,
              ws.wp_user as website_wp_user,
-             ws.wp_app_password as website_wp_password
+             ws.wp_app_password as website_wp_password,
+             ws.elementor_cta_text as website_cta_text,
+             ws.elementor_cta_url as website_cta_url
       FROM articles a
       LEFT JOIN websites ws ON a.website_id = ws.id
       WHERE a.id = ${articleId}
@@ -1611,7 +1614,9 @@ router.post('/:articleId/push-content', requireDb, async (req, res) => {
     // Call rebuildPage — images: null means re-use existing generated_images (Golden Rule #1)
     const result = await rebuildPage(article, wpCredentials, {
       images: null,
-      templateStyles
+      templateStyles,
+      ctaText: article.website_cta_text || null,
+      ctaUrl: article.website_cta_url || null
     });
 
     console.log('[Push Content] ========== COMPLETE ==========');
@@ -1647,13 +1652,15 @@ router.post('/bulk-push-content', requireDb, async (req, res) => {
     // Set up SSE for progress reporting
     const { sendProgress, sendComplete, sendError } = setupSSE(res);
 
-    // Fetch website credentials
+    // Fetch website credentials + CTA settings
     let wpCredentials = null;
+    let websiteCtaText = null;
+    let websiteCtaUrl = null;
     const effectiveWebsiteId = websiteId || null;
 
     if (effectiveWebsiteId) {
       const [website] = await sql`
-        SELECT wp_url, wp_user, wp_app_password
+        SELECT wp_url, wp_user, wp_app_password, elementor_cta_text, elementor_cta_url
         FROM websites
         WHERE id = ${effectiveWebsiteId}
       `;
@@ -1663,13 +1670,16 @@ router.post('/bulk-push-content', requireDb, async (req, res) => {
           user: website.wp_user,
           password: website.wp_app_password
         };
+        websiteCtaText = website.elementor_cta_text || null;
+        websiteCtaUrl = website.elementor_cta_url || null;
       }
     }
 
     // If no website-level credentials, try to get from workflow's website
     if (!wpCredentials && workflowId) {
       const [workflow] = await sql`
-        SELECT w.website_id, ws.wp_url, ws.wp_user, ws.wp_app_password
+        SELECT w.website_id, ws.wp_url, ws.wp_user, ws.wp_app_password,
+               ws.elementor_cta_text, ws.elementor_cta_url
         FROM workflows w
         LEFT JOIN websites ws ON w.website_id = ws.id
         WHERE w.id = ${workflowId}
@@ -1680,6 +1690,8 @@ router.post('/bulk-push-content', requireDb, async (req, res) => {
           user: workflow.wp_user,
           password: workflow.wp_app_password
         };
+        websiteCtaText = workflow.elementor_cta_text || null;
+        websiteCtaUrl = workflow.elementor_cta_url || null;
       }
     }
 
@@ -1764,7 +1776,9 @@ router.post('/bulk-push-content', requireDb, async (req, res) => {
     // Call bulkRebuildPages — images: null re-uses existing generated_images (Golden Rule #1)
     const results = await bulkRebuildPages(articles, wpCredentials, {
       images: null,
-      templateStyles
+      templateStyles,
+      ctaText: websiteCtaText,
+      ctaUrl: websiteCtaUrl
     }, (progress) => {
       sendProgress({
         total: progress.total,

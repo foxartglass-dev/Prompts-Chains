@@ -1449,6 +1449,7 @@ const App: React.FC = () => {
 
                         // Save article to database and capture the article ID
                         let savedArticleId: string | null = null;
+                        let articleHadExistingWpPage = false; // Phase 3E: track if article already had a WP page
                         try {
                             const articleResponse = await retryFetch(
                                 () => fetch('/api/articles', {
@@ -1474,6 +1475,7 @@ const App: React.FC = () => {
                             if (articleResponse.ok) {
                                 const articleData = await articleResponse.json();
                                 savedArticleId = articleData.article?.id || null;
+                                articleHadExistingWpPage = !!articleData.article?.wp_post_id;
                             }
                             addLog(`[${itemLabel}] Article saved to database.`, LogStatus.INFO, item.id);
                         } catch (saveError) {
@@ -1690,49 +1692,47 @@ const App: React.FC = () => {
                     }
 
                     // Phase 3E: Post-batch content push hooks
-                    // If "Push to existing WP pages" is checked and article has an existing page
-                    if (currentProject.state.pushContentAfterBatch && savedArticleId) {
+                    // Only fires for articles that ALREADY had a WP page before this batch run.
+                    // New articles created in this batch won't have wp_post_id from the initial save,
+                    // so articleHadExistingWpPage will be false — avoiding redundant rebuilds.
+                    if (currentProject.state.pushContentAfterBatch && savedArticleId && articleHadExistingWpPage) {
                         try {
-                            // Check if article has an existing WP page
-                            const articleCheckRes = await fetch(`/api/articles/${savedArticleId}`);
-                            if (articleCheckRes.ok) {
-                                const articleCheckData = await articleCheckRes.json();
-                                const existingArticle = articleCheckData.article;
-
-                                if (existingArticle?.wp_post_id) {
-                                    // Optionally regenerate images first
-                                    if (currentProject.state.regenImagesAfterBatch) {
-                                        addLog(`[${itemLabel}] Regenerating images with new content...`, LogStatus.WORKING, item.id);
-                                        try {
-                                            await fetch(`/api/articles/${savedArticleId}/regenerate-all-images`, {
-                                                method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ workflowId: currentWorkflowId })
-                                            });
-                                            addLog(`[${itemLabel}] Images regenerated.`, LogStatus.SUCCESS, item.id);
-                                        } catch (regenErr) {
-                                            addLog(`[${itemLabel}] Image regeneration failed: ${regenErr instanceof Error ? regenErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
-                                        }
+                            // Optionally regenerate images first
+                            if (currentProject.state.regenImagesAfterBatch) {
+                                addLog(`[${itemLabel}] Regenerating images with new content...`, LogStatus.WORKING, item.id);
+                                try {
+                                    const regenRes = await fetch(`/api/articles/${savedArticleId}/regenerate-all-images`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ workflowId: currentWorkflowId })
+                                    });
+                                    if (regenRes.ok) {
+                                        addLog(`[${itemLabel}] Images regenerated.`, LogStatus.SUCCESS, item.id);
+                                    } else {
+                                        const regenData = await regenRes.json().catch(() => ({ error: `HTTP ${regenRes.status}` }));
+                                        addLog(`[${itemLabel}] Image regeneration failed: ${regenData.error || `HTTP ${regenRes.status}`}`, LogStatus.ERROR, item.id);
                                     }
-
-                                    // Push content to existing page
-                                    addLog(`[${itemLabel}] Pushing content to existing WP page...`, LogStatus.WORKING, item.id);
-                                    try {
-                                        const pushRes = await fetch(`/api/articles/${savedArticleId}/push-content`, {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({})
-                                        });
-                                        const pushData = await pushRes.json();
-                                        if (pushData.success) {
-                                            addLog(`[${itemLabel}] Content pushed to WP page (slug: ${pushData.slug}).`, LogStatus.SUCCESS, item.id);
-                                        } else {
-                                            addLog(`[${itemLabel}] Content push failed: ${pushData.error}`, LogStatus.ERROR, item.id);
-                                        }
-                                    } catch (pushErr) {
-                                        addLog(`[${itemLabel}] Content push error: ${pushErr instanceof Error ? pushErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
-                                    }
+                                } catch (regenErr) {
+                                    addLog(`[${itemLabel}] Image regeneration failed: ${regenErr instanceof Error ? regenErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
                                 }
+                            }
+
+                            // Push content to existing page
+                            addLog(`[${itemLabel}] Pushing content to existing WP page...`, LogStatus.WORKING, item.id);
+                            try {
+                                const pushRes = await fetch(`/api/articles/${savedArticleId}/push-content`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({})
+                                });
+                                const pushData = await pushRes.json();
+                                if (pushData.success) {
+                                    addLog(`[${itemLabel}] Content pushed to WP page (slug: ${pushData.slug}).`, LogStatus.SUCCESS, item.id);
+                                } else {
+                                    addLog(`[${itemLabel}] Content push failed: ${pushData.error}`, LogStatus.ERROR, item.id);
+                                }
+                            } catch (pushErr) {
+                                addLog(`[${itemLabel}] Content push error: ${pushErr instanceof Error ? pushErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
                             }
                         } catch (hookErr) {
                             addLog(`[${itemLabel}] Post-batch hook error: ${hookErr instanceof Error ? hookErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
