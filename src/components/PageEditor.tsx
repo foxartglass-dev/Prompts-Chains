@@ -74,6 +74,8 @@ interface PageEditorProps {
   pageId: number;
   // Optional article context
   articleKeyword?: string;
+  articleId?: number;
+  websiteId?: number;
   // Callbacks
   onClose: () => void;
   showNotification?: (message: string, type: 'success' | 'error' | 'info') => void;
@@ -95,6 +97,8 @@ const PageEditor: React.FC<PageEditorProps> = ({
   wpPassword,
   pageId,
   articleKeyword,
+  articleId,
+  websiteId,
   onClose,
   showNotification
 }) => {
@@ -122,6 +126,15 @@ const PageEditor: React.FC<PageEditorProps> = ({
 
   // Image upload state
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
+
+  // Link management state (Phase 7)
+  const [showManageLinks, setShowManageLinks] = useState(false);
+  const [linkData, setLinkData] = useState<{
+    parentLink: { url: string; suggestedAnchorText: string; parentTitle: string } | null;
+    outboundLinks: Array<{ id: number; url: string; anchor_text: string; description: string; rel_attribute: string; target: string }>;
+  }>({ parentLink: null, outboundLinks: [] });
+  const [loadingLinks, setLoadingLinks] = useState(false);
+  const [applyingLinks, setApplyingLinks] = useState(false);
 
   // Load page data on mount
   useEffect(() => {
@@ -758,6 +771,33 @@ const PageEditor: React.FC<PageEditorProps> = ({
               Replace All Text
             </button>
             <button
+              onClick={async () => {
+                setShowManageLinks(true);
+                if (articleId) {
+                  setLoadingLinks(true);
+                  try {
+                    const res = await fetch(`/api/links/article/${articleId}`);
+                    if (res.ok) {
+                      const data = await res.json();
+                      setLinkData({
+                        parentLink: data.parentLink || null,
+                        outboundLinks: data.outboundLinks || []
+                      });
+                    }
+                  } catch (err) {
+                    console.error('[PageEditor] Failed to load links:', err);
+                  } finally {
+                    setLoadingLinks(false);
+                  }
+                }
+              }}
+              disabled={loading || !articleId}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-brand-cyan/20 hover:bg-brand-cyan/30 text-brand-cyan border border-brand-cyan/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Manage internal and outbound links for this page"
+            >
+              Manage Links
+            </button>
+            <button
               onClick={loadPage}
               disabled={loading}
               className="px-3 py-1.5 rounded text-xs font-medium bg-slate-700 hover:bg-slate-600 text-gray-300 transition disabled:opacity-40"
@@ -903,6 +943,173 @@ const PageEditor: React.FC<PageEditorProps> = ({
                 ) : (
                   'Replace All Text & Push'
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Links Panel (Phase 7) */}
+      {showManageLinks && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowManageLinks(false)} />
+          <div className="relative bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-2xl mx-4 p-6 max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-white mb-4">Links for this page</h3>
+
+            {loadingLinks ? (
+              <div className="text-center py-8 text-gray-400">Loading link data...</div>
+            ) : (
+              <div className="space-y-4">
+                {/* Internal Link (Parent Page) */}
+                <div>
+                  <h4 className="text-sm font-medium text-brand-cyan mb-2 uppercase tracking-wide">Internal (auto-detected)</h4>
+                  {linkData.parentLink ? (
+                    <div className="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-brand-cyan text-sm">Parent Page:</span>
+                        <span className="text-white text-sm font-medium">{linkData.parentLink.parentTitle}</span>
+                      </div>
+                      <div className="text-xs text-gray-400">URL: {linkData.parentLink.url}</div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        Anchor text: <span className="text-gray-300">"{linkData.parentLink.suggestedAnchorText}"</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-800 rounded-lg p-3 border border-slate-700 text-gray-500 text-sm">
+                      No parent page detected (top-level page or no hierarchy data)
+                    </div>
+                  )}
+                </div>
+
+                {/* Outbound Links */}
+                <div>
+                  <h4 className="text-sm font-medium text-brand-gold mb-2 uppercase tracking-wide">Outbound (from link pool)</h4>
+                  {linkData.outboundLinks.length > 0 ? (
+                    <div className="space-y-2">
+                      {linkData.outboundLinks.map(link => (
+                        <div key={link.id} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-green-400 text-sm">&#8599;</span>
+                            <span className="text-white text-sm font-medium">{link.description || link.url}</span>
+                          </div>
+                          <div className="text-xs text-gray-400">URL: {link.url}</div>
+                          {link.anchor_text && (
+                            <div className="text-xs text-gray-400 mt-1">
+                              Anchor text: <span className="text-gray-300">"{link.anchor_text}"</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-800 rounded-lg p-3 border border-slate-700 text-gray-500 text-sm">
+                      No outbound links assigned. Use the Link Pool Manager to add and distribute links.
+                    </div>
+                  )}
+                </div>
+
+                {/* Apply Links Button */}
+                {(linkData.parentLink || linkData.outboundLinks.length > 0) && (
+                  <div className="pt-2 border-t border-slate-700">
+                    <button
+                      onClick={async () => {
+                        if (!articleId) return;
+                        setApplyingLinks(true);
+                        try {
+                          // Get current text widget content and inject links
+                          const textWidgets = widgets.filter(w => w.category === 'text');
+                          if (textWidgets.length === 0) {
+                            showNotification?.('No text widgets found to inject links into', 'error');
+                            return;
+                          }
+
+                          // Build links array for injection preview
+                          const linksToInject: Array<{url: string; anchorText: string; type: string; rel: string; target: string}> = [];
+                          if (linkData.parentLink) {
+                            linksToInject.push({
+                              url: linkData.parentLink.url,
+                              anchorText: linkData.parentLink.suggestedAnchorText,
+                              type: 'internal',
+                              rel: '',
+                              target: '_self'
+                            });
+                          }
+                          for (const link of linkData.outboundLinks) {
+                            linksToInject.push({
+                              url: link.url,
+                              anchorText: link.anchor_text || link.description || link.url,
+                              type: 'outbound',
+                              rel: link.rel_attribute || 'noopener',
+                              target: link.target || '_blank'
+                            });
+                          }
+
+                          // For each text widget, try to inject links
+                          let injectedCount = 0;
+                          for (const widget of textWidgets) {
+                            const currentContent = editStates[widget.id]?.editValue || widget.content || '';
+                            const res = await fetch('/api/links/inject-preview', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                content: currentContent,
+                                links: linksToInject
+                              })
+                            });
+
+                            if (res.ok) {
+                              const data = await res.json();
+                              if (data.previewHtml !== currentContent) {
+                                // Content was modified - mark widget as modified
+                                setEditStates(prev => ({
+                                  ...prev,
+                                  [widget.id]: {
+                                    ...prev[widget.id],
+                                    state: 'modified',
+                                    editValue: data.previewHtml,
+                                    editUrl: prev[widget.id]?.editUrl || '',
+                                    editImageUrl: prev[widget.id]?.editImageUrl || '',
+                                    editMediaId: prev[widget.id]?.editMediaId || null
+                                  }
+                                }));
+                                injectedCount++;
+                                break; // Only inject into first matching widget
+                              }
+                            }
+                          }
+
+                          if (injectedCount > 0) {
+                            showNotification?.(`Links injected into ${injectedCount} text widget(s). Review and push when ready.`, 'success');
+                          } else {
+                            showNotification?.('No matching anchor text found in text widgets. Try editing anchor text in the Link Pool.', 'info');
+                          }
+                          setShowManageLinks(false);
+                        } catch (err: any) {
+                          console.error('[PageEditor] Link injection error:', err);
+                          showNotification?.(err.message || 'Failed to inject links', 'error');
+                        } finally {
+                          setApplyingLinks(false);
+                        }
+                      }}
+                      disabled={applyingLinks}
+                      className="w-full px-4 py-2 rounded text-sm font-medium bg-brand-cyan text-slate-900 hover:bg-cyan-400 transition disabled:opacity-40 flex items-center justify-center gap-2"
+                    >
+                      {applyingLinks ? 'Applying...' : 'Apply Links to Text'}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Links are injected into the first matching text. Modified widgets will show as changed. Push to apply.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => setShowManageLinks(false)}
+                className="px-4 py-2 rounded text-sm text-gray-400 hover:text-white transition"
+              >
+                Close
               </button>
             </div>
           </div>

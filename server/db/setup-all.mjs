@@ -1116,6 +1116,104 @@ async function setup() {
       console.error('  ✗ Error with component_settings column:', err.message);
     }
 
+    // ================================
+    // LINK POOL SYSTEM (Phase 7)
+    // ================================
+    console.log('');
+    console.log('🔗 Creating Link Pool tables...');
+
+    // Link Pool table
+    try {
+      const hasLinkPool = await sql`
+        SELECT table_name FROM information_schema.tables
+        WHERE table_name = 'link_pool'
+      `;
+      if (hasLinkPool.length === 0) {
+        await sql`
+          CREATE TABLE link_pool (
+            id SERIAL PRIMARY KEY,
+            website_id INTEGER NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
+            url VARCHAR(500) NOT NULL,
+            anchor_text VARCHAR(255),
+            description TEXT,
+            link_type VARCHAR(20) DEFAULT 'outbound',
+            status VARCHAR(20) DEFAULT 'pending',
+            assigned_article_id INTEGER REFERENCES articles(id),
+            used_on_article_id INTEGER REFERENCES articles(id),
+            rel_attribute VARCHAR(50) DEFAULT 'noopener',
+            target VARCHAR(20) DEFAULT '_blank',
+            discovery_run INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            used_at TIMESTAMP
+          )
+        `;
+        await sql`CREATE INDEX IF NOT EXISTS idx_link_pool_website ON link_pool(website_id)`;
+        await sql`CREATE INDEX IF NOT EXISTS idx_link_pool_status ON link_pool(status)`;
+        await sql`CREATE INDEX IF NOT EXISTS idx_link_pool_assigned ON link_pool(assigned_article_id)`;
+        console.log('  ✓ Created link_pool table');
+      } else {
+        console.log('  - link_pool table already exists');
+      }
+    } catch (err) {
+      console.error('  ✗ Error with link_pool table:', err.message);
+    }
+
+    // Add link discovery columns to websites table
+    const hasLinkDiscoveryPrompt = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'websites' AND column_name = 'link_discovery_prompt'
+    `;
+    if (hasLinkDiscoveryPrompt.length === 0) {
+      await sql`ALTER TABLE websites ADD COLUMN link_discovery_prompt TEXT`;
+      console.log('  ✓ Added link_discovery_prompt column to websites');
+    } else {
+      console.log('  - link_discovery_prompt already exists');
+    }
+
+    const hasLinkDiscoveryModel = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'websites' AND column_name = 'link_discovery_model'
+    `;
+    if (hasLinkDiscoveryModel.length === 0) {
+      await sql`ALTER TABLE websites ADD COLUMN link_discovery_model VARCHAR(100) DEFAULT 'claude-sonnet-4-5-20250929'`;
+      console.log('  ✓ Added link_discovery_model column to websites');
+    } else {
+      console.log('  - link_discovery_model already exists');
+    }
+
+    const hasLinkDiscoveryCount = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'websites' AND column_name = 'link_discovery_count'
+    `;
+    if (hasLinkDiscoveryCount.length === 0) {
+      await sql`ALTER TABLE websites ADD COLUMN link_discovery_count INTEGER DEFAULT 70`;
+      console.log('  ✓ Added link_discovery_count column to websites');
+    } else {
+      console.log('  - link_discovery_count already exists');
+    }
+
+    const hasLinksPerPage = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'websites' AND column_name = 'links_per_page'
+    `;
+    if (hasLinksPerPage.length === 0) {
+      await sql`ALTER TABLE websites ADD COLUMN links_per_page INTEGER DEFAULT 1`;
+      console.log('  ✓ Added links_per_page column to websites');
+    } else {
+      console.log('  - links_per_page already exists');
+    }
+
+    const hasLinkDiscoveryRuns = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'websites' AND column_name = 'link_discovery_runs'
+    `;
+    if (hasLinkDiscoveryRuns.length === 0) {
+      await sql`ALTER TABLE websites ADD COLUMN link_discovery_runs INTEGER DEFAULT 0`;
+      console.log('  ✓ Added link_discovery_runs column to websites');
+    } else {
+      console.log('  - link_discovery_runs already exists');
+    }
+
     console.log('');
     console.log('================================');
     console.log('✅ Database setup complete!');
