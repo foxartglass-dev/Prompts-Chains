@@ -1214,6 +1214,126 @@ async function setup() {
       console.log('  - link_discovery_runs already exists');
     }
 
+    // ================================
+    // SCHEMA / JSON-LD INJECTION (Phase 8)
+    // ================================
+    console.log('');
+    console.log('📋 Creating Schema/JSON-LD tables...');
+
+    // schema_custom_pages table
+    try {
+      const hasSchemaCustomPages = await sql`
+        SELECT table_name FROM information_schema.tables
+        WHERE table_name = 'schema_custom_pages'
+      `;
+      if (hasSchemaCustomPages.length === 0) {
+        await sql`
+          CREATE TABLE schema_custom_pages (
+            id SERIAL PRIMARY KEY,
+            website_id INTEGER NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
+            article_id INTEGER REFERENCES articles(id),
+            wp_post_id INTEGER,
+            page_title VARCHAR(255),
+            page_url VARCHAR(500),
+            custom_prompt TEXT NOT NULL,
+            generated_schema TEXT,
+            schema_pushed BOOLEAN DEFAULT false,
+            pushed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `;
+        await sql`CREATE INDEX IF NOT EXISTS idx_schema_custom_pages_website ON schema_custom_pages(website_id)`;
+        await sql`CREATE INDEX IF NOT EXISTS idx_schema_custom_pages_article ON schema_custom_pages(article_id)`;
+        console.log('  ✓ Created schema_custom_pages table');
+      } else {
+        console.log('  - schema_custom_pages table already exists');
+      }
+    } catch (err) {
+      console.error('  ✗ Error with schema_custom_pages table:', err.message);
+    }
+
+    // Add schema columns to websites table
+    const hasSchemaTypes = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'websites' AND column_name = 'schema_types'
+    `;
+    if (hasSchemaTypes.length === 0) {
+      await sql`ALTER TABLE websites ADD COLUMN schema_types TEXT`;
+      console.log('  ✓ Added schema_types column to websites');
+    } else {
+      console.log('  - schema_types already exists');
+    }
+
+    const hasSchemaBulkPrompt = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'websites' AND column_name = 'schema_bulk_prompt'
+    `;
+    if (hasSchemaBulkPrompt.length === 0) {
+      await sql`ALTER TABLE websites ADD COLUMN schema_bulk_prompt TEXT`;
+      console.log('  ✓ Added schema_bulk_prompt column to websites');
+    } else {
+      console.log('  - schema_bulk_prompt already exists');
+    }
+
+    const hasSchemaModel = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'websites' AND column_name = 'schema_model'
+    `;
+    if (hasSchemaModel.length === 0) {
+      await sql`ALTER TABLE websites ADD COLUMN schema_model VARCHAR(100) DEFAULT 'claude-sonnet-4-5-20250929'`;
+      console.log('  ✓ Added schema_model column to websites');
+    } else {
+      console.log('  - schema_model already exists');
+    }
+
+    const hasSchemaMuPlugin = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'websites' AND column_name = 'schema_mu_plugin_deployed'
+    `;
+    if (hasSchemaMuPlugin.length === 0) {
+      await sql`ALTER TABLE websites ADD COLUMN schema_mu_plugin_deployed BOOLEAN DEFAULT false`;
+      console.log('  ✓ Added schema_mu_plugin_deployed column to websites');
+    } else {
+      console.log('  - schema_mu_plugin_deployed already exists');
+    }
+
+    // Add schema columns to articles table
+    const hasGeneratedSchema = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'articles' AND column_name = 'generated_schema'
+    `;
+    if (hasGeneratedSchema.length === 0) {
+      await sql`ALTER TABLE articles ADD COLUMN generated_schema TEXT`;
+      console.log('  ✓ Added generated_schema column to articles');
+    } else {
+      console.log('  - generated_schema already exists');
+    }
+
+    const hasSchemaPushed = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'articles' AND column_name = 'schema_pushed'
+    `;
+    if (hasSchemaPushed.length === 0) {
+      await sql`ALTER TABLE articles ADD COLUMN schema_pushed BOOLEAN DEFAULT false`;
+      console.log('  ✓ Added schema_pushed column to articles');
+    } else {
+      console.log('  - schema_pushed already exists');
+    }
+
+    const hasSchemaPushedAt = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'articles' AND column_name = 'schema_pushed_at'
+    `;
+    if (hasSchemaPushedAt.length === 0) {
+      await sql`ALTER TABLE articles ADD COLUMN schema_pushed_at TIMESTAMP`;
+      console.log('  ✓ Added schema_pushed_at column to articles');
+    } else {
+      console.log('  - schema_pushed_at already exists');
+    }
+
+    console.log('  ✓ Schema/JSON-LD migration complete');
+
     console.log('');
     console.log('================================');
     console.log('✅ Database setup complete!');

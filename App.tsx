@@ -23,6 +23,7 @@ import WordPressSettings from './src/components/WordPressSettings';
 import ArticlesPage from './src/pages/ArticlesPage';
 import BlueprintPage from './src/pages/BlueprintPage';
 import LinkPoolManager from './src/components/LinkPoolManager';
+import SchemaManager from './src/components/SchemaManager';
 import ImageCreationSection from './src/components/ImageCreationSection';
 import SitePlanningSection from './src/components/SitePlanningSection';
 import LocalVikingSection from './src/components/LocalVikingSection';
@@ -268,6 +269,7 @@ const App: React.FC = () => {
     const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
     const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
     const [isLinkPoolOpen, setIsLinkPoolOpen] = useState(false);
+    const [isSchemaManagerOpen, setIsSchemaManagerOpen] = useState(false);
     const [isTestRunnerOpen, setIsTestRunnerOpen] = useState(false);
     const [testQueue, setTestQueue] = useState<Array<{
       articleMode: 'draft' | 'wordpress';
@@ -2249,6 +2251,14 @@ const App: React.FC = () => {
               workflowId={currentWorkflowId}
             />
 
+            {/* Schema Manager - JSON-LD Injection */}
+            <SchemaManager
+              isOpen={isSchemaManagerOpen}
+              onClose={() => setIsSchemaManagerOpen(false)}
+              websiteId={currentWebsiteId}
+              websiteName={currentWorkflowContext.websiteName}
+            />
+
             {/* Test Runner Popup */}
             <TestRunnerPopup
               isOpen={isTestRunnerOpen}
@@ -2847,6 +2857,15 @@ const App: React.FC = () => {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                         </svg>
                                         <span className="text-sm font-medium">Link Pool</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsSchemaManagerOpen(true); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition"
+                                    >
+                                        <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                        </svg>
+                                        <span className="text-sm font-medium">Schema Manager</span>
                                     </button>
                                     <button
                                         onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsBlueprintOpen(true); }}

@@ -600,6 +600,29 @@ CREATE INDEX IF NOT EXISTS idx_wp_hierarchy_parent ON wp_page_hierarchy(wp_paren
 
 
 -- ============================================
+-- SCHEMA / JSON-LD INJECTION (Phase 8)
+-- ============================================
+
+-- Schema custom pages - pages that get their own custom schema prompt
+CREATE TABLE IF NOT EXISTS schema_custom_pages (
+  id SERIAL PRIMARY KEY,
+  website_id INTEGER NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
+  article_id INTEGER REFERENCES articles(id),
+  wp_post_id INTEGER,
+  page_title VARCHAR(255),
+  page_url VARCHAR(500),
+  custom_prompt TEXT NOT NULL,
+  generated_schema TEXT,
+  schema_pushed BOOLEAN DEFAULT false,
+  pushed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_schema_custom_pages_website ON schema_custom_pages(website_id);
+CREATE INDEX IF NOT EXISTS idx_schema_custom_pages_article ON schema_custom_pages(article_id);
+
+-- ============================================
 -- MIGRATIONS: Add columns if they don't exist
 -- ============================================
 
@@ -617,6 +640,34 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='articles' AND column_name='images_wp_pushed_at') THEN
         ALTER TABLE articles ADD COLUMN images_wp_pushed_at TIMESTAMP;
+    END IF;
+END
+$$;
+
+-- Add schema columns to websites table (Phase 8)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='websites' AND column_name='schema_types') THEN
+        ALTER TABLE websites ADD COLUMN schema_types TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='websites' AND column_name='schema_bulk_prompt') THEN
+        ALTER TABLE websites ADD COLUMN schema_bulk_prompt TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='websites' AND column_name='schema_model') THEN
+        ALTER TABLE websites ADD COLUMN schema_model VARCHAR(100) DEFAULT 'claude-sonnet-4-5-20250929';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='websites' AND column_name='schema_mu_plugin_deployed') THEN
+        ALTER TABLE websites ADD COLUMN schema_mu_plugin_deployed BOOLEAN DEFAULT false;
+    END IF;
+    -- Add schema columns to articles table
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='articles' AND column_name='generated_schema') THEN
+        ALTER TABLE articles ADD COLUMN generated_schema TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='articles' AND column_name='schema_pushed') THEN
+        ALTER TABLE articles ADD COLUMN schema_pushed BOOLEAN DEFAULT false;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='articles' AND column_name='schema_pushed_at') THEN
+        ALTER TABLE articles ADD COLUMN schema_pushed_at TIMESTAMP;
     END IF;
 END
 $$;

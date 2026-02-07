@@ -41,6 +41,7 @@ import reverseImageRouter from './routes/reverse-image.js';
 import elementorStylesRouter from './routes/elementor-styles.js';
 import componentLibraryRouter from './routes/component-library.js';
 import linksRouter from './routes/links.js';
+import schemaRouter from './routes/schema.js';
 import { initDripFeedScheduler } from './services/drip-feed-scheduler.js';
 import { testConnection, isDatabaseEnabled } from './db/index.js';
 
@@ -218,6 +219,7 @@ app.use('/api/test-presets', testPresetsRouter);
 app.use('/api/reverse-image', reverseImageRouter);
 app.use('/api/component-library', componentLibraryRouter);
 app.use('/api/links', linksRouter);
+app.use('/api/schema', schemaRouter);
 app.use('/api', elementorStylesRouter);  // Routes like /api/workflows/:id/elementor-style
 
 // Database status endpoint
