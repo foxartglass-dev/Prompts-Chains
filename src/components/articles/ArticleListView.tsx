@@ -147,6 +147,21 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const [updatingCta, setUpdatingCta] = useState(false);
   const [showCtaConfirm, setShowCtaConfirm] = useState(false);
 
+  // Bulk component refresh state
+  const [showComponentRefreshConfirm, setShowComponentRefreshConfirm] = useState(false);
+  const [componentResetRotation, setComponentResetRotation] = useState(true);
+  const [componentRefreshProgress, setComponentRefreshProgress] = useState<{
+    active: boolean;
+    total: number;
+    current: number;
+    succeeded: number;
+    failed: number;
+    errors: Array<{ articleId: number; keyword: string; error: string }>;
+    complete: boolean;
+    phase: string;
+    currentKeyword?: string;
+  } | null>(null);
+
   // Post-publish image generation state
   const [generatingImages, setGeneratingImages] = useState(false);
   const [regeneratingAllImages, setRegeneratingAllImages] = useState(false);
@@ -672,6 +687,117 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     }
   };
 
+  // Bulk refresh components on all published pages
+  const bulkRefreshComponents = async () => {
+    if (!websiteId) return;
+    setShowComponentRefreshConfirm(false);
+    setComponentRefreshProgress({
+      active: true, total: 0, current: 0, succeeded: 0, failed: 0,
+      errors: [], complete: false, phase: 'starting'
+    });
+    setError(null);
+
+    try {
+      const wsRes = await fetch(`/api/websites/${websiteId}`);
+      const wsData = await wsRes.json();
+      const website = wsData.website;
+
+      if (!website || !website.wp_url || !website.wp_user || !website.wp_app_password) {
+        setError('WordPress credentials not configured for this website');
+        setComponentRefreshProgress(null);
+        return;
+      }
+
+      // Get workflowId from the first published article
+      const publishedArticles = articles.filter(a => a.wp_post_id);
+      if (publishedArticles.length === 0) {
+        setError('No published pages to update');
+        setComponentRefreshProgress(null);
+        return;
+      }
+      const workflowId = publishedArticles[0].workflow_id;
+
+      const response = await fetch('/api/elementor/bulk-update-components', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflowId,
+          websiteId,
+          resetRotation: componentResetRotation,
+          wpUrl: website.wp_url,
+          wpUser: website.wp_user,
+          wpPassword: website.wp_app_password
+        })
+      });
+
+      if (!response.ok && !response.headers.get('content-type')?.includes('text/event-stream')) {
+        const errData = await response.json();
+        setError(errData.error || 'Failed to start component refresh');
+        setComponentRefreshProgress(null);
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        setError('Failed to read response stream');
+        setComponentRefreshProgress(null);
+        return;
+      }
+
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'progress') {
+                setComponentRefreshProgress(prev => prev ? {
+                  ...prev,
+                  total: data.total ?? prev.total,
+                  current: (data.succeeded ?? 0) + (data.failed ?? 0),
+                  succeeded: data.succeeded ?? prev.succeeded,
+                  failed: data.failed ?? prev.failed,
+                  errors: data.errors ?? prev.errors,
+                  phase: data.phase ?? prev.phase,
+                  currentKeyword: data.currentKeyword
+                } : null);
+              } else if (data.type === 'complete') {
+                setComponentRefreshProgress(prev => prev ? {
+                  ...prev,
+                  total: data.total ?? prev.total,
+                  current: data.total ?? prev.total,
+                  succeeded: data.succeeded ?? prev.succeeded,
+                  failed: data.failed ?? prev.failed,
+                  errors: data.errors ?? prev.errors,
+                  complete: true,
+                  phase: 'complete'
+                } : null);
+                fetchArticles();
+              } else if (data.type === 'error') {
+                setError(data.error || 'Unknown error during component refresh');
+                setComponentRefreshProgress(prev => prev ? { ...prev, complete: true, phase: 'error' } : null);
+              }
+            } catch {
+              // Ignore malformed SSE data
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to refresh components');
+      setComponentRefreshProgress(prev => prev ? { ...prev, complete: true, phase: 'error' } : null);
+    }
+  };
+
   // Add selected articles to drip feed
   const addToDripFeed = async () => {
     if (selectedIds.size === 0 || !websiteId) return;
@@ -1156,6 +1282,22 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             </button>
           )}
 
+          {/* Refresh Components on All Pages */}
+          {articles.some(a => a.wp_post_id) && (
+            <button
+              onClick={() => setShowComponentRefreshConfirm(true)}
+              disabled={componentRefreshProgress?.active && !componentRefreshProgress?.complete}
+              className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 rounded text-white text-sm font-medium transition disabled:opacity-50 flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              {componentRefreshProgress?.active && !componentRefreshProgress?.complete
+                ? `Refreshing Components...`
+                : `Refresh Components (${articles.filter(a => a.wp_post_id).length})`}
+            </button>
+          )}
+
           {/* Bulk Image Actions Dropdown */}
           <div className="relative">
             <button
@@ -1224,6 +1366,129 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             </div>
           </div>
         </div>
+      )}
+
+      {/* Component Refresh Confirmation Modal — React Portal (Golden Rule #7) */}
+      {showComponentRefreshConfirm && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-xl p-6 w-full max-w-md border border-cyan-500/30 shadow-2xl">
+            <h3 className="text-xl font-bold text-cyan-400 mb-4">Refresh Components on All Pages</h3>
+            <p className="text-gray-300 text-sm mb-3">
+              This will rebuild {articles.filter(a => a.wp_post_id).length} published page{articles.filter(a => a.wp_post_id).length !== 1 ? 's' : ''} with
+              updated component assignments from the current library.
+            </p>
+            <p className="text-gray-400 text-xs mb-4">
+              Page URLs will be preserved.
+            </p>
+
+            <label className="flex items-center gap-2 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={componentResetRotation}
+                onChange={(e) => setComponentResetRotation(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-500 text-cyan-500 focus:ring-cyan-500 bg-slate-800"
+              />
+              <span className="text-sm text-white">Reset rotation (redistribute components evenly)</span>
+            </label>
+
+            <div className="bg-slate-800/50 rounded p-3 mb-4 border border-gray-700">
+              <p className="text-xs text-gray-400">
+                <strong className="text-gray-300">Note:</strong> If you only changed a template's content
+                (not which template is assigned), you don't need this — template changes appear automatically.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={bulkRefreshComponents}
+                className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded text-white font-medium transition"
+              >
+                Refresh All Pages
+              </button>
+              <button
+                onClick={() => setShowComponentRefreshConfirm(false)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-gray-300 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Component Refresh Progress Modal — React Portal (Golden Rule #7) */}
+      {componentRefreshProgress?.active && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-xl w-full max-w-lg border border-cyan-500/30 shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  Component Refresh
+                </h3>
+                {componentRefreshProgress.complete && (
+                  <button
+                    onClick={() => setComponentRefreshProgress(null)}
+                    className="text-gray-400 hover:text-white text-xl"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+
+              <div className="mb-1 flex items-center justify-between text-sm">
+                <span className="text-gray-400">
+                  {componentRefreshProgress.complete ? 'Complete' : 'Rebuilding pages...'}
+                </span>
+                <span className="text-white font-medium">
+                  {componentRefreshProgress.current} / {componentRefreshProgress.total || '...'}
+                </span>
+              </div>
+
+              {componentRefreshProgress.currentKeyword && !componentRefreshProgress.complete && (
+                <p className="text-xs text-gray-500 mb-2 truncate">
+                  Current: {componentRefreshProgress.currentKeyword}
+                </p>
+              )}
+
+              <div className="w-full bg-slate-700 rounded-full h-3 mb-4">
+                <div
+                  className={`h-3 rounded-full transition-all duration-300 ${
+                    componentRefreshProgress.complete
+                      ? componentRefreshProgress.failed > 0 ? 'bg-amber-500' : 'bg-green-500'
+                      : 'bg-cyan-500'
+                  }`}
+                  style={{ width: `${componentRefreshProgress.total ? (componentRefreshProgress.current / componentRefreshProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+
+              {componentRefreshProgress.complete && (
+                <div className="space-y-2">
+                  <div className="flex gap-4 text-sm">
+                    <span className="text-green-400">{componentRefreshProgress.succeeded} succeeded</span>
+                    {componentRefreshProgress.failed > 0 && (
+                      <span className="text-red-400">{componentRefreshProgress.failed} failed</span>
+                    )}
+                  </div>
+
+                  {componentRefreshProgress.errors.length > 0 && (
+                    <div className="mt-2 max-h-32 overflow-y-auto">
+                      {componentRefreshProgress.errors.map((err, idx) => (
+                        <div key={idx} className="text-xs text-red-400 py-1 border-t border-slate-700">
+                          <span className="text-gray-400">{err.keyword}:</span> {err.error}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Bulk Action Bar */}

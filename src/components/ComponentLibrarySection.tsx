@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 interface Tag {
   id: number;
@@ -50,6 +51,7 @@ interface DetectedComponent {
 
 interface ComponentLibraryProps {
   workflowId: number | null;
+  websiteId?: number | null;
   tags?: Tag[];
   websiteUrl?: string;
 }
@@ -107,6 +109,7 @@ const DetectedComponentRow: React.FC<{
 
 const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
   workflowId,
+  websiteId,
   tags = [],
   websiteUrl
 }) => {
@@ -144,6 +147,22 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
     slotNumber: 1,
     tag: '' // Empty string = Global
   });
+
+  // Bulk component refresh state
+  const [showRefreshModal, setShowRefreshModal] = useState(false);
+  const [resetRotation, setResetRotation] = useState(true);
+  const [publishedCount, setPublishedCount] = useState<number | null>(null);
+  const [refreshProgress, setRefreshProgress] = useState<{
+    active: boolean;
+    total: number;
+    current: number;
+    succeeded: number;
+    failed: number;
+    errors: Array<{ articleId: number; keyword: string; error: string }>;
+    complete: boolean;
+    phase: string;
+    currentKeyword?: string;
+  } | null>(null);
 
   // Fetch components and settings
   const fetchData = useCallback(async () => {
@@ -412,6 +431,139 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
       fetchData();
     } catch (err: any) {
       setError(err.message);
+    }
+  };
+
+  // Fetch published page count for refresh modal
+  const fetchPublishedCount = useCallback(async () => {
+    if (!workflowId) return;
+    try {
+      const url = `/api/articles?workflowId=${workflowId}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const published = (data.articles || []).filter((a: any) => a.wp_post_id).length;
+      setPublishedCount(published);
+    } catch {
+      setPublishedCount(null);
+    }
+  }, [workflowId]);
+
+  // Open refresh modal
+  const handleOpenRefreshModal = () => {
+    setShowRefreshModal(true);
+    fetchPublishedCount();
+  };
+
+  // Bulk refresh components via SSE
+  const handleBulkRefreshComponents = async () => {
+    if (!workflowId) return;
+
+    setShowRefreshModal(false);
+    setRefreshProgress({
+      active: true, total: 0, current: 0, succeeded: 0, failed: 0,
+      errors: [], complete: false, phase: 'starting'
+    });
+    setError(null);
+
+    try {
+      // Fetch website credentials
+      let wpUrl = '', wpUser = '', wpPassword = '';
+      if (websiteId) {
+        const wsRes = await fetch(`/api/websites/${websiteId}`);
+        const wsData = await wsRes.json();
+        const website = wsData.website;
+        if (!website || !website.wp_url || !website.wp_user || !website.wp_app_password) {
+          setError('WordPress credentials not configured for this website');
+          setRefreshProgress(null);
+          return;
+        }
+        wpUrl = website.wp_url;
+        wpUser = website.wp_user;
+        wpPassword = website.wp_app_password;
+      } else {
+        setError('No website associated with this workflow');
+        setRefreshProgress(null);
+        return;
+      }
+
+      const response = await fetch('/api/elementor/bulk-update-components', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflowId,
+          websiteId,
+          resetRotation,
+          wpUrl,
+          wpUser,
+          wpPassword
+        })
+      });
+
+      if (!response.ok && !response.headers.get('content-type')?.includes('text/event-stream')) {
+        const errData = await response.json();
+        setError(errData.error || 'Failed to start component refresh');
+        setRefreshProgress(null);
+        return;
+      }
+
+      // Read SSE stream
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        setError('Failed to read response stream');
+        setRefreshProgress(null);
+        return;
+      }
+
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'progress') {
+                setRefreshProgress(prev => prev ? {
+                  ...prev,
+                  total: data.total ?? prev.total,
+                  current: (data.succeeded ?? 0) + (data.failed ?? 0),
+                  succeeded: data.succeeded ?? prev.succeeded,
+                  failed: data.failed ?? prev.failed,
+                  errors: data.errors ?? prev.errors,
+                  phase: data.phase ?? prev.phase,
+                  currentKeyword: data.currentKeyword
+                } : null);
+              } else if (data.type === 'complete') {
+                setRefreshProgress(prev => prev ? {
+                  ...prev,
+                  total: data.total ?? prev.total,
+                  current: data.total ?? prev.total,
+                  succeeded: data.succeeded ?? prev.succeeded,
+                  failed: data.failed ?? prev.failed,
+                  errors: data.errors ?? prev.errors,
+                  complete: true,
+                  phase: 'complete'
+                } : null);
+              } else if (data.type === 'error') {
+                setError(data.error || 'Unknown error during component refresh');
+                setRefreshProgress(prev => prev ? { ...prev, complete: true, phase: 'error' } : null);
+              }
+            } catch {
+              // Ignore malformed SSE data
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to refresh components on pages');
+      setRefreshProgress(prev => prev ? { ...prev, complete: true, phase: 'error' } : null);
     }
   };
 
@@ -724,6 +876,22 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
             );
           })}
 
+          {/* Refresh Components on All Pages */}
+          {settings.enabled && components.length > 0 && websiteId && (
+            <button
+              onClick={handleOpenRefreshModal}
+              disabled={refreshProgress?.active && !refreshProgress?.complete}
+              className="w-full py-2 bg-brand-cyan/20 hover:bg-brand-cyan/30 border border-brand-cyan/50 rounded-lg text-brand-cyan text-sm font-medium transition disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {refreshProgress?.active && !refreshProgress?.complete
+                ? `Refreshing... ${refreshProgress.current}/${refreshProgress.total}`
+                : 'Refresh Components on All Pages'}
+            </button>
+          )}
+
           {/* Messages */}
           {error && (
             <div className="p-2 bg-red-900/30 border border-red-500/50 rounded text-red-400 text-sm">
@@ -738,6 +906,139 @@ const ComponentLibrarySection: React.FC<ComponentLibraryProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* Refresh Components Confirmation Modal — React Portal (Golden Rule #7) */}
+      {showRefreshModal && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-xl p-6 w-full max-w-md border border-brand-cyan/30 shadow-2xl">
+            <h3 className="text-xl font-bold text-brand-cyan mb-4">Refresh Components on All Pages</h3>
+            <p className="text-gray-300 text-sm mb-3">
+              This will rebuild {publishedCount !== null ? publishedCount : '...'} published page{publishedCount !== 1 ? 's' : ''} with
+              updated component assignments from the current library.
+            </p>
+            <p className="text-gray-400 text-xs mb-4">
+              Page URLs will be preserved.
+            </p>
+
+            <label className="flex items-center gap-2 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={resetRotation}
+                onChange={(e) => setResetRotation(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-500 text-brand-cyan focus:ring-brand-cyan bg-slate-800"
+              />
+              <span className="text-sm text-white">Reset rotation (redistribute components evenly)</span>
+            </label>
+
+            <div className="bg-slate-800/50 rounded p-3 mb-4 border border-gray-700">
+              <p className="text-xs text-gray-400">
+                <strong className="text-gray-300">Note:</strong> If you only changed a template's content
+                (not which template is assigned), you don't need this — template changes appear automatically.
+              </p>
+            </div>
+
+            {publishedCount === 0 && (
+              <div className="p-2 bg-amber-900/30 border border-amber-500/50 rounded text-amber-400 text-xs mb-4">
+                No published pages to update.
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleBulkRefreshComponents}
+                disabled={publishedCount === 0}
+                className="flex-1 px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium transition disabled:opacity-50"
+              >
+                Refresh All Pages
+              </button>
+              <button
+                onClick={() => setShowRefreshModal(false)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-gray-300 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Component Refresh Progress Modal — React Portal (Golden Rule #7) */}
+      {refreshProgress?.active && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-xl w-full max-w-lg border border-brand-cyan/30 shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Component Refresh
+                </h3>
+                {refreshProgress.complete && (
+                  <button
+                    onClick={() => setRefreshProgress(null)}
+                    className="text-gray-400 hover:text-white text-xl"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+
+              <div className="mb-1 flex items-center justify-between text-sm">
+                <span className="text-gray-400">
+                  {refreshProgress.complete ? 'Complete' : `Rebuilding pages...`}
+                </span>
+                <span className="text-white font-medium">
+                  {refreshProgress.current} / {refreshProgress.total || '...'}
+                </span>
+              </div>
+
+              {refreshProgress.currentKeyword && !refreshProgress.complete && (
+                <p className="text-xs text-gray-500 mb-2 truncate">
+                  Current: {refreshProgress.currentKeyword}
+                </p>
+              )}
+
+              {/* Progress bar */}
+              <div className="w-full bg-slate-700 rounded-full h-3 mb-4">
+                <div
+                  className={`h-3 rounded-full transition-all duration-300 ${
+                    refreshProgress.complete
+                      ? refreshProgress.failed > 0 ? 'bg-amber-500' : 'bg-green-500'
+                      : 'bg-brand-cyan'
+                  }`}
+                  style={{ width: `${refreshProgress.total ? (refreshProgress.current / refreshProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+
+              {/* Results summary */}
+              {refreshProgress.complete && (
+                <div className="space-y-2">
+                  <div className="flex gap-4 text-sm">
+                    <span className="text-green-400">{refreshProgress.succeeded} succeeded</span>
+                    {refreshProgress.failed > 0 && (
+                      <span className="text-red-400">{refreshProgress.failed} failed</span>
+                    )}
+                  </div>
+
+                  {/* Error details — Golden Rule #9: never silently swallow errors */}
+                  {refreshProgress.errors.length > 0 && (
+                    <div className="mt-2 max-h-32 overflow-y-auto">
+                      {refreshProgress.errors.map((err, idx) => (
+                        <div key={idx} className="text-xs text-red-400 py-1 border-t border-slate-700">
+                          <span className="text-gray-400">{err.keyword}:</span> {err.error}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
