@@ -64,6 +64,8 @@ import { addBatchToDraftBank } from '../services/draft-image-bank.js';
 import githubLogger from '../services/github-logger.js';
 import { getImageBank } from '../services/image-bank.js';
 import { selectComponentsForArticle } from '../services/component-library-service.js';
+import { bulkRebuildPages } from '../services/page-rebuild-service.js';
+import { setupSSE } from '../services/sse-progress.js';
 
 const router = express.Router();
 
@@ -2924,6 +2926,99 @@ router.post('/bulk-update-cta', async (req, res) => {
   } catch (error) {
     console.error('[Bulk CTA] ❌ ERROR:', error.message);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
+// Bulk Component Re-assignment — Phase 4
+// Rebuilds all published pages with fresh component assignments
+// from the component library rotation system.
+// ============================================================
+router.post('/bulk-update-components', async (req, res) => {
+  try {
+    const { workflowId, websiteId, resetRotation, wpUrl, wpUser, wpPassword } = req.body;
+
+    if (!wpUrl || !wpUser || !wpPassword) {
+      return res.status(400).json({ error: 'WordPress credentials are required' });
+    }
+    if (!workflowId && !websiteId) {
+      return res.status(400).json({ error: 'workflowId or websiteId is required' });
+    }
+
+    // Validate WordPress credentials with a test request
+    const auth = Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
+    try {
+      const testUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages?per_page=1`;
+      const testRes = await fetch(testUrl, {
+        headers: { 'Authorization': `Basic ${auth}` }
+      });
+      if (!testRes.ok) {
+        return res.status(401).json({ error: `WordPress authentication failed: ${testRes.status}` });
+      }
+    } catch (connErr) {
+      return res.status(502).json({ error: `Cannot connect to WordPress: ${connErr.message}` });
+    }
+
+    // Set up SSE for streaming progress
+    const { sendProgress, sendComplete, sendError } = setupSSE(res);
+
+    // Fetch all published articles for this workflow/website
+    const conditions = [];
+    if (workflowId) conditions.push(sql`a.workflow_id = ${workflowId}`);
+    if (websiteId) conditions.push(sql`a.website_id = ${websiteId}`);
+
+    const whereClause = conditions.reduce((acc, cond, idx) => {
+      return idx === 0 ? cond : sql`${acc} AND ${cond}`;
+    });
+
+    const articles = await sql`
+      SELECT a.id, a.keyword, a.final_content, a.wp_post_id, a.generated_images, a.workflow_id
+      FROM articles a
+      WHERE a.wp_post_id IS NOT NULL
+        AND a.final_content IS NOT NULL
+        AND ${whereClause}
+    `;
+
+    if (articles.length === 0) {
+      sendComplete({ total: 0, succeeded: 0, failed: 0, errors: [], message: 'No published pages to update' });
+      return;
+    }
+
+    console.log(`[Bulk Components] Found ${articles.length} published articles to update`);
+    sendProgress({ total: articles.length, phase: 'starting', current: 0, succeeded: 0, failed: 0 });
+
+    const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
+    const effectiveWorkflowId = workflowId || articles[0].workflow_id;
+
+    // Use bulkRebuildPages — components: null forces re-selection via selectComponentsForArticle()
+    const results = await bulkRebuildPages(articles, wpCredentials, {
+      workflowId: effectiveWorkflowId,
+      resetRotation: !!resetRotation,
+      // components: null → forces fresh component re-selection
+      // images: null → re-uses existing generated_images (Golden Rule #1)
+      // ctaText/ctaUrl: null → keeps existing CTA
+    }, (progress) => {
+      sendProgress({
+        ...progress,
+        phase: 'rebuilding'
+      });
+    });
+
+    console.log(`[Bulk Components] Done: ${results.succeeded} succeeded, ${results.failed} failed out of ${results.total}`);
+    sendComplete(results);
+  } catch (error) {
+    console.error('[Bulk Components] ERROR:', error.message);
+    // If SSE headers already sent, try sendError; otherwise return JSON
+    if (res.headersSent) {
+      try {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+        res.end();
+      } catch (e) {
+        // Connection may be closed
+      }
+    } else {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
