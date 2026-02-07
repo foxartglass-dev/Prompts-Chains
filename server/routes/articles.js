@@ -6,6 +6,7 @@ import chunkContent from '../services/content-chunker.js';
 import buildElementorPage, { getElementorMetaFields } from '../services/elementor-builder.js';
 import { updatePage, getPage, createElementorPage, uploadMedia } from '../services/wordpress-publisher.js';
 import { processArticleWithImages } from '../services/image-pipeline.js';
+import { rebuildPage } from '../services/page-rebuild-service.js';
 
 /**
  * Select avatar for a given tag from the audience_avatars array.
@@ -672,136 +673,55 @@ router.post('/:articleId/push-images', requireDb, async (req, res) => {
     console.log('[Push Images] ⏭️ Skipped:', skippedCount);
     console.log('[Push Images] ❌ Failed:', failedCount);
 
-    // If article has a WP page, RE-CREATE it with images (same approach as Push All)
-    // WordPress/Elementor doesn't properly update _elementor_data via REST API,
-    // so we need to create a new page with the same slug
+    // If article has a WP page, RE-CREATE it with images using shared rebuild service
+    // WordPress/Elementor can't reliably update _elementor_data via REST API,
+    // so rebuild = delete old page → create new page with same slug
     let pageUpdated = false;
     let newPageResult = null;
     if (article.wp_post_id && article.final_content && updatedImages.length > 0) {
       try {
-        console.log('[Push Images] Re-creating page with images (same approach as Push All)...');
+        console.log('[Push Images] Re-creating page with images via rebuildPage()...');
         const wpCredentials = { url: wpUrl, user: wpUser, password: wpPassword };
 
-        // Step 1: Get the existing page's slug to preserve the URL
-        let existingSlug = null;
-        try {
-          const existingPage = await getPage(wpCredentials, article.wp_post_id);
-          existingSlug = existingPage.slug;
-          console.log('[Push Images] Existing page slug:', existingSlug);
-        } catch (getPageError) {
-          console.log('[Push Images] Could not get existing page, will generate new slug');
-        }
-
-        // Step 2: Chunk the content
-        const chunked = chunkContent(article.final_content, { maxWords: 300 });
-
-        // Step 3: Sort images by placement (hero first, then sections)
-        const sortedImages = [...updatedImages].sort((a, b) => {
-          if (a.placement === 'hero') return -1;
-          if (b.placement === 'hero') return 1;
-          const aNum = parseInt(a.placement?.replace('section-', '') || '99');
-          const bNum = parseInt(b.placement?.replace('section-', '') || '99');
-          return aNum - bNum;
-        });
-
-        // Step 4: Embed images into chunks (same as Push All does)
-        sortedImages.forEach((img, imgIdx) => {
-          const isHero = img.placement === 'hero';
-          const imageUrl = img.wpMediaUrl || img.url;
-
-          // Skip base64 images - they need to be uploaded first
-          if (imageUrl?.startsWith('data:')) {
-            console.log('[Push Images] Skipping base64 image:', img.id);
-            return;
-          }
-
-          const imageData = {
-            url: imageUrl,
-            wpUrl: img.wpMediaUrl || img.url,
-            wpMediaId: img.wpMediaId || null,
-            alt: img.prompt?.substring(0, 50) || 'Article image',
-            width: isHero ? 400 : 380,
-            height: isHero ? 500 : 475,
-            side: img.side || (isHero ? 'right' : 'left'),
-            orientation: 'vertical'
-          };
-
-          console.log('[Push Images] Embedding image:', {
-            placement: img.placement,
-            hasWpUrl: !!img.wpMediaUrl,
-            wpMediaId: img.wpMediaId
-          });
-
-          if (isHero && chunked.intro) {
-            chunked.intro.imageData = imageData;
-          } else {
-            const sectionMatch = img.placement?.match(/section-(\d+)/);
-            if (sectionMatch) {
-              const sectionIdx = parseInt(sectionMatch[1]) - 1;
-              if (chunked.chunks[sectionIdx]) {
-                chunked.chunks[sectionIdx].imageData = imageData;
-              }
-            }
-          }
-        });
-
-        // Step 5: Build new Elementor structure (same as Push All)
-        const elementorData = buildElementorPage(chunked, {
-          title: article.keyword || 'Article',
-          heroImageSide: sortedImages.find(i => i.placement === 'hero')?.side || 'right'
-        });
-
-        const elementorMeta = getElementorMetaFields(elementorData);
-
-        // Step 6: Delete the old page first (to free up the slug)
-        if (existingSlug) {
+        // Fetch template styles for rebuild
+        let templateStyles = null;
+        if (article.workflow_id) {
           try {
-            const deleteUrl = `${wpUrl.replace(/\/$/, '')}/wp-json/wp/v2/pages/${article.wp_post_id}?force=true`;
-            const auth = Buffer.from(`${wpUser}:${wpPassword}`).toString('base64');
-            const deleteRes = await fetch(deleteUrl, {
-              method: 'DELETE',
-              headers: { 'Authorization': `Basic ${auth}` }
-            });
-            if (deleteRes.ok) {
-              console.log('[Push Images] ✅ Deleted old page to free up slug');
-            } else {
-              console.log('[Push Images] Could not delete old page, will use different slug');
-              existingSlug = existingSlug + '-updated'; // Use modified slug
+            const [styleRecord] = await sql`
+              SELECT extracted_styles
+              FROM workflow_elementor_styles
+              WHERE workflow_id = ${article.workflow_id}
+                AND status = 'active'
+              LIMIT 1
+            `;
+            if (styleRecord?.extracted_styles) {
+              templateStyles = styleRecord.extracted_styles;
             }
-          } catch (deleteError) {
-            console.log('[Push Images] Delete failed, continuing with modified slug');
-            existingSlug = existingSlug + '-updated';
+          } catch (styleErr) {
+            console.warn('[Push Images] Could not fetch template styles:', styleErr.message);
           }
         }
 
-        // Step 7: Create NEW page with images (same as Push All's createElementorPage)
-        console.log('[Push Images] Creating new page with images...');
-        newPageResult = await createElementorPage(wpCredentials, {
-          title: article.keyword || 'Article',
-          slug: existingSlug,
-          elementorMeta,
-          status: 'draft'
+        // Re-read article from DB with updated images
+        const [freshArticle] = await sql`SELECT * FROM articles WHERE id = ${articleId}`;
+
+        const rebuildResult = await rebuildPage(freshArticle, wpCredentials, {
+          images: updatedImages,
+          templateStyles
         });
 
-        if (newPageResult.success) {
-          pageUpdated = true;
-          console.log('[Push Images] ✅ New page created with images!');
-          console.log('[Push Images] New page ID:', newPageResult.id);
-          console.log('[Push Images] New page URL:', newPageResult.link);
+        pageUpdated = true;
+        newPageResult = { id: rebuildResult.newPageId, link: null };
 
-          // Step 8: Update article with new page info
-          await sql`
-            UPDATE articles
-            SET wp_post_id = ${newPageResult.id},
-                wp_post_url = ${newPageResult.link},
-                wp_published_at = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${articleId}
-          `;
-          console.log('[Push Images] ✅ Article updated with new page info');
-        } else {
-          console.error('[Push Images] Failed to create new page');
+        // Fetch URL of the new page
+        try {
+          const newPage = await getPage(wpCredentials, rebuildResult.newPageId);
+          newPageResult.link = newPage.link;
+        } catch (linkErr) {
+          console.warn('[Push Images] Could not fetch new page URL:', linkErr.message);
         }
+
+        console.log('[Push Images] Page rebuilt via shared service, new page ID:', rebuildResult.newPageId);
       } catch (updateError) {
         console.error('[Push Images] Error re-creating page:', updateError.message);
       }
