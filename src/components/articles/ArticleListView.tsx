@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import ElementorPreview from './ElementorPreview';
 
 interface ArticleImage {
@@ -146,6 +147,22 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const [updatingCta, setUpdatingCta] = useState(false);
   const [showCtaConfirm, setShowCtaConfirm] = useState(false);
 
+  // Post-publish image generation state
+  const [generatingImages, setGeneratingImages] = useState(false);
+  const [regeneratingAllImages, setRegeneratingAllImages] = useState(false);
+  const [showBulkImageMenu, setShowBulkImageMenu] = useState(false);
+  const [bulkImageProgress, setBulkImageProgress] = useState<{
+    active: boolean;
+    mode: string;
+    total: number;
+    current: number;
+    succeeded: number;
+    failed: number;
+    currentKeyword: string;
+    errors: string[];
+    complete: boolean;
+  } | null>(null);
+
   useEffect(() => {
     fetchArticles();
   }, [websiteId, statusFilter]);
@@ -156,6 +173,14 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       fetchArticleDetails(openArticleId);
     }
   }, [openArticleId]);
+
+  // Close bulk image menu when clicking outside
+  useEffect(() => {
+    if (!showBulkImageMenu) return;
+    const handler = () => setShowBulkImageMenu(false);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [showBulkImageMenu]);
 
   const fetchArticles = async () => {
     setLoading(true);
@@ -898,6 +923,182 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     }
   };
 
+  // Generate images for an article that has no images yet
+  const generateImagesForArticle = async () => {
+    if (!selectedArticle) return;
+
+    setGeneratingImages(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/articles/${selectedArticle.id}/generate-images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflowId: selectedArticle.workflow_id
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await fetchArticleDetails(selectedArticle.id);
+        await fetchArticles();
+      } else {
+        setError(data.error || 'Failed to generate images');
+      }
+    } catch (err) {
+      setError('Failed to generate images');
+    } finally {
+      setGeneratingImages(false);
+    }
+  };
+
+  // Regenerate ALL images for an article (replace entire set)
+  const regenerateAllImages = async () => {
+    if (!selectedArticle) return;
+
+    setRegeneratingAllImages(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/articles/${selectedArticle.id}/regenerate-all-images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflowId: selectedArticle.workflow_id
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await fetchArticleDetails(selectedArticle.id);
+        await fetchArticles();
+      } else {
+        setError(data.error || 'Failed to regenerate all images');
+      }
+    } catch (err) {
+      setError('Failed to regenerate all images');
+    } finally {
+      setRegeneratingAllImages(false);
+    }
+  };
+
+  // Bulk generate images for multiple articles via SSE
+  const bulkGenerateImages = async (mode: 'missing' | 'all') => {
+    setShowBulkImageMenu(false);
+    setBulkImageProgress({
+      active: true,
+      mode,
+      total: 0,
+      current: 0,
+      succeeded: 0,
+      failed: 0,
+      currentKeyword: '',
+      errors: [],
+      complete: false
+    });
+
+    try {
+      const body: Record<string, any> = { mode };
+      if (websiteId) {
+        body.websiteId = websiteId;
+      } else if (selectedIds.size > 0) {
+        body.articleIds = Array.from(selectedIds);
+      } else {
+        // Use the first article's workflow ID as fallback
+        const firstArticle = articles[0];
+        if (firstArticle?.workflow_id) {
+          body.workflowId = firstArticle.workflow_id;
+        }
+      }
+
+      const res = await fetch('/api/articles/bulk-generate-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE events from buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === 'start') {
+                setBulkImageProgress(prev => prev ? { ...prev, total: data.total } : null);
+              } else if (data.type === 'progress') {
+                setBulkImageProgress(prev => prev ? {
+                  ...prev,
+                  current: data.current,
+                  currentKeyword: data.keyword || '',
+                  succeeded: data.succeeded,
+                  failed: data.failed
+                } : null);
+              } else if (data.type === 'article_complete') {
+                setBulkImageProgress(prev => prev ? {
+                  ...prev,
+                  current: data.current,
+                  succeeded: data.succeeded,
+                  failed: data.failed
+                } : null);
+              } else if (data.type === 'article_error') {
+                setBulkImageProgress(prev => prev ? {
+                  ...prev,
+                  current: data.current,
+                  succeeded: data.succeeded,
+                  failed: data.failed,
+                  errors: [...prev.errors, `${data.keyword}: ${data.error}`]
+                } : null);
+              } else if (data.type === 'complete') {
+                setBulkImageProgress(prev => prev ? {
+                  ...prev,
+                  total: data.total,
+                  succeeded: data.succeeded,
+                  failed: data.failed,
+                  errors: data.errors || prev.errors,
+                  complete: true
+                } : null);
+              } else if (data.type === 'error') {
+                setBulkImageProgress(prev => prev ? {
+                  ...prev,
+                  errors: [...prev.errors, data.message],
+                  complete: true
+                } : null);
+              }
+            } catch (parseErr) {
+              // Skip malformed SSE data
+            }
+          }
+        }
+      }
+
+      // Refresh articles list after bulk operation
+      await fetchArticles();
+
+    } catch (err: any) {
+      setBulkImageProgress(prev => prev ? {
+        ...prev,
+        errors: [...prev.errors, err.message || 'Bulk operation failed'],
+        complete: true
+      } : null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -939,19 +1140,59 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
         </select>
       </div>
 
-      {/* Update CTA Button - website-level action */}
-      {websiteId && articles.some(a => a.wp_post_id) && (
-        <div className="flex items-center gap-3 mb-2">
-          <button
-            onClick={() => setShowCtaConfirm(true)}
-            disabled={updatingCta}
-            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-sm font-medium transition disabled:opacity-50 flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            {updatingCta ? 'Updating CTA...' : `Update CTA on Published Pages (${articles.filter(a => a.wp_post_id).length})`}
-          </button>
+      {/* Action Buttons Row - CTA update + Bulk Image Actions */}
+      {websiteId && articles.length > 0 && (
+        <div className="flex items-center gap-3 mb-2 flex-wrap">
+          {articles.some(a => a.wp_post_id) && (
+            <button
+              onClick={() => setShowCtaConfirm(true)}
+              disabled={updatingCta}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-sm font-medium transition disabled:opacity-50 flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {updatingCta ? 'Updating CTA...' : `Update CTA on Published Pages (${articles.filter(a => a.wp_post_id).length})`}
+            </button>
+          )}
+
+          {/* Bulk Image Actions Dropdown */}
+          <div className="relative">
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowBulkImageMenu(!showBulkImageMenu); }}
+              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded text-white text-sm font-medium transition flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Bulk Image Actions
+              <svg className={`w-3 h-3 transition-transform ${showBulkImageMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showBulkImageMenu && (
+              <div className="absolute top-full left-0 mt-1 w-72 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 overflow-hidden">
+                <button
+                  onClick={() => bulkGenerateImages('missing')}
+                  className="w-full text-left px-4 py-3 hover:bg-slate-700 transition border-b border-slate-700"
+                >
+                  <div className="text-sm font-medium text-green-400">Generate Missing Images</div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    Articles without images ({articles.filter(a => a.final_content && (!a.generated_images || (Array.isArray(a.generated_images) && a.generated_images.length === 0))).length} articles)
+                  </div>
+                </button>
+                <button
+                  onClick={() => bulkGenerateImages('all')}
+                  className="w-full text-left px-4 py-3 hover:bg-slate-700 transition"
+                >
+                  <div className="text-sm font-medium text-amber-400">Regenerate All Images</div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    Replace images on all articles ({articles.filter(a => a.final_content).length} articles)
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1773,6 +2014,58 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                         <span className="ml-2 text-sm text-gray-400">({selectedArticle.images.length} images)</span>
                       )}
                     </h4>
+                    <div className="flex items-center gap-2">
+                      {/* Generate Images — only when article has NO images but HAS content */}
+                      {(!selectedArticle.images || selectedArticle.images.length === 0) && selectedArticle.final_content && (
+                        <button
+                          onClick={generateImagesForArticle}
+                          disabled={generatingImages}
+                          className="px-3 py-1.5 bg-green-600 hover:bg-green-500 rounded text-white text-xs font-medium transition disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                          {generatingImages ? (
+                            <>
+                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                              </svg>
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                              </svg>
+                              Generate Images
+                            </>
+                          )}
+                        </button>
+                      )}
+                      {/* Regenerate All Images — only when article HAS images */}
+                      {selectedArticle.images && selectedArticle.images.length > 0 && (
+                        <button
+                          onClick={regenerateAllImages}
+                          disabled={regeneratingAllImages}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded text-white text-xs font-medium transition disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                          {regeneratingAllImages ? (
+                            <>
+                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                              </svg>
+                              Regenerating All...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              Regenerate All
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Collapsible Image Integration Settings */}
@@ -1900,7 +2193,32 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                       <p className="text-lg">No images generated yet</p>
-                      <p className="text-sm mt-1">Generate images from the Image Creation section</p>
+                      {selectedArticle.final_content ? (
+                        <button
+                          onClick={generateImagesForArticle}
+                          disabled={generatingImages}
+                          className="mt-4 px-6 py-2.5 bg-green-600 hover:bg-green-500 rounded-lg text-white font-medium transition disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {generatingImages ? (
+                            <>
+                              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                              </svg>
+                              Generating Images...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                              </svg>
+                              Generate Images Now
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <p className="text-sm mt-1">Article needs content before images can be generated</p>
+                      )}
                     </div>
                   )}
 
@@ -2279,6 +2597,115 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bulk Image Progress Modal — React Portal (Golden Rule #7) */}
+      {bulkImageProgress?.active && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-xl w-full max-w-lg border border-purple-500/30 shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Bulk Image Generation
+                </h3>
+                {bulkImageProgress.complete && (
+                  <button
+                    onClick={() => setBulkImageProgress(null)}
+                    className="text-gray-400 hover:text-white text-xl"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+
+              <div className="mb-1 flex items-center justify-between text-sm">
+                <span className="text-gray-400">
+                  {bulkImageProgress.mode === 'missing' ? 'Generating missing images' : 'Regenerating all images'}
+                </span>
+                <span className="text-white font-medium">
+                  {bulkImageProgress.current} / {bulkImageProgress.total}
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-slate-700 rounded-full h-3 mb-4">
+                <div
+                  className={`h-3 rounded-full transition-all duration-300 ${
+                    bulkImageProgress.complete
+                      ? bulkImageProgress.failed > 0 ? 'bg-amber-500' : 'bg-green-500'
+                      : 'bg-purple-500'
+                  }`}
+                  style={{ width: `${bulkImageProgress.total > 0 ? (bulkImageProgress.current / bulkImageProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+
+              {/* Current article being processed */}
+              {!bulkImageProgress.complete && bulkImageProgress.currentKeyword && (
+                <div className="mb-4 flex items-center gap-2 text-sm">
+                  <svg className="w-4 h-4 animate-spin text-purple-400" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                  <span className="text-gray-300 truncate">{bulkImageProgress.currentKeyword}</span>
+                </div>
+              )}
+
+              {/* Stats */}
+              <div className="flex gap-4 mb-4">
+                <div className="flex items-center gap-1.5 text-sm">
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                  <span className="text-green-400">{bulkImageProgress.succeeded} succeeded</span>
+                </div>
+                {bulkImageProgress.failed > 0 && (
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                    <span className="text-red-400">{bulkImageProgress.failed} failed</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Error log */}
+              {bulkImageProgress.errors.length > 0 && (
+                <div className="max-h-32 overflow-auto bg-red-900/20 border border-red-500/30 rounded-lg p-3 mb-4">
+                  <div className="text-xs text-red-400 font-medium mb-1">Errors:</div>
+                  {bulkImageProgress.errors.map((err, i) => (
+                    <div key={i} className="text-xs text-red-300 py-0.5">{err}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Complete message */}
+              {bulkImageProgress.complete && (
+                <div className={`text-center py-2 rounded-lg text-sm font-medium ${
+                  bulkImageProgress.failed === 0
+                    ? 'bg-green-600/20 text-green-400'
+                    : 'bg-amber-600/20 text-amber-400'
+                }`}>
+                  {bulkImageProgress.failed === 0
+                    ? `All ${bulkImageProgress.succeeded} articles processed successfully!`
+                    : `Done: ${bulkImageProgress.succeeded} succeeded, ${bulkImageProgress.failed} failed`
+                  }
+                </div>
+              )}
+
+              {/* Close button when complete */}
+              {bulkImageProgress.complete && (
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={() => setBulkImageProgress(null)}
+                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm font-medium transition"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
