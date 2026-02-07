@@ -2,7 +2,7 @@
 
 **Priority:** HIGH
 **Date:** 2026-02-07 (revised)
-**Status:** Phase 1 COMPLETE. Phases 2-5 pending.
+**Status:** Phase 1 COMPLETE. Phases 2-6 pending.
 
 ---
 
@@ -19,12 +19,17 @@ Once articles are published to WordPress, everything is frozen. Users can't upda
 | **3** | [PRD-phase-3-content-push.md](PRD-phase-3-content-push.md) | Push updated content to existing pages (single + bulk + batch) | Phase 2 |
 | **4** | [PRD-phase-4-component-ops.md](PRD-phase-4-component-ops.md) | Bulk component re-assignment on existing pages | Phase 2 |
 | **5** | [PRD-phase-5-full-rebuild.md](PRD-phase-5-full-rebuild.md) | "Nuclear option" full rebuild + refactor existing endpoints | Phases 2-4 |
+| **6** | [PRD-phase-6-surgical-editing.md](PRD-phase-6-surgical-editing.md) | Surgical editing of pages we didn't create (in-place text/image swaps) | Phase 2 (loosely) |
 
 **Each phase is a self-contained document.** Copy-paste the phase document to an agent and they have everything they need — architecture context, function names, file locations, golden rules, validation steps.
 
 **Context budget:** Each phase designed to complete under 40% context window.
 
-**Phase 3 and 4 are independent** — they can run in parallel if desired (both only depend on Phase 2). Phase 5 requires all previous phases.
+**Phase 3, 4, and 6 are independent** — they all only depend on Phase 2, so they can run in parallel if desired. Phase 5 requires Phases 2-4. Phase 6 can run anytime after Phase 2.
+
+**Two editing approaches in this system:**
+- **Phases 2-5 (Rebuild):** Delete page, recreate from scratch. For pages WE built with PromptFlow.
+- **Phase 6 (Surgical Edit):** Modify widget values in-place via REST API. For pages we DIDN'T build, or pages where external edits must be preserved. Changes text and images only — cannot alter page structure/layout.
 
 ## What Phase 1 Delivered (Already Complete)
 
