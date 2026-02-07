@@ -56,6 +56,7 @@ interface Article {
   wp_post_url: string | null;
   created_at: string;
   updated_at: string;
+  wp_published_at?: string | null;
   workflow_name?: string;
   website_name?: string;
   client_name?: string;
@@ -131,6 +132,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const [pushingImages, setPushingImages] = useState(false);
   const [pushingMeta, setPushingMeta] = useState(false);
   const [pushingArticle, setPushingArticle] = useState(false);
+  const [pushingContent, setPushingContent] = useState(false);
   const [regeneratingImage, setRegeneratingImage] = useState<string | null>(null);
 
   // Bulk selection state
@@ -151,6 +153,18 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   const [generatingImages, setGeneratingImages] = useState(false);
   const [regeneratingAllImages, setRegeneratingAllImages] = useState(false);
   const [showBulkImageMenu, setShowBulkImageMenu] = useState(false);
+  const [showBulkContentMenu, setShowBulkContentMenu] = useState(false);
+  const [bulkContentProgress, setBulkContentProgress] = useState<{
+    active: boolean;
+    mode: string;
+    total: number;
+    current: number;
+    succeeded: number;
+    failed: number;
+    currentKeyword: string;
+    errors: string[];
+    complete: boolean;
+  } | null>(null);
   const [bulkImageProgress, setBulkImageProgress] = useState<{
     active: boolean;
     mode: string;
@@ -1099,6 +1113,145 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     }
   };
 
+  // Push updated content to an existing WordPress page (Phase 3C)
+  const pushContentToPage = async () => {
+    if (!selectedArticle) return;
+
+    if (!selectedArticle.wp_post_id) {
+      setError('Article not published yet — no WordPress page to update');
+      return;
+    }
+    if (!selectedArticle.final_content) {
+      setError('Article has no content');
+      return;
+    }
+
+    setPushingContent(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/articles/${selectedArticle.id}/push-content`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wpUrl: selectedArticle.wp_url,
+          wpUser: selectedArticle.wp_user,
+          wpPassword: selectedArticle.wp_app_password
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await fetchArticleDetails(selectedArticle.id);
+        await fetchArticles();
+      } else {
+        setError(data.error || 'Failed to push content');
+      }
+    } catch (err) {
+      setError('Failed to push content to WordPress');
+    } finally {
+      setPushingContent(false);
+    }
+  };
+
+  // Bulk push updated content to existing WordPress pages (Phase 3D)
+  const bulkPushContent = async (mode: 'changed' | 'all') => {
+    setShowBulkContentMenu(false);
+    setBulkContentProgress({
+      active: true,
+      mode,
+      total: 0,
+      current: 0,
+      succeeded: 0,
+      failed: 0,
+      currentKeyword: '',
+      errors: [],
+      complete: false
+    });
+
+    try {
+      const body: Record<string, any> = { mode };
+      if (websiteId) {
+        body.websiteId = websiteId;
+      } else {
+        const firstArticle = articles[0];
+        if (firstArticle?.workflow_id) {
+          body.workflowId = firstArticle.workflow_id;
+        }
+      }
+
+      const res = await fetch('/api/articles/bulk-push-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === 'progress') {
+                setBulkContentProgress(prev => prev ? {
+                  ...prev,
+                  total: data.total,
+                  current: data.current,
+                  succeeded: data.succeeded,
+                  failed: data.failed,
+                  currentKeyword: data.currentKeyword || '',
+                  errors: data.errors || prev.errors
+                } : null);
+              } else if (data.type === 'complete') {
+                setBulkContentProgress(prev => prev ? {
+                  ...prev,
+                  total: data.total,
+                  succeeded: data.succeeded,
+                  failed: data.failed,
+                  errors: data.errors || prev.errors,
+                  complete: true
+                } : null);
+              } else if (data.type === 'error') {
+                setBulkContentProgress(prev => prev ? {
+                  ...prev,
+                  errors: [...prev.errors, data.error],
+                  complete: true
+                } : null);
+              }
+            } catch (parseErr) {
+              // Skip malformed SSE data
+            }
+          }
+        }
+      }
+
+      // Refresh articles list after bulk operation
+      await fetchArticles();
+
+    } catch (err: any) {
+      setBulkContentProgress(prev => prev ? {
+        ...prev,
+        errors: [...prev.errors, err.message || 'Bulk content push failed'],
+        complete: true
+      } : null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -1193,6 +1346,46 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
               </div>
             )}
           </div>
+
+          {/* Bulk Content Push Dropdown (Phase 3D) */}
+          {articles.some(a => a.wp_post_id && a.final_content) && (
+            <div className="relative">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowBulkContentMenu(!showBulkContentMenu); }}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white text-sm font-medium transition flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Push Content to Pages
+                <svg className={`w-3 h-3 transition-transform ${showBulkContentMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showBulkContentMenu && (
+                <div className="absolute top-full left-0 mt-1 w-72 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 overflow-hidden">
+                  <button
+                    onClick={() => bulkPushContent('changed')}
+                    className="w-full text-left px-4 py-3 hover:bg-slate-700 transition border-b border-slate-700"
+                  >
+                    <div className="text-sm font-medium text-blue-400">Push Updated Content</div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      Articles changed since last push ({articles.filter(a => a.wp_post_id && a.final_content && (!a.wp_published_at || new Date(a.updated_at) > new Date(a.wp_published_at))).length} changed)
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => bulkPushContent('all')}
+                    className="w-full text-left px-4 py-3 hover:bg-slate-700 transition"
+                  >
+                    <div className="text-sm font-medium text-amber-400">Push All Content</div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      Rebuild all published pages ({articles.filter(a => a.wp_post_id && a.final_content).length} articles)
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1841,6 +2034,34 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       </button>
                     );
                   })()}
+                </div>
+
+                {/* Content to WP (Phase 3C) */}
+                <div className="relative group">
+                  <button
+                    onClick={pushContentToPage}
+                    disabled={pushingContent || !selectedArticle.wp_post_id || !selectedArticle.final_content}
+                    className={`px-3 py-1.5 rounded text-xs font-medium transition flex items-center gap-1.5 ${
+                      !selectedArticle.wp_post_id || !selectedArticle.final_content
+                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed opacity-60'
+                        : 'bg-blue-600 hover:bg-blue-500 text-white'
+                    }`}
+                    title={
+                      !selectedArticle.final_content
+                        ? 'Article has no content'
+                        : !selectedArticle.wp_post_id
+                          ? 'Push article to WP first'
+                          : 'Push updated content to existing WordPress page'
+                    }
+                  >
+                    {pushingContent ? (
+                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                      </svg>
+                    ) : '↑'}
+                    Content
+                  </button>
                 </div>
               </div>
 
@@ -2696,6 +2917,115 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                 <div className="mt-4 flex justify-end">
                   <button
                     onClick={() => setBulkImageProgress(null)}
+                    className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm font-medium transition"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Bulk Content Push Progress Modal — React Portal (Golden Rule #7) */}
+      {bulkContentProgress?.active && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-xl w-full max-w-lg border border-blue-500/30 shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Bulk Content Push
+                </h3>
+                {bulkContentProgress.complete && (
+                  <button
+                    onClick={() => setBulkContentProgress(null)}
+                    className="text-gray-400 hover:text-white text-xl"
+                  >
+                    &times;
+                  </button>
+                )}
+              </div>
+
+              <div className="mb-1 flex items-center justify-between text-sm">
+                <span className="text-gray-400">
+                  {bulkContentProgress.mode === 'changed' ? 'Pushing updated content' : 'Pushing all content'}
+                </span>
+                <span className="text-white font-medium">
+                  {bulkContentProgress.current} / {bulkContentProgress.total}
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-slate-700 rounded-full h-3 mb-4">
+                <div
+                  className={`h-3 rounded-full transition-all duration-300 ${
+                    bulkContentProgress.complete
+                      ? bulkContentProgress.failed > 0 ? 'bg-amber-500' : 'bg-green-500'
+                      : 'bg-blue-500'
+                  }`}
+                  style={{ width: `${bulkContentProgress.total > 0 ? (bulkContentProgress.current / bulkContentProgress.total) * 100 : 0}%` }}
+                />
+              </div>
+
+              {/* Current article being processed */}
+              {!bulkContentProgress.complete && bulkContentProgress.currentKeyword && (
+                <div className="mb-4 flex items-center gap-2 text-sm">
+                  <svg className="w-4 h-4 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                  <span className="text-gray-300 truncate">{bulkContentProgress.currentKeyword}</span>
+                </div>
+              )}
+
+              {/* Stats */}
+              <div className="flex gap-4 mb-4">
+                <div className="flex items-center gap-1.5 text-sm">
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                  <span className="text-green-400">{bulkContentProgress.succeeded} succeeded</span>
+                </div>
+                {bulkContentProgress.failed > 0 && (
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                    <span className="text-red-400">{bulkContentProgress.failed} failed</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Error log (Golden Rule #9: never silently swallow errors) */}
+              {bulkContentProgress.errors.length > 0 && (
+                <div className="max-h-32 overflow-auto bg-red-900/20 border border-red-500/30 rounded-lg p-3 mb-4">
+                  <div className="text-xs text-red-400 font-medium mb-1">Errors:</div>
+                  {bulkContentProgress.errors.map((err, i) => (
+                    <div key={i} className="text-xs text-red-300 py-0.5">{err}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Complete message */}
+              {bulkContentProgress.complete && (
+                <div className={`text-center py-2 rounded-lg text-sm font-medium ${
+                  bulkContentProgress.failed === 0
+                    ? 'bg-green-600/20 text-green-400'
+                    : 'bg-amber-600/20 text-amber-400'
+                }`}>
+                  {bulkContentProgress.failed === 0
+                    ? `All ${bulkContentProgress.succeeded} pages rebuilt successfully!`
+                    : `Done: ${bulkContentProgress.succeeded} succeeded, ${bulkContentProgress.failed} failed`
+                  }
+                </div>
+              )}
+
+              {/* Close button when complete */}
+              {bulkContentProgress.complete && (
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={() => setBulkContentProgress(null)}
                     className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm font-medium transition"
                   >
                     Close

@@ -6,6 +6,8 @@ import chunkContent from '../services/content-chunker.js';
 import buildElementorPage, { getElementorMetaFields } from '../services/elementor-builder.js';
 import { updatePage, getPage, createElementorPage, uploadMedia } from '../services/wordpress-publisher.js';
 import { processArticleWithImages } from '../services/image-pipeline.js';
+import { rebuildPage, bulkRebuildPages } from '../services/page-rebuild-service.js';
+import { setupSSE } from '../services/sse-progress.js';
 
 /**
  * Select avatar for a given tag from the audience_avatars array.
@@ -1533,6 +1535,267 @@ router.post('/:articleId/push-meta', requireDb, async (req, res) => {
   } catch (error) {
     console.error('[Push Meta] Error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// POST push updated content to an existing WordPress page
+// Phase 3A: Single article content push — re-uses existing images, rebuilds page with new text
+router.post('/:articleId/push-content', requireDb, async (req, res) => {
+  try {
+    const { articleId } = req.params;
+    const { wpUrl, wpUser, wpPassword } = req.body;
+
+    console.log('[Push Content] ========== STARTING ==========');
+    console.log('[Push Content] Article ID:', articleId);
+
+    // Fetch article with website credentials (same pattern as publish-article in elementor.js:2291-2312)
+    const articles = await sql`
+      SELECT a.*,
+             ws.wp_url as website_wp_url,
+             ws.wp_user as website_wp_user,
+             ws.wp_app_password as website_wp_password
+      FROM articles a
+      LEFT JOIN websites ws ON a.website_id = ws.id
+      WHERE a.id = ${articleId}
+    `;
+
+    if (articles.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    const article = articles[0];
+
+    // Validate article has a published page
+    if (!article.wp_post_id) {
+      return res.status(400).json({ error: 'Article not published yet — no WordPress page to update' });
+    }
+
+    // Validate article has content
+    if (!article.final_content) {
+      return res.status(400).json({ error: 'Article has no content' });
+    }
+
+    // Use provided credentials or fall back to website credentials
+    const wpCredentials = {
+      url: wpUrl || article.website_wp_url,
+      user: wpUser || article.website_wp_user,
+      password: wpPassword || article.website_wp_password
+    };
+
+    if (!wpCredentials.url || !wpCredentials.user || !wpCredentials.password) {
+      return res.status(400).json({
+        error: 'WordPress credentials required. Either provide them in the request or configure them on the website.'
+      });
+    }
+
+    // Fetch workflow template styles (same pattern as elementor.js:2326-2345)
+    let templateStyles = null;
+    if (article.workflow_id) {
+      try {
+        const [styleRecord] = await sql`
+          SELECT extracted_styles
+          FROM workflow_elementor_styles
+          WHERE workflow_id = ${article.workflow_id}
+            AND status = 'active'
+          LIMIT 1
+        `;
+        if (styleRecord?.extracted_styles) {
+          templateStyles = styleRecord.extracted_styles;
+          console.log(`[Push Content] Using template styles from workflow ${article.workflow_id}`);
+        }
+      } catch (styleErr) {
+        console.error('[Push Content] Failed to fetch template styles:', styleErr.message);
+      }
+    }
+
+    // Call rebuildPage — images: null means re-use existing generated_images (Golden Rule #1)
+    const result = await rebuildPage(article, wpCredentials, {
+      images: null,
+      templateStyles
+    });
+
+    console.log('[Push Content] ========== COMPLETE ==========');
+    console.log('[Push Content] Old page:', result.oldPageId, '→ New page:', result.newPageId);
+
+    res.json({
+      success: true,
+      newPageId: result.newPageId,
+      slug: result.slug,
+      message: `Content pushed to WordPress. Page rebuilt with slug "${result.slug}".`
+    });
+
+  } catch (error) {
+    console.error('[Push Content] ERROR:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST bulk push updated content to existing WordPress pages
+// Phase 3B: Bulk content push with SSE progress streaming
+router.post('/bulk-push-content', requireDb, async (req, res) => {
+  try {
+    const { workflowId, websiteId, mode = 'changed' } = req.body;
+    // mode: 'changed' = only articles where updated_at > wp_published_at
+    // mode: 'all' = all articles with wp_post_id
+
+    if (!workflowId && !websiteId) {
+      return res.status(400).json({ error: 'Must provide workflowId or websiteId' });
+    }
+
+    console.log(`[Bulk Push Content] mode=${mode}, workflowId=${workflowId}, websiteId=${websiteId}`);
+
+    // Set up SSE for progress reporting
+    const { sendProgress, sendComplete, sendError } = setupSSE(res);
+
+    // Fetch website credentials
+    let wpCredentials = null;
+    const effectiveWebsiteId = websiteId || null;
+
+    if (effectiveWebsiteId) {
+      const [website] = await sql`
+        SELECT wp_url, wp_user, wp_app_password
+        FROM websites
+        WHERE id = ${effectiveWebsiteId}
+      `;
+      if (website?.wp_url) {
+        wpCredentials = {
+          url: website.wp_url,
+          user: website.wp_user,
+          password: website.wp_app_password
+        };
+      }
+    }
+
+    // If no website-level credentials, try to get from workflow's website
+    if (!wpCredentials && workflowId) {
+      const [workflow] = await sql`
+        SELECT w.website_id, ws.wp_url, ws.wp_user, ws.wp_app_password
+        FROM workflows w
+        LEFT JOIN websites ws ON w.website_id = ws.id
+        WHERE w.id = ${workflowId}
+      `;
+      if (workflow?.wp_url) {
+        wpCredentials = {
+          url: workflow.wp_url,
+          user: workflow.wp_user,
+          password: workflow.wp_app_password
+        };
+      }
+    }
+
+    if (!wpCredentials) {
+      sendError({ message: 'No WordPress credentials found for this website/workflow' });
+      return;
+    }
+
+    // Fetch matching articles
+    let articles;
+    if (mode === 'changed') {
+      // Only articles that have been updated since last push to WordPress
+      if (workflowId) {
+        articles = await sql`
+          SELECT * FROM articles
+          WHERE workflow_id = ${workflowId}
+            AND wp_post_id IS NOT NULL
+            AND final_content IS NOT NULL
+            AND (wp_published_at IS NULL OR updated_at > wp_published_at)
+          ORDER BY created_at ASC
+        `;
+      } else {
+        articles = await sql`
+          SELECT * FROM articles
+          WHERE website_id = ${websiteId}
+            AND wp_post_id IS NOT NULL
+            AND final_content IS NOT NULL
+            AND (wp_published_at IS NULL OR updated_at > wp_published_at)
+          ORDER BY created_at ASC
+        `;
+      }
+    } else {
+      // All articles with wp_post_id
+      if (workflowId) {
+        articles = await sql`
+          SELECT * FROM articles
+          WHERE workflow_id = ${workflowId}
+            AND wp_post_id IS NOT NULL
+            AND final_content IS NOT NULL
+          ORDER BY created_at ASC
+        `;
+      } else {
+        articles = await sql`
+          SELECT * FROM articles
+          WHERE website_id = ${websiteId}
+            AND wp_post_id IS NOT NULL
+            AND final_content IS NOT NULL
+          ORDER BY created_at ASC
+        `;
+      }
+    }
+
+    if (!articles || articles.length === 0) {
+      sendComplete({ total: 0, succeeded: 0, failed: 0, message: 'No articles found matching criteria' });
+      return;
+    }
+
+    // Fetch template styles for the workflow
+    let templateStyles = null;
+    const effectiveWorkflowId = workflowId || articles[0]?.workflow_id;
+    if (effectiveWorkflowId) {
+      try {
+        const [styleRecord] = await sql`
+          SELECT extracted_styles
+          FROM workflow_elementor_styles
+          WHERE workflow_id = ${effectiveWorkflowId}
+            AND status = 'active'
+          LIMIT 1
+        `;
+        if (styleRecord?.extracted_styles) {
+          templateStyles = styleRecord.extracted_styles;
+          console.log(`[Bulk Push Content] Using template styles from workflow ${effectiveWorkflowId}`);
+        }
+      } catch (styleErr) {
+        console.error('[Bulk Push Content] Failed to fetch template styles:', styleErr.message);
+      }
+    }
+
+    // Send initial count
+    sendProgress({ total: articles.length, current: 0, succeeded: 0, failed: 0 });
+
+    // Call bulkRebuildPages — images: null re-uses existing generated_images (Golden Rule #1)
+    const results = await bulkRebuildPages(articles, wpCredentials, {
+      images: null,
+      templateStyles
+    }, (progress) => {
+      sendProgress({
+        total: progress.total,
+        current: progress.succeeded + progress.failed,
+        succeeded: progress.succeeded,
+        failed: progress.failed,
+        currentKeyword: progress.currentKeyword,
+        errors: progress.errors?.map(e => `${e.keyword}: ${e.error}`) || []
+      });
+    });
+
+    sendComplete({
+      total: results.total,
+      succeeded: results.succeeded,
+      failed: results.failed,
+      errors: results.errors.map(e => `${e.keyword}: ${e.error}`)
+    });
+
+  } catch (error) {
+    console.error('[Bulk Push Content] ERROR:', error);
+    // If headers already sent (SSE started), try to send error event
+    if (res.headersSent) {
+      try {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+        res.end();
+      } catch (writeErr) {
+        // Connection already closed
+      }
+    } else {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 

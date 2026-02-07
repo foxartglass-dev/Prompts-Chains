@@ -604,6 +604,8 @@ const App: React.FC = () => {
                   wpPublishMode: 'draft',
                   articlePublishMode: 'draft',
                   metaPublishMode: 'draft',
+                  pushContentAfterBatch: false,
+                  regenImagesAfterBatch: false,
                 })
               });
               setHasUnsavedChanges(false);
@@ -1684,6 +1686,56 @@ const App: React.FC = () => {
                             } else {
                                 addLog(`[${itemLabel}] Skipping auto-publish: WordPress credentials not configured.`, LogStatus.ERROR, item.id);
                             }
+                        }
+                    }
+
+                    // Phase 3E: Post-batch content push hooks
+                    // If "Push to existing WP pages" is checked and article has an existing page
+                    if (currentProject.state.pushContentAfterBatch && savedArticleId) {
+                        try {
+                            // Check if article has an existing WP page
+                            const articleCheckRes = await fetch(`/api/articles/${savedArticleId}`);
+                            if (articleCheckRes.ok) {
+                                const articleCheckData = await articleCheckRes.json();
+                                const existingArticle = articleCheckData.article;
+
+                                if (existingArticle?.wp_post_id) {
+                                    // Optionally regenerate images first
+                                    if (currentProject.state.regenImagesAfterBatch) {
+                                        addLog(`[${itemLabel}] Regenerating images with new content...`, LogStatus.WORKING, item.id);
+                                        try {
+                                            await fetch(`/api/articles/${savedArticleId}/regenerate-all-images`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ workflowId: currentWorkflowId })
+                                            });
+                                            addLog(`[${itemLabel}] Images regenerated.`, LogStatus.SUCCESS, item.id);
+                                        } catch (regenErr) {
+                                            addLog(`[${itemLabel}] Image regeneration failed: ${regenErr instanceof Error ? regenErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
+                                        }
+                                    }
+
+                                    // Push content to existing page
+                                    addLog(`[${itemLabel}] Pushing content to existing WP page...`, LogStatus.WORKING, item.id);
+                                    try {
+                                        const pushRes = await fetch(`/api/articles/${savedArticleId}/push-content`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({})
+                                        });
+                                        const pushData = await pushRes.json();
+                                        if (pushData.success) {
+                                            addLog(`[${itemLabel}] Content pushed to WP page (slug: ${pushData.slug}).`, LogStatus.SUCCESS, item.id);
+                                        } else {
+                                            addLog(`[${itemLabel}] Content push failed: ${pushData.error}`, LogStatus.ERROR, item.id);
+                                        }
+                                    } catch (pushErr) {
+                                        addLog(`[${itemLabel}] Content push error: ${pushErr instanceof Error ? pushErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
+                                    }
+                                }
+                            }
+                        } catch (hookErr) {
+                            addLog(`[${itemLabel}] Post-batch hook error: ${hookErr instanceof Error ? hookErr.message : 'Unknown'}`, LogStatus.ERROR, item.id);
                         }
                     }
                 } catch (error) {
@@ -3574,6 +3626,29 @@ const App: React.FC = () => {
                                     }`}
                                 >WP</button>
                             </div>
+                        </div>
+
+                        {/* Post-batch push toggles (Phase 3E) */}
+                        <div className="flex items-center gap-1 border-l border-brand-gold/30 pl-3">
+                            <label className="flex items-center gap-1 cursor-pointer" title="After each article finishes the prompt chain, push updated content to its existing WordPress page">
+                                <input
+                                    type="checkbox"
+                                    checked={currentProject.state.pushContentAfterBatch || false}
+                                    onChange={e => setCurrentProjectState(p => ({...p, pushContentAfterBatch: e.target.checked}))}
+                                    className="w-3 h-3 rounded border-brand-gold/50 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-[10px] text-brand-gold/70">Push</span>
+                            </label>
+                            <label className="flex items-center gap-1 cursor-pointer" title="Regenerate images with new content before pushing to WordPress">
+                                <input
+                                    type="checkbox"
+                                    checked={currentProject.state.regenImagesAfterBatch || false}
+                                    onChange={e => setCurrentProjectState(p => ({...p, regenImagesAfterBatch: e.target.checked}))}
+                                    disabled={!currentProject.state.pushContentAfterBatch}
+                                    className="w-3 h-3 rounded border-brand-gold/50 bg-slate-900 text-blue-600 focus:ring-blue-500 disabled:opacity-40"
+                                />
+                                <span className={`text-[10px] ${currentProject.state.pushContentAfterBatch ? 'text-brand-gold/70' : 'text-brand-gold/30'}`}>Regen Imgs</span>
+                            </label>
                         </div>
                     </div>
                     )}
