@@ -8643,42 +8643,86 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               )}
 
-                              {/* Main Prompt Context Toggles — what the AI can see */}
-                              <div className="flex items-center flex-wrap gap-1 px-1 pb-1">
-                                <span className="text-[10px] text-slate-500 mr-0.5">Main Prompt Context:</span>
-                                {([
-                                  ['promptSetup', 'Prompt'],
-                                  ['guardrails', 'Rules'],
-                                  ['imageBank', 'Bank'],
-                                ] as [keyof typeof mainPromptContextToggles, string][]).map(([key, label]) => (
+                              {/* Context Toggles — both chats visible side by side */}
+                              <div className="flex items-center flex-wrap gap-x-3 gap-y-1 px-1 pb-1.5">
+                                {/* Guided GPT */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-slate-300 font-medium">Guided GPT:</span>
+                                  {([
+                                    ['promptSetup', 'Prompt'],
+                                    ['guardrails', 'Rules'],
+                                    ['testingMode', 'Testing'],
+                                    ['imageBank', 'Bank'],
+                                    ['problemAreas', 'Problems'],
+                                  ] as [keyof typeof guidedContextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setGuidedContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        guidedContextToggles[key]
+                                          ? 'bg-emerald-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
                                   <button
-                                    key={key}
-                                    onClick={() => setMainPromptContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
-                                    className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                      mainPromptContextToggles[key]
-                                        ? 'bg-amber-600/80 text-white'
-                                        : 'bg-slate-800/80 text-slate-500 hover:text-slate-300'
+                                    onClick={() => {
+                                      const allOn = Object.values(guidedContextToggles).every(v => v);
+                                      const v = !allOn;
+                                      setGuidedContextToggles({ promptSetup: v, guardrails: v, testingMode: v, imageBank: v, problemAreas: v });
+                                    }}
+                                    className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
+                                      Object.values(guidedContextToggles).every(v => v)
+                                        ? 'bg-emerald-600 text-white'
+                                        : Object.values(guidedContextToggles).some(v => v)
+                                          ? 'bg-emerald-600/40 text-emerald-200'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
                                     }`}
                                   >
-                                    {label}
+                                    All
                                   </button>
-                                ))}
-                                <button
-                                  onClick={() => {
-                                    const allOn = Object.values(mainPromptContextToggles).every(v => v);
-                                    const v = !allOn;
-                                    setMainPromptContextToggles({ promptSetup: v, guardrails: v, imageBank: v });
-                                  }}
-                                  className={`px-2 py-0.5 text-[10px] rounded-full transition font-medium ${
-                                    Object.values(mainPromptContextToggles).every(v => v)
-                                      ? 'bg-amber-600 text-white'
-                                      : Object.values(mainPromptContextToggles).some(v => v)
-                                        ? 'bg-amber-600/40 text-amber-300'
-                                        : 'bg-slate-800/80 text-slate-500 hover:text-slate-300'
-                                  }`}
-                                >
-                                  All
-                                </button>
+                                </div>
+                                {/* Separator */}
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Main Prompt */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-slate-300 font-medium">Main Prompt:</span>
+                                  {([
+                                    ['promptSetup', 'Prompt'],
+                                    ['guardrails', 'Rules'],
+                                    ['imageBank', 'Bank'],
+                                  ] as [keyof typeof mainPromptContextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setMainPromptContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        mainPromptContextToggles[key]
+                                          ? 'bg-amber-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                  <button
+                                    onClick={() => {
+                                      const allOn = Object.values(mainPromptContextToggles).every(v => v);
+                                      const v = !allOn;
+                                      setMainPromptContextToggles({ promptSetup: v, guardrails: v, imageBank: v });
+                                    }}
+                                    className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
+                                      Object.values(mainPromptContextToggles).every(v => v)
+                                        ? 'bg-amber-600 text-white'
+                                        : Object.values(mainPromptContextToggles).some(v => v)
+                                          ? 'bg-amber-600/40 text-amber-200'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                    }`}
+                                  >
+                                    All
+                                  </button>
+                                </div>
                               </div>
 
                               {/* Chat Input */}
@@ -10163,44 +10207,86 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               )}
 
-                              {/* Guided GPT Context Toggles — what the AI can see */}
-                              <div className="flex items-center flex-wrap gap-1 px-1 pb-1">
-                                <span className="text-[10px] text-slate-500 mr-0.5">Guided GPT Context:</span>
-                                {([
-                                  ['promptSetup', 'Prompt'],
-                                  ['guardrails', 'Rules'],
-                                  ['testingMode', 'Testing'],
-                                  ['imageBank', 'Bank'],
-                                  ['problemAreas', 'Problems'],
-                                ] as [keyof typeof guidedContextToggles, string][]).map(([key, label]) => (
+                              {/* Context Toggles — both chats visible side by side */}
+                              <div className="flex items-center flex-wrap gap-x-3 gap-y-1 px-1 pb-1.5">
+                                {/* Guided GPT */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-slate-300 font-medium">Guided GPT:</span>
+                                  {([
+                                    ['promptSetup', 'Prompt'],
+                                    ['guardrails', 'Rules'],
+                                    ['testingMode', 'Testing'],
+                                    ['imageBank', 'Bank'],
+                                    ['problemAreas', 'Problems'],
+                                  ] as [keyof typeof guidedContextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setGuidedContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        guidedContextToggles[key]
+                                          ? 'bg-emerald-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
                                   <button
-                                    key={key}
-                                    onClick={() => setGuidedContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
-                                    className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                      guidedContextToggles[key]
-                                        ? 'bg-emerald-600/80 text-white'
-                                        : 'bg-slate-800/80 text-slate-500 hover:text-slate-300'
+                                    onClick={() => {
+                                      const allOn = Object.values(guidedContextToggles).every(v => v);
+                                      const v = !allOn;
+                                      setGuidedContextToggles({ promptSetup: v, guardrails: v, testingMode: v, imageBank: v, problemAreas: v });
+                                    }}
+                                    className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
+                                      Object.values(guidedContextToggles).every(v => v)
+                                        ? 'bg-emerald-600 text-white'
+                                        : Object.values(guidedContextToggles).some(v => v)
+                                          ? 'bg-emerald-600/40 text-emerald-200'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
                                     }`}
                                   >
-                                    {label}
+                                    All
                                   </button>
-                                ))}
-                                <button
-                                  onClick={() => {
-                                    const allOn = Object.values(guidedContextToggles).every(v => v);
-                                    const v = !allOn;
-                                    setGuidedContextToggles({ promptSetup: v, guardrails: v, testingMode: v, imageBank: v, problemAreas: v });
-                                  }}
-                                  className={`px-2 py-0.5 text-[10px] rounded-full transition font-medium ${
-                                    Object.values(guidedContextToggles).every(v => v)
-                                      ? 'bg-emerald-600 text-white'
-                                      : Object.values(guidedContextToggles).some(v => v)
-                                        ? 'bg-emerald-600/40 text-emerald-300'
-                                        : 'bg-slate-800/80 text-slate-500 hover:text-slate-300'
-                                  }`}
-                                >
-                                  All
-                                </button>
+                                </div>
+                                {/* Separator */}
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Main Prompt */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-slate-300 font-medium">Main Prompt:</span>
+                                  {([
+                                    ['promptSetup', 'Prompt'],
+                                    ['guardrails', 'Rules'],
+                                    ['imageBank', 'Bank'],
+                                  ] as [keyof typeof mainPromptContextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setMainPromptContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        mainPromptContextToggles[key]
+                                          ? 'bg-amber-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                  <button
+                                    onClick={() => {
+                                      const allOn = Object.values(mainPromptContextToggles).every(v => v);
+                                      const v = !allOn;
+                                      setMainPromptContextToggles({ promptSetup: v, guardrails: v, imageBank: v });
+                                    }}
+                                    className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
+                                      Object.values(mainPromptContextToggles).every(v => v)
+                                        ? 'bg-amber-600 text-white'
+                                        : Object.values(mainPromptContextToggles).some(v => v)
+                                          ? 'bg-amber-600/40 text-amber-200'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                    }`}
+                                  >
+                                    All
+                                  </button>
+                                </div>
                               </div>
 
                               {/* Chat Input */}
