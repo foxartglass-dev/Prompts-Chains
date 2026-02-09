@@ -4624,23 +4624,25 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       timestamp: new Date().toISOString()
     };
 
-    // Build message history for API
-    const historyToSend = [...guidedAssistantMessages, newMessage];
+    // Build full history for local state/persistence (NOT sent to API)
+    const fullHistory = [...guidedAssistantMessages, newMessage];
+    // Only send the current message to API (prevents token bloat from accumulated history)
+    const messagesToApi = [newMessage];
 
     // Update local state immediately
-    setGuidedAssistantMessages(historyToSend);
+    setGuidedAssistantMessages(fullHistory);
     // 🛡️ PERSIST to database immediately
     if (activeConversationId) {
       // Save to active conversation in file system
       const updatedConversations = (settings.consultant_chat_conversations || []).map(c =>
         c.id === activeConversationId
-          ? { ...c, messages: historyToSend, updatedAt: new Date().toISOString() }
+          ? { ...c, messages: fullHistory, updatedAt: new Date().toISOString() }
           : c
       );
       updateSettings({ consultant_chat_conversations: updatedConversations });
     } else {
       // Save to unfiled chat history
-      updateSettings({ consultant_chat_history: historyToSend });
+      updateSettings({ consultant_chat_history: fullHistory });
     }
     setGuidedAssistantInput('');
     setGuidedAssistantImages([]);
@@ -4757,9 +4759,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           isOpen: testingModeOpen,
           activeTab: activeTestingTab.name,
           currentPrompt: activeTestingTab.prompt,
-          // Send ALL history - no limit, AI should see the full iteration journey
-          // Include imageUrl so AI can see the generated test images
-          fullHistory: activeTestingTab.history.map(h => ({
+          // Only send last 5 iterations to avoid token bloat
+          fullHistory: activeTestingTab.history.slice(-5).map(h => ({
             prompt: h.prompt,
             imageUrl: h.url,  // history entry uses 'url' property
             model: h.model,
@@ -4768,8 +4769,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           model: settings.default_model || 'gpt-image-1.5'
         },
 
-        // LOADED ARTICLES - For image planning based on article content
-        // AI can read these to understand the content and create image plans
+        // LOADED ARTICLES - Metadata only (no full content) to avoid token bloat
         articles: loadedArticles.length > 0 ? {
           count: loadedArticles.length,
           items: loadedArticles.map(a => ({
@@ -4778,8 +4778,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             tag: a.tag,
             wordCount: a.wordCount,
             websiteName: a.websiteName,
-            clientName: a.clientName,
-            content: a.content
+            clientName: a.clientName
           }))
         } : null
       };
@@ -4789,7 +4788,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: settings.guided_model || 'gpt-5.2-2025-12-11',
-          messages: historyToSend.map(m => ({
+          messages: messagesToApi.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -4945,7 +4944,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           content: responseContent,
           timestamp: new Date().toISOString()
         };
-        const updatedHistory = [...historyToSend, assistantMessage];
+        const updatedHistory = [...fullHistory, assistantMessage];
         setGuidedAssistantMessages(updatedHistory);
         // 🛡️ PERSIST assistant response to database
         if (activeConversationId) {
@@ -4998,21 +4997,23 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       timestamp: new Date().toISOString()
     };
 
-    // Build message history for API
-    const historyToSend = [...mainPromptAssistantMessages, newMessage];
+    // Build full history for local state/persistence (NOT sent to API)
+    const fullHistory = [...mainPromptAssistantMessages, newMessage];
+    // Only send the current message to API (prevents token bloat from accumulated history)
+    const messagesToApi = [newMessage];
 
     // Update local state immediately
-    setMainPromptAssistantMessages(historyToSend);
+    setMainPromptAssistantMessages(fullHistory);
     // 🛡️ PERSIST to database immediately
     if (mainPromptActiveConversationId) {
       const updatedConversations = (settings.main_prompt_chat_conversations || []).map(c =>
         c.id === mainPromptActiveConversationId
-          ? { ...c, messages: historyToSend, updatedAt: new Date().toISOString() }
+          ? { ...c, messages: fullHistory, updatedAt: new Date().toISOString() }
           : c
       );
       updateSettings({ main_prompt_chat_conversations: updatedConversations });
     } else {
-      updateSettings({ main_prompt_chat_history: historyToSend });
+      updateSettings({ main_prompt_chat_history: fullHistory });
     }
     setMainPromptAssistantInput('');
     setMainPromptAssistantImages([]);
@@ -5083,7 +5084,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: settings.main_prompt_chat_model || 'gpt-4o',
-          messages: historyToSend.map(m => ({
+          messages: messagesToApi.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -5118,7 +5119,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           content: responseContent,
           timestamp: new Date().toISOString()
         };
-        const updatedHistory = [...historyToSend, assistantMessage];
+        const updatedHistory = [...fullHistory, assistantMessage];
         setMainPromptAssistantMessages(updatedHistory);
 
         // 🛡️ PERSIST assistant response to database
