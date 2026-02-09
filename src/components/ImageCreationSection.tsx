@@ -1010,6 +1010,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [renamingItemId, setRenamingItemId] = useState<string | null>(null);
   const [renamingValue, setRenamingValue] = useState('');
 
+  // Context toggles — controls what gets sent with each chat message
+  // Default: all OFF (just chat, no extra context payload)
+  const [guidedContextToggles, setGuidedContextToggles] = useState({
+    promptSetup: false,  // Main prompt + placeholders/variations
+    guardrails: false,   // Instructions, uniform, subject, avoid
+    testingMode: false,  // Current test prompt + recent iterations
+    imageBank: false,    // Recent successful prompts + reference images
+    problemAreas: false, // Active problems + solved problems
+  });
+  const [mainPromptContextToggles, setMainPromptContextToggles] = useState({
+    promptSetup: false,
+    guardrails: false,
+    imageBank: false,
+  });
+
   // Main Prompt AI Assistant Chat state (mirrors Guided GPT assistant)
   const [mainPromptAssistantOpen, setMainPromptAssistantOpen] = useState(false);
   const [mainPromptAssistantMessages, setMainPromptAssistantMessages] = useState<ChatMessage[]>([]);
@@ -4790,6 +4805,34 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         } : null
       };
 
+      // Apply context toggles — only send sections the user has toggled on
+      // Default: all off = no context (just chat, no extra payload to AI)
+      const anyGuidedToggleOn = Object.values(guidedContextToggles).some(v => v);
+      if (anyGuidedToggleOn) {
+        const ctx = context as Record<string, any>;
+        if (!guidedContextToggles.guardrails) ctx.guardrails = undefined;
+        if (!guidedContextToggles.promptSetup) {
+          ctx.mainPrompt = undefined;
+          ctx.placeholderMode = undefined;
+          ctx.placeholderCategories = undefined;
+          ctx.variations = undefined;
+        }
+        if (!guidedContextToggles.imageBank) {
+          ctx.referenceImages = undefined;
+          ctx.logoImages = undefined;
+          ctx.actionShots = undefined;
+          ctx.imageBankExamples = undefined;
+        }
+        if (!guidedContextToggles.problemAreas) {
+          ctx.problemAreas = undefined;
+          ctx.solvedProblems = undefined;
+        }
+        if (!guidedContextToggles.testingMode) {
+          ctx.testingMode = undefined;
+          ctx.articles = undefined;
+        }
+      }
+
       // Send last 8 messages + current for AI memory without token bloat
       const recentMessages = [...guidedAssistantMessages.slice(-8), newMessage];
 
@@ -4803,7 +4846,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             content: m.content,
             images: m.images
           })),
-          context
+          context: anyGuidedToggleOn ? context : null
         })
       });
 
@@ -5087,6 +5130,20 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           }))
       };
 
+      // Apply context toggles — only send sections the user has toggled on
+      const anyMPToggleOn = Object.values(mainPromptContextToggles).some(v => v);
+      if (anyMPToggleOn) {
+        const ctx = context as Record<string, any>;
+        if (!mainPromptContextToggles.promptSetup) {
+          ctx.mainPrompt = undefined;
+          ctx.placeholderMode = undefined;
+          ctx.placeholderCategories = undefined;
+          ctx.variations = undefined;
+        }
+        if (!mainPromptContextToggles.guardrails) ctx.guidedGuardrails = undefined;
+        if (!mainPromptContextToggles.imageBank) ctx.imageBankExamples = undefined;
+      }
+
       // Send last 8 messages + current for AI memory without token bloat
       const recentMessages = [...mainPromptAssistantMessages.slice(-8), newMessage];
 
@@ -5100,7 +5157,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             content: m.content,
             images: m.images
           })),
-          context
+          context: anyMPToggleOn ? context : null
         })
       });
 
@@ -8586,6 +8643,44 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               )}
 
+                              {/* Context Toggles — what the AI can see */}
+                              <div className="flex items-center flex-wrap gap-1 px-1 pb-1">
+                                <span className="text-[10px] text-slate-500 mr-0.5">Context:</span>
+                                {([
+                                  ['promptSetup', 'Prompt'],
+                                  ['guardrails', 'Rules'],
+                                  ['imageBank', 'Bank'],
+                                ] as [keyof typeof mainPromptContextToggles, string][]).map(([key, label]) => (
+                                  <button
+                                    key={key}
+                                    onClick={() => setMainPromptContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                    className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                      mainPromptContextToggles[key]
+                                        ? 'bg-amber-600/80 text-white'
+                                        : 'bg-slate-800/80 text-slate-500 hover:text-slate-300'
+                                    }`}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                                <button
+                                  onClick={() => {
+                                    const allOn = Object.values(mainPromptContextToggles).every(v => v);
+                                    const v = !allOn;
+                                    setMainPromptContextToggles({ promptSetup: v, guardrails: v, imageBank: v });
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition font-medium ${
+                                    Object.values(mainPromptContextToggles).every(v => v)
+                                      ? 'bg-amber-600 text-white'
+                                      : Object.values(mainPromptContextToggles).some(v => v)
+                                        ? 'bg-amber-600/40 text-amber-300'
+                                        : 'bg-slate-800/80 text-slate-500 hover:text-slate-300'
+                                  }`}
+                                >
+                                  All
+                                </button>
+                              </div>
+
                               {/* Chat Input */}
                               <div className="flex gap-2">
                                 <input
@@ -10067,6 +10162,46 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   )}
                                 </div>
                               )}
+
+                              {/* Context Toggles — what the AI can see */}
+                              <div className="flex items-center flex-wrap gap-1 px-1 pb-1">
+                                <span className="text-[10px] text-slate-500 mr-0.5">Context:</span>
+                                {([
+                                  ['promptSetup', 'Prompt'],
+                                  ['guardrails', 'Rules'],
+                                  ['testingMode', 'Testing'],
+                                  ['imageBank', 'Bank'],
+                                  ['problemAreas', 'Problems'],
+                                ] as [keyof typeof guidedContextToggles, string][]).map(([key, label]) => (
+                                  <button
+                                    key={key}
+                                    onClick={() => setGuidedContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                    className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                      guidedContextToggles[key]
+                                        ? 'bg-emerald-600/80 text-white'
+                                        : 'bg-slate-800/80 text-slate-500 hover:text-slate-300'
+                                    }`}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                                <button
+                                  onClick={() => {
+                                    const allOn = Object.values(guidedContextToggles).every(v => v);
+                                    const v = !allOn;
+                                    setGuidedContextToggles({ promptSetup: v, guardrails: v, testingMode: v, imageBank: v, problemAreas: v });
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition font-medium ${
+                                    Object.values(guidedContextToggles).every(v => v)
+                                      ? 'bg-emerald-600 text-white'
+                                      : Object.values(guidedContextToggles).some(v => v)
+                                        ? 'bg-emerald-600/40 text-emerald-300'
+                                        : 'bg-slate-800/80 text-slate-500 hover:text-slate-300'
+                                  }`}
+                                >
+                                  All
+                                </button>
+                              </div>
 
                               {/* Chat Input */}
                               <div className="flex gap-2">
