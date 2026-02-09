@@ -4802,34 +4802,60 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             websiteName: a.websiteName,
             clientName: a.clientName
           }))
-        } : null
+        } : null,
+
+        // GUIDED GPT PROMPT SETTINGS - Smart Prompt, Matching Rules, Placement
+        // AI can edit these by outputting code blocks (```smartprompt, ```matchingrule1, etc.)
+        smartPromptGuidance: settings.smart_prompt_guidance || '',
+        matchingRules: {
+          rule1: settings.matching_rule_1 || '',
+          rule2: settings.matching_rule_2 || '',
+          rule3: settings.matching_rule_3 || '',
+          rule4: settings.matching_rule_4 || '',
+        },
+        placementRule: settings.placement_rule || '',
+        smartMatchingRule: settings.smart_matching_rule || ''
       };
 
       // Apply context toggles — only send sections the user has toggled on
-      // Shared fields (Prompt, Rules, Bank) use OR logic: if EITHER toggle set has it on, include it
-      // Testing + Problems are Guided GPT-only
+      // Each "Prompt" toggle controls DIFFERENT data:
+      //   Main Prompt: Prompt → template, placeholders, variations
+      //   Guided GPT: Prompt → smart prompt, matching rules, placement rules
+      // Shared fields (Rules, Bank) use OR: if EITHER has it on, include it
       const gt = guidedContextToggles;
       const mp = mainPromptContextToggles;
       const anyToggleOn = Object.values(gt).some(v => v) || Object.values(mp).some(v => v);
       if (anyToggleOn) {
         const ctx = context as Record<string, any>;
+        // Rules: shared (OR logic)
         if (!gt.guardrails && !mp.guardrails) ctx.guardrails = undefined;
-        if (!gt.promptSetup && !mp.promptSetup) {
+        // Main Prompt: Prompt → template + placeholders
+        if (!mp.promptSetup) {
           ctx.mainPrompt = undefined;
           ctx.placeholderMode = undefined;
           ctx.placeholderCategories = undefined;
           ctx.variations = undefined;
         }
+        // Guided GPT: Prompt → smart prompt + matching/placement rules
+        if (!gt.promptSetup) {
+          ctx.smartPromptGuidance = undefined;
+          ctx.matchingRules = undefined;
+          ctx.placementRule = undefined;
+          ctx.smartMatchingRule = undefined;
+        }
+        // Bank: shared (OR logic)
         if (!gt.imageBank && !mp.imageBank) {
           ctx.referenceImages = undefined;
           ctx.logoImages = undefined;
           ctx.actionShots = undefined;
           ctx.imageBankExamples = undefined;
         }
+        // Problems: Guided GPT only
         if (!gt.problemAreas) {
           ctx.problemAreas = undefined;
           ctx.solvedProblems = undefined;
         }
+        // Testing: Guided GPT only
         if (!gt.testingMode) {
           ctx.testingMode = undefined;
           ctx.articles = undefined;

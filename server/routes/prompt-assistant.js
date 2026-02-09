@@ -467,6 +467,35 @@ router.post('/chat', async (req, res) => {
         parts.push(`\n## All Avatars: ${context.allAvatars.map(a => `${a.name}${a.tag ? ` (${a.tag})` : ''}${a.hasPrompt ? '' : ' [no prompt]'}`).join(', ')}`);
       }
 
+      // GUIDED GPT PROMPT SETTINGS - Smart Prompt, Matching Rules
+      if (context.smartPromptGuidance) {
+        parts.push('\n## Smart Prompt Guidance:');
+        parts.push('```');
+        parts.push(context.smartPromptGuidance);
+        parts.push('```');
+        parts.push('*You can edit this by outputting a ```smartprompt code block.*');
+      }
+      if (context.matchingRules) {
+        const rules = context.matchingRules;
+        const hasAny = rules.rule1 || rules.rule2 || rules.rule3 || rules.rule4;
+        if (hasAny) {
+          parts.push('\n## Matching Rules:');
+          if (rules.rule1) parts.push(`**Rule 1:** ${rules.rule1}`);
+          if (rules.rule2) parts.push(`**Rule 2:** ${rules.rule2}`);
+          if (rules.rule3) parts.push(`**Rule 3:** ${rules.rule3}`);
+          if (rules.rule4) parts.push(`**Rule 4:** ${rules.rule4}`);
+          parts.push('*You can edit these by outputting ```matchingrule1 through ```matchingrule4 code blocks.*');
+        }
+      }
+      if (context.placementRule) {
+        parts.push(`\n## Placement Rule: ${context.placementRule}`);
+        parts.push('*You can edit this by outputting a ```placementrule code block.*');
+      }
+      if (context.smartMatchingRule) {
+        parts.push(`\n## Smart Matching Rule: ${context.smartMatchingRule}`);
+        parts.push('*You can edit this by outputting a ```smartmatchingrule code block.*');
+      }
+
       // TESTING MODE - Current prompt that AI can edit
       if (context.testingMode) {
         parts.push('\n## TESTING MODE (Active Sandbox):');
