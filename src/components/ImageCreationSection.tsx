@@ -8643,9 +8643,9 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               )}
 
-                              {/* Context Toggles — what the AI can see */}
+                              {/* Main Prompt Context Toggles — what the AI can see */}
                               <div className="flex items-center flex-wrap gap-1 px-1 pb-1">
-                                <span className="text-[10px] text-slate-500 mr-0.5">Context:</span>
+                                <span className="text-[10px] text-slate-500 mr-0.5">Main Prompt Context:</span>
                                 {([
                                   ['promptSetup', 'Prompt'],
                                   ['guardrails', 'Rules'],
@@ -10163,9 +10163,9 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               )}
 
-                              {/* Context Toggles — what the AI can see */}
+                              {/* Guided GPT Context Toggles — what the AI can see */}
                               <div className="flex items-center flex-wrap gap-1 px-1 pb-1">
-                                <span className="text-[10px] text-slate-500 mr-0.5">Context:</span>
+                                <span className="text-[10px] text-slate-500 mr-0.5">Guided GPT Context:</span>
                                 {([
                                   ['promptSetup', 'Prompt'],
                                   ['guardrails', 'Rules'],
