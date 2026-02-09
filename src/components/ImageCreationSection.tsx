@@ -1012,17 +1012,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Context toggles — controls what gets sent with each chat message
   // Default: all OFF (just chat, no extra context payload)
-  const [guidedContextToggles, setGuidedContextToggles] = useState({
-    promptSetup: false,  // Main prompt + placeholders/variations
-    guardrails: false,   // Instructions, uniform, subject, avoid
-    testingMode: false,  // Current test prompt + recent iterations
-    imageBank: false,    // Recent successful prompts + reference images
-    problemAreas: false, // Active problems + solved problems
-  });
-  const [mainPromptContextToggles, setMainPromptContextToggles] = useState({
-    promptSetup: false,
-    guardrails: false,
-    imageBank: false,
+  // Three prompt systems (each with sub-toggles) + three independent sections
+  const [contextToggles, setContextToggles] = useState({
+    mainPrompt: false,       // Main Prompt: template + variations + avatars
+    mainCategories: false,   // Main Prompt: placeholder categories/groups
+    guidedPrompt: false,     // Guided GPT: prompt/instructions
+    guidedRules: false,      // Guided GPT: rules (uniform, subject, avoid)
+    smartPrompt: false,      // Smart Prompt: smart prompt + matching/placement rules
+    testing: false,          // Testing: testing mode + articles (independent)
+    problems: false,         // Problems: problem areas + solved problems (independent)
+    imageBank: false,        // Image Bank: bank examples + reference images + logos (independent)
   });
 
   // Main Prompt AI Assistant Chat state (mirrors Guided GPT assistant)
@@ -4817,48 +4816,56 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         smartMatchingRule: settings.smart_matching_rule || ''
       };
 
-      // Apply context toggles — only send sections the user has toggled on
-      // Each "Prompt" toggle controls DIFFERENT data:
-      //   Main Prompt: Prompt → template, placeholders, variations
-      //   Guided GPT: Prompt → smart prompt, matching rules, placement rules
-      // Shared fields (Rules, Bank) use OR: if EITHER has it on, include it
-      const gt = guidedContextToggles;
-      const mp = mainPromptContextToggles;
-      const anyToggleOn = Object.values(gt).some(v => v) || Object.values(mp).some(v => v);
+      // Apply context toggles — strip sections the user hasn't toggled on
+      // 3 prompt systems: Main Prompt (Prompt+Categories), Guided GPT (Prompt+Rules), Smart Prompt
+      // 3 independent sections: Testing, Problems, Image Bank
+      const t = contextToggles;
+      const anyToggleOn = Object.values(t).some(v => v);
       if (anyToggleOn) {
         const ctx = context as Record<string, any>;
-        // Rules: shared (OR logic)
-        if (!gt.guardrails && !mp.guardrails) ctx.guardrails = undefined;
-        // Main Prompt: Prompt → template + placeholders
-        if (!mp.promptSetup) {
+        // Main Prompt: template + variations + avatars
+        if (!t.mainPrompt) {
           ctx.mainPrompt = undefined;
+          ctx.variations = undefined;
+          ctx.activeAvatar = undefined;
+          ctx.allAvatars = undefined;
+        }
+        // Main Prompt: placeholder categories/groups
+        if (!t.mainCategories) {
           ctx.placeholderMode = undefined;
           ctx.placeholderCategories = undefined;
-          ctx.variations = undefined;
         }
-        // Guided GPT: Prompt → smart prompt + matching/placement rules
-        if (!gt.promptSetup) {
+        // Guided GPT: prompt/instructions vs rules (uniform, subject, avoid)
+        if (!t.guidedPrompt && !t.guidedRules) {
+          ctx.guardrails = undefined;
+        } else if (!t.guidedPrompt && ctx.guardrails) {
+          ctx.guardrails = { ...ctx.guardrails, instructions: undefined };
+        } else if (!t.guidedRules && ctx.guardrails) {
+          ctx.guardrails = { ...ctx.guardrails, uniformRules: undefined, subjectRules: undefined, avoidRules: undefined };
+        }
+        // Smart Prompt: smart prompt + matching/placement rules
+        if (!t.smartPrompt) {
           ctx.smartPromptGuidance = undefined;
           ctx.matchingRules = undefined;
           ctx.placementRule = undefined;
           ctx.smartMatchingRule = undefined;
         }
-        // Bank: shared (OR logic)
-        if (!gt.imageBank && !mp.imageBank) {
+        // Testing: testing mode + articles (independent)
+        if (!t.testing) {
+          ctx.testingMode = undefined;
+          ctx.articles = undefined;
+        }
+        // Problems: problem areas + solved (independent)
+        if (!t.problems) {
+          ctx.problemAreas = undefined;
+          ctx.solvedProblems = undefined;
+        }
+        // Image Bank: bank examples + reference images + logos (independent)
+        if (!t.imageBank) {
           ctx.referenceImages = undefined;
           ctx.logoImages = undefined;
           ctx.actionShots = undefined;
           ctx.imageBankExamples = undefined;
-        }
-        // Problems: Guided GPT only
-        if (!gt.problemAreas) {
-          ctx.problemAreas = undefined;
-          ctx.solvedProblems = undefined;
-        }
-        // Testing: Guided GPT only
-        if (!gt.testingMode) {
-          ctx.testingMode = undefined;
-          ctx.articles = undefined;
         }
       }
 
@@ -5159,18 +5166,28 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           }))
       };
 
-      // Apply context toggles — only send sections the user has toggled on
-      const anyMPToggleOn = Object.values(mainPromptContextToggles).some(v => v);
-      if (anyMPToggleOn) {
+      // Apply context toggles — strip sections the user hasn't toggled on
+      // Same unified toggles as Guided GPT chat (both chats share one toggle bar)
+      const t = contextToggles;
+      const anyToggleOn = Object.values(t).some(v => v);
+      if (anyToggleOn) {
         const ctx = context as Record<string, any>;
-        if (!mainPromptContextToggles.promptSetup) {
+        // Main Prompt: template + variations + avatars
+        if (!t.mainPrompt) {
           ctx.mainPrompt = undefined;
+          ctx.variations = undefined;
+          ctx.activeAvatar = undefined;
+          ctx.allAvatars = undefined;
+        }
+        // Main Prompt: placeholder categories
+        if (!t.mainCategories) {
           ctx.placeholderMode = undefined;
           ctx.placeholderCategories = undefined;
-          ctx.variations = undefined;
         }
-        if (!mainPromptContextToggles.guardrails) ctx.guidedGuardrails = undefined;
-        if (!mainPromptContextToggles.imageBank) ctx.imageBankExamples = undefined;
+        // Guided GPT guardrails (cross-reference in Main Prompt chat)
+        if (!t.guidedPrompt && !t.guidedRules) ctx.guidedGuardrails = undefined;
+        // Image Bank
+        if (!t.imageBank) ctx.imageBankExamples = undefined;
       }
 
       // Send last 8 messages + current for AI memory without token bloat
@@ -5186,7 +5203,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             content: m.content,
             images: m.images
           })),
-          context: anyMPToggleOn ? context : null
+          context: anyToggleOn ? context : null
         })
       });
 
