@@ -4806,28 +4806,31 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       };
 
       // Apply context toggles — only send sections the user has toggled on
-      // Default: all off = no context (just chat, no extra payload to AI)
-      const anyGuidedToggleOn = Object.values(guidedContextToggles).some(v => v);
-      if (anyGuidedToggleOn) {
+      // Shared fields (Prompt, Rules, Bank) use OR logic: if EITHER toggle set has it on, include it
+      // Testing + Problems are Guided GPT-only
+      const gt = guidedContextToggles;
+      const mp = mainPromptContextToggles;
+      const anyToggleOn = Object.values(gt).some(v => v) || Object.values(mp).some(v => v);
+      if (anyToggleOn) {
         const ctx = context as Record<string, any>;
-        if (!guidedContextToggles.guardrails) ctx.guardrails = undefined;
-        if (!guidedContextToggles.promptSetup) {
+        if (!gt.guardrails && !mp.guardrails) ctx.guardrails = undefined;
+        if (!gt.promptSetup && !mp.promptSetup) {
           ctx.mainPrompt = undefined;
           ctx.placeholderMode = undefined;
           ctx.placeholderCategories = undefined;
           ctx.variations = undefined;
         }
-        if (!guidedContextToggles.imageBank) {
+        if (!gt.imageBank && !mp.imageBank) {
           ctx.referenceImages = undefined;
           ctx.logoImages = undefined;
           ctx.actionShots = undefined;
           ctx.imageBankExamples = undefined;
         }
-        if (!guidedContextToggles.problemAreas) {
+        if (!gt.problemAreas) {
           ctx.problemAreas = undefined;
           ctx.solvedProblems = undefined;
         }
-        if (!guidedContextToggles.testingMode) {
+        if (!gt.testingMode) {
           ctx.testingMode = undefined;
           ctx.articles = undefined;
         }
@@ -4846,7 +4849,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             content: m.content,
             images: m.images
           })),
-          context: anyGuidedToggleOn ? context : null
+          context: anyToggleOn ? context : null
         })
       });
 
