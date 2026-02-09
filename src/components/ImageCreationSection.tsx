@@ -3542,11 +3542,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setChatLoading(true);
 
     try {
+      // Only send the current message to API (prevents token bloat from accumulated history)
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: newHistory.map(m => ({
+          messages: [newMessage].map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -3961,19 +3962,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       timestamp: new Date().toISOString()
     };
 
-    // Build history with context
+    // Build full history for local state/persistence (NOT sent to API)
     const isFirstMessage = settings.consultant_chat_history.length === 0;
-    let historyToSend = [...settings.consultant_chat_history, newMessage];
-
-    // Add system context for first message
-    if (isFirstMessage) {
-      const contextMessage: ChatMessage = {
-        role: 'system',
-        content: buildConsultantContext(),
-        timestamp: new Date().toISOString()
-      };
-      historyToSend = [contextMessage, ...historyToSend];
-    }
 
     // Update local state
     const newHistory = [...settings.consultant_chat_history, newMessage];
@@ -3985,13 +3975,18 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     try {
       // Get context images to include
       const contextImages = getContextImages('consultant');
-      const allImages = [...(newMessage.images || []), ...contextImages];
+
+      // Only send the current message to API (prevents token bloat from accumulated history)
+      // Include system context on first message only
+      const messagesToApi: ChatMessage[] = isFirstMessage
+        ? [{ role: 'system', content: buildConsultantContext(), timestamp: new Date().toISOString() } as ChatMessage, newMessage]
+        : [newMessage];
 
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: historyToSend.map(m => ({
+          messages: messagesToApi.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -6419,11 +6414,12 @@ Start by introducing yourself and asking about their business in a friendly way.
     setConsultantLoading(true);
 
     try {
+      // Only send the export request message to API (prevents token bloat)
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: newHistory.map(m => ({
+          messages: [exportMessage].map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -6462,19 +6458,9 @@ Start by introducing yourself and asking about their business in a friendly way.
       timestamp: new Date().toISOString()
     };
 
-    // Build history with context (include consultant context always for worker)
+    // Build full history for local state/persistence (NOT sent to API)
     const isFirstMessage = settings.worker_chat_history.length === 0;
-    let historyToSend = [...settings.worker_chat_history, newMessage];
-
-    // Add system context for first message or refresh context periodically
-    if (isFirstMessage || settings.worker_chat_history.length % 10 === 0) {
-      const contextMessage: ChatMessage = {
-        role: 'system',
-        content: buildWorkerContext(),
-        timestamp: new Date().toISOString()
-      };
-      historyToSend = [contextMessage, ...historyToSend];
-    }
+    const needsContext = isFirstMessage || settings.worker_chat_history.length % 10 === 0;
 
     // Update local state
     const newHistory = [...settings.worker_chat_history, newMessage];
@@ -6484,11 +6470,17 @@ Start by introducing yourself and asking about their business in a friendly way.
     setWorkerLoading(true);
 
     try {
+      // Only send the current message to API (prevents token bloat from accumulated history)
+      // Include system context on first message or every 10th message
+      const messagesToApi: ChatMessage[] = needsContext
+        ? [{ role: 'system', content: buildWorkerContext(), timestamp: new Date().toISOString() } as ChatMessage, newMessage]
+        : [newMessage];
+
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: historyToSend.map(m => ({
+          messages: messagesToApi.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
