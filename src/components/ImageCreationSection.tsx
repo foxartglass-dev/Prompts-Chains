@@ -3542,11 +3542,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setChatLoading(true);
 
     try {
+      // Send last 8 messages + current for AI memory without token bloat
+      const recentMessages = [...settings.chat_history.slice(-8), newMessage];
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: newHistory.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -3987,11 +3989,17 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const contextImages = getContextImages('consultant');
       const allImages = [...(newMessage.images || []), ...contextImages];
 
+      // Send last 8 messages + current for AI memory without token bloat
+      // On first message, historyToSend = [systemContext, newMessage] which is already small
+      const recentMessages = isFirstMessage
+        ? historyToSend
+        : [...settings.consultant_chat_history.slice(-8), newMessage];
+
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: historyToSend.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -4757,9 +4765,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           isOpen: testingModeOpen,
           activeTab: activeTestingTab.name,
           currentPrompt: activeTestingTab.prompt,
-          // Send ALL history - no limit, AI should see the full iteration journey
-          // Include imageUrl so AI can see the generated test images
-          fullHistory: activeTestingTab.history.map(h => ({
+          // Last 5 iterations to avoid token bloat (AI still sees recent journey)
+          fullHistory: activeTestingTab.history.slice(-5).map(h => ({
             prompt: h.prompt,
             imageUrl: h.url,  // history entry uses 'url' property
             model: h.model,
@@ -4778,18 +4785,20 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             tag: a.tag,
             wordCount: a.wordCount,
             websiteName: a.websiteName,
-            clientName: a.clientName,
-            content: a.content
+            clientName: a.clientName
           }))
         } : null
       };
+
+      // Send last 8 messages + current for AI memory without token bloat
+      const recentMessages = [...guidedAssistantMessages.slice(-8), newMessage];
 
       const res = await fetch('/api/prompt-assistant/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: settings.guided_model || 'gpt-5.2-2025-12-11',
-          messages: historyToSend.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -5078,12 +5087,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           }))
       };
 
+      // Send last 8 messages + current for AI memory without token bloat
+      const recentMessages = [...mainPromptAssistantMessages.slice(-8), newMessage];
+
       const res = await fetch('/api/prompt-assistant/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: settings.main_prompt_chat_model || 'gpt-4o',
-          messages: historyToSend.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -6418,11 +6430,13 @@ Start by introducing yourself and asking about their business in a friendly way.
     setConsultantLoading(true);
 
     try {
+      // Send last 8 messages + export message for AI memory without token bloat
+      const recentMessages = [...settings.consultant_chat_history.slice(-8), exportMessage];
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: newHistory.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -6483,11 +6497,18 @@ Start by introducing yourself and asking about their business in a friendly way.
     setWorkerLoading(true);
 
     try {
+      // Send last 8 messages + current for AI memory without token bloat
+      // Preserve system context when needed (first message or periodic refresh)
+      const needsContext = isFirstMessage || settings.worker_chat_history.length % 10 === 0;
+      const recentMessages = needsContext
+        ? [historyToSend[0], ...settings.worker_chat_history.slice(-8), newMessage]
+        : [...settings.worker_chat_history.slice(-8), newMessage];
+
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: historyToSend.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
