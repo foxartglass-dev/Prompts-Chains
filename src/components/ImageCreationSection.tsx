@@ -3542,12 +3542,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setChatLoading(true);
 
     try {
-      // Only send the current message to API (prevents token bloat from accumulated history)
+      // Send last 8 messages + current message (conversation memory without token bloat)
+      const recentHistory = settings.chat_history.slice(-8);
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [newMessage].map(m => ({
+          messages: [...recentHistory, newMessage].map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -3976,11 +3977,12 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       // Get context images to include
       const contextImages = getContextImages('consultant');
 
-      // Only send the current message to API (prevents token bloat from accumulated history)
+      // Send last 8 messages + current message (conversation memory without token bloat)
       // Include system context on first message only
-      const messagesToApi: ChatMessage[] = isFirstMessage
-        ? [{ role: 'system', content: buildConsultantContext(), timestamp: new Date().toISOString() } as ChatMessage, newMessage]
-        : [newMessage];
+      const recentHistory = settings.consultant_chat_history.slice(-8);
+      const messagesToApi = isFirstMessage
+        ? [{ role: 'system' as const, content: buildConsultantContext(), timestamp: new Date().toISOString() }, newMessage]
+        : [...recentHistory, newMessage];
 
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
@@ -4621,8 +4623,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
     // Build full history for local state/persistence (NOT sent to API)
     const fullHistory = [...guidedAssistantMessages, newMessage];
-    // Only send the current message to API (prevents token bloat from accumulated history)
-    const messagesToApi = [newMessage];
+    // Send last 8 messages + current message (conversation memory without token bloat)
+    const recentHistory = guidedAssistantMessages.slice(-8);
+    const messagesToApi = [...recentHistory, newMessage];
 
     // Update local state immediately
     setGuidedAssistantMessages(fullHistory);
@@ -4994,8 +4997,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
     // Build full history for local state/persistence (NOT sent to API)
     const fullHistory = [...mainPromptAssistantMessages, newMessage];
-    // Only send the current message to API (prevents token bloat from accumulated history)
-    const messagesToApi = [newMessage];
+    // Send last 8 messages + current message (conversation memory without token bloat)
+    const recentHistory = mainPromptAssistantMessages.slice(-8);
+    const messagesToApi = [...recentHistory, newMessage];
 
     // Update local state immediately
     setMainPromptAssistantMessages(fullHistory);
@@ -6414,12 +6418,13 @@ Start by introducing yourself and asking about their business in a friendly way.
     setConsultantLoading(true);
 
     try {
-      // Only send the export request message to API (prevents token bloat)
+      // Send last 8 messages + export message (conversation memory without token bloat)
+      const recentHistory = settings.consultant_chat_history.slice(-8);
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [exportMessage].map(m => ({
+          messages: [...recentHistory, exportMessage].map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -6470,11 +6475,12 @@ Start by introducing yourself and asking about their business in a friendly way.
     setWorkerLoading(true);
 
     try {
-      // Only send the current message to API (prevents token bloat from accumulated history)
+      // Send last 8 messages + current message (conversation memory without token bloat)
       // Include system context on first message or every 10th message
-      const messagesToApi: ChatMessage[] = needsContext
-        ? [{ role: 'system', content: buildWorkerContext(), timestamp: new Date().toISOString() } as ChatMessage, newMessage]
-        : [newMessage];
+      const recentHistory = settings.worker_chat_history.slice(-8);
+      const messagesToApi = needsContext
+        ? [{ role: 'system' as const, content: buildWorkerContext(), timestamp: new Date().toISOString() }, ...recentHistory, newMessage]
+        : [...recentHistory, newMessage];
 
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
