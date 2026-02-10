@@ -601,6 +601,11 @@ interface ImageCreationSettings {
   guided_gpt_rules: TagBasedRule[];
   // Rules per tag for Smart/Legacy Prompt
   legacy_prompt_rules: TagBasedRule[];
+  // ========== PERSISTENT PROMPT PORTIONS ==========
+  // Bottom portion of split prompt text areas — shared across ALL tags
+  main_prompt_persistent: string;       // Main Prompt: persistent portion below unique avatar prompt
+  guided_instructions_persistent: string; // Guided GPT: persistent instructions below unique tag instructions
+  smart_prompt_persistent: string;      // Smart Prompt: persistent guidance below unique tag guidance
 }
 
 enum LogStatus {
@@ -702,7 +707,11 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   // Rules per tag for Guided GPT (replaces placement rules)
   guided_gpt_rules: [],
   // Rules per tag for Smart/Legacy Prompt
-  legacy_prompt_rules: []
+  legacy_prompt_rules: [],
+  // ========== PERSISTENT PROMPT PORTIONS ==========
+  main_prompt_persistent: '',
+  guided_instructions_persistent: '',
+  smart_prompt_persistent: '',
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -4675,9 +4684,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const context = {
         // Guardrails / instructions
         guardrails: settings.guided_guardrails,
+        // Guided GPT persistent instructions (shared across all tags)
+        guidedInstructionsPersistent: settings.guided_instructions_persistent || '',
 
-        // Main prompt template from active avatar
+        // Main prompt template from active avatar (unique portion)
         mainPrompt: activeAvatar?.mainPrompt || '',
+        // Main prompt persistent portion (shared across all tags)
+        mainPromptPersistent: settings.main_prompt_persistent || '',
 
         // Placeholder categories with all options (for understanding prompt structure)
         placeholderMode: activeAvatar?.placeholderMode || 'simple',
@@ -4806,6 +4819,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         // GUIDED GPT PROMPT SETTINGS - Smart Prompt, Matching Rules, Placement
         // AI can edit these by outputting code blocks (```smartprompt, ```matchingrule1, etc.)
         smartPromptGuidance: settings.smart_prompt_guidance || '',
+        // Smart Prompt persistent portion (shared across all tags)
+        smartPromptPersistent: settings.smart_prompt_persistent || '',
         matchingRules: {
           rule1: settings.matching_rule_1 || '',
           rule2: settings.matching_rule_2 || '',
@@ -4823,9 +4838,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const anyToggleOn = Object.values(t).some(v => v);
       if (anyToggleOn) {
         const ctx = context as Record<string, any>;
-        // Main Prompt: template + variations + avatars
+        // Main Prompt: template + variations + avatars + persistent
         if (!t.mainPrompt) {
           ctx.mainPrompt = undefined;
+          ctx.mainPromptPersistent = undefined;
           ctx.variations = undefined;
           ctx.activeAvatar = undefined;
           ctx.allAvatars = undefined;
@@ -4838,14 +4854,17 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         // Guided GPT: prompt/instructions vs rules (uniform, subject, avoid)
         if (!t.guidedPrompt && !t.guidedRules) {
           ctx.guardrails = undefined;
+          ctx.guidedInstructionsPersistent = undefined;
         } else if (!t.guidedPrompt && ctx.guardrails) {
           ctx.guardrails = { ...ctx.guardrails, instructions: undefined };
+          ctx.guidedInstructionsPersistent = undefined;
         } else if (!t.guidedRules && ctx.guardrails) {
           ctx.guardrails = { ...ctx.guardrails, uniformRules: undefined, subjectRules: undefined, avoidRules: undefined };
         }
-        // Smart Prompt: smart prompt + matching/placement rules
+        // Smart Prompt: smart prompt + matching/placement rules + persistent
         if (!t.smartPrompt) {
           ctx.smartPromptGuidance = undefined;
+          ctx.smartPromptPersistent = undefined;
           ctx.matchingRules = undefined;
           ctx.placementRule = undefined;
           ctx.smartMatchingRule = undefined;
@@ -5113,8 +5132,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         // Assistant mode
         assistantMode: 'main_prompt',
 
-        // Main prompt template from active avatar
+        // Main prompt template from active avatar (unique portion)
         mainPrompt: activeAvatar?.mainPrompt || '',
+        // Main prompt persistent portion (shared across all tags)
+        mainPromptPersistent: settings.main_prompt_persistent || '',
 
         // Placeholder categories with all options
         placeholderMode: activeAvatar?.placeholderMode || 'simple',
@@ -5172,9 +5193,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const anyToggleOn = Object.values(t).some(v => v);
       if (anyToggleOn) {
         const ctx = context as Record<string, any>;
-        // Main Prompt: template + variations + avatars
+        // Main Prompt: template + variations + avatars + persistent
         if (!t.mainPrompt) {
           ctx.mainPrompt = undefined;
+          ctx.mainPromptPersistent = undefined;
           ctx.variations = undefined;
           ctx.activeAvatar = undefined;
           ctx.allAvatars = undefined;
@@ -9258,18 +9280,39 @@ Start by introducing yourself and asking about their business in a friendly way.
                               </div>
                             </div>
 
-                            {/* Guardrails */}
-                            <div className="space-y-2">
-                              <label className="text-[10px] text-emerald-400 block">Guardrails / Instructions:</label>
-                              <textarea
-                                value={activeGuidedPrompt.guardrails.instructions}
-                                onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
-                                  guardrails: { ...activeGuidedPrompt.guardrails, instructions: e.target.value }
-                                })}
-                                placeholder="e.g., Always show professional cleaners in uniform. Focus on the specific task being discussed."
-                                className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
-                                rows={3}
-                              />
+                            {/* Guardrails — Top/Bottom split */}
+                            <div className="space-y-0">
+                              <label className="text-[10px] text-emerald-400 block mb-1">Guardrails / Instructions:</label>
+                              {/* Top: Unique to this tag's prompt */}
+                              <div className="relative">
+                                <div className="absolute top-1 right-2 text-[9px] text-emerald-400/60 pointer-events-none">
+                                  Unique to [{activeGuidedPrompt.tag}]
+                                </div>
+                                <textarea
+                                  value={activeGuidedPrompt.guardrails.instructions}
+                                  onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
+                                    guardrails: { ...activeGuidedPrompt.guardrails, instructions: e.target.value }
+                                  })}
+                                  placeholder="e.g., Always show professional cleaners in uniform. Focus on the specific task being discussed."
+                                  className="w-full p-2 pt-5 text-xs bg-slate-900 border border-emerald-500/30 rounded-t text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                  rows={3}
+                                />
+                              </div>
+                              {/* Divider */}
+                              <div className="h-px bg-emerald-500/30 mx-1" />
+                              {/* Bottom: Persistent across ALL tags */}
+                              <div className="relative">
+                                <div className="absolute top-1 right-2 text-[9px] text-emerald-400/60 pointer-events-none">
+                                  All Tags
+                                </div>
+                                <textarea
+                                  value={settings.guided_instructions_persistent || ''}
+                                  onChange={(e) => updateSettings({ guided_instructions_persistent: e.target.value })}
+                                  placeholder="Persistent guardrails for ALL tags — shared rules, brand guidelines, safety constraints..."
+                                  className="w-full p-2 pt-5 text-xs bg-slate-900/80 border border-emerald-500/20 rounded-b text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                  rows={2}
+                                />
+                              </div>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <div>
@@ -11638,16 +11681,37 @@ Start by introducing yourself and asking about their business in a friendly way.
                               </div>
                             </div>
 
-                            {/* Guidance */}
-                            <div>
+                            {/* Guidance — Top/Bottom split */}
+                            <div className="space-y-0">
                               <label className="text-[10px] text-purple-400 mb-1 block">Guidance / Guardrails:</label>
-                              <textarea
-                                value={activeSmartPrompt.guidance}
-                                onChange={(e) => handleUpdateSmartPrompt(activeSmartPrompt.id, { guidance: e.target.value })}
-                                placeholder="e.g., Always show professional cleaners in navy blue uniforms. Include cleaning supplies. Modern residential settings only."
-                                className="w-full p-2 text-xs bg-slate-900 border border-purple-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
-                                rows={3}
-                              />
+                              {/* Top: Unique to this tag's prompt */}
+                              <div className="relative">
+                                <div className="absolute top-1 right-2 text-[9px] text-purple-400/60 pointer-events-none">
+                                  Unique to [{activeSmartPrompt.tag}]
+                                </div>
+                                <textarea
+                                  value={activeSmartPrompt.guidance}
+                                  onChange={(e) => handleUpdateSmartPrompt(activeSmartPrompt.id, { guidance: e.target.value })}
+                                  placeholder="e.g., Always show professional cleaners in navy blue uniforms. Include cleaning supplies. Modern residential settings only."
+                                  className="w-full p-2 pt-5 text-xs bg-slate-900 border border-purple-500/30 rounded-t text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                  rows={3}
+                                />
+                              </div>
+                              {/* Divider */}
+                              <div className="h-px bg-purple-500/30 mx-1" />
+                              {/* Bottom: Persistent across ALL tags */}
+                              <div className="relative">
+                                <div className="absolute top-1 right-2 text-[9px] text-purple-400/60 pointer-events-none">
+                                  All Tags
+                                </div>
+                                <textarea
+                                  value={settings.smart_prompt_persistent || ''}
+                                  onChange={(e) => updateSettings({ smart_prompt_persistent: e.target.value })}
+                                  placeholder="Persistent guidance for ALL tags — shared rules, brand guidelines, style requirements..."
+                                  className="w-full p-2 pt-5 text-xs bg-slate-900/80 border border-purple-500/20 rounded-b text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                  rows={2}
+                                />
+                              </div>
                             </div>
                           </div>
                         )}
@@ -13835,18 +13899,40 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <button onClick={insertVariationPlaceholder} className="text-xs text-brand-cyan hover:text-brand-cyan-light">+ Insert {'{variation}'}</button>
                     )}
                   </div>
-                  <textarea
-                    ref={mainPromptRef}
-                    value={activeAvatar.mainPrompt}
-                    onChange={(e) => {
-                      handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
-                      autoResizeTextarea(e.target);
-                    }}
-                    className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-none min-h-[100px]"
-                    placeholder={activeAvatar.placeholderMode === 'advanced'
-                      ? "Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
-                      : "Professional cleaning photo, {variation}, bright natural lighting..."}
-                  />
+                  {/* Top: Unique to active tag */}
+                  <div className="relative">
+                    <div className="absolute top-1 right-2 text-[9px] text-amber-400/60 pointer-events-none">
+                      Unique to [{activeAvatar.tag || activeAvatar.name}]
+                    </div>
+                    <textarea
+                      ref={mainPromptRef}
+                      value={activeAvatar.mainPrompt}
+                      onChange={(e) => {
+                        handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
+                        autoResizeTextarea(e.target);
+                      }}
+                      className="w-full bg-slate-900 border border-amber-500/50 rounded-t px-3 py-2 pt-5 text-white text-sm font-mono resize-none min-h-[80px]"
+                      placeholder={activeAvatar.placeholderMode === 'advanced'
+                        ? "Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
+                        : "Professional cleaning photo, {variation}, bright natural lighting..."}
+                    />
+                  </div>
+                  {/* Divider */}
+                  <div className="h-px bg-amber-500/30 mx-1" />
+                  {/* Bottom: Persistent across ALL tags */}
+                  <div className="relative">
+                    <div className="absolute top-1 right-2 text-[9px] text-amber-400/60 pointer-events-none">
+                      All Tags
+                    </div>
+                    <textarea
+                      value={settings.main_prompt_persistent || ''}
+                      onChange={(e) => {
+                        updateSettings({ main_prompt_persistent: e.target.value });
+                      }}
+                      className="w-full bg-slate-900/80 border border-amber-500/30 rounded-b px-3 py-2 pt-5 text-white text-sm font-mono resize-none min-h-[60px]"
+                      placeholder="Persistent rules for ALL tags — pose/camera angle, uniform info, logo strategy, diversity requirements..."
+                    />
+                  </div>
                   {/* Insert placeholder tags */}
                   {(activeAvatar.placeholderMode || 'simple') === 'simple' && activeAvatar.variations.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">

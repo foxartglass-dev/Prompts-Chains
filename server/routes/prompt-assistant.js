@@ -364,9 +364,15 @@ router.post('/chat', async (req, res) => {
 
       // Main prompt template - THE KEY PIECE
       if (context.mainPrompt) {
-        parts.push('\n## Main Prompt Template:');
+        parts.push('\n## Main Prompt Template (Unique to Tag):');
         parts.push('```');
         parts.push(context.mainPrompt);
+        parts.push('```');
+      }
+      if (context.mainPromptPersistent) {
+        parts.push('\n## Main Prompt (Persistent — All Tags):');
+        parts.push('```');
+        parts.push(context.mainPromptPersistent);
         parts.push('```');
       }
 
@@ -402,6 +408,12 @@ router.post('/chat', async (req, res) => {
         if (context.guardrails.avoidList) {
           parts.push(`**Avoid:** ${context.guardrails.avoidList}`);
         }
+      }
+
+      // Guided GPT persistent instructions (shared across all tags)
+      if (context.guidedInstructionsPersistent) {
+        parts.push('\n## Guided GPT Instructions (Persistent — All Tags):');
+        parts.push(context.guidedInstructionsPersistent);
       }
 
       // Reference images with detail
@@ -469,11 +481,15 @@ router.post('/chat', async (req, res) => {
 
       // GUIDED GPT PROMPT SETTINGS - Smart Prompt, Matching Rules
       if (context.smartPromptGuidance) {
-        parts.push('\n## Smart Prompt Guidance:');
+        parts.push('\n## Smart Prompt Guidance (Unique to Tag):');
         parts.push('```');
         parts.push(context.smartPromptGuidance);
         parts.push('```');
         parts.push('*You can edit this by outputting a ```smartprompt code block.*');
+      }
+      if (context.smartPromptPersistent) {
+        parts.push('\n## Smart Prompt Guidance (Persistent — All Tags):');
+        parts.push(context.smartPromptPersistent);
       }
       if (context.matchingRules) {
         const rules = context.matchingRules;
