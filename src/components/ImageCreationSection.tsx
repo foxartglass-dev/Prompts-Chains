@@ -8689,62 +8689,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               )}
 
-                              {/* Context Toggles — both chats visible side by side */}
+                              {/* Context Toggles — unified 9-pill bar shared by both chats */}
                               <div className="flex items-center flex-wrap gap-x-3 gap-y-1 px-1 pb-1.5">
-                                {/* Guided GPT */}
+                                {/* Main Prompt group */}
                                 <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-slate-300 font-medium">Guided GPT:</span>
+                                  <span className="text-[11px] text-amber-300 font-medium">Main:</span>
                                   {([
-                                    ['promptSetup', 'Prompt'],
-                                    ['guardrails', 'Rules'],
-                                    ['testingMode', 'Testing'],
-                                    ['imageBank', 'Bank'],
-                                    ['problemAreas', 'Problems'],
-                                  ] as [keyof typeof guidedContextToggles, string][]).map(([key, label]) => (
+                                    ['mainPrompt', 'Prompt'],
+                                    ['mainCategories', 'Categories'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
                                     <button
                                       key={key}
-                                      onClick={() => setGuidedContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
                                       className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        guidedContextToggles[key]
-                                          ? 'bg-emerald-600 text-white font-medium'
-                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                  <button
-                                    onClick={() => {
-                                      const allOn = Object.values(guidedContextToggles).every(v => v);
-                                      const v = !allOn;
-                                      setGuidedContextToggles({ promptSetup: v, guardrails: v, testingMode: v, imageBank: v, problemAreas: v });
-                                    }}
-                                    className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
-                                      Object.values(guidedContextToggles).every(v => v)
-                                        ? 'bg-emerald-600 text-white'
-                                        : Object.values(guidedContextToggles).some(v => v)
-                                          ? 'bg-emerald-600/40 text-emerald-200'
-                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                    }`}
-                                  >
-                                    All
-                                  </button>
-                                </div>
-                                {/* Separator */}
-                                <div className="w-px h-4 bg-slate-500/60"></div>
-                                {/* Main Prompt */}
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-slate-300 font-medium">Main Prompt:</span>
-                                  {([
-                                    ['promptSetup', 'Prompt'],
-                                    ['guardrails', 'Rules'],
-                                    ['imageBank', 'Bank'],
-                                  ] as [keyof typeof mainPromptContextToggles, string][]).map(([key, label]) => (
-                                    <button
-                                      key={key}
-                                      onClick={() => setMainPromptContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
-                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        mainPromptContextToggles[key]
+                                        contextToggles[key]
                                           ? 'bg-amber-600 text-white font-medium'
                                           : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
                                       }`}
@@ -8752,23 +8710,87 @@ Start by introducing yourself and asking about their business in a friendly way.
                                       {label}
                                     </button>
                                   ))}
-                                  <button
-                                    onClick={() => {
-                                      const allOn = Object.values(mainPromptContextToggles).every(v => v);
-                                      const v = !allOn;
-                                      setMainPromptContextToggles({ promptSetup: v, guardrails: v, imageBank: v });
-                                    }}
-                                    className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
-                                      Object.values(mainPromptContextToggles).every(v => v)
-                                        ? 'bg-amber-600 text-white'
-                                        : Object.values(mainPromptContextToggles).some(v => v)
-                                          ? 'bg-amber-600/40 text-amber-200'
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Guided GPT group */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-emerald-300 font-medium">Guided:</span>
+                                  {([
+                                    ['guidedPrompt', 'Prompt'],
+                                    ['guidedRules', 'Rules'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        contextToggles[key]
+                                          ? 'bg-emerald-600 text-white font-medium'
                                           : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Smart Prompt group */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-purple-300 font-medium">Smart:</span>
+                                  <button
+                                    onClick={() => setContextToggles(prev => ({ ...prev, smartPrompt: !prev.smartPrompt }))}
+                                    className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                      contextToggles.smartPrompt
+                                        ? 'bg-purple-600 text-white font-medium'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
                                     }`}
                                   >
-                                    All
+                                    Prompt
                                   </button>
                                 </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Independent sections */}
+                                <div className="flex items-center gap-1">
+                                  {([
+                                    ['testing', 'Testing'],
+                                    ['problems', 'Problems'],
+                                    ['imageBank', 'Bank'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        contextToggles[key]
+                                          ? 'bg-sky-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* All toggle */}
+                                <button
+                                  onClick={() => {
+                                    const allOn = Object.values(contextToggles).every(v => v);
+                                    const v = !allOn;
+                                    setContextToggles({
+                                      mainPrompt: v, mainCategories: v,
+                                      guidedPrompt: v, guidedRules: v,
+                                      smartPrompt: v,
+                                      testing: v, problems: v, imageBank: v,
+                                    });
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
+                                    Object.values(contextToggles).every(v => v)
+                                      ? 'bg-sky-600 text-white'
+                                      : Object.values(contextToggles).some(v => v)
+                                        ? 'bg-sky-600/40 text-sky-200'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                >
+                                  All
+                                </button>
                               </div>
 
                               {/* Chat Input */}
@@ -10253,62 +10275,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               )}
 
-                              {/* Context Toggles — both chats visible side by side */}
+                              {/* Context Toggles — unified 9-pill bar shared by both chats */}
                               <div className="flex items-center flex-wrap gap-x-3 gap-y-1 px-1 pb-1.5">
-                                {/* Guided GPT */}
+                                {/* Main Prompt group */}
                                 <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-slate-300 font-medium">Guided GPT:</span>
+                                  <span className="text-[11px] text-amber-300 font-medium">Main:</span>
                                   {([
-                                    ['promptSetup', 'Prompt'],
-                                    ['guardrails', 'Rules'],
-                                    ['testingMode', 'Testing'],
-                                    ['imageBank', 'Bank'],
-                                    ['problemAreas', 'Problems'],
-                                  ] as [keyof typeof guidedContextToggles, string][]).map(([key, label]) => (
+                                    ['mainPrompt', 'Prompt'],
+                                    ['mainCategories', 'Categories'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
                                     <button
                                       key={key}
-                                      onClick={() => setGuidedContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
                                       className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        guidedContextToggles[key]
-                                          ? 'bg-emerald-600 text-white font-medium'
-                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                  <button
-                                    onClick={() => {
-                                      const allOn = Object.values(guidedContextToggles).every(v => v);
-                                      const v = !allOn;
-                                      setGuidedContextToggles({ promptSetup: v, guardrails: v, testingMode: v, imageBank: v, problemAreas: v });
-                                    }}
-                                    className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
-                                      Object.values(guidedContextToggles).every(v => v)
-                                        ? 'bg-emerald-600 text-white'
-                                        : Object.values(guidedContextToggles).some(v => v)
-                                          ? 'bg-emerald-600/40 text-emerald-200'
-                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                    }`}
-                                  >
-                                    All
-                                  </button>
-                                </div>
-                                {/* Separator */}
-                                <div className="w-px h-4 bg-slate-500/60"></div>
-                                {/* Main Prompt */}
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-slate-300 font-medium">Main Prompt:</span>
-                                  {([
-                                    ['promptSetup', 'Prompt'],
-                                    ['guardrails', 'Rules'],
-                                    ['imageBank', 'Bank'],
-                                  ] as [keyof typeof mainPromptContextToggles, string][]).map(([key, label]) => (
-                                    <button
-                                      key={key}
-                                      onClick={() => setMainPromptContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
-                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        mainPromptContextToggles[key]
+                                        contextToggles[key]
                                           ? 'bg-amber-600 text-white font-medium'
                                           : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
                                       }`}
@@ -10316,23 +10296,87 @@ Start by introducing yourself and asking about their business in a friendly way.
                                       {label}
                                     </button>
                                   ))}
-                                  <button
-                                    onClick={() => {
-                                      const allOn = Object.values(mainPromptContextToggles).every(v => v);
-                                      const v = !allOn;
-                                      setMainPromptContextToggles({ promptSetup: v, guardrails: v, imageBank: v });
-                                    }}
-                                    className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
-                                      Object.values(mainPromptContextToggles).every(v => v)
-                                        ? 'bg-amber-600 text-white'
-                                        : Object.values(mainPromptContextToggles).some(v => v)
-                                          ? 'bg-amber-600/40 text-amber-200'
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Guided GPT group */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-emerald-300 font-medium">Guided:</span>
+                                  {([
+                                    ['guidedPrompt', 'Prompt'],
+                                    ['guidedRules', 'Rules'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        contextToggles[key]
+                                          ? 'bg-emerald-600 text-white font-medium'
                                           : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Smart Prompt group */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-purple-300 font-medium">Smart:</span>
+                                  <button
+                                    onClick={() => setContextToggles(prev => ({ ...prev, smartPrompt: !prev.smartPrompt }))}
+                                    className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                      contextToggles.smartPrompt
+                                        ? 'bg-purple-600 text-white font-medium'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
                                     }`}
                                   >
-                                    All
+                                    Prompt
                                   </button>
                                 </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Independent sections */}
+                                <div className="flex items-center gap-1">
+                                  {([
+                                    ['testing', 'Testing'],
+                                    ['problems', 'Problems'],
+                                    ['imageBank', 'Bank'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        contextToggles[key]
+                                          ? 'bg-sky-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* All toggle */}
+                                <button
+                                  onClick={() => {
+                                    const allOn = Object.values(contextToggles).every(v => v);
+                                    const v = !allOn;
+                                    setContextToggles({
+                                      mainPrompt: v, mainCategories: v,
+                                      guidedPrompt: v, guidedRules: v,
+                                      smartPrompt: v,
+                                      testing: v, problems: v, imageBank: v,
+                                    });
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
+                                    Object.values(contextToggles).every(v => v)
+                                      ? 'bg-sky-600 text-white'
+                                      : Object.values(contextToggles).some(v => v)
+                                        ? 'bg-sky-600/40 text-sky-200'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                >
+                                  All
+                                </button>
                               </div>
 
                               {/* Chat Input */}
