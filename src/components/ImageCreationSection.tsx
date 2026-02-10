@@ -328,6 +328,7 @@ interface TagBasedRule {
   text: string; // Editable rule text
   order: number; // Display order
   globalAppliesTo?: string[]; // For Global rules: which tags they apply to
+  appliesTo?: string[]; // Grid-selected targets: e.g. ['H-prompt', 'J-categories', 'All-guardrails']
   createdAt: string;
   updatedAt: string;
 }
@@ -780,6 +781,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [legacyRulesCollapsed, setLegacyRulesCollapsed] = useState(true);
   const [legacyRulesActiveTag, setLegacyRulesActiveTag] = useState<string>('Global');
   const [legacyRulesEditingId, setLegacyRulesEditingId] = useState<string | null>(null);
+  // Rules grid popup — which rule ID has its checkbox grid open
+  const [rulesGridOpenId, setRulesGridOpenId] = useState<string | null>(null);
+  const [rulesGridType, setRulesGridType] = useState<'guided' | 'legacy'>('guided');
+  const rulesGridButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // ========== PHASE 3: TAG-BASED MULTI-PROMPT SYSTEM ==========
   // Guided GPT Prompts - per-tag multi-prompt system
@@ -9508,32 +9513,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         className="w-full p-2 text-xs bg-slate-900 border border-brand-gold/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
                                         rows={2}
                                       />
-                                      {/* Global rule applies-to checkboxes */}
-                                      {rule.tag === 'Global' && (
-                                        <div className="flex items-center gap-2 mt-2 bg-emerald-900/20 px-2 py-1.5 rounded border border-emerald-500/20">
-                                          <span className="text-[10px] text-emerald-400 font-medium">Applies to:</span>
-                                          {tags.map(tag => {
-                                            const currentAppliesTo = rule.globalAppliesTo || tags.map(t => t.name);
-                                            const isChecked = currentAppliesTo.includes(tag.name);
-                                            return (
-                                              <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
-                                                <input
-                                                  type="checkbox"
-                                                  checked={isChecked}
-                                                  onChange={(e) => {
-                                                    const newAppliesTo = e.target.checked
-                                                      ? [...currentAppliesTo, tag.name]
-                                                      : currentAppliesTo.filter(t => t !== tag.name);
-                                                    handleUpdateGuidedRule(rule.id, { globalAppliesTo: newAppliesTo });
-                                                  }}
-                                                  className="accent-emerald-500 w-3 h-3"
-                                                />
-                                                {tag.name}
-                                              </label>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
+                                      {/* Rule applies-to grid */}
+                                      <div className="flex items-center gap-2 mt-2">
+                                        {(rule.appliesTo || []).length > 0 && (
+                                          <span className="text-[9px] text-emerald-400/70 truncate max-w-[300px]">
+                                            {(rule.appliesTo || []).join(', ')}
+                                          </span>
+                                        )}
+                                        <button
+                                          ref={rulesGridOpenId === rule.id ? rulesGridButtonRef : undefined}
+                                          onClick={(e) => {
+                                            rulesGridButtonRef.current = e.currentTarget;
+                                            setRulesGridOpenId(rulesGridOpenId === rule.id ? null : rule.id);
+                                            setRulesGridType('guided');
+                                          }}
+                                          className={`px-2 py-1 text-[10px] rounded transition ${
+                                            rulesGridOpenId === rule.id
+                                              ? 'bg-emerald-600 text-white'
+                                              : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                          }`}
+                                        >
+                                          {(rule.appliesTo || []).length > 0 ? `Scope (${(rule.appliesTo || []).length})` : 'Set Scope'}
+                                        </button>
+                                      </div>
                                     </div>
                                   ))
                                 )}
@@ -11869,32 +11871,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         className="w-full p-2 text-xs bg-slate-900 border border-purple-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
                                         rows={2}
                                       />
-                                      {/* Global rule applies-to checkboxes */}
-                                      {rule.tag === 'Global' && (
-                                        <div className="flex items-center gap-2 mt-2 bg-purple-900/20 px-2 py-1.5 rounded border border-purple-500/20">
-                                          <span className="text-[10px] text-purple-400 font-medium">Applies to:</span>
-                                          {tags.map(tag => {
-                                            const currentAppliesTo = rule.globalAppliesTo || tags.map(t => t.name);
-                                            const isChecked = currentAppliesTo.includes(tag.name);
-                                            return (
-                                              <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
-                                                <input
-                                                  type="checkbox"
-                                                  checked={isChecked}
-                                                  onChange={(e) => {
-                                                    const newAppliesTo = e.target.checked
-                                                      ? [...currentAppliesTo, tag.name]
-                                                      : currentAppliesTo.filter(t => t !== tag.name);
-                                                    handleUpdateLegacyRule(rule.id, { globalAppliesTo: newAppliesTo });
-                                                  }}
-                                                  className="accent-purple-500 w-3 h-3"
-                                                />
-                                                {tag.name}
-                                              </label>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
+                                      {/* Rule applies-to grid */}
+                                      <div className="flex items-center gap-2 mt-2">
+                                        {(rule.appliesTo || []).length > 0 && (
+                                          <span className="text-[9px] text-purple-400/70 truncate max-w-[300px]">
+                                            {(rule.appliesTo || []).join(', ')}
+                                          </span>
+                                        )}
+                                        <button
+                                          ref={rulesGridOpenId === rule.id ? rulesGridButtonRef : undefined}
+                                          onClick={(e) => {
+                                            rulesGridButtonRef.current = e.currentTarget;
+                                            setRulesGridOpenId(rulesGridOpenId === rule.id ? null : rule.id);
+                                            setRulesGridType('legacy');
+                                          }}
+                                          className={`px-2 py-1 text-[10px] rounded transition ${
+                                            rulesGridOpenId === rule.id
+                                              ? 'bg-purple-600 text-white'
+                                              : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                          }`}
+                                        >
+                                          {(rule.appliesTo || []).length > 0 ? `Scope (${(rule.appliesTo || []).length})` : 'Set Scope'}
+                                        </button>
+                                      </div>
                                     </div>
                                   ))
                                 )}
@@ -18400,6 +18399,189 @@ Start by introducing yourself and asking about their business in a friendly way.
                 </button>
               </div>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Rules Checkbox Grid Popup (Portal) */}
+      {rulesGridOpenId && createPortal(
+        <div
+          className="fixed inset-0 z-[9999]"
+          onClick={() => setRulesGridOpenId(null)}
+        >
+          <div
+            className="absolute bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-4 max-w-[520px]"
+            style={{
+              top: rulesGridButtonRef.current
+                ? Math.min(rulesGridButtonRef.current.getBoundingClientRect().bottom + 8, window.innerHeight - 400)
+                : 200,
+              left: rulesGridButtonRef.current
+                ? Math.min(rulesGridButtonRef.current.getBoundingClientRect().left, window.innerWidth - 540)
+                : 200,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-white">Rule Applies To</h3>
+              <button
+                onClick={() => setRulesGridOpenId(null)}
+                className="text-slate-400 hover:text-white transition"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {(() => {
+              const tagNames = tags.map(t => t.name);
+              const columns = [...tagNames, 'All'];
+              const rows = [
+                { key: 'prompt', label: 'Main Prompt' },
+                { key: 'categories', label: 'Main Categories' },
+                { key: 'guardrails', label: 'Guided Prompt' },
+                { key: 'guided-rules', label: 'Guided Rules' },
+                { key: 'smart', label: 'Smart Prompt' },
+                { key: 'smart-rules', label: 'Smart Rules' },
+              ];
+
+              // Find the active rule
+              const allRules = rulesGridType === 'guided' ? (settings.guided_gpt_rules || []) : (settings.legacy_prompt_rules || []);
+              const activeRule = allRules.find(r => r.id === rulesGridOpenId);
+              if (!activeRule) return null;
+              const currentAppliesTo = activeRule.appliesTo || [];
+
+              const toggleCell = (col: string, rowKey: string) => {
+                const cellId = `${col}-${rowKey}`;
+                const updated = currentAppliesTo.includes(cellId)
+                  ? currentAppliesTo.filter(x => x !== cellId)
+                  : [...currentAppliesTo, cellId];
+                if (rulesGridType === 'guided') {
+                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
+                } else {
+                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
+                }
+              };
+
+              const toggleColumn = (col: string) => {
+                const colCells = rows.map(r => `${col}-${r.key}`);
+                const allChecked = colCells.every(c => currentAppliesTo.includes(c));
+                let updated: string[];
+                if (allChecked) {
+                  updated = currentAppliesTo.filter(x => !colCells.includes(x));
+                } else {
+                  updated = [...new Set([...currentAppliesTo, ...colCells])];
+                }
+                if (rulesGridType === 'guided') {
+                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
+                } else {
+                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
+                }
+              };
+
+              const toggleRow = (rowKey: string) => {
+                const rowCells = columns.map(c => `${c}-${rowKey}`);
+                const allChecked = rowCells.every(c => currentAppliesTo.includes(c));
+                let updated: string[];
+                if (allChecked) {
+                  updated = currentAppliesTo.filter(x => !rowCells.includes(x));
+                } else {
+                  updated = [...new Set([...currentAppliesTo, ...rowCells])];
+                }
+                if (rulesGridType === 'guided') {
+                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
+                } else {
+                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
+                }
+              };
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[10px]">
+                    <thead>
+                      <tr>
+                        <th className="text-left text-slate-400 pr-2 py-1"></th>
+                        {columns.map(col => (
+                          <th key={col} className="text-center px-1 py-1">
+                            <button
+                              onClick={() => toggleColumn(col)}
+                              className="text-slate-300 hover:text-white font-medium transition"
+                            >
+                              {col}
+                            </button>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map(row => (
+                        <tr key={row.key}>
+                          <td className="pr-2 py-1">
+                            <button
+                              onClick={() => toggleRow(row.key)}
+                              className="text-slate-300 hover:text-white text-left transition whitespace-nowrap"
+                            >
+                              {row.label}
+                            </button>
+                          </td>
+                          {columns.map(col => {
+                            const cellId = `${col}-${row.key}`;
+                            const isChecked = currentAppliesTo.includes(cellId);
+                            return (
+                              <td key={col} className="text-center px-1 py-1">
+                                <button
+                                  onClick={() => toggleCell(col, row.key)}
+                                  className={`w-5 h-5 rounded border transition ${
+                                    isChecked
+                                      ? rulesGridType === 'guided'
+                                        ? 'bg-emerald-600 border-emerald-500 text-white'
+                                        : 'bg-purple-600 border-purple-500 text-white'
+                                      : 'bg-slate-700 border-slate-600 text-slate-500 hover:border-slate-400'
+                                  }`}
+                                >
+                                  {isChecked ? '✓' : ''}
+                                </button>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {/* Select All / Clear All */}
+                  <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-700">
+                    <button
+                      onClick={() => {
+                        const allCells = columns.flatMap(col => rows.map(r => `${col}-${r.key}`));
+                        if (rulesGridType === 'guided') {
+                          handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: allCells });
+                        } else {
+                          handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: allCells });
+                        }
+                      }}
+                      className="px-2 py-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (rulesGridType === 'guided') {
+                          handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: [] });
+                        } else {
+                          handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: [] });
+                        }
+                      }}
+                      className="px-2 py-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition"
+                    >
+                      Clear All
+                    </button>
+                    <span className="text-[10px] text-slate-500 ml-auto">
+                      {currentAppliesTo.length} selected
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>,
         document.body
