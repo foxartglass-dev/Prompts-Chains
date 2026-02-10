@@ -74,6 +74,7 @@ interface PlaceholderCategory {
   options: PlaceholderOption[];
   isRandomized?: boolean; // If true, pick random option instead of keyword matching
   enabled?: boolean; // If false, category is disabled but not deleted (for testing)
+  scope?: 'unique' | 'persistent'; // unique = this tag only, persistent = all tags (default: unique)
 }
 
 // An option within a category
@@ -14077,6 +14078,31 @@ Start by introducing yourself and asking about their business in a friendly way.
                             placeholder="Category name (e.g., Cleaning_Item)"
                           />
                           <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
+                          {/* Unique / Persistent scope toggle */}
+                          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'unique' })}
+                              className={`px-1.5 py-0.5 text-[9px] rounded-l transition ${
+                                (category.scope || 'unique') === 'unique'
+                                  ? 'bg-amber-600 text-white font-medium'
+                                  : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                              }`}
+                              title="This category only appears for the current tag"
+                            >
+                              Unique
+                            </button>
+                            <button
+                              onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'persistent' })}
+                              className={`px-1.5 py-0.5 text-[9px] rounded-r transition ${
+                                category.scope === 'persistent'
+                                  ? 'bg-sky-600 text-white font-medium'
+                                  : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                              }`}
+                              title="This category appears for ALL tags"
+                            >
+                              Persistent
+                            </button>
+                          </div>
                           {isCategoryCollapsed && (
                             <span className="text-xs text-slate-500">{category.options.length} options</span>
                           )}
