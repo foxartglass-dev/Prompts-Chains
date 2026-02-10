@@ -74,6 +74,7 @@ interface PlaceholderCategory {
   options: PlaceholderOption[];
   isRandomized?: boolean; // If true, pick random option instead of keyword matching
   enabled?: boolean; // If false, category is disabled but not deleted (for testing)
+  scope?: 'unique' | 'persistent'; // unique = this tag only, persistent = all tags (default: unique)
 }
 
 // An option within a category
@@ -327,6 +328,7 @@ interface TagBasedRule {
   text: string; // Editable rule text
   order: number; // Display order
   globalAppliesTo?: string[]; // For Global rules: which tags they apply to
+  appliesTo?: string[]; // Grid-selected targets: e.g. ['H-prompt', 'J-categories', 'All-guardrails']
   createdAt: string;
   updatedAt: string;
 }
@@ -601,6 +603,11 @@ interface ImageCreationSettings {
   guided_gpt_rules: TagBasedRule[];
   // Rules per tag for Smart/Legacy Prompt
   legacy_prompt_rules: TagBasedRule[];
+  // ========== PERSISTENT PROMPT PORTIONS ==========
+  // Bottom portion of split prompt text areas — shared across ALL tags
+  main_prompt_persistent: string;       // Main Prompt: persistent portion below unique avatar prompt
+  guided_instructions_persistent: string; // Guided GPT: persistent instructions below unique tag instructions
+  smart_prompt_persistent: string;      // Smart Prompt: persistent guidance below unique tag guidance
 }
 
 enum LogStatus {
@@ -702,7 +709,11 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   // Rules per tag for Guided GPT (replaces placement rules)
   guided_gpt_rules: [],
   // Rules per tag for Smart/Legacy Prompt
-  legacy_prompt_rules: []
+  legacy_prompt_rules: [],
+  // ========== PERSISTENT PROMPT PORTIONS ==========
+  main_prompt_persistent: '',
+  guided_instructions_persistent: '',
+  smart_prompt_persistent: '',
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -770,6 +781,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [legacyRulesCollapsed, setLegacyRulesCollapsed] = useState(true);
   const [legacyRulesActiveTag, setLegacyRulesActiveTag] = useState<string>('Global');
   const [legacyRulesEditingId, setLegacyRulesEditingId] = useState<string | null>(null);
+  // Rules grid popup — which rule ID has its checkbox grid open
+  const [rulesGridOpenId, setRulesGridOpenId] = useState<string | null>(null);
+  const [rulesGridType, setRulesGridType] = useState<'guided' | 'legacy'>('guided');
+  const rulesGridButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // ========== PHASE 3: TAG-BASED MULTI-PROMPT SYSTEM ==========
   // Guided GPT Prompts - per-tag multi-prompt system
@@ -1009,6 +1024,20 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [showChatFileManager, setShowChatFileManager] = useState(false);
   const [renamingItemId, setRenamingItemId] = useState<string | null>(null);
   const [renamingValue, setRenamingValue] = useState('');
+
+  // Context toggles — controls what gets sent with each chat message
+  // Default: all OFF (just chat, no extra context payload)
+  // Three prompt systems (each with sub-toggles) + three independent sections
+  const [contextToggles, setContextToggles] = useState({
+    mainPrompt: false,       // Main Prompt: template + variations + avatars
+    mainCategories: false,   // Main Prompt: placeholder categories/groups
+    guidedPrompt: false,     // Guided GPT: prompt/instructions
+    guidedRules: false,      // Guided GPT: rules (uniform, subject, avoid)
+    smartPrompt: false,      // Smart Prompt: smart prompt + matching/placement rules
+    testing: false,          // Testing: testing mode + articles (independent)
+    problems: false,         // Problems: problem areas + solved problems (independent)
+    imageBank: false,        // Image Bank: bank examples + reference images + logos (independent)
+  });
 
   // Main Prompt AI Assistant Chat state (mirrors Guided GPT assistant)
   const [mainPromptAssistantOpen, setMainPromptAssistantOpen] = useState(false);
@@ -3542,11 +3571,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setChatLoading(true);
 
     try {
+      // Send last 8 messages + current for AI memory without token bloat
+      const recentMessages = [...settings.chat_history.slice(-8), newMessage];
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: newHistory.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -3987,11 +4018,17 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const contextImages = getContextImages('consultant');
       const allImages = [...(newMessage.images || []), ...contextImages];
 
+      // Send last 8 messages + current for AI memory without token bloat
+      // On first message, historyToSend = [systemContext, newMessage] which is already small
+      const recentMessages = isFirstMessage
+        ? historyToSend
+        : [...settings.consultant_chat_history.slice(-8), newMessage];
+
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: historyToSend.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -4653,9 +4690,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const context = {
         // Guardrails / instructions
         guardrails: settings.guided_guardrails,
+        // Guided GPT persistent instructions (shared across all tags)
+        guidedInstructionsPersistent: settings.guided_instructions_persistent || '',
 
-        // Main prompt template from active avatar
+        // Main prompt template from active avatar (unique portion)
         mainPrompt: activeAvatar?.mainPrompt || '',
+        // Main prompt persistent portion (shared across all tags)
+        mainPromptPersistent: settings.main_prompt_persistent || '',
 
         // Placeholder categories with all options (for understanding prompt structure)
         placeholderMode: activeAvatar?.placeholderMode || 'simple',
@@ -4757,9 +4798,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           isOpen: testingModeOpen,
           activeTab: activeTestingTab.name,
           currentPrompt: activeTestingTab.prompt,
-          // Send ALL history - no limit, AI should see the full iteration journey
-          // Include imageUrl so AI can see the generated test images
-          fullHistory: activeTestingTab.history.map(h => ({
+          // Last 5 iterations to avoid token bloat (AI still sees recent journey)
+          fullHistory: activeTestingTab.history.slice(-5).map(h => ({
             prompt: h.prompt,
             imageUrl: h.url,  // history entry uses 'url' property
             model: h.model,
@@ -4778,23 +4818,96 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             tag: a.tag,
             wordCount: a.wordCount,
             websiteName: a.websiteName,
-            clientName: a.clientName,
-            content: a.content
+            clientName: a.clientName
           }))
-        } : null
+        } : null,
+
+        // GUIDED GPT PROMPT SETTINGS - Smart Prompt, Matching Rules, Placement
+        // AI can edit these by outputting code blocks (```smartprompt, ```matchingrule1, etc.)
+        smartPromptGuidance: settings.smart_prompt_guidance || '',
+        // Smart Prompt persistent portion (shared across all tags)
+        smartPromptPersistent: settings.smart_prompt_persistent || '',
+        matchingRules: {
+          rule1: settings.matching_rule_1 || '',
+          rule2: settings.matching_rule_2 || '',
+          rule3: settings.matching_rule_3 || '',
+          rule4: settings.matching_rule_4 || '',
+        },
+        placementRule: settings.placement_rule || '',
+        smartMatchingRule: settings.smart_matching_rule || ''
       };
+
+      // Apply context toggles — strip sections the user hasn't toggled on
+      // 3 prompt systems: Main Prompt (Prompt+Categories), Guided GPT (Prompt+Rules), Smart Prompt
+      // 3 independent sections: Testing, Problems, Image Bank
+      const t = contextToggles;
+      const anyToggleOn = Object.values(t).some(v => v);
+      if (anyToggleOn) {
+        const ctx = context as Record<string, any>;
+        // Main Prompt: template + variations + avatars + persistent
+        if (!t.mainPrompt) {
+          ctx.mainPrompt = undefined;
+          ctx.mainPromptPersistent = undefined;
+          ctx.variations = undefined;
+          ctx.activeAvatar = undefined;
+          ctx.allAvatars = undefined;
+        }
+        // Main Prompt: placeholder categories/groups
+        if (!t.mainCategories) {
+          ctx.placeholderMode = undefined;
+          ctx.placeholderCategories = undefined;
+        }
+        // Guided GPT: prompt/instructions vs rules (uniform, subject, avoid)
+        if (!t.guidedPrompt && !t.guidedRules) {
+          ctx.guardrails = undefined;
+          ctx.guidedInstructionsPersistent = undefined;
+        } else if (!t.guidedPrompt && ctx.guardrails) {
+          ctx.guardrails = { ...ctx.guardrails, instructions: undefined };
+          ctx.guidedInstructionsPersistent = undefined;
+        } else if (!t.guidedRules && ctx.guardrails) {
+          ctx.guardrails = { ...ctx.guardrails, uniformRules: undefined, subjectRules: undefined, avoidRules: undefined };
+        }
+        // Smart Prompt: smart prompt + matching/placement rules + persistent
+        if (!t.smartPrompt) {
+          ctx.smartPromptGuidance = undefined;
+          ctx.smartPromptPersistent = undefined;
+          ctx.matchingRules = undefined;
+          ctx.placementRule = undefined;
+          ctx.smartMatchingRule = undefined;
+        }
+        // Testing: testing mode + articles (independent)
+        if (!t.testing) {
+          ctx.testingMode = undefined;
+          ctx.articles = undefined;
+        }
+        // Problems: problem areas + solved (independent)
+        if (!t.problems) {
+          ctx.problemAreas = undefined;
+          ctx.solvedProblems = undefined;
+        }
+        // Image Bank: bank examples + reference images + logos (independent)
+        if (!t.imageBank) {
+          ctx.referenceImages = undefined;
+          ctx.logoImages = undefined;
+          ctx.actionShots = undefined;
+          ctx.imageBankExamples = undefined;
+        }
+      }
+
+      // Send last 8 messages + current for AI memory without token bloat
+      const recentMessages = [...guidedAssistantMessages.slice(-8), newMessage];
 
       const res = await fetch('/api/prompt-assistant/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: settings.guided_model || 'gpt-5.2-2025-12-11',
-          messages: historyToSend.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
           })),
-          context
+          context: anyToggleOn ? context : null
         })
       });
 
@@ -5025,8 +5138,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         // Assistant mode
         assistantMode: 'main_prompt',
 
-        // Main prompt template from active avatar
+        // Main prompt template from active avatar (unique portion)
         mainPrompt: activeAvatar?.mainPrompt || '',
+        // Main prompt persistent portion (shared across all tags)
+        mainPromptPersistent: settings.main_prompt_persistent || '',
 
         // Placeholder categories with all options
         placeholderMode: activeAvatar?.placeholderMode || 'simple',
@@ -5078,17 +5193,45 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           }))
       };
 
+      // Apply context toggles — strip sections the user hasn't toggled on
+      // Same unified toggles as Guided GPT chat (both chats share one toggle bar)
+      const t = contextToggles;
+      const anyToggleOn = Object.values(t).some(v => v);
+      if (anyToggleOn) {
+        const ctx = context as Record<string, any>;
+        // Main Prompt: template + variations + avatars + persistent
+        if (!t.mainPrompt) {
+          ctx.mainPrompt = undefined;
+          ctx.mainPromptPersistent = undefined;
+          ctx.variations = undefined;
+          ctx.activeAvatar = undefined;
+          ctx.allAvatars = undefined;
+        }
+        // Main Prompt: placeholder categories
+        if (!t.mainCategories) {
+          ctx.placeholderMode = undefined;
+          ctx.placeholderCategories = undefined;
+        }
+        // Guided GPT guardrails (cross-reference in Main Prompt chat)
+        if (!t.guidedPrompt && !t.guidedRules) ctx.guidedGuardrails = undefined;
+        // Image Bank
+        if (!t.imageBank) ctx.imageBankExamples = undefined;
+      }
+
+      // Send last 8 messages + current for AI memory without token bloat
+      const recentMessages = [...mainPromptAssistantMessages.slice(-8), newMessage];
+
       const res = await fetch('/api/prompt-assistant/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: settings.main_prompt_chat_model || 'gpt-4o',
-          messages: historyToSend.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
           })),
-          context
+          context: anyToggleOn ? context : null
         })
       });
 
@@ -6418,11 +6561,13 @@ Start by introducing yourself and asking about their business in a friendly way.
     setConsultantLoading(true);
 
     try {
+      // Send last 8 messages + export message for AI memory without token bloat
+      const recentMessages = [...settings.consultant_chat_history.slice(-8), exportMessage];
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: newHistory.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -6483,11 +6628,18 @@ Start by introducing yourself and asking about their business in a friendly way.
     setWorkerLoading(true);
 
     try {
+      // Send last 8 messages + current for AI memory without token bloat
+      // Preserve system context when needed (first message or periodic refresh)
+      const needsContext = isFirstMessage || settings.worker_chat_history.length % 10 === 0;
+      const recentMessages = needsContext
+        ? [historyToSend[0], ...settings.worker_chat_history.slice(-8), newMessage]
+        : [...settings.worker_chat_history.slice(-8), newMessage];
+
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: historyToSend.map(m => ({
+          messages: recentMessages.map(m => ({
             role: m.role,
             content: m.content,
             images: m.images
@@ -8565,6 +8717,110 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               )}
 
+                              {/* Context Toggles — unified 9-pill bar shared by both chats */}
+                              <div className="flex items-center flex-wrap gap-x-3 gap-y-1 px-1 pb-1.5">
+                                {/* Main Prompt group */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-amber-300 font-medium">Main:</span>
+                                  {([
+                                    ['mainPrompt', 'Prompt'],
+                                    ['mainCategories', 'Categories'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        contextToggles[key]
+                                          ? 'bg-amber-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Guided GPT group */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-emerald-300 font-medium">Guided:</span>
+                                  {([
+                                    ['guidedPrompt', 'Prompt'],
+                                    ['guidedRules', 'Rules'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        contextToggles[key]
+                                          ? 'bg-emerald-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Smart Prompt group */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-purple-300 font-medium">Smart:</span>
+                                  <button
+                                    onClick={() => setContextToggles(prev => ({ ...prev, smartPrompt: !prev.smartPrompt }))}
+                                    className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                      contextToggles.smartPrompt
+                                        ? 'bg-purple-600 text-white font-medium'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                    }`}
+                                  >
+                                    Prompt
+                                  </button>
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Independent sections */}
+                                <div className="flex items-center gap-1">
+                                  {([
+                                    ['testing', 'Testing'],
+                                    ['problems', 'Problems'],
+                                    ['imageBank', 'Bank'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        contextToggles[key]
+                                          ? 'bg-sky-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* All toggle */}
+                                <button
+                                  onClick={() => {
+                                    const allOn = Object.values(contextToggles).every(v => v);
+                                    const v = !allOn;
+                                    setContextToggles({
+                                      mainPrompt: v, mainCategories: v,
+                                      guidedPrompt: v, guidedRules: v,
+                                      smartPrompt: v,
+                                      testing: v, problems: v, imageBank: v,
+                                    });
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
+                                    Object.values(contextToggles).every(v => v)
+                                      ? 'bg-sky-600 text-white'
+                                      : Object.values(contextToggles).some(v => v)
+                                        ? 'bg-sky-600/40 text-sky-200'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                >
+                                  All
+                                </button>
+                              </div>
+
                               {/* Chat Input */}
                               <div className="flex gap-2">
                                 <input
@@ -9030,18 +9286,39 @@ Start by introducing yourself and asking about their business in a friendly way.
                               </div>
                             </div>
 
-                            {/* Guardrails */}
-                            <div className="space-y-2">
-                              <label className="text-[10px] text-emerald-400 block">Guardrails / Instructions:</label>
-                              <textarea
-                                value={activeGuidedPrompt.guardrails.instructions}
-                                onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
-                                  guardrails: { ...activeGuidedPrompt.guardrails, instructions: e.target.value }
-                                })}
-                                placeholder="e.g., Always show professional cleaners in uniform. Focus on the specific task being discussed."
-                                className="w-full p-2 text-xs bg-slate-900 border border-emerald-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
-                                rows={3}
-                              />
+                            {/* Guardrails — Top/Bottom split */}
+                            <div className="space-y-0">
+                              <label className="text-[10px] text-emerald-400 block mb-1">Guardrails / Instructions:</label>
+                              {/* Top: Unique to this tag's prompt */}
+                              <div className="relative">
+                                <div className="absolute top-1 right-2 text-[9px] text-emerald-400/60 pointer-events-none">
+                                  Unique to [{activeGuidedPrompt.tag}]
+                                </div>
+                                <textarea
+                                  value={activeGuidedPrompt.guardrails.instructions}
+                                  onChange={(e) => handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
+                                    guardrails: { ...activeGuidedPrompt.guardrails, instructions: e.target.value }
+                                  })}
+                                  placeholder="e.g., Always show professional cleaners in uniform. Focus on the specific task being discussed."
+                                  className="w-full p-2 pt-5 text-xs bg-slate-900 border border-emerald-500/30 rounded-t text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                  rows={3}
+                                />
+                              </div>
+                              {/* Divider */}
+                              <div className="h-px bg-emerald-500/30 mx-1" />
+                              {/* Bottom: Persistent across ALL tags */}
+                              <div className="relative">
+                                <div className="absolute top-1 right-2 text-[9px] text-emerald-400/60 pointer-events-none">
+                                  All Tags
+                                </div>
+                                <textarea
+                                  value={settings.guided_instructions_persistent || ''}
+                                  onChange={(e) => updateSettings({ guided_instructions_persistent: e.target.value })}
+                                  placeholder="Persistent guardrails for ALL tags — shared rules, brand guidelines, safety constraints..."
+                                  className="w-full p-2 pt-5 text-xs bg-slate-900/80 border border-emerald-500/20 rounded-b text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                  rows={2}
+                                />
+                              </div>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                               <div>
@@ -9236,32 +9513,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         className="w-full p-2 text-xs bg-slate-900 border border-brand-gold/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
                                         rows={2}
                                       />
-                                      {/* Global rule applies-to checkboxes */}
-                                      {rule.tag === 'Global' && (
-                                        <div className="flex items-center gap-2 mt-2 bg-emerald-900/20 px-2 py-1.5 rounded border border-emerald-500/20">
-                                          <span className="text-[10px] text-emerald-400 font-medium">Applies to:</span>
-                                          {tags.map(tag => {
-                                            const currentAppliesTo = rule.globalAppliesTo || tags.map(t => t.name);
-                                            const isChecked = currentAppliesTo.includes(tag.name);
-                                            return (
-                                              <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
-                                                <input
-                                                  type="checkbox"
-                                                  checked={isChecked}
-                                                  onChange={(e) => {
-                                                    const newAppliesTo = e.target.checked
-                                                      ? [...currentAppliesTo, tag.name]
-                                                      : currentAppliesTo.filter(t => t !== tag.name);
-                                                    handleUpdateGuidedRule(rule.id, { globalAppliesTo: newAppliesTo });
-                                                  }}
-                                                  className="accent-emerald-500 w-3 h-3"
-                                                />
-                                                {tag.name}
-                                              </label>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
+                                      {/* Rule applies-to grid */}
+                                      <div className="flex items-center gap-2 mt-2">
+                                        {(rule.appliesTo || []).length > 0 && (
+                                          <span className="text-[9px] text-emerald-400/70 truncate max-w-[300px]">
+                                            {(rule.appliesTo || []).join(', ')}
+                                          </span>
+                                        )}
+                                        <button
+                                          ref={rulesGridOpenId === rule.id ? rulesGridButtonRef : undefined}
+                                          onClick={(e) => {
+                                            rulesGridButtonRef.current = e.currentTarget;
+                                            setRulesGridOpenId(rulesGridOpenId === rule.id ? null : rule.id);
+                                            setRulesGridType('guided');
+                                          }}
+                                          className={`px-2 py-1 text-[10px] rounded transition ${
+                                            rulesGridOpenId === rule.id
+                                              ? 'bg-emerald-600 text-white'
+                                              : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                          }`}
+                                        >
+                                          {(rule.appliesTo || []).length > 0 ? `Scope (${(rule.appliesTo || []).length})` : 'Set Scope'}
+                                        </button>
+                                      </div>
                                     </div>
                                   ))
                                 )}
@@ -10046,6 +10320,110 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   )}
                                 </div>
                               )}
+
+                              {/* Context Toggles — unified 9-pill bar shared by both chats */}
+                              <div className="flex items-center flex-wrap gap-x-3 gap-y-1 px-1 pb-1.5">
+                                {/* Main Prompt group */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-amber-300 font-medium">Main:</span>
+                                  {([
+                                    ['mainPrompt', 'Prompt'],
+                                    ['mainCategories', 'Categories'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        contextToggles[key]
+                                          ? 'bg-amber-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Guided GPT group */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-emerald-300 font-medium">Guided:</span>
+                                  {([
+                                    ['guidedPrompt', 'Prompt'],
+                                    ['guidedRules', 'Rules'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        contextToggles[key]
+                                          ? 'bg-emerald-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Smart Prompt group */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] text-purple-300 font-medium">Smart:</span>
+                                  <button
+                                    onClick={() => setContextToggles(prev => ({ ...prev, smartPrompt: !prev.smartPrompt }))}
+                                    className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                      contextToggles.smartPrompt
+                                        ? 'bg-purple-600 text-white font-medium'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                    }`}
+                                  >
+                                    Prompt
+                                  </button>
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* Independent sections */}
+                                <div className="flex items-center gap-1">
+                                  {([
+                                    ['testing', 'Testing'],
+                                    ['problems', 'Problems'],
+                                    ['imageBank', 'Bank'],
+                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        contextToggles[key]
+                                          ? 'bg-sky-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                {/* All toggle */}
+                                <button
+                                  onClick={() => {
+                                    const allOn = Object.values(contextToggles).every(v => v);
+                                    const v = !allOn;
+                                    setContextToggles({
+                                      mainPrompt: v, mainCategories: v,
+                                      guidedPrompt: v, guidedRules: v,
+                                      smartPrompt: v,
+                                      testing: v, problems: v, imageBank: v,
+                                    });
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
+                                    Object.values(contextToggles).every(v => v)
+                                      ? 'bg-sky-600 text-white'
+                                      : Object.values(contextToggles).some(v => v)
+                                        ? 'bg-sky-600/40 text-sky-200'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                >
+                                  All
+                                </button>
+                              </div>
 
                               {/* Chat Input */}
                               <div className="flex gap-2">
@@ -11306,16 +11684,37 @@ Start by introducing yourself and asking about their business in a friendly way.
                               </div>
                             </div>
 
-                            {/* Guidance */}
-                            <div>
+                            {/* Guidance — Top/Bottom split */}
+                            <div className="space-y-0">
                               <label className="text-[10px] text-purple-400 mb-1 block">Guidance / Guardrails:</label>
-                              <textarea
-                                value={activeSmartPrompt.guidance}
-                                onChange={(e) => handleUpdateSmartPrompt(activeSmartPrompt.id, { guidance: e.target.value })}
-                                placeholder="e.g., Always show professional cleaners in navy blue uniforms. Include cleaning supplies. Modern residential settings only."
-                                className="w-full p-2 text-xs bg-slate-900 border border-purple-500/30 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
-                                rows={3}
-                              />
+                              {/* Top: Unique to this tag's prompt */}
+                              <div className="relative">
+                                <div className="absolute top-1 right-2 text-[9px] text-purple-400/60 pointer-events-none">
+                                  Unique to [{activeSmartPrompt.tag}]
+                                </div>
+                                <textarea
+                                  value={activeSmartPrompt.guidance}
+                                  onChange={(e) => handleUpdateSmartPrompt(activeSmartPrompt.id, { guidance: e.target.value })}
+                                  placeholder="e.g., Always show professional cleaners in navy blue uniforms. Include cleaning supplies. Modern residential settings only."
+                                  className="w-full p-2 pt-5 text-xs bg-slate-900 border border-purple-500/30 rounded-t text-white placeholder-slate-500 resize-y min-h-[60px]"
+                                  rows={3}
+                                />
+                              </div>
+                              {/* Divider */}
+                              <div className="h-px bg-purple-500/30 mx-1" />
+                              {/* Bottom: Persistent across ALL tags */}
+                              <div className="relative">
+                                <div className="absolute top-1 right-2 text-[9px] text-purple-400/60 pointer-events-none">
+                                  All Tags
+                                </div>
+                                <textarea
+                                  value={settings.smart_prompt_persistent || ''}
+                                  onChange={(e) => updateSettings({ smart_prompt_persistent: e.target.value })}
+                                  placeholder="Persistent guidance for ALL tags — shared rules, brand guidelines, style requirements..."
+                                  className="w-full p-2 pt-5 text-xs bg-slate-900/80 border border-purple-500/20 rounded-b text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                  rows={2}
+                                />
+                              </div>
                             </div>
                           </div>
                         )}
@@ -11472,32 +11871,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         className="w-full p-2 text-xs bg-slate-900 border border-purple-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[60px]"
                                         rows={2}
                                       />
-                                      {/* Global rule applies-to checkboxes */}
-                                      {rule.tag === 'Global' && (
-                                        <div className="flex items-center gap-2 mt-2 bg-purple-900/20 px-2 py-1.5 rounded border border-purple-500/20">
-                                          <span className="text-[10px] text-purple-400 font-medium">Applies to:</span>
-                                          {tags.map(tag => {
-                                            const currentAppliesTo = rule.globalAppliesTo || tags.map(t => t.name);
-                                            const isChecked = currentAppliesTo.includes(tag.name);
-                                            return (
-                                              <label key={tag.id} className="flex items-center gap-1 text-[10px] text-gray-300 cursor-pointer">
-                                                <input
-                                                  type="checkbox"
-                                                  checked={isChecked}
-                                                  onChange={(e) => {
-                                                    const newAppliesTo = e.target.checked
-                                                      ? [...currentAppliesTo, tag.name]
-                                                      : currentAppliesTo.filter(t => t !== tag.name);
-                                                    handleUpdateLegacyRule(rule.id, { globalAppliesTo: newAppliesTo });
-                                                  }}
-                                                  className="accent-purple-500 w-3 h-3"
-                                                />
-                                                {tag.name}
-                                              </label>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
+                                      {/* Rule applies-to grid */}
+                                      <div className="flex items-center gap-2 mt-2">
+                                        {(rule.appliesTo || []).length > 0 && (
+                                          <span className="text-[9px] text-purple-400/70 truncate max-w-[300px]">
+                                            {(rule.appliesTo || []).join(', ')}
+                                          </span>
+                                        )}
+                                        <button
+                                          ref={rulesGridOpenId === rule.id ? rulesGridButtonRef : undefined}
+                                          onClick={(e) => {
+                                            rulesGridButtonRef.current = e.currentTarget;
+                                            setRulesGridOpenId(rulesGridOpenId === rule.id ? null : rule.id);
+                                            setRulesGridType('legacy');
+                                          }}
+                                          className={`px-2 py-1 text-[10px] rounded transition ${
+                                            rulesGridOpenId === rule.id
+                                              ? 'bg-purple-600 text-white'
+                                              : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                          }`}
+                                        >
+                                          {(rule.appliesTo || []).length > 0 ? `Scope (${(rule.appliesTo || []).length})` : 'Set Scope'}
+                                        </button>
+                                      </div>
                                     </div>
                                   ))
                                 )}
@@ -13503,18 +13899,40 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <button onClick={insertVariationPlaceholder} className="text-xs text-brand-cyan hover:text-brand-cyan-light">+ Insert {'{variation}'}</button>
                     )}
                   </div>
-                  <textarea
-                    ref={mainPromptRef}
-                    value={activeAvatar.mainPrompt}
-                    onChange={(e) => {
-                      handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
-                      autoResizeTextarea(e.target);
-                    }}
-                    className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono resize-none min-h-[100px]"
-                    placeholder={activeAvatar.placeholderMode === 'advanced'
-                      ? "Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
-                      : "Professional cleaning photo, {variation}, bright natural lighting..."}
-                  />
+                  {/* Top: Unique to active tag */}
+                  <div className="relative">
+                    <div className="absolute top-1 right-2 text-[9px] text-amber-400/60 pointer-events-none">
+                      Unique to [{activeAvatar.tag || activeAvatar.name}]
+                    </div>
+                    <textarea
+                      ref={mainPromptRef}
+                      value={activeAvatar.mainPrompt}
+                      onChange={(e) => {
+                        handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
+                        autoResizeTextarea(e.target);
+                      }}
+                      className="w-full bg-slate-900 border border-amber-500/50 rounded-t px-3 py-2 pt-5 text-white text-sm font-mono resize-none min-h-[80px]"
+                      placeholder={activeAvatar.placeholderMode === 'advanced'
+                        ? "Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
+                        : "Professional cleaning photo, {variation}, bright natural lighting..."}
+                    />
+                  </div>
+                  {/* Divider */}
+                  <div className="h-px bg-amber-500/30 mx-1" />
+                  {/* Bottom: Persistent across ALL tags */}
+                  <div className="relative">
+                    <div className="absolute top-1 right-2 text-[9px] text-amber-400/60 pointer-events-none">
+                      All Tags
+                    </div>
+                    <textarea
+                      value={settings.main_prompt_persistent || ''}
+                      onChange={(e) => {
+                        updateSettings({ main_prompt_persistent: e.target.value });
+                      }}
+                      className="w-full bg-slate-900/80 border border-amber-500/30 rounded-b px-3 py-2 pt-5 text-white text-sm font-mono resize-none min-h-[60px]"
+                      placeholder="Persistent rules for ALL tags — pose/camera angle, uniform info, logo strategy, diversity requirements..."
+                    />
+                  </div>
                   {/* Insert placeholder tags */}
                   {(activeAvatar.placeholderMode || 'simple') === 'simple' && activeAvatar.variations.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
@@ -13659,6 +14077,31 @@ Start by introducing yourself and asking about their business in a friendly way.
                             placeholder="Category name (e.g., Cleaning_Item)"
                           />
                           <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
+                          {/* Unique / Persistent scope toggle */}
+                          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'unique' })}
+                              className={`px-1.5 py-0.5 text-[9px] rounded-l transition ${
+                                (category.scope || 'unique') === 'unique'
+                                  ? 'bg-amber-600 text-white font-medium'
+                                  : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                              }`}
+                              title="This category only appears for the current tag"
+                            >
+                              Unique
+                            </button>
+                            <button
+                              onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'persistent' })}
+                              className={`px-1.5 py-0.5 text-[9px] rounded-r transition ${
+                                category.scope === 'persistent'
+                                  ? 'bg-sky-600 text-white font-medium'
+                                  : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                              }`}
+                              title="This category appears for ALL tags"
+                            >
+                              Persistent
+                            </button>
+                          </div>
                           {isCategoryCollapsed && (
                             <span className="text-xs text-slate-500">{category.options.length} options</span>
                           )}
@@ -17956,6 +18399,189 @@ Start by introducing yourself and asking about their business in a friendly way.
                 </button>
               </div>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Rules Checkbox Grid Popup (Portal) */}
+      {rulesGridOpenId && createPortal(
+        <div
+          className="fixed inset-0 z-[9999]"
+          onClick={() => setRulesGridOpenId(null)}
+        >
+          <div
+            className="absolute bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-4 max-w-[520px]"
+            style={{
+              top: rulesGridButtonRef.current
+                ? Math.min(rulesGridButtonRef.current.getBoundingClientRect().bottom + 8, window.innerHeight - 400)
+                : 200,
+              left: rulesGridButtonRef.current
+                ? Math.min(rulesGridButtonRef.current.getBoundingClientRect().left, window.innerWidth - 540)
+                : 200,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-white">Rule Applies To</h3>
+              <button
+                onClick={() => setRulesGridOpenId(null)}
+                className="text-slate-400 hover:text-white transition"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {(() => {
+              const tagNames = tags.map(t => t.name);
+              const columns = [...tagNames, 'All'];
+              const rows = [
+                { key: 'prompt', label: 'Main Prompt' },
+                { key: 'categories', label: 'Main Categories' },
+                { key: 'guardrails', label: 'Guided Prompt' },
+                { key: 'guided-rules', label: 'Guided Rules' },
+                { key: 'smart', label: 'Smart Prompt' },
+                { key: 'smart-rules', label: 'Smart Rules' },
+              ];
+
+              // Find the active rule
+              const allRules = rulesGridType === 'guided' ? (settings.guided_gpt_rules || []) : (settings.legacy_prompt_rules || []);
+              const activeRule = allRules.find(r => r.id === rulesGridOpenId);
+              if (!activeRule) return null;
+              const currentAppliesTo = activeRule.appliesTo || [];
+
+              const toggleCell = (col: string, rowKey: string) => {
+                const cellId = `${col}-${rowKey}`;
+                const updated = currentAppliesTo.includes(cellId)
+                  ? currentAppliesTo.filter(x => x !== cellId)
+                  : [...currentAppliesTo, cellId];
+                if (rulesGridType === 'guided') {
+                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
+                } else {
+                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
+                }
+              };
+
+              const toggleColumn = (col: string) => {
+                const colCells = rows.map(r => `${col}-${r.key}`);
+                const allChecked = colCells.every(c => currentAppliesTo.includes(c));
+                let updated: string[];
+                if (allChecked) {
+                  updated = currentAppliesTo.filter(x => !colCells.includes(x));
+                } else {
+                  updated = [...new Set([...currentAppliesTo, ...colCells])];
+                }
+                if (rulesGridType === 'guided') {
+                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
+                } else {
+                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
+                }
+              };
+
+              const toggleRow = (rowKey: string) => {
+                const rowCells = columns.map(c => `${c}-${rowKey}`);
+                const allChecked = rowCells.every(c => currentAppliesTo.includes(c));
+                let updated: string[];
+                if (allChecked) {
+                  updated = currentAppliesTo.filter(x => !rowCells.includes(x));
+                } else {
+                  updated = [...new Set([...currentAppliesTo, ...rowCells])];
+                }
+                if (rulesGridType === 'guided') {
+                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
+                } else {
+                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
+                }
+              };
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[10px]">
+                    <thead>
+                      <tr>
+                        <th className="text-left text-slate-400 pr-2 py-1"></th>
+                        {columns.map(col => (
+                          <th key={col} className="text-center px-1 py-1">
+                            <button
+                              onClick={() => toggleColumn(col)}
+                              className="text-slate-300 hover:text-white font-medium transition"
+                            >
+                              {col}
+                            </button>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map(row => (
+                        <tr key={row.key}>
+                          <td className="pr-2 py-1">
+                            <button
+                              onClick={() => toggleRow(row.key)}
+                              className="text-slate-300 hover:text-white text-left transition whitespace-nowrap"
+                            >
+                              {row.label}
+                            </button>
+                          </td>
+                          {columns.map(col => {
+                            const cellId = `${col}-${row.key}`;
+                            const isChecked = currentAppliesTo.includes(cellId);
+                            return (
+                              <td key={col} className="text-center px-1 py-1">
+                                <button
+                                  onClick={() => toggleCell(col, row.key)}
+                                  className={`w-5 h-5 rounded border transition ${
+                                    isChecked
+                                      ? rulesGridType === 'guided'
+                                        ? 'bg-emerald-600 border-emerald-500 text-white'
+                                        : 'bg-purple-600 border-purple-500 text-white'
+                                      : 'bg-slate-700 border-slate-600 text-slate-500 hover:border-slate-400'
+                                  }`}
+                                >
+                                  {isChecked ? '✓' : ''}
+                                </button>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {/* Select All / Clear All */}
+                  <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-700">
+                    <button
+                      onClick={() => {
+                        const allCells = columns.flatMap(col => rows.map(r => `${col}-${r.key}`));
+                        if (rulesGridType === 'guided') {
+                          handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: allCells });
+                        } else {
+                          handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: allCells });
+                        }
+                      }}
+                      className="px-2 py-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (rulesGridType === 'guided') {
+                          handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: [] });
+                        } else {
+                          handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: [] });
+                        }
+                      }}
+                      className="px-2 py-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition"
+                    >
+                      Clear All
+                    </button>
+                    <span className="text-[10px] text-slate-500 ml-auto">
+                      {currentAppliesTo.length} selected
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>,
         document.body

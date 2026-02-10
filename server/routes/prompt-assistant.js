@@ -364,9 +364,15 @@ router.post('/chat', async (req, res) => {
 
       // Main prompt template - THE KEY PIECE
       if (context.mainPrompt) {
-        parts.push('\n## Main Prompt Template:');
+        parts.push('\n## Main Prompt Template (Unique to Tag):');
         parts.push('```');
         parts.push(context.mainPrompt);
+        parts.push('```');
+      }
+      if (context.mainPromptPersistent) {
+        parts.push('\n## Main Prompt (Persistent — All Tags):');
+        parts.push('```');
+        parts.push(context.mainPromptPersistent);
         parts.push('```');
       }
 
@@ -402,6 +408,12 @@ router.post('/chat', async (req, res) => {
         if (context.guardrails.avoidList) {
           parts.push(`**Avoid:** ${context.guardrails.avoidList}`);
         }
+      }
+
+      // Guided GPT persistent instructions (shared across all tags)
+      if (context.guidedInstructionsPersistent) {
+        parts.push('\n## Guided GPT Instructions (Persistent — All Tags):');
+        parts.push(context.guidedInstructionsPersistent);
       }
 
       // Reference images with detail
@@ -465,6 +477,39 @@ router.post('/chat', async (req, res) => {
       // All avatars for reference
       if (context.allAvatars?.length > 1) {
         parts.push(`\n## All Avatars: ${context.allAvatars.map(a => `${a.name}${a.tag ? ` (${a.tag})` : ''}${a.hasPrompt ? '' : ' [no prompt]'}`).join(', ')}`);
+      }
+
+      // GUIDED GPT PROMPT SETTINGS - Smart Prompt, Matching Rules
+      if (context.smartPromptGuidance) {
+        parts.push('\n## Smart Prompt Guidance (Unique to Tag):');
+        parts.push('```');
+        parts.push(context.smartPromptGuidance);
+        parts.push('```');
+        parts.push('*You can edit this by outputting a ```smartprompt code block.*');
+      }
+      if (context.smartPromptPersistent) {
+        parts.push('\n## Smart Prompt Guidance (Persistent — All Tags):');
+        parts.push(context.smartPromptPersistent);
+      }
+      if (context.matchingRules) {
+        const rules = context.matchingRules;
+        const hasAny = rules.rule1 || rules.rule2 || rules.rule3 || rules.rule4;
+        if (hasAny) {
+          parts.push('\n## Matching Rules:');
+          if (rules.rule1) parts.push(`**Rule 1:** ${rules.rule1}`);
+          if (rules.rule2) parts.push(`**Rule 2:** ${rules.rule2}`);
+          if (rules.rule3) parts.push(`**Rule 3:** ${rules.rule3}`);
+          if (rules.rule4) parts.push(`**Rule 4:** ${rules.rule4}`);
+          parts.push('*You can edit these by outputting ```matchingrule1 through ```matchingrule4 code blocks.*');
+        }
+      }
+      if (context.placementRule) {
+        parts.push(`\n## Placement Rule: ${context.placementRule}`);
+        parts.push('*You can edit this by outputting a ```placementrule code block.*');
+      }
+      if (context.smartMatchingRule) {
+        parts.push(`\n## Smart Matching Rule: ${context.smartMatchingRule}`);
+        parts.push('*You can edit this by outputting a ```smartmatchingrule code block.*');
       }
 
       // TESTING MODE - Current prompt that AI can edit
