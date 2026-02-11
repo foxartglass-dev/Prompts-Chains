@@ -548,6 +548,11 @@ interface ImageCreationSettings {
   matching_rule_2_title: string;
   matching_rule_3_title: string;
   matching_rule_4_title: string;
+  // Rule scope grid — same grid as Guided/Legacy rules
+  matching_rule_1_applies_to?: string[];
+  matching_rule_2_applies_to?: string[];
+  matching_rule_3_applies_to?: string[];
+  matching_rule_4_applies_to?: string[];
   // Per-tag Smart Matching Rules - each tag (H, J, C) gets its own rules
   smart_matching_rules_by_tag: {
     [tagName: string]: {
@@ -12812,6 +12817,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                             rows={2}
                             placeholder="Rule for primary keyword matching..."
                           />
+                          {/* Scope grid */}
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {(settings.matching_rule_1_applies_to || []).length > 0 && (
+                              <span className="text-[9px] text-emerald-400/70 truncate max-w-[250px]">
+                                {(settings.matching_rule_1_applies_to || []).join(', ')}
+                              </span>
+                            )}
+                            <button
+                              ref={rulesGridOpenId === 'matching-1' ? rulesGridButtonRef : undefined}
+                              onClick={(e) => {
+                                rulesGridButtonRef.current = e.currentTarget;
+                                setRulesGridOpenId(rulesGridOpenId === 'matching-1' ? null : 'matching-1');
+                                setRulesGridType('guided');
+                              }}
+                              className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                rulesGridOpenId === 'matching-1'
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                              }`}
+                            >
+                              {(settings.matching_rule_1_applies_to || []).length > 0 ? `Scope (${(settings.matching_rule_1_applies_to || []).length})` : 'Set Scope'}
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -12865,6 +12893,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                             rows={2}
                             placeholder="Rule for secondary keyword fallback..."
                           />
+                          {/* Scope grid */}
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {(settings.matching_rule_2_applies_to || []).length > 0 && (
+                              <span className="text-[9px] text-amber-400/70 truncate max-w-[250px]">
+                                {(settings.matching_rule_2_applies_to || []).join(', ')}
+                              </span>
+                            )}
+                            <button
+                              ref={rulesGridOpenId === 'matching-2' ? rulesGridButtonRef : undefined}
+                              onClick={(e) => {
+                                rulesGridButtonRef.current = e.currentTarget;
+                                setRulesGridOpenId(rulesGridOpenId === 'matching-2' ? null : 'matching-2');
+                                setRulesGridType('guided');
+                              }}
+                              className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                rulesGridOpenId === 'matching-2'
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                              }`}
+                            >
+                              {(settings.matching_rule_2_applies_to || []).length > 0 ? `Scope (${(settings.matching_rule_2_applies_to || []).length})` : 'Set Scope'}
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -12918,6 +12969,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                             rows={2}
                             placeholder="Rule for preventing duplicate primary keywords..."
                           />
+                          {/* Scope grid */}
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {(settings.matching_rule_3_applies_to || []).length > 0 && (
+                              <span className="text-[9px] text-red-400/70 truncate max-w-[250px]">
+                                {(settings.matching_rule_3_applies_to || []).join(', ')}
+                              </span>
+                            )}
+                            <button
+                              ref={rulesGridOpenId === 'matching-3' ? rulesGridButtonRef : undefined}
+                              onClick={(e) => {
+                                rulesGridButtonRef.current = e.currentTarget;
+                                setRulesGridOpenId(rulesGridOpenId === 'matching-3' ? null : 'matching-3');
+                                setRulesGridType('guided');
+                              }}
+                              className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                rulesGridOpenId === 'matching-3'
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                              }`}
+                            >
+                              {(settings.matching_rule_3_applies_to || []).length > 0 ? `Scope (${(settings.matching_rule_3_applies_to || []).length})` : 'Set Scope'}
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -12971,6 +13045,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                             rows={2}
                             placeholder="Rule for secondary keyword primary diversity..."
                           />
+                          {/* Scope grid */}
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {(settings.matching_rule_4_applies_to || []).length > 0 && (
+                              <span className="text-[9px] text-purple-400/70 truncate max-w-[250px]">
+                                {(settings.matching_rule_4_applies_to || []).join(', ')}
+                              </span>
+                            )}
+                            <button
+                              ref={rulesGridOpenId === 'matching-4' ? rulesGridButtonRef : undefined}
+                              onClick={(e) => {
+                                rulesGridButtonRef.current = e.currentTarget;
+                                setRulesGridOpenId(rulesGridOpenId === 'matching-4' ? null : 'matching-4');
+                                setRulesGridType('guided');
+                              }}
+                              className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                rulesGridOpenId === 'matching-4'
+                                  ? 'bg-purple-600 text-white'
+                                  : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                              }`}
+                            >
+                              {(settings.matching_rule_4_applies_to || []).length > 0 ? `Scope (${(settings.matching_rule_4_applies_to || []).length})` : 'Set Scope'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -14051,91 +14148,97 @@ Start by introducing yourself and asking about their business in a friendly way.
                       }`}>
                         {/* Category Header - Clickable to collapse/expand */}
                         <div
-                          className="flex items-center gap-2 p-3 cursor-pointer hover:bg-slate-700/30 transition"
+                          className="p-3 cursor-pointer hover:bg-slate-700/30 transition"
                           onClick={toggleCategoryCollapse}
                         >
-                          {/* Collapse Toggle */}
-                          <span className={`text-purple-400 transition-transform text-xs ${isCategoryCollapsed ? '' : 'rotate-90'}`}>▶</span>
-                          {/* On/Off Toggle */}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false }); }}
-                            className={`w-5 h-5 rounded flex items-center justify-center text-xs transition ${
-                              category.enabled !== false
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-slate-700 text-slate-500'
-                            }`}
-                            title={category.enabled !== false ? 'Click to disable' : 'Click to enable'}
-                          >
-                            {category.enabled !== false ? '✓' : '○'}
-                          </button>
-                          <input
-                            type="text"
-                            value={category.name}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => handleUpdatePlaceholderCategory(category.id, { name: e.target.value, placeholder: `{${e.target.value.replace(/\s+/g, '_')}}` })}
-                            className="flex-1 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
-                            placeholder="Category name (e.g., Cleaning_Item)"
-                          />
-                          <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
-                          {/* Unique / Persistent scope toggle */}
-                          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                          {/* Row 1: Core controls */}
+                          <div className="flex items-center gap-2">
+                            {/* Collapse Toggle */}
+                            <span className={`text-purple-400 transition-transform text-xs ${isCategoryCollapsed ? '' : 'rotate-90'}`}>▶</span>
+                            {/* On/Off Toggle */}
                             <button
-                              onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'unique' })}
-                              className={`px-1.5 py-0.5 text-[9px] rounded-l transition ${
-                                (category.scope || 'unique') === 'unique'
-                                  ? 'bg-amber-600 text-white font-medium'
-                                  : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                              onClick={(e) => { e.stopPropagation(); handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false }); }}
+                              className={`w-5 h-5 rounded flex items-center justify-center text-xs transition shrink-0 ${
+                                category.enabled !== false
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-slate-700 text-slate-500'
                               }`}
-                              title="This category only appears for the current tag"
+                              title={category.enabled !== false ? 'Click to disable' : 'Click to enable'}
                             >
-                              Unique
+                              {category.enabled !== false ? '✓' : '○'}
                             </button>
+                            <input
+                              type="text"
+                              value={category.name}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => handleUpdatePlaceholderCategory(category.id, { name: e.target.value, placeholder: `{${e.target.value.replace(/\s+/g, '_')}}` })}
+                              className="flex-1 min-w-0 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
+                              placeholder="Category name (e.g., Cleaning_Item)"
+                            />
+                            <span className="text-xs text-purple-400 font-mono shrink-0">{category.placeholder}</span>
+                            {isCategoryCollapsed && (
+                              <span className="text-xs text-slate-500 shrink-0">{category.options.length} options</span>
+                            )}
                             <button
-                              onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'persistent' })}
-                              className={`px-1.5 py-0.5 text-[9px] rounded-r transition ${
-                                category.scope === 'persistent'
-                                  ? 'bg-sky-600 text-white font-medium'
-                                  : 'bg-slate-700/80 text-slate-400 hover:text-white'
-                              }`}
-                              title="This category appears for ALL tags"
+                              onClick={(e) => { e.stopPropagation(); handleRemovePlaceholderCategory(category.id); }}
+                              className="p-1 bg-red-600/50 hover:bg-red-600 rounded text-white transition shrink-0"
                             >
-                              Persistent
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
                             </button>
                           </div>
-                          {isCategoryCollapsed && (
-                            <span className="text-xs text-slate-500">{category.options.length} options</span>
-                          )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openVersionHistory('placeholder', category.letter, `${category.name} (${category.letter})`);
-                            }}
-                            className="px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-[10px] transition"
-                            title="View and restore previous versions of this category"
-                          >
-                            History
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const companyCategory = prompt('Enter company/type category (e.g., Cleaning, Construction):');
-                              if (companyCategory) {
-                                handleSavePlaceholderCategoryTemplate(category, companyCategory);
-                              }
-                            }}
-                            className="px-2 py-1 bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/50 rounded text-orange-300 text-[10px] transition"
-                            title="Save this category as a reusable template"
-                          >
-                            Save Template
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleRemovePlaceholderCategory(category.id); }}
-                            className="p-1 bg-red-600/50 hover:bg-red-600 rounded text-white transition"
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
+                          {/* Row 2: Scope toggle + action buttons */}
+                          <div className="flex items-center gap-2 mt-1.5 ml-[30px]">
+                            {/* Unique / Persistent scope toggle */}
+                            <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'unique' })}
+                                className={`px-1.5 py-0.5 text-[9px] rounded-l transition ${
+                                  (category.scope || 'unique') === 'unique'
+                                    ? 'bg-amber-600 text-white font-medium'
+                                    : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                                }`}
+                                title="This category only appears for the current tag"
+                              >
+                                Unique
+                              </button>
+                              <button
+                                onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'persistent' })}
+                                className={`px-1.5 py-0.5 text-[9px] rounded-r transition ${
+                                  category.scope === 'persistent'
+                                    ? 'bg-sky-600 text-white font-medium'
+                                    : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                                }`}
+                                title="This category appears for ALL tags"
+                              >
+                                Persistent
+                              </button>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openVersionHistory('placeholder', category.letter, `${category.name} (${category.letter})`);
+                              }}
+                              className="px-2 py-0.5 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-[10px] transition"
+                              title="View and restore previous versions of this category"
+                            >
+                              History
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const companyCategory = prompt('Enter company/type category (e.g., Cleaning, Construction):');
+                                if (companyCategory) {
+                                  handleSavePlaceholderCategoryTemplate(category, companyCategory);
+                                }
+                              }}
+                              className="px-2 py-0.5 bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/50 rounded text-orange-300 text-[10px] transition"
+                              title="Save this category as a reusable template"
+                            >
+                              Save Template
+                            </button>
+                          </div>
                         </div>
 
                         {/* Category Content - Options (collapsible) */}
@@ -18445,54 +18548,55 @@ Start by introducing yourself and asking about their business in a friendly way.
                 { key: 'smart-rules', label: 'Smart Rules' },
               ];
 
-              // Find the active rule
-              const allRules = rulesGridType === 'guided' ? (settings.guided_gpt_rules || []) : (settings.legacy_prompt_rules || []);
-              const activeRule = allRules.find(r => r.id === rulesGridOpenId);
-              if (!activeRule) return null;
-              const currentAppliesTo = activeRule.appliesTo || [];
+              // Determine data source: TagBasedRule[] or matching_rule_N settings
+              const isMatchingRule = rulesGridOpenId?.startsWith('matching-');
+              let currentAppliesTo: string[] = [];
+              if (isMatchingRule) {
+                const ruleNum = rulesGridOpenId!.split('-')[1] as '1' | '2' | '3' | '4';
+                const key = `matching_rule_${ruleNum}_applies_to` as keyof ImageCreationSettings;
+                currentAppliesTo = (settings[key] as string[] | undefined) || [];
+              } else {
+                const allRules = rulesGridType === 'guided' ? (settings.guided_gpt_rules || []) : (settings.legacy_prompt_rules || []);
+                const activeRule = allRules.find(r => r.id === rulesGridOpenId);
+                if (!activeRule) return null;
+                currentAppliesTo = activeRule.appliesTo || [];
+              }
+
+              const saveAppliesTo = (updated: string[]) => {
+                if (isMatchingRule) {
+                  const ruleNum = rulesGridOpenId!.split('-')[1];
+                  updateSettings({ [`matching_rule_${ruleNum}_applies_to`]: updated } as any);
+                } else if (rulesGridType === 'guided') {
+                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
+                } else {
+                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
+                }
+              };
 
               const toggleCell = (col: string, rowKey: string) => {
                 const cellId = `${col}-${rowKey}`;
                 const updated = currentAppliesTo.includes(cellId)
                   ? currentAppliesTo.filter(x => x !== cellId)
                   : [...currentAppliesTo, cellId];
-                if (rulesGridType === 'guided') {
-                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
-                } else {
-                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
-                }
+                saveAppliesTo(updated);
               };
 
               const toggleColumn = (col: string) => {
                 const colCells = rows.map(r => `${col}-${r.key}`);
                 const allChecked = colCells.every(c => currentAppliesTo.includes(c));
-                let updated: string[];
-                if (allChecked) {
-                  updated = currentAppliesTo.filter(x => !colCells.includes(x));
-                } else {
-                  updated = [...new Set([...currentAppliesTo, ...colCells])];
-                }
-                if (rulesGridType === 'guided') {
-                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
-                } else {
-                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
-                }
+                const updated = allChecked
+                  ? currentAppliesTo.filter(x => !colCells.includes(x))
+                  : [...new Set([...currentAppliesTo, ...colCells])];
+                saveAppliesTo(updated);
               };
 
               const toggleRow = (rowKey: string) => {
                 const rowCells = columns.map(c => `${c}-${rowKey}`);
                 const allChecked = rowCells.every(c => currentAppliesTo.includes(c));
-                let updated: string[];
-                if (allChecked) {
-                  updated = currentAppliesTo.filter(x => !rowCells.includes(x));
-                } else {
-                  updated = [...new Set([...currentAppliesTo, ...rowCells])];
-                }
-                if (rulesGridType === 'guided') {
-                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
-                } else {
-                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
-                }
+                const updated = allChecked
+                  ? currentAppliesTo.filter(x => !rowCells.includes(x))
+                  : [...new Set([...currentAppliesTo, ...rowCells])];
+                saveAppliesTo(updated);
               };
 
               return (
@@ -18553,24 +18657,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                     <button
                       onClick={() => {
                         const allCells = columns.flatMap(col => rows.map(r => `${col}-${r.key}`));
-                        if (rulesGridType === 'guided') {
-                          handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: allCells });
-                        } else {
-                          handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: allCells });
-                        }
+                        saveAppliesTo(allCells);
                       }}
                       className="px-2 py-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition"
                     >
                       Select All
                     </button>
                     <button
-                      onClick={() => {
-                        if (rulesGridType === 'guided') {
-                          handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: [] });
-                        } else {
-                          handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: [] });
-                        }
-                      }}
+                      onClick={() => saveAppliesTo([])}
                       className="px-2 py-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition"
                     >
                       Clear All
