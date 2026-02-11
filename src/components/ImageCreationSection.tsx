@@ -670,7 +670,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   variation_order_mode: 'sequential',
   manual_variation_order: [],
   // Smart Content Matching - OFF by default until user is ready
-  smart_matching_enabled: false,
+  smart_matching_enabled: true,
   smart_matching_mode: 'bank_first', // Default: check bank first, generate if no match
   // Editable algorithm rules
   placement_rule: 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
@@ -3856,10 +3856,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     // ========== SMART MATCHING SETTINGS ==========
     parts.push('━━━━━━━━━━ INTEGRATION SETTINGS ━━━━━━━━━━');
     parts.push(`🔄 Integration Mode: ${settings.integration_mode}`);
-    parts.push(`   Smart Matching: ${settings.smart_matching_enabled ? 'ON' : 'OFF'}`);
-    if (settings.smart_matching_enabled) {
-      parts.push(`   Matching Mode: ${settings.smart_matching_mode}`);
-    }
+    parts.push(`   Smart Matching: ALWAYS ON`);
+    parts.push(`   Matching Mode: ${settings.smart_matching_mode}`);
     parts.push(`   Fallback to Live Generation: ${settings.fallback_to_live ? 'Yes' : 'No'}`);
     parts.push(`   Variation Order: ${settings.variation_order_mode}`);
     parts.push('');
@@ -3937,7 +3935,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     parts.push('⚙️ IMAGE INTEGRATION SETTINGS:');
     parts.push(`  - Source Mode: ${settings.integration_mode === 'bank' ? 'Pull from Bank' : 'Generate Live'}`);
     parts.push(`  - Fallback to Live: ${settings.fallback_to_live ? 'Yes' : 'No'}`);
-    parts.push(`  - Smart Matching: ${settings.smart_matching_enabled ? 'ENABLED' : 'Disabled'}`);
+    parts.push(`  - Smart Matching: ALWAYS ON`);
     parts.push(`  - Smart Matching Mode: ${settings.smart_matching_mode || 'bank_first'}`);
     parts.push('');
     parts.push('📐 ALGORITHM RULES (user can edit these):');
@@ -6460,7 +6458,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       `IMAGE INTEGRATION SETTINGS:`,
       `- Source Mode: ${settings.integration_mode === 'bank' ? 'Pull from Bank' : 'Generate Live'}`,
       `- Fallback to Live: ${settings.fallback_to_live ? 'Yes' : 'No'}`,
-      `- Smart Matching: ${settings.smart_matching_enabled ? 'ENABLED' : 'Disabled'}`,
+      `- Smart Matching: ALWAYS ON`,
       `- Smart Matching Mode: ${settings.smart_matching_mode || 'bank_first'}`,
       ``,
       `ALGORITHM RULES (editable by user):`,
@@ -8033,11 +8031,9 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="px-2.5 py-1 bg-purple-600/40 text-purple-200 text-xs rounded-full font-medium border border-purple-500/30">
                     {settings.integration_mode === 'bank' ? '📦 Bank Mode' : '⚡ Live Mode'}
                   </span>
-                  {settings.smart_matching_enabled && (
-                    <span className="px-2.5 py-1 bg-emerald-600/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-500/30">
-                      🎯 Smart Match ON
-                    </span>
-                  )}
+                  <span className="px-2.5 py-1 bg-emerald-600/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-500/30">
+                    🎯 Smart Match ON
+                  </span>
                   <svg className={`w-5 h-5 text-purple-400 transition-transform ${imageIntegrationCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                   </svg>
@@ -12242,21 +12238,15 @@ Start by introducing yourself and asking about their business in a friendly way.
                 const isAlwaysOnMode = isLiveMode && isMainPromptMode;
                 // Smart Matching is OFF/disabled for Guided GPT and Smart Prompt
                 const isDisabledMode = isLiveMode && isGuidedOrSmartMode;
-                // Normal toggle mode for Bank
-                const isToggleMode = !isLiveMode;
 
-                // Effective enabled state
-                const effectiveEnabled = isAlwaysOnMode || (isToggleMode && settings.smart_matching_enabled);
+                // Always enabled — no toggle (Bank mode is always on too)
+                const effectiveEnabled = true;
 
                 return (
               <div className={`rounded-lg p-4 border transition-all ${
                 isDisabledMode
                   ? 'bg-slate-800/20 border-slate-600 opacity-60'
-                  : isAlwaysOnMode
-                    ? 'bg-purple-900/30 border-purple-500'
-                    : effectiveEnabled
-                      ? 'bg-purple-900/20 border-purple-500'
-                      : 'bg-slate-800/30 border-slate-700'
+                  : 'bg-purple-900/30 border-purple-500'
               }`}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -12265,25 +12255,15 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </svg>
                     <h3 className={`font-semibold ${isDisabledMode ? 'text-slate-500' : effectiveEnabled ? 'text-purple-400' : 'text-slate-500'}`}>Smart Content Matching</h3>
                     <span className="px-2 py-0.5 bg-purple-600/30 text-purple-300 text-[10px] rounded font-medium">BETA</span>
-                    {isAlwaysOnMode && (
+                    {!isDisabledMode && (
                       <span className="px-2 py-0.5 bg-purple-600/50 text-purple-200 text-[10px] rounded font-medium">ALWAYS ON</span>
                     )}
                     {isDisabledMode && (
                       <span className="px-2 py-0.5 bg-slate-600/50 text-slate-400 text-[10px] rounded font-medium">GPT HANDLES THIS</span>
                     )}
                   </div>
-                  {/* Toggle - only show for Bank mode */}
-                  {isToggleMode ? (
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={settings.smart_matching_enabled}
-                        onChange={(e) => updateSettings({ smart_matching_enabled: e.target.checked })}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                    </label>
-                  ) : isAlwaysOnMode ? (
+                  {/* Always ON — no toggle needed */}
+                  {!isDisabledMode ? (
                     <span className="text-xs text-purple-400 font-medium">Core Feature</span>
                   ) : (
                     <span className="text-xs text-slate-500">Not Used</span>
@@ -12355,7 +12335,21 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </p>
                     <div className="bg-purple-900/30 rounded-lg p-3 border border-purple-500/30">
                       <p className="text-[10px] text-purple-300 leading-relaxed">
-                        <strong>How it works:</strong> For each image position, the system looks at the surrounding ~75 words and matches your placeholder keywords (e.g., {'{Room}'}, {'{Surface}'}) to the article content.
+                        <strong>How it works:</strong> For each image position, the system looks at the surrounding{' '}
+                        <input
+                          type="number"
+                          value={settings.smart_matching_config?.wordRange || 75}
+                          onChange={(e) => updateSettings({
+                            smart_matching_config: {
+                              ...settings.smart_matching_config,
+                              wordRange: parseInt(e.target.value) || 75
+                            }
+                          })}
+                          className="w-12 bg-purple-800/50 border border-purple-500/50 rounded px-1 py-0.5 text-purple-200 text-[10px] text-center font-bold inline-block mx-0.5 focus:outline-none focus:border-purple-400"
+                          min={10}
+                          max={500}
+                        />
+                        {' '}words and matches your placeholder keywords (e.g., {'{Room}'}, {'{Surface}'}) to the article content.
                       </p>
                     </div>
 
@@ -12510,7 +12504,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     )}
                   </div>
-                ) : effectiveEnabled ? (
+                ) : (
                   <div className="space-y-4">
                     <p className="text-xs text-purple-300/70">
                       AI analyzes article text and matches images based on keywords. Define keywords in each placeholder option above.
@@ -12662,10 +12656,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </p>
                     </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-slate-500">
-                    Enable Smart Content Matching to have AI automatically select images based on article content for optimal SEO.
-                  </p>
                 )}
               </div>
                 );
@@ -12678,22 +12668,19 @@ Start by introducing yourself and asking about their business in a friendly way.
                   (Guided GPT and Smart Prompt use their own dedicated Rules sections)
               ───────────────────────────────────────────────────── */}
               {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode === 'main_prompt')) && (
-              <div className={`rounded-lg p-4 border -mt-2 ${settings.smart_matching_enabled ? 'bg-slate-800/50 border-emerald-500/30' : 'bg-slate-800/30 border-cyan-500/30'}`}>
+              <div className="rounded-lg p-4 border -mt-2 bg-slate-800/50 border-emerald-500/30">
                 <div className="flex items-center gap-2 mb-4">
-                  <svg className={`w-5 h-5 ${settings.smart_matching_enabled ? 'text-emerald-400' : 'text-cyan-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                   </svg>
-                  <h3 className={`font-semibold ${settings.smart_matching_enabled ? 'text-emerald-400' : 'text-cyan-400'}`}>
-                    {settings.smart_matching_enabled ? 'Smart Matching Rules' : 'Static Matching Rules'}
-                  </h3>
-                  <span className={`text-[10px] px-2 py-0.5 rounded ${settings.smart_matching_enabled ? 'bg-emerald-600/30 text-emerald-300' : 'bg-cyan-600/30 text-cyan-300'}`}>
-                    {settings.smart_matching_enabled ? 'Smart Matching ON' : 'Smart Matching OFF'}
+                  <h3 className="font-semibold text-emerald-400">Smart Matching Rules</h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-600/30 text-emerald-300">
+                    ALWAYS ON
                   </span>
                 </div>
 
-                {/* 4 COLORED RULES - Only show when Smart Matching is ON */}
-                {settings.smart_matching_enabled ? (
-                  <>
+                {/* 4 COLORED RULES - Smart Matching always ON */}
+                <>
                     {/* Tag Tabs for Per-Tag Rules */}
                     {allTags.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1 mb-4 border-b border-slate-700 pb-3">
@@ -13160,34 +13147,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     </div>
                   </>
-                ) : (
-                  /* 2 BLUE RULES - Only show when Smart Matching is OFF (static fallback) */
-                  <div className="space-y-3">
-                    <p className="text-xs text-cyan-300/70 mb-3">
-                      Smart Matching is OFF. These static rules will be used for all image placements.
-                    </p>
-                    <div>
-                      <label className="text-xs text-cyan-400 font-semibold block mb-1">Image Placement Rule</label>
-                      <textarea
-                        value={settings.placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.'}
-                        onChange={(e) => updateSettings({ placement_rule: e.target.value })}
-                        className="w-full bg-slate-800 border border-cyan-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-cyan-500"
-                        rows={2}
-                        placeholder="Place image at last paragraph break under {300} words since previous image..."
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-cyan-400 font-semibold block mb-1">Smart Matching Rule</label>
-                      <textarea
-                        value={settings.smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.'}
-                        onChange={(e) => updateSettings({ smart_matching_rule: e.target.value })}
-                        className="w-full bg-slate-800 border border-cyan-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-cyan-500"
-                        rows={2}
-                        placeholder="Look {50-75} words around image placement for keyword matches..."
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
               )}
 
@@ -14181,10 +14140,11 @@ Start by introducing yourself and asking about their business in a friendly way.
                             )}
                             <button
                               onClick={(e) => { e.stopPropagation(); handleRemovePlaceholderCategory(category.id); }}
-                              className="p-1 bg-red-600/50 hover:bg-red-600 rounded text-white transition shrink-0"
+                              className="p-1.5 bg-red-600/50 hover:bg-red-600 rounded text-white transition shrink-0"
+                              title="Delete category"
                             >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
                             </button>
                           </div>
