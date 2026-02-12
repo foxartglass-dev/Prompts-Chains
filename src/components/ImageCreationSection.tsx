@@ -14134,7 +14134,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                           {/* Row 1: Core controls */}
                           <div className="flex items-center gap-2">
                             {/* Collapse Toggle */}
-                            <span className={`text-purple-400 transition-transform text-xs ${isCategoryCollapsed ? '' : 'rotate-90'}`}>▶</span>
+                            <span className={`text-purple-400 transition-transform text-xs shrink-0 ${isCategoryCollapsed ? '' : 'rotate-90'}`}>▶</span>
                             {/* On/Off Toggle */}
                             <button
                               onClick={(e) => { e.stopPropagation(); handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false }); }}
@@ -14152,33 +14152,18 @@ Start by introducing yourself and asking about their business in a friendly way.
                               value={category.name}
                               onClick={(e) => e.stopPropagation()}
                               onChange={(e) => handleUpdatePlaceholderCategory(category.id, { name: e.target.value, placeholder: `{${e.target.value.replace(/\s+/g, '_')}}` })}
-                              className="flex-1 min-w-0 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
+                              className="flex-1 min-w-0 max-w-[220px] bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
                               placeholder="Category name (e.g., Cleaning_Item)"
                             />
                             <span className="text-xs text-purple-400 font-mono shrink-0">{category.placeholder}</span>
-                            {isCategoryCollapsed && (
-                              <span className="text-xs text-slate-500 shrink-0">{category.options.length} options</span>
-                            )}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleRemovePlaceholderCategory(category.id); }}
-                              className="p-1.5 bg-red-600/50 hover:bg-red-600 rounded text-white transition shrink-0"
-                              title="Delete category"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-                          {/* Row 2: Scope toggle + action buttons */}
-                          <div className="flex items-center gap-2 mt-1.5 ml-[30px]">
-                            {/* Unique / Persistent scope toggle */}
-                            <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                            {/* Unique / Persistent scope toggle — inline on Row 1 */}
+                            <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                               <button
                                 onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'unique' })}
-                                className={`px-1.5 py-0.5 text-[9px] rounded-l transition ${
+                                className={`px-2 py-1 text-[11px] rounded-l border transition ${
                                   (category.scope || 'unique') === 'unique'
-                                    ? 'bg-amber-600 text-white font-medium'
-                                    : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                                    ? 'bg-amber-600 border-amber-500 text-white font-semibold'
+                                    : 'bg-slate-700/80 border-slate-600 text-slate-400 hover:text-white hover:bg-slate-600'
                                 }`}
                                 title="This category only appears for the current tag"
                               >
@@ -14186,16 +14171,22 @@ Start by introducing yourself and asking about their business in a friendly way.
                               </button>
                               <button
                                 onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'persistent' })}
-                                className={`px-1.5 py-0.5 text-[9px] rounded-r transition ${
+                                className={`px-2 py-1 text-[11px] rounded-r border transition ${
                                   category.scope === 'persistent'
-                                    ? 'bg-sky-600 text-white font-medium'
-                                    : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                                    ? 'bg-sky-600 border-sky-500 text-white font-semibold'
+                                    : 'bg-slate-700/80 border-slate-600 text-slate-400 hover:text-white hover:bg-slate-600'
                                 }`}
                                 title="This category appears for ALL tags"
                               >
                                 Persistent
                               </button>
                             </div>
+                            {isCategoryCollapsed && (
+                              <span className="text-xs text-slate-500 shrink-0">{category.options.length} options</span>
+                            )}
+                          </div>
+                          {/* Row 2: Action buttons */}
+                          <div className="flex items-center gap-2 mt-1.5 ml-[30px]">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -14218,6 +14209,18 @@ Start by introducing yourself and asking about their business in a friendly way.
                               title="Save this category as a reusable template"
                             >
                               Save Template
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm(`Delete category "${category.name}" and all its options?`)) {
+                                  handleRemovePlaceholderCategory(category.id);
+                                }
+                              }}
+                              className="px-2 py-0.5 bg-red-600/30 hover:bg-red-600/50 border border-red-500/50 rounded text-red-300 text-[10px] transition ml-auto"
+                              title="Delete this entire category and all its options"
+                            >
+                              Delete Category
                             </button>
                           </div>
                         </div>
