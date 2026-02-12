@@ -8055,12 +8055,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'bank' ? 'bg-brand-gold/20 border-2 border-brand-gold' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
-                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'bank'} onChange={() => updateSettings({
+                  <div
+                    onClick={(e) => { e.stopPropagation(); updateSettings({
                       integration_mode: 'bank',
-                      // AUTO-SWITCH: When switching to Bank mode, ensure matching strategy is a bank option
                       smart_matching_mode: (settings.smart_matching_mode === 'generate_first' || settings.smart_matching_mode === 'generate_only') ? 'bank_first' : settings.smart_matching_mode
-                    })} className="hidden" />
+                    }); }}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'bank' ? 'bg-brand-gold/20 border-2 border-brand-gold' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}
+                  >
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'bank' ? 'bg-brand-gold text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
                     </div>
@@ -8068,15 +8069,15 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <span className={`font-medium ${settings.integration_mode === 'bank' ? 'text-brand-gold' : 'text-white'}`}>Pull from Bank</span>
                       <p className="text-[10px] text-slate-400">Use pre-generated images</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'live' ? 'bg-brand-cyan/20 border-2 border-brand-cyan' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
-                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'live'} onChange={() => updateSettings({
+                  <div
+                    onClick={(e) => { e.stopPropagation(); updateSettings({
                       integration_mode: 'live',
-                      // AUTO-SWITCH: When switching to Live mode, default to generate_only (Page Only)
-                      // generate_first requires double opt-in, so never auto-switch to it
                       smart_matching_mode: 'generate_only'
-                    })} className="hidden" />
+                    }); }}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'live' ? 'bg-brand-cyan/20 border-2 border-brand-cyan' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}
+                  >
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'live' ? 'bg-brand-cyan text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                     </div>
@@ -8084,18 +8085,18 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <span className={`font-medium ${settings.integration_mode === 'live' ? 'text-brand-cyan' : 'text-white'}`}>Generate Live</span>
                       <p className="text-[10px] text-slate-400">Create fresh images on-the-fly</p>
                     </div>
-                  </label>
+                  </div>
                 </div>
 
                 {/* Generate Live Prompt Mode Toggle - only show when Live mode is selected */}
                 {settings.integration_mode === 'live' && (
-                  <div className="bg-brand-cyan/10 rounded-lg p-3 border border-brand-cyan/30 mb-3">
+                  <div className="bg-brand-cyan/10 rounded-lg p-3 border border-brand-cyan/30 mb-3 relative z-10">
                     <label className="text-xs text-brand-cyan mb-2 block font-medium">Prompt Source for Generate Live:</label>
                     <div className="grid grid-cols-3 gap-2 mb-2">
                       <button
                         type="button"
-                        onClick={() => updateSettings({ live_prompt_mode: 'main_prompt' })}
-                        className={`p-2 rounded text-xs font-medium transition-all ${
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); updateSettings({ live_prompt_mode: 'main_prompt' }); }}
+                        className={`p-2 rounded text-xs font-medium transition-all cursor-pointer ${
                           settings.live_prompt_mode === 'main_prompt'
                             ? 'bg-brand-gold text-slate-900'
                             : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -8106,8 +8107,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </button>
                       <button
                         type="button"
-                        onClick={() => updateSettings({ live_prompt_mode: 'guided_gpt' })}
-                        className={`p-2 rounded text-xs font-medium transition-all ${
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); updateSettings({ live_prompt_mode: 'guided_gpt' }); }}
+                        className={`p-2 rounded text-xs font-medium transition-all cursor-pointer ${
                           settings.live_prompt_mode === 'guided_gpt'
                             ? 'bg-emerald-600 text-white'
                             : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -8118,8 +8119,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </button>
                       <button
                         type="button"
-                        onClick={() => updateSettings({ live_prompt_mode: 'smart_prompt' })}
-                        className={`p-2 rounded text-xs font-medium transition-all ${
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); updateSettings({ live_prompt_mode: 'smart_prompt' }); }}
+                        className={`p-2 rounded text-xs font-medium transition-all cursor-pointer ${
                           settings.live_prompt_mode === 'smart_prompt'
                             ? 'bg-purple-600 text-white'
                             : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
