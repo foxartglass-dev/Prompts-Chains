@@ -8086,36 +8086,60 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                 {/* Generate Live Prompt Mode Toggle - only show when Live mode is selected */}
                 {settings.integration_mode === 'live' && (
-                  <div className="bg-brand-cyan/10 rounded-lg p-3 border border-brand-cyan/30 mb-3">
-                    <span className="text-xs text-brand-cyan mb-2 block font-medium">Prompt Source for Generate Live:</span>
-                    <div className="grid grid-cols-3 gap-2 mb-2">
-                      <label className={`p-2 rounded text-xs font-medium transition-all cursor-pointer text-center ${
-                        settings.live_prompt_mode === 'main_prompt'
-                          ? 'bg-brand-gold text-slate-900'
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                      }`}>
-                        <input type="radio" name="live_prompt_mode" checked={settings.live_prompt_mode === 'main_prompt'} onChange={() => updateSettings({ live_prompt_mode: 'main_prompt' })} className="hidden" />
+                  <div className="bg-brand-cyan/10 rounded-lg p-3 border border-brand-cyan/30 mb-3" style={{ position: 'relative', zIndex: 20 }}>
+                    <label className="text-xs text-brand-cyan mb-2 block font-medium">Prompt Source for Generate Live:</label>
+                    <div className="grid grid-cols-3 gap-2 mb-2" onClick={(e) => { if (e.target === e.currentTarget) console.log('[BUTTON DEBUG] Grid clicked but no button hit'); }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log('[BUTTON DEBUG] Main Prompt clicked, current:', settings.live_prompt_mode);
+                          showNotification('Switching to Main Prompt', 'success');
+                          updateSettings({ live_prompt_mode: 'main_prompt' });
+                        }}
+                        className={`p-2 rounded text-xs font-medium transition-all relative z-10 ${
+                          settings.live_prompt_mode === 'main_prompt'
+                            ? 'bg-brand-gold text-slate-900'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
                         Main Prompt
                         <span className="block text-[10px] opacity-70 mt-0.5">Avatar template</span>
-                      </label>
-                      <label className={`p-2 rounded text-xs font-medium transition-all cursor-pointer text-center ${
-                        settings.live_prompt_mode === 'guided_gpt'
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                      }`}>
-                        <input type="radio" name="live_prompt_mode" checked={settings.live_prompt_mode === 'guided_gpt'} onChange={() => updateSettings({ live_prompt_mode: 'guided_gpt' })} className="hidden" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log('[BUTTON DEBUG] Guided GPT clicked, current:', settings.live_prompt_mode);
+                          showNotification('Switching to Guided GPT', 'success');
+                          updateSettings({ live_prompt_mode: 'guided_gpt' });
+                        }}
+                        className={`p-2 rounded text-xs font-medium transition-all relative z-10 ${
+                          settings.live_prompt_mode === 'guided_gpt'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
                         Guided GPT
                         <span className="block text-[10px] opacity-70 mt-0.5">GPT + guardrails</span>
-                      </label>
-                      <label className={`p-2 rounded text-xs font-medium transition-all cursor-pointer text-center ${
-                        settings.live_prompt_mode === 'smart_prompt'
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                      }`}>
-                        <input type="radio" name="live_prompt_mode" checked={settings.live_prompt_mode === 'smart_prompt'} onChange={() => updateSettings({ live_prompt_mode: 'smart_prompt' })} className="hidden" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log('[BUTTON DEBUG] Smart Prompt clicked, current:', settings.live_prompt_mode);
+                          showNotification('Switching to Smart Prompt', 'success');
+                          updateSettings({ live_prompt_mode: 'smart_prompt' });
+                        }}
+                        className={`p-2 rounded text-xs font-medium transition-all relative z-10 ${
+                          settings.live_prompt_mode === 'smart_prompt'
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
                         Smart Prompt
                         <span className="block text-[10px] opacity-70 mt-0.5">Legacy GPT-4o-mini</span>
-                      </label>
+                      </button>
                     </div>
                     {settings.live_prompt_mode === 'main_prompt' && (
                       <div className="space-y-3 mt-2">
