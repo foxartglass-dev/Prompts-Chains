@@ -2965,9 +2965,18 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   };
 
   // Get active guided prompt
-  const activeGuidedPrompt = (settings.guided_gpt_prompts || []).find(p => p.id === guidedPromptsActiveId) || null;
-  // Get active smart prompt
-  const activeSmartPrompt = (settings.smart_prompt_prompts || []).find(p => p.id === smartPromptsActiveId) || null;
+  const activeGuidedPromptRaw = (settings.guided_gpt_prompts || []).find(p => p.id === guidedPromptsActiveId) || null;
+  // Ensure guardrails is always a valid object (protects against DB data missing this field)
+  const activeGuidedPrompt = activeGuidedPromptRaw ? {
+    ...activeGuidedPromptRaw,
+    guardrails: activeGuidedPromptRaw.guardrails || { instructions: '', uniformDescription: '', stylePreferences: '', avoidList: '', defaultSubject: '' }
+  } : null;
+  // Get active smart prompt (ensure guidance always exists)
+  const activeSmartPromptRaw = (settings.smart_prompt_prompts || []).find(p => p.id === smartPromptsActiveId) || null;
+  const activeSmartPrompt = activeSmartPromptRaw ? {
+    ...activeSmartPromptRaw,
+    guidance: activeSmartPromptRaw.guidance ?? ''
+  } : null;
 
   // Add a new Guided GPT prompt
   const handleAddGuidedPrompt = (tag: string) => {

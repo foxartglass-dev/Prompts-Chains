@@ -1580,7 +1580,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       guided_gpt_prompts,
       smart_prompt_prompts,
       guided_gpt_rules,
-      legacy_prompt_rules
+      legacy_prompt_rules,
+      // Persistent prompt portions (shared across all tags)
+      main_prompt_persistent,
+      guided_instructions_persistent,
+      smart_prompt_persistent
     } = req.body;
 
     // DEBUG: Log what Test Mode is sending
@@ -1749,7 +1753,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 guided_gpt_prompts,
                 smart_prompt_prompts,
                 guided_gpt_rules,
-                legacy_prompt_rules
+                legacy_prompt_rules,
+                main_prompt_persistent,
+                guided_instructions_persistent,
+                smart_prompt_persistent
               ) VALUES (
                 ${websiteId},
                 ${enabled ?? false},
@@ -1785,7 +1792,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${JSON.stringify(guided_gpt_prompts ?? [])},
                 ${JSON.stringify(smart_prompt_prompts ?? [])},
                 ${JSON.stringify(guided_gpt_rules ?? [])},
-                ${JSON.stringify(legacy_prompt_rules ?? [])}
+                ${JSON.stringify(legacy_prompt_rules ?? [])},
+                ${main_prompt_persistent ?? ''},
+                ${guided_instructions_persistent ?? ''},
+                ${smart_prompt_persistent ?? ''}
               )
               RETURNING id
             `
@@ -1825,7 +1835,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 guided_gpt_prompts,
                 smart_prompt_prompts,
                 guided_gpt_rules,
-                legacy_prompt_rules
+                legacy_prompt_rules,
+                main_prompt_persistent,
+                guided_instructions_persistent,
+                smart_prompt_persistent
               ) VALUES (
                 ${workflowId},
               ${enabled ?? false},
@@ -1861,14 +1874,17 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
               ${JSON.stringify(guided_gpt_prompts ?? [])},
               ${JSON.stringify(smart_prompt_prompts ?? [])},
               ${JSON.stringify(guided_gpt_rules ?? [])},
-              ${JSON.stringify(legacy_prompt_rules ?? [])}
+              ${JSON.stringify(legacy_prompt_rules ?? [])},
+              ${main_prompt_persistent ?? ''},
+              ${guided_instructions_persistent ?? ''},
+              ${smart_prompt_persistent ?? ''}
             )
             RETURNING id
           `;
           return result[0].id;
         } catch (insertErr) {
           // If it failed due to missing column, try without live_prompt_mode columns
-          if (insertErr.message?.includes('live_prompt_mode') || insertErr.message?.includes('smart_prompt_guidance') || insertErr.message?.includes('guided_guardrails') || insertErr.message?.includes('prompt_problem_areas') || insertErr.message?.includes('fallback_prompt_mode')) {
+          if (insertErr.message?.includes('live_prompt_mode') || insertErr.message?.includes('smart_prompt_guidance') || insertErr.message?.includes('guided_guardrails') || insertErr.message?.includes('prompt_problem_areas') || insertErr.message?.includes('fallback_prompt_mode') || insertErr.message?.includes('main_prompt_persistent') || insertErr.message?.includes('guided_instructions_persistent') || insertErr.message?.includes('smart_prompt_persistent')) {
             console.log('[Image Creation API] Falling back to INSERT without live_prompt columns');
             // Use website_id or workflow_id based on saveToWebsite flag
             const result = saveToWebsite
@@ -2035,6 +2051,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 smart_prompt_prompts = COALESCE(${smart_prompt_prompts ? JSON.stringify(smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
                 guided_gpt_rules = COALESCE(${guided_gpt_rules ? JSON.stringify(guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
                 legacy_prompt_rules = COALESCE(${legacy_prompt_rules ? JSON.stringify(legacy_prompt_rules) : null}::jsonb, legacy_prompt_rules),
+                main_prompt_persistent = COALESCE(${main_prompt_persistent ?? null}, main_prompt_persistent),
+                guided_instructions_persistent = COALESCE(${guided_instructions_persistent ?? null}, guided_instructions_persistent),
+                smart_prompt_persistent = COALESCE(${smart_prompt_persistent ?? null}, smart_prompt_persistent),
                 updated_at = CURRENT_TIMESTAMP
               WHERE website_id = ${websiteId}
               RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
@@ -2078,6 +2097,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 smart_prompt_prompts = COALESCE(${smart_prompt_prompts ? JSON.stringify(smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
                 guided_gpt_rules = COALESCE(${guided_gpt_rules ? JSON.stringify(guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
                 legacy_prompt_rules = COALESCE(${legacy_prompt_rules ? JSON.stringify(legacy_prompt_rules) : null}::jsonb, legacy_prompt_rules),
+                main_prompt_persistent = COALESCE(${main_prompt_persistent ?? null}, main_prompt_persistent),
+                guided_instructions_persistent = COALESCE(${guided_instructions_persistent ?? null}, guided_instructions_persistent),
+                smart_prompt_persistent = COALESCE(${smart_prompt_persistent ?? null}, smart_prompt_persistent),
                 updated_at = CURRENT_TIMESTAMP
               WHERE workflow_id = ${workflowId}
               RETURNING id, integration_mode, live_prompt_mode, smart_matching_mode
@@ -2086,7 +2108,7 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
           }
         } catch (updateErr) {
           // If it failed due to missing column, try without live_prompt_mode columns
-          if (updateErr.message?.includes('live_prompt_mode') || updateErr.message?.includes('fallback_prompt_mode') || updateErr.message?.includes('smart_prompt_guidance') || updateErr.message?.includes('guided_guardrails')) {
+          if (updateErr.message?.includes('live_prompt_mode') || updateErr.message?.includes('fallback_prompt_mode') || updateErr.message?.includes('smart_prompt_guidance') || updateErr.message?.includes('guided_guardrails') || updateErr.message?.includes('main_prompt_persistent') || updateErr.message?.includes('guided_instructions_persistent') || updateErr.message?.includes('smart_prompt_persistent')) {
             console.log('[Image Creation API] Falling back to UPDATE without live_prompt columns');
             // Use separate UPDATE statements based on saveToWebsite flag
             if (saveToWebsite) {
