@@ -548,6 +548,11 @@ interface ImageCreationSettings {
   matching_rule_2_title: string;
   matching_rule_3_title: string;
   matching_rule_4_title: string;
+  // Rule scope grid — same grid as Guided/Legacy rules
+  matching_rule_1_applies_to?: string[];
+  matching_rule_2_applies_to?: string[];
+  matching_rule_3_applies_to?: string[];
+  matching_rule_4_applies_to?: string[];
   // Per-tag Smart Matching Rules - each tag (H, J, C) gets its own rules
   smart_matching_rules_by_tag: {
     [tagName: string]: {
@@ -665,7 +670,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   variation_order_mode: 'sequential',
   manual_variation_order: [],
   // Smart Content Matching - OFF by default until user is ready
-  smart_matching_enabled: false,
+  smart_matching_enabled: true,
   smart_matching_mode: 'bank_first', // Default: check bank first, generate if no match
   // Editable algorithm rules
   placement_rule: 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.',
@@ -3851,10 +3856,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     // ========== SMART MATCHING SETTINGS ==========
     parts.push('━━━━━━━━━━ INTEGRATION SETTINGS ━━━━━━━━━━');
     parts.push(`🔄 Integration Mode: ${settings.integration_mode}`);
-    parts.push(`   Smart Matching: ${settings.smart_matching_enabled ? 'ON' : 'OFF'}`);
-    if (settings.smart_matching_enabled) {
-      parts.push(`   Matching Mode: ${settings.smart_matching_mode}`);
-    }
+    parts.push(`   Smart Matching: ALWAYS ON`);
+    parts.push(`   Matching Mode: ${settings.smart_matching_mode}`);
     parts.push(`   Fallback to Live Generation: ${settings.fallback_to_live ? 'Yes' : 'No'}`);
     parts.push(`   Variation Order: ${settings.variation_order_mode}`);
     parts.push('');
@@ -3932,7 +3935,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     parts.push('⚙️ IMAGE INTEGRATION SETTINGS:');
     parts.push(`  - Source Mode: ${settings.integration_mode === 'bank' ? 'Pull from Bank' : 'Generate Live'}`);
     parts.push(`  - Fallback to Live: ${settings.fallback_to_live ? 'Yes' : 'No'}`);
-    parts.push(`  - Smart Matching: ${settings.smart_matching_enabled ? 'ENABLED' : 'Disabled'}`);
+    parts.push(`  - Smart Matching: ALWAYS ON`);
     parts.push(`  - Smart Matching Mode: ${settings.smart_matching_mode || 'bank_first'}`);
     parts.push('');
     parts.push('📐 ALGORITHM RULES (user can edit these):');
@@ -6455,7 +6458,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       `IMAGE INTEGRATION SETTINGS:`,
       `- Source Mode: ${settings.integration_mode === 'bank' ? 'Pull from Bank' : 'Generate Live'}`,
       `- Fallback to Live: ${settings.fallback_to_live ? 'Yes' : 'No'}`,
-      `- Smart Matching: ${settings.smart_matching_enabled ? 'ENABLED' : 'Disabled'}`,
+      `- Smart Matching: ALWAYS ON`,
       `- Smart Matching Mode: ${settings.smart_matching_mode || 'bank_first'}`,
       ``,
       `ALGORITHM RULES (editable by user):`,
@@ -8028,11 +8031,9 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="px-2.5 py-1 bg-purple-600/40 text-purple-200 text-xs rounded-full font-medium border border-purple-500/30">
                     {settings.integration_mode === 'bank' ? '📦 Bank Mode' : '⚡ Live Mode'}
                   </span>
-                  {settings.smart_matching_enabled && (
-                    <span className="px-2.5 py-1 bg-emerald-600/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-500/30">
-                      🎯 Smart Match ON
-                    </span>
-                  )}
+                  <span className="px-2.5 py-1 bg-emerald-600/40 text-emerald-200 text-xs rounded-full font-medium border border-emerald-500/30">
+                    🎯 Smart Match ON
+                  </span>
                   <svg className={`w-5 h-5 text-purple-400 transition-transform ${imageIntegrationCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                   </svg>
@@ -8057,7 +8058,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'bank' ? 'bg-brand-gold/20 border-2 border-brand-gold' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
                     <input type="radio" name="integration_mode" checked={settings.integration_mode === 'bank'} onChange={() => updateSettings({
                       integration_mode: 'bank',
-                      // AUTO-SWITCH: When switching to Bank mode, ensure matching strategy is a bank option
                       smart_matching_mode: (settings.smart_matching_mode === 'generate_first' || settings.smart_matching_mode === 'generate_only') ? 'bank_first' : settings.smart_matching_mode
                     })} className="hidden" />
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'bank' ? 'bg-brand-gold text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
@@ -8072,8 +8072,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'live' ? 'bg-brand-cyan/20 border-2 border-brand-cyan' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
                     <input type="radio" name="integration_mode" checked={settings.integration_mode === 'live'} onChange={() => updateSettings({
                       integration_mode: 'live',
-                      // AUTO-SWITCH: When switching to Live mode, default to generate_only (Page Only)
-                      // generate_first requires double opt-in, so never auto-switch to it
                       smart_matching_mode: 'generate_only'
                     })} className="hidden" />
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'live' ? 'bg-brand-cyan text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
@@ -8088,13 +8086,18 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                 {/* Generate Live Prompt Mode Toggle - only show when Live mode is selected */}
                 {settings.integration_mode === 'live' && (
-                  <div className="bg-brand-cyan/10 rounded-lg p-3 border border-brand-cyan/30 mb-3">
+                  <div className="bg-brand-cyan/10 rounded-lg p-3 border border-brand-cyan/30 mb-3" style={{ position: 'relative', zIndex: 20 }}>
                     <label className="text-xs text-brand-cyan mb-2 block font-medium">Prompt Source for Generate Live:</label>
-                    <div className="grid grid-cols-3 gap-2 mb-2">
+                    <div className="grid grid-cols-3 gap-2 mb-2" onClick={(e) => { if (e.target === e.currentTarget) console.log('[BUTTON DEBUG] Grid clicked but no button hit'); }}>
                       <button
                         type="button"
-                        onClick={() => updateSettings({ live_prompt_mode: 'main_prompt' })}
-                        className={`p-2 rounded text-xs font-medium transition-all ${
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log('[BUTTON DEBUG] Main Prompt clicked, current:', settings.live_prompt_mode);
+                          showNotification('Switching to Main Prompt', 'success');
+                          updateSettings({ live_prompt_mode: 'main_prompt' });
+                        }}
+                        className={`p-2 rounded text-xs font-medium transition-all relative z-10 ${
                           settings.live_prompt_mode === 'main_prompt'
                             ? 'bg-brand-gold text-slate-900'
                             : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -8105,8 +8108,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </button>
                       <button
                         type="button"
-                        onClick={() => updateSettings({ live_prompt_mode: 'guided_gpt' })}
-                        className={`p-2 rounded text-xs font-medium transition-all ${
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log('[BUTTON DEBUG] Guided GPT clicked, current:', settings.live_prompt_mode);
+                          showNotification('Switching to Guided GPT', 'success');
+                          updateSettings({ live_prompt_mode: 'guided_gpt' });
+                        }}
+                        className={`p-2 rounded text-xs font-medium transition-all relative z-10 ${
                           settings.live_prompt_mode === 'guided_gpt'
                             ? 'bg-emerald-600 text-white'
                             : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -8117,8 +8125,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </button>
                       <button
                         type="button"
-                        onClick={() => updateSettings({ live_prompt_mode: 'smart_prompt' })}
-                        className={`p-2 rounded text-xs font-medium transition-all ${
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log('[BUTTON DEBUG] Smart Prompt clicked, current:', settings.live_prompt_mode);
+                          showNotification('Switching to Smart Prompt', 'success');
+                          updateSettings({ live_prompt_mode: 'smart_prompt' });
+                        }}
+                        className={`p-2 rounded text-xs font-medium transition-all relative z-10 ${
                           settings.live_prompt_mode === 'smart_prompt'
                             ? 'bg-purple-600 text-white'
                             : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -12237,21 +12250,15 @@ Start by introducing yourself and asking about their business in a friendly way.
                 const isAlwaysOnMode = isLiveMode && isMainPromptMode;
                 // Smart Matching is OFF/disabled for Guided GPT and Smart Prompt
                 const isDisabledMode = isLiveMode && isGuidedOrSmartMode;
-                // Normal toggle mode for Bank
-                const isToggleMode = !isLiveMode;
 
-                // Effective enabled state
-                const effectiveEnabled = isAlwaysOnMode || (isToggleMode && settings.smart_matching_enabled);
+                // Always enabled — no toggle (Bank mode is always on too)
+                const effectiveEnabled = true;
 
                 return (
               <div className={`rounded-lg p-4 border transition-all ${
                 isDisabledMode
                   ? 'bg-slate-800/20 border-slate-600 opacity-60'
-                  : isAlwaysOnMode
-                    ? 'bg-purple-900/30 border-purple-500'
-                    : effectiveEnabled
-                      ? 'bg-purple-900/20 border-purple-500'
-                      : 'bg-slate-800/30 border-slate-700'
+                  : 'bg-purple-900/30 border-purple-500'
               }`}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -12260,25 +12267,15 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </svg>
                     <h3 className={`font-semibold ${isDisabledMode ? 'text-slate-500' : effectiveEnabled ? 'text-purple-400' : 'text-slate-500'}`}>Smart Content Matching</h3>
                     <span className="px-2 py-0.5 bg-purple-600/30 text-purple-300 text-[10px] rounded font-medium">BETA</span>
-                    {isAlwaysOnMode && (
+                    {!isDisabledMode && (
                       <span className="px-2 py-0.5 bg-purple-600/50 text-purple-200 text-[10px] rounded font-medium">ALWAYS ON</span>
                     )}
                     {isDisabledMode && (
                       <span className="px-2 py-0.5 bg-slate-600/50 text-slate-400 text-[10px] rounded font-medium">GPT HANDLES THIS</span>
                     )}
                   </div>
-                  {/* Toggle - only show for Bank mode */}
-                  {isToggleMode ? (
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={settings.smart_matching_enabled}
-                        onChange={(e) => updateSettings({ smart_matching_enabled: e.target.checked })}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                    </label>
-                  ) : isAlwaysOnMode ? (
+                  {/* Always ON — no toggle needed */}
+                  {!isDisabledMode ? (
                     <span className="text-xs text-purple-400 font-medium">Core Feature</span>
                   ) : (
                     <span className="text-xs text-slate-500">Not Used</span>
@@ -12350,7 +12347,21 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </p>
                     <div className="bg-purple-900/30 rounded-lg p-3 border border-purple-500/30">
                       <p className="text-[10px] text-purple-300 leading-relaxed">
-                        <strong>How it works:</strong> For each image position, the system looks at the surrounding ~75 words and matches your placeholder keywords (e.g., {'{Room}'}, {'{Surface}'}) to the article content.
+                        <strong>How it works:</strong> For each image position, the system looks at the surrounding{' '}
+                        <input
+                          type="number"
+                          value={settings.smart_matching_config?.wordRange || 75}
+                          onChange={(e) => updateSettings({
+                            smart_matching_config: {
+                              ...settings.smart_matching_config,
+                              wordRange: parseInt(e.target.value) || 75
+                            }
+                          })}
+                          className="w-12 bg-purple-800/50 border border-purple-500/50 rounded px-1 py-0.5 text-purple-200 text-[10px] text-center font-bold inline-block mx-0.5 focus:outline-none focus:border-purple-400"
+                          min={10}
+                          max={500}
+                        />
+                        {' '}words and matches your placeholder keywords (e.g., {'{Room}'}, {'{Surface}'}) to the article content.
                       </p>
                     </div>
 
@@ -12505,7 +12516,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     )}
                   </div>
-                ) : effectiveEnabled ? (
+                ) : (
                   <div className="space-y-4">
                     <p className="text-xs text-purple-300/70">
                       AI analyzes article text and matches images based on keywords. Define keywords in each placeholder option above.
@@ -12657,10 +12668,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </p>
                     </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-slate-500">
-                    Enable Smart Content Matching to have AI automatically select images based on article content for optimal SEO.
-                  </p>
                 )}
               </div>
                 );
@@ -12673,22 +12680,19 @@ Start by introducing yourself and asking about their business in a friendly way.
                   (Guided GPT and Smart Prompt use their own dedicated Rules sections)
               ───────────────────────────────────────────────────── */}
               {(settings.integration_mode === 'bank' || (settings.integration_mode === 'live' && settings.live_prompt_mode === 'main_prompt')) && (
-              <div className={`rounded-lg p-4 border -mt-2 ${settings.smart_matching_enabled ? 'bg-slate-800/50 border-emerald-500/30' : 'bg-slate-800/30 border-cyan-500/30'}`}>
+              <div className="rounded-lg p-4 border -mt-2 bg-slate-800/50 border-emerald-500/30">
                 <div className="flex items-center gap-2 mb-4">
-                  <svg className={`w-5 h-5 ${settings.smart_matching_enabled ? 'text-emerald-400' : 'text-cyan-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                   </svg>
-                  <h3 className={`font-semibold ${settings.smart_matching_enabled ? 'text-emerald-400' : 'text-cyan-400'}`}>
-                    {settings.smart_matching_enabled ? 'Smart Matching Rules' : 'Static Matching Rules'}
-                  </h3>
-                  <span className={`text-[10px] px-2 py-0.5 rounded ${settings.smart_matching_enabled ? 'bg-emerald-600/30 text-emerald-300' : 'bg-cyan-600/30 text-cyan-300'}`}>
-                    {settings.smart_matching_enabled ? 'Smart Matching ON' : 'Smart Matching OFF'}
+                  <h3 className="font-semibold text-emerald-400">Smart Matching Rules</h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-600/30 text-emerald-300">
+                    ALWAYS ON
                   </span>
                 </div>
 
-                {/* 4 COLORED RULES - Only show when Smart Matching is ON */}
-                {settings.smart_matching_enabled ? (
-                  <>
+                {/* 4 COLORED RULES - Smart Matching always ON */}
+                <>
                     {/* Tag Tabs for Per-Tag Rules */}
                     {allTags.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1 mb-4 border-b border-slate-700 pb-3">
@@ -12812,6 +12816,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                             rows={2}
                             placeholder="Rule for primary keyword matching..."
                           />
+                          {/* Scope grid */}
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {(settings.matching_rule_1_applies_to || []).length > 0 && (
+                              <span className="text-[9px] text-emerald-400/70 truncate max-w-[250px]">
+                                {(settings.matching_rule_1_applies_to || []).join(', ')}
+                              </span>
+                            )}
+                            <button
+                              ref={rulesGridOpenId === 'matching-1' ? rulesGridButtonRef : undefined}
+                              onClick={(e) => {
+                                rulesGridButtonRef.current = e.currentTarget;
+                                setRulesGridOpenId(rulesGridOpenId === 'matching-1' ? null : 'matching-1');
+                                setRulesGridType('guided');
+                              }}
+                              className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                rulesGridOpenId === 'matching-1'
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                              }`}
+                            >
+                              {(settings.matching_rule_1_applies_to || []).length > 0 ? `Scope (${(settings.matching_rule_1_applies_to || []).length})` : 'Set Scope'}
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -12865,6 +12892,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                             rows={2}
                             placeholder="Rule for secondary keyword fallback..."
                           />
+                          {/* Scope grid */}
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {(settings.matching_rule_2_applies_to || []).length > 0 && (
+                              <span className="text-[9px] text-amber-400/70 truncate max-w-[250px]">
+                                {(settings.matching_rule_2_applies_to || []).join(', ')}
+                              </span>
+                            )}
+                            <button
+                              ref={rulesGridOpenId === 'matching-2' ? rulesGridButtonRef : undefined}
+                              onClick={(e) => {
+                                rulesGridButtonRef.current = e.currentTarget;
+                                setRulesGridOpenId(rulesGridOpenId === 'matching-2' ? null : 'matching-2');
+                                setRulesGridType('guided');
+                              }}
+                              className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                rulesGridOpenId === 'matching-2'
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                              }`}
+                            >
+                              {(settings.matching_rule_2_applies_to || []).length > 0 ? `Scope (${(settings.matching_rule_2_applies_to || []).length})` : 'Set Scope'}
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -12918,6 +12968,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                             rows={2}
                             placeholder="Rule for preventing duplicate primary keywords..."
                           />
+                          {/* Scope grid */}
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {(settings.matching_rule_3_applies_to || []).length > 0 && (
+                              <span className="text-[9px] text-red-400/70 truncate max-w-[250px]">
+                                {(settings.matching_rule_3_applies_to || []).join(', ')}
+                              </span>
+                            )}
+                            <button
+                              ref={rulesGridOpenId === 'matching-3' ? rulesGridButtonRef : undefined}
+                              onClick={(e) => {
+                                rulesGridButtonRef.current = e.currentTarget;
+                                setRulesGridOpenId(rulesGridOpenId === 'matching-3' ? null : 'matching-3');
+                                setRulesGridType('guided');
+                              }}
+                              className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                rulesGridOpenId === 'matching-3'
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                              }`}
+                            >
+                              {(settings.matching_rule_3_applies_to || []).length > 0 ? `Scope (${(settings.matching_rule_3_applies_to || []).length})` : 'Set Scope'}
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -12971,6 +13044,29 @@ Start by introducing yourself and asking about their business in a friendly way.
                             rows={2}
                             placeholder="Rule for secondary keyword primary diversity..."
                           />
+                          {/* Scope grid */}
+                          <div className="flex items-center gap-2 mt-1.5">
+                            {(settings.matching_rule_4_applies_to || []).length > 0 && (
+                              <span className="text-[9px] text-purple-400/70 truncate max-w-[250px]">
+                                {(settings.matching_rule_4_applies_to || []).join(', ')}
+                              </span>
+                            )}
+                            <button
+                              ref={rulesGridOpenId === 'matching-4' ? rulesGridButtonRef : undefined}
+                              onClick={(e) => {
+                                rulesGridButtonRef.current = e.currentTarget;
+                                setRulesGridOpenId(rulesGridOpenId === 'matching-4' ? null : 'matching-4');
+                                setRulesGridType('guided');
+                              }}
+                              className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                rulesGridOpenId === 'matching-4'
+                                  ? 'bg-purple-600 text-white'
+                                  : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                              }`}
+                            >
+                              {(settings.matching_rule_4_applies_to || []).length > 0 ? `Scope (${(settings.matching_rule_4_applies_to || []).length})` : 'Set Scope'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -13063,34 +13159,6 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     </div>
                   </>
-                ) : (
-                  /* 2 BLUE RULES - Only show when Smart Matching is OFF (static fallback) */
-                  <div className="space-y-3">
-                    <p className="text-xs text-cyan-300/70 mb-3">
-                      Smart Matching is OFF. These static rules will be used for all image placements.
-                    </p>
-                    <div>
-                      <label className="text-xs text-cyan-400 font-semibold block mb-1">Image Placement Rule</label>
-                      <textarea
-                        value={settings.placement_rule || 'Place image at last paragraph break under {300} words since previous image. Hero image on {right/left/alt}.'}
-                        onChange={(e) => updateSettings({ placement_rule: e.target.value })}
-                        className="w-full bg-slate-800 border border-cyan-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-cyan-500"
-                        rows={2}
-                        placeholder="Place image at last paragraph break under {300} words since previous image..."
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-cyan-400 font-semibold block mb-1">Smart Matching Rule</label>
-                      <textarea
-                        value={settings.smart_matching_rule || 'Look {50-75} words around image placement for keyword matches. Match against: {placeholder_categories}.'}
-                        onChange={(e) => updateSettings({ smart_matching_rule: e.target.value })}
-                        className="w-full bg-slate-800 border border-cyan-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-cyan-500"
-                        rows={2}
-                        placeholder="Look {50-75} words around image placement for keyword matches..."
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
               )}
 
@@ -14051,91 +14119,98 @@ Start by introducing yourself and asking about their business in a friendly way.
                       }`}>
                         {/* Category Header - Clickable to collapse/expand */}
                         <div
-                          className="flex items-center gap-2 p-3 cursor-pointer hover:bg-slate-700/30 transition"
+                          className="p-3 cursor-pointer hover:bg-slate-700/30 transition"
                           onClick={toggleCategoryCollapse}
                         >
-                          {/* Collapse Toggle */}
-                          <span className={`text-purple-400 transition-transform text-xs ${isCategoryCollapsed ? '' : 'rotate-90'}`}>▶</span>
-                          {/* On/Off Toggle */}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false }); }}
-                            className={`w-5 h-5 rounded flex items-center justify-center text-xs transition ${
-                              category.enabled !== false
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-slate-700 text-slate-500'
-                            }`}
-                            title={category.enabled !== false ? 'Click to disable' : 'Click to enable'}
-                          >
-                            {category.enabled !== false ? '✓' : '○'}
-                          </button>
-                          <input
-                            type="text"
-                            value={category.name}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => handleUpdatePlaceholderCategory(category.id, { name: e.target.value, placeholder: `{${e.target.value.replace(/\s+/g, '_')}}` })}
-                            className="flex-1 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
-                            placeholder="Category name (e.g., Cleaning_Item)"
-                          />
-                          <span className="text-xs text-purple-400 font-mono">{category.placeholder}</span>
-                          {/* Unique / Persistent scope toggle */}
-                          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                          {/* Row 1: Core controls */}
+                          <div className="flex items-center gap-2">
+                            {/* Collapse Toggle */}
+                            <span className={`text-purple-400 transition-transform text-xs ${isCategoryCollapsed ? '' : 'rotate-90'}`}>▶</span>
+                            {/* On/Off Toggle */}
                             <button
-                              onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'unique' })}
-                              className={`px-1.5 py-0.5 text-[9px] rounded-l transition ${
-                                (category.scope || 'unique') === 'unique'
-                                  ? 'bg-amber-600 text-white font-medium'
-                                  : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                              onClick={(e) => { e.stopPropagation(); handleUpdatePlaceholderCategory(category.id, { enabled: category.enabled === false ? true : false }); }}
+                              className={`w-5 h-5 rounded flex items-center justify-center text-xs transition shrink-0 ${
+                                category.enabled !== false
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-slate-700 text-slate-500'
                               }`}
-                              title="This category only appears for the current tag"
+                              title={category.enabled !== false ? 'Click to disable' : 'Click to enable'}
                             >
-                              Unique
+                              {category.enabled !== false ? '✓' : '○'}
                             </button>
+                            <input
+                              type="text"
+                              value={category.name}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => handleUpdatePlaceholderCategory(category.id, { name: e.target.value, placeholder: `{${e.target.value.replace(/\s+/g, '_')}}` })}
+                              className="flex-1 min-w-0 bg-slate-900 border border-purple-500/50 rounded px-2 py-1 text-white text-sm"
+                              placeholder="Category name (e.g., Cleaning_Item)"
+                            />
+                            <span className="text-xs text-purple-400 font-mono shrink-0">{category.placeholder}</span>
+                            {isCategoryCollapsed && (
+                              <span className="text-xs text-slate-500 shrink-0">{category.options.length} options</span>
+                            )}
                             <button
-                              onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'persistent' })}
-                              className={`px-1.5 py-0.5 text-[9px] rounded-r transition ${
-                                category.scope === 'persistent'
-                                  ? 'bg-sky-600 text-white font-medium'
-                                  : 'bg-slate-700/80 text-slate-400 hover:text-white'
-                              }`}
-                              title="This category appears for ALL tags"
+                              onClick={(e) => { e.stopPropagation(); handleRemovePlaceholderCategory(category.id); }}
+                              className="p-1.5 bg-red-600/50 hover:bg-red-600 rounded text-white transition shrink-0"
+                              title="Delete category"
                             >
-                              Persistent
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
                             </button>
                           </div>
-                          {isCategoryCollapsed && (
-                            <span className="text-xs text-slate-500">{category.options.length} options</span>
-                          )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openVersionHistory('placeholder', category.letter, `${category.name} (${category.letter})`);
-                            }}
-                            className="px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-[10px] transition"
-                            title="View and restore previous versions of this category"
-                          >
-                            History
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const companyCategory = prompt('Enter company/type category (e.g., Cleaning, Construction):');
-                              if (companyCategory) {
-                                handleSavePlaceholderCategoryTemplate(category, companyCategory);
-                              }
-                            }}
-                            className="px-2 py-1 bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/50 rounded text-orange-300 text-[10px] transition"
-                            title="Save this category as a reusable template"
-                          >
-                            Save Template
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleRemovePlaceholderCategory(category.id); }}
-                            className="p-1 bg-red-600/50 hover:bg-red-600 rounded text-white transition"
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
+                          {/* Row 2: Scope toggle + action buttons */}
+                          <div className="flex items-center gap-2 mt-1.5 ml-[30px]">
+                            {/* Unique / Persistent scope toggle */}
+                            <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'unique' })}
+                                className={`px-1.5 py-0.5 text-[9px] rounded-l transition ${
+                                  (category.scope || 'unique') === 'unique'
+                                    ? 'bg-amber-600 text-white font-medium'
+                                    : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                                }`}
+                                title="This category only appears for the current tag"
+                              >
+                                Unique
+                              </button>
+                              <button
+                                onClick={() => handleUpdatePlaceholderCategory(category.id, { scope: 'persistent' })}
+                                className={`px-1.5 py-0.5 text-[9px] rounded-r transition ${
+                                  category.scope === 'persistent'
+                                    ? 'bg-sky-600 text-white font-medium'
+                                    : 'bg-slate-700/80 text-slate-400 hover:text-white'
+                                }`}
+                                title="This category appears for ALL tags"
+                              >
+                                Persistent
+                              </button>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openVersionHistory('placeholder', category.letter, `${category.name} (${category.letter})`);
+                              }}
+                              className="px-2 py-0.5 bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/50 rounded text-blue-300 text-[10px] transition"
+                              title="View and restore previous versions of this category"
+                            >
+                              History
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const companyCategory = prompt('Enter company/type category (e.g., Cleaning, Construction):');
+                                if (companyCategory) {
+                                  handleSavePlaceholderCategoryTemplate(category, companyCategory);
+                                }
+                              }}
+                              className="px-2 py-0.5 bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/50 rounded text-orange-300 text-[10px] transition"
+                              title="Save this category as a reusable template"
+                            >
+                              Save Template
+                            </button>
+                          </div>
                         </div>
 
                         {/* Category Content - Options (collapsible) */}
@@ -18407,7 +18482,7 @@ Start by introducing yourself and asking about their business in a friendly way.
       {/* Rules Checkbox Grid Popup (Portal) */}
       {rulesGridOpenId && createPortal(
         <div
-          className="fixed inset-0 z-[9999]"
+          className="fixed inset-0 z-[9999] bg-black/30"
           onClick={() => setRulesGridOpenId(null)}
         >
           <div
@@ -18445,54 +18520,55 @@ Start by introducing yourself and asking about their business in a friendly way.
                 { key: 'smart-rules', label: 'Smart Rules' },
               ];
 
-              // Find the active rule
-              const allRules = rulesGridType === 'guided' ? (settings.guided_gpt_rules || []) : (settings.legacy_prompt_rules || []);
-              const activeRule = allRules.find(r => r.id === rulesGridOpenId);
-              if (!activeRule) return null;
-              const currentAppliesTo = activeRule.appliesTo || [];
+              // Determine data source: TagBasedRule[] or matching_rule_N settings
+              const isMatchingRule = rulesGridOpenId?.startsWith('matching-');
+              let currentAppliesTo: string[] = [];
+              if (isMatchingRule) {
+                const ruleNum = rulesGridOpenId!.split('-')[1] as '1' | '2' | '3' | '4';
+                const key = `matching_rule_${ruleNum}_applies_to` as keyof ImageCreationSettings;
+                currentAppliesTo = (settings[key] as string[] | undefined) || [];
+              } else {
+                const allRules = rulesGridType === 'guided' ? (settings.guided_gpt_rules || []) : (settings.legacy_prompt_rules || []);
+                const activeRule = allRules.find(r => r.id === rulesGridOpenId);
+                if (!activeRule) return null;
+                currentAppliesTo = activeRule.appliesTo || [];
+              }
+
+              const saveAppliesTo = (updated: string[]) => {
+                if (isMatchingRule) {
+                  const ruleNum = rulesGridOpenId!.split('-')[1];
+                  updateSettings({ [`matching_rule_${ruleNum}_applies_to`]: updated } as any);
+                } else if (rulesGridType === 'guided') {
+                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
+                } else {
+                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
+                }
+              };
 
               const toggleCell = (col: string, rowKey: string) => {
                 const cellId = `${col}-${rowKey}`;
                 const updated = currentAppliesTo.includes(cellId)
                   ? currentAppliesTo.filter(x => x !== cellId)
                   : [...currentAppliesTo, cellId];
-                if (rulesGridType === 'guided') {
-                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
-                } else {
-                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
-                }
+                saveAppliesTo(updated);
               };
 
               const toggleColumn = (col: string) => {
                 const colCells = rows.map(r => `${col}-${r.key}`);
                 const allChecked = colCells.every(c => currentAppliesTo.includes(c));
-                let updated: string[];
-                if (allChecked) {
-                  updated = currentAppliesTo.filter(x => !colCells.includes(x));
-                } else {
-                  updated = [...new Set([...currentAppliesTo, ...colCells])];
-                }
-                if (rulesGridType === 'guided') {
-                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
-                } else {
-                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
-                }
+                const updated = allChecked
+                  ? currentAppliesTo.filter(x => !colCells.includes(x))
+                  : [...new Set([...currentAppliesTo, ...colCells])];
+                saveAppliesTo(updated);
               };
 
               const toggleRow = (rowKey: string) => {
                 const rowCells = columns.map(c => `${c}-${rowKey}`);
                 const allChecked = rowCells.every(c => currentAppliesTo.includes(c));
-                let updated: string[];
-                if (allChecked) {
-                  updated = currentAppliesTo.filter(x => !rowCells.includes(x));
-                } else {
-                  updated = [...new Set([...currentAppliesTo, ...rowCells])];
-                }
-                if (rulesGridType === 'guided') {
-                  handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: updated });
-                } else {
-                  handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: updated });
-                }
+                const updated = allChecked
+                  ? currentAppliesTo.filter(x => !rowCells.includes(x))
+                  : [...new Set([...currentAppliesTo, ...rowCells])];
+                saveAppliesTo(updated);
               };
 
               return (
@@ -18553,24 +18629,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                     <button
                       onClick={() => {
                         const allCells = columns.flatMap(col => rows.map(r => `${col}-${r.key}`));
-                        if (rulesGridType === 'guided') {
-                          handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: allCells });
-                        } else {
-                          handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: allCells });
-                        }
+                        saveAppliesTo(allCells);
                       }}
                       className="px-2 py-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition"
                     >
                       Select All
                     </button>
                     <button
-                      onClick={() => {
-                        if (rulesGridType === 'guided') {
-                          handleUpdateGuidedRule(rulesGridOpenId!, { appliesTo: [] });
-                        } else {
-                          handleUpdateLegacyRule(rulesGridOpenId!, { appliesTo: [] });
-                        }
-                      }}
+                      onClick={() => saveAppliesTo([])}
                       className="px-2 py-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition"
                     >
                       Clear All
