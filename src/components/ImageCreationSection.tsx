@@ -22,6 +22,14 @@ import SetScopeGrid, { ScopeGridRow } from './shared/SetScopeGrid';
 import VersionHistoryBrowser from './VersionHistoryBrowser';
 import TestingSlotsSelector, { TestingSlot, TestingSlotContent } from './TestingSlotsSelector';
 import { useVersionControl, VersionEntityType } from '../hooks/useVersionControl';
+import {
+  parseAndApplyCodeBlocks,
+  PendingConfirmation,
+  AppliedBlock,
+  CodeBlockDeps,
+  CODE_BLOCK_LABELS,
+  isAdditiveBlock,
+} from '../utils/parseCodeBlocks';
 
 // Types for Feedback System
 interface GeneratedImage {
@@ -877,6 +885,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [versionHistorySaveMode, setVersionHistorySaveMode] = useState(false);
   const [versionHistorySaveName, setVersionHistorySaveName] = useState('');
   const [versionHistorySaveNotes, setVersionHistorySaveNotes] = useState('');
+  // Code block confirmation state (Phase 4)
+  const [pendingConfirmations, setPendingConfirmations] = useState<PendingConfirmation[]>([]);
+  const [appliedBlocksLog, setAppliedBlocksLog] = useState<AppliedBlock[]>([]);
+  const [confirmationPreviewId, setConfirmationPreviewId] = useState<string | null>(null);
   // Placeholder template editing state
   const [editingPlaceholderTemplate, setEditingPlaceholderTemplate] = useState<PlaceholderCategoryTemplate | null>(null);
   const [editPlaceholderTemplateName, setEditPlaceholderTemplateName] = useState('');
@@ -3092,6 +3104,40 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     return rules.filter(r => r.tag === tag).sort((a, b) => a.order - b.order);
   };
 
+  // Build deps object for parseAndApplyCodeBlocks utility (Phase 4)
+  const getCodeBlockDeps = (): CodeBlockDeps => ({
+    settings,
+    updateSettings,
+    activeAvatar,
+    handleUpdateAvatar,
+    saveVersionSnapshot,
+    setTestingModeOpen,
+    updateActiveTabPrompt,
+    allTags,
+    getRulesForTag,
+  });
+
+  // Handle applying a pending confirmation (Phase 4)
+  const handleApplyConfirmation = (id: string) => {
+    const conf = pendingConfirmations.find(c => c.id === id);
+    if (conf) {
+      conf.applyFn();
+      setAppliedBlocksLog(prev => [...prev, {
+        blockType: conf.blockType,
+        fieldLabel: conf.fieldLabel,
+        action: 'updated' as const,
+        timestamp: new Date().toISOString(),
+      }]);
+      setPendingConfirmations(prev => prev.filter(c => c.id !== id));
+      showNotification(`Applied: ${conf.fieldLabel}`, 'success');
+    }
+  };
+
+  // Handle skipping a pending confirmation (Phase 4)
+  const handleSkipConfirmation = (id: string) => {
+    setPendingConfirmations(prev => prev.filter(c => c.id !== id));
+  };
+
   // Add a new Guided GPT rule
   const handleAddGuidedRule = (tag: string) => {
     const existingRules = settings.guided_gpt_rules || [];
@@ -5228,143 +5274,17 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const data = await res.json();
       if (data.success) {
         const responseContent = data.response;
-        const updatedFields: string[] = [];
 
-        // Check for ```testprompt blocks - AI can directly update Testing Mode
-        const testPromptMatch = responseContent.match(/```testprompt\n?([\s\S]*?)```/);
-        if (testPromptMatch) {
-          const newPrompt = testPromptMatch[1].trim();
-          // Open Testing Mode and update the prompt
-          setTestingModeOpen(true);
-          updateActiveTabPrompt(newPrompt);
-          updatedFields.push('Test Prompt');
+        // Parse and apply code blocks via shared utility (Phase 4)
+        const { updatedFields, pendingConfirmations: newConfirmations, appliedBlocks } = parseAndApplyCodeBlocks(responseContent, getCodeBlockDeps());
+        if (newConfirmations.length > 0) {
+          setPendingConfirmations(prev => [...prev, ...newConfirmations]);
         }
-
-        // Check for ```instructions blocks - AI can directly update Instructions field
-        const instructionsMatch = responseContent.match(/```instructions\n?([\s\S]*?)```/);
-        if (instructionsMatch) {
-          const newInstructions = instructionsMatch[1].trim();
-          updateSettings({
-            guided_guardrails: {
-              ...settings.guided_guardrails,
-              instructions: newInstructions
-            } as any
-          });
-          updatedFields.push('Instructions');
+        if (appliedBlocks.length > 0) {
+          setAppliedBlocksLog(prev => [...prev, ...appliedBlocks]);
         }
-
-        // Check for ```uniform blocks - AI can directly update Uniform/Appearance field
-        const uniformMatch = responseContent.match(/```uniform\n?([\s\S]*?)```/);
-        if (uniformMatch) {
-          const newUniform = uniformMatch[1].trim();
-          updateSettings({
-            guided_guardrails: {
-              ...settings.guided_guardrails,
-              uniformDescription: newUniform
-            } as any
-          });
-          updatedFields.push('Uniform/Appearance');
-        }
-
-        // Check for ```subject blocks - AI can directly update Default Subject field
-        const subjectMatch = responseContent.match(/```subject\n?([\s\S]*?)```/);
-        if (subjectMatch) {
-          const newSubject = subjectMatch[1].trim();
-          updateSettings({
-            guided_guardrails: {
-              ...settings.guided_guardrails,
-              defaultSubject: newSubject
-            } as any
-          });
-          updatedFields.push('Default Subject');
-        }
-
-        // Check for ```avoid blocks - AI can directly update Avoid field
-        const avoidMatch = responseContent.match(/```avoid\n?([\s\S]*?)```/);
-        if (avoidMatch) {
-          const newAvoid = avoidMatch[1].trim();
-          updateSettings({
-            guided_guardrails: {
-              ...settings.guided_guardrails,
-              avoidList: newAvoid
-            } as any
-          });
-          updatedFields.push('Avoid List');
-        }
-
-        // Check for ```stylepreferences blocks - AI can update style preferences
-        const styleMatch = responseContent.match(/```stylepreferences\n?([\s\S]*?)```/);
-        if (styleMatch) {
-          const newStyle = styleMatch[1].trim();
-          updateSettings({
-            guided_guardrails: {
-              ...settings.guided_guardrails,
-              stylePreferences: newStyle
-            } as any
-          });
-          updatedFields.push('Style Preferences');
-        }
-
-        // Check for ```mainprompt blocks - AI can update avatar's main prompt
-        const mainPromptMatch = responseContent.match(/```mainprompt\n?([\s\S]*?)```/);
-        if (mainPromptMatch && activeAvatar) {
-          const newMainPrompt = mainPromptMatch[1].trim();
-          const updatedAvatars = settings.audience_avatars.map(a =>
-            a.tag === activeAvatar.tag ? { ...a, mainPrompt: newMainPrompt } : a
-          );
-          updateSettings({ audience_avatars: updatedAvatars });
-          updatedFields.push('Main Prompt');
-        }
-
-        // Check for ```smartprompt blocks - AI can update smart prompt guidance
-        const smartPromptMatch = responseContent.match(/```smartprompt\n?([\s\S]*?)```/);
-        if (smartPromptMatch) {
-          updateSettings({ smart_prompt_guidance: smartPromptMatch[1].trim() });
-          updatedFields.push('Smart Prompt Guidance');
-        }
-
-        // Check for ```matchingrule1-4 blocks - AI can update matching rules
-        const rule1Match = responseContent.match(/```matchingrule1\n?([\s\S]*?)```/);
-        if (rule1Match) {
-          updateSettings({ matching_rule_1: rule1Match[1].trim() });
-          updatedFields.push('Matching Rule 1');
-        }
-
-        const rule2Match = responseContent.match(/```matchingrule2\n?([\s\S]*?)```/);
-        if (rule2Match) {
-          updateSettings({ matching_rule_2: rule2Match[1].trim() });
-          updatedFields.push('Matching Rule 2');
-        }
-
-        const rule3Match = responseContent.match(/```matchingrule3\n?([\s\S]*?)```/);
-        if (rule3Match) {
-          updateSettings({ matching_rule_3: rule3Match[1].trim() });
-          updatedFields.push('Matching Rule 3');
-        }
-
-        const rule4Match = responseContent.match(/```matchingrule4\n?([\s\S]*?)```/);
-        if (rule4Match) {
-          updateSettings({ matching_rule_4: rule4Match[1].trim() });
-          updatedFields.push('Matching Rule 4');
-        }
-
-        // Check for ```placementrule blocks - AI can update placement rule
-        const placementMatch = responseContent.match(/```placementrule\n?([\s\S]*?)```/);
-        if (placementMatch) {
-          updateSettings({ placement_rule: placementMatch[1].trim() });
-          updatedFields.push('Placement Rule');
-        }
-
-        // Check for ```smartmatchingrule blocks - AI can update smart matching rule
-        const smartMatchingMatch = responseContent.match(/```smartmatchingrule\n?([\s\S]*?)```/);
-        if (smartMatchingMatch) {
-          updateSettings({ smart_matching_rule: smartMatchingMatch[1].trim() });
-          updatedFields.push('Smart Matching Rule');
-        }
-
-        // Show notification for all updated fields
         if (updatedFields.length > 0) {
-          showNotification(`✓ Updated: ${updatedFields.join(', ')}`, 'success');
+          showNotification(`Updated: ${updatedFields.join(', ')}`, 'success');
         }
 
         const assistantMessage: ChatMessage = {
@@ -5552,22 +5472,17 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const data = await res.json();
       if (data.success) {
         const responseContent = data.response;
-        const updatedFields: string[] = [];
 
-        // Check for ```mainprompt blocks - AI can update avatar's main prompt
-        const mainPromptMatch = responseContent.match(/```mainprompt\n?([\s\S]*?)```/);
-        if (mainPromptMatch && activeAvatar) {
-          const newMainPrompt = mainPromptMatch[1].trim();
-          const updatedAvatars = settings.audience_avatars.map(a =>
-            a.id === activeAvatar.id ? { ...a, mainPrompt: newMainPrompt } : a
-          );
-          updateSettings({ audience_avatars: updatedAvatars });
-          updatedFields.push('Main Prompt');
+        // Parse and apply code blocks via shared utility (Phase 4)
+        const { updatedFields, pendingConfirmations: newConfirmations, appliedBlocks } = parseAndApplyCodeBlocks(responseContent, getCodeBlockDeps());
+        if (newConfirmations.length > 0) {
+          setPendingConfirmations(prev => [...prev, ...newConfirmations]);
         }
-
-        // Show notification for updated fields
+        if (appliedBlocks.length > 0) {
+          setAppliedBlocksLog(prev => [...prev, ...appliedBlocks]);
+        }
         if (updatedFields.length > 0) {
-          showNotification(`✓ Updated: ${updatedFields.join(', ')}`, 'success');
+          showNotification(`Updated: ${updatedFields.join(', ')}`, 'success');
         }
 
         const assistantMessage: ChatMessage = {
@@ -5698,44 +5613,17 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       const data = await res.json();
       if (data.success) {
         const responseContent = data.response;
-        const updatedFields: string[] = [];
 
-        // Handle code block write-backs from AI response (same as existing handlers)
-        // ```mainprompt blocks
-        const mainPromptMatch = responseContent.match(/```mainprompt\n?([\s\S]*?)```/);
-        if (mainPromptMatch && activeAvatar) {
-          const newMainPrompt = mainPromptMatch[1].trim();
-          const updatedAvatars = settings.audience_avatars.map((a: any) =>
-            a.id === activeAvatar.id ? { ...a, mainPrompt: newMainPrompt } : a
-          );
-          updateSettings({ audience_avatars: updatedAvatars });
-          updatedFields.push('Main Prompt');
+        // Parse and apply code blocks via shared utility (Phase 4)
+        const { updatedFields, pendingConfirmations: newConfirmations, appliedBlocks } = parseAndApplyCodeBlocks(responseContent, getCodeBlockDeps());
+        if (newConfirmations.length > 0) {
+          setPendingConfirmations(prev => [...prev, ...newConfirmations]);
         }
-
-        // ```testprompt blocks
-        const testPromptMatch = responseContent.match(/```testprompt\n?([\s\S]*?)```/);
-        if (testPromptMatch) {
-          const newPrompt = testPromptMatch[1].trim();
-          setTestingModeOpen(true);
-          updateActiveTabPrompt(newPrompt);
-          updatedFields.push('Test Prompt');
+        if (appliedBlocks.length > 0) {
+          setAppliedBlocksLog(prev => [...prev, ...appliedBlocks]);
         }
-
-        // ```instructions blocks
-        const instructionsMatch = responseContent.match(/```instructions\n?([\s\S]*?)```/);
-        if (instructionsMatch) {
-          const newInstructions = instructionsMatch[1].trim();
-          updateSettings({
-            guided_guardrails: {
-              ...settings.guided_guardrails,
-              instructions: newInstructions,
-            } as any,
-          });
-          updatedFields.push('Instructions');
-        }
-
         if (updatedFields.length > 0) {
-          showNotification(`✓ Updated: ${updatedFields.join(', ')}`, 'success');
+          showNotification(`Updated: ${updatedFields.join(', ')}`, 'success');
         }
 
         const assistantMessage: ChatMessage = {
@@ -10730,70 +10618,89 @@ Start by introducing yourself and asking about their business in a friendly way.
                                             ))}
                                           </div>
                                         )}
-                                        {/* Message content with markdown-ish rendering for special blocks */}
+                                        {/* Message content with code block visualization (Phase 4 enhanced) */}
                                         <div className="text-xs whitespace-pre-wrap">
                                           {(() => {
-                                            // Parse content for both ```guardrail and ```testprompt blocks
-                                            let content = msg.content;
+                                            const content = msg.content;
                                             const elements: React.ReactNode[] = [];
                                             let keyIdx = 0;
 
-                                            // Process ```testprompt blocks (amber)
-                                            const testPromptRegex = /```testprompt\n?([\s\S]*?)```/g;
+                                            // Match ALL known code block types in a single pass
+                                            const allBlockRegex = /```(testprompt|guardrail|mainprompt|instructions|uniform|subject|avoid|stylepreferences|smartprompt|matchingrule[1-4]|placementrule|smartmatchingrule|guidedprompt|newcategory|addoptions|newguidedrule|newlegacyrule)\n?([\s\S]*?)```/g;
                                             let lastIndex = 0;
                                             let match;
 
-                                            while ((match = testPromptRegex.exec(content)) !== null) {
+                                            while ((match = allBlockRegex.exec(content)) !== null) {
                                               // Add text before this match
                                               if (match.index > lastIndex) {
                                                 elements.push(<span key={keyIdx++}>{content.slice(lastIndex, match.index)}</span>);
                                               }
-                                              // Add the testprompt block
-                                              const testPrompt = match[1].trim();
+                                              const blockType = match[1];
+                                              const blockContent = match[2].trim();
+                                              const label = CODE_BLOCK_LABELS[blockType] || blockType;
+                                              const isAdditive = isAdditiveBlock(blockType);
+
+                                              // Choose styling based on block type
+                                              const isTest = blockType === 'testprompt';
+                                              const isGuardrailSuggestion = blockType === 'guardrail';
+                                              const bgClass = isTest ? 'bg-amber-900/50 border-amber-500/50'
+                                                : isGuardrailSuggestion ? 'bg-emerald-900/50 border-emerald-500/50'
+                                                : isAdditive ? 'bg-green-900/50 border-green-500/50'
+                                                : 'bg-cyan-900/40 border-cyan-500/40';
+                                              const labelClass = isTest ? 'text-amber-400'
+                                                : isGuardrailSuggestion ? 'text-emerald-400'
+                                                : isAdditive ? 'text-green-400'
+                                                : 'text-cyan-400';
+                                              const codeClass = isTest ? 'text-amber-300'
+                                                : isGuardrailSuggestion ? 'text-emerald-300'
+                                                : isAdditive ? 'text-green-300'
+                                                : 'text-cyan-300';
+                                              const actionLabel = isAdditive ? 'Created' : 'Updated';
+
                                               elements.push(
-                                                <div key={keyIdx++} className="my-2 bg-amber-900/50 border border-amber-500/50 rounded p-2">
+                                                <div key={keyIdx++} className={`my-2 ${bgClass} border rounded p-2`}>
                                                   <div className="flex items-center justify-between mb-1">
-                                                    <span className="text-[10px] text-amber-400 font-medium flex items-center gap-1">
-                                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                                      </svg>
-                                                      Prompt Updated in Testing Mode
+                                                    <span className={`text-[10px] ${labelClass} font-medium flex items-center gap-1`}>
+                                                      {isTest ? (
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                        </svg>
+                                                      ) : isAdditive ? (
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                        </svg>
+                                                      ) : (
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                      )}
+                                                      {actionLabel}: {label}
                                                     </span>
+                                                    {isGuardrailSuggestion && (
+                                                      <button
+                                                        onClick={() => saveGuardrailFromChat(`\`\`\`guardrail\n${blockContent}\`\`\``)}
+                                                        className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] rounded transition"
+                                                      >
+                                                        + Add to Guardrails
+                                                      </button>
+                                                    )}
                                                   </div>
-                                                  <code className="text-amber-300 text-[11px] block">{testPrompt}</code>
+                                                  <details>
+                                                    <summary className={`text-[10px] ${labelClass} cursor-pointer opacity-70 hover:opacity-100`}>Show content</summary>
+                                                    <code className={`${codeClass} text-[11px] block mt-1 max-h-32 overflow-y-auto`}>{blockContent}</code>
+                                                  </details>
                                                 </div>
                                               );
                                               lastIndex = match.index + match[0].length;
                                             }
-                                            // Add remaining content
+
+                                            // Add any remaining text after last block
                                             if (lastIndex < content.length) {
-                                              const remaining = content.slice(lastIndex);
-                                              // Now process guardrail blocks in remaining content
-                                              elements.push(
-                                                ...remaining.split('```guardrail').map((part, partIdx) => {
-                                                  if (partIdx === 0) return <span key={keyIdx++}>{part}</span>;
-                                                  const [guardrail, rest] = part.split('```');
-                                                  return (
-                                                    <span key={keyIdx++}>
-                                                      <div className="my-2 bg-emerald-900/50 border border-emerald-500/50 rounded p-2">
-                                                        <div className="flex items-center justify-between mb-1">
-                                                          <span className="text-[10px] text-emerald-400 font-medium">Suggested Guardrail:</span>
-                                                          <button
-                                                            onClick={() => saveGuardrailFromChat(`\`\`\`guardrail\n${guardrail}\`\`\``)}
-                                                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] rounded transition"
-                                                          >
-                                                            + Add to Guardrails
-                                                          </button>
-                                                        </div>
-                                                        <code className="text-emerald-300 text-[11px]">{guardrail?.trim()}</code>
-                                                      </div>
-                                                      {rest}
-                                                    </span>
-                                                  );
-                                                })
-                                              );
+                                              elements.push(<span key={keyIdx++}>{content.slice(lastIndex)}</span>);
+                                            } else if (elements.length === 0) {
+                                              elements.push(<span key={keyIdx++}>{content}</span>);
                                             }
-                                            return elements.length > 0 ? elements : content;
+                                            return elements;
                                           })()}
                                         </div>
                                         {/* Action buttons for assistant messages */}
@@ -10843,6 +10750,56 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   </div>
                                 )}
                               </div>
+
+                              {/* Pending Confirmation Banners (Phase 4) */}
+                              {pendingConfirmations.length > 0 && (
+                                <div className="space-y-2 mt-2">
+                                  {pendingConfirmations.map(conf => (
+                                    <div key={conf.id} className="bg-amber-900/40 border border-amber-500/50 rounded-lg p-2.5">
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-[11px] text-amber-300 font-medium flex items-center gap-1">
+                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                          </svg>
+                                          AI wants to update: {conf.fieldLabel}
+                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                          <button
+                                            onClick={() => setConfirmationPreviewId(confirmationPreviewId === conf.id ? null : conf.id)}
+                                            className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-[10px] rounded transition"
+                                          >
+                                            {confirmationPreviewId === conf.id ? 'Hide' : 'Preview'}
+                                          </button>
+                                          <button
+                                            onClick={() => handleApplyConfirmation(conf.id)}
+                                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] rounded transition"
+                                          >
+                                            Apply
+                                          </button>
+                                          <button
+                                            onClick={() => handleSkipConfirmation(conf.id)}
+                                            className="px-2 py-0.5 bg-red-700 hover:bg-red-600 text-white text-[10px] rounded transition"
+                                          >
+                                            Skip
+                                          </button>
+                                        </div>
+                                      </div>
+                                      {confirmationPreviewId === conf.id && (
+                                        <div className="mt-2 space-y-2">
+                                          <div className="bg-red-900/30 border border-red-500/30 rounded p-2">
+                                            <div className="text-[9px] text-red-400 font-medium mb-1">Current Value:</div>
+                                            <pre className="text-[10px] text-red-300 whitespace-pre-wrap max-h-24 overflow-y-auto">{conf.currentValue.substring(0, 500)}{conf.currentValue.length > 500 ? '...' : ''}</pre>
+                                          </div>
+                                          <div className="bg-emerald-900/30 border border-emerald-500/30 rounded p-2">
+                                            <div className="text-[9px] text-emerald-400 font-medium mb-1">Proposed Value:</div>
+                                            <pre className="text-[10px] text-emerald-300 whitespace-pre-wrap max-h-24 overflow-y-auto">{conf.newValue.substring(0, 500)}{conf.newValue.length > 500 ? '...' : ''}</pre>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
 
                               {/* Loaded Articles Preview */}
                               {loadedArticles.length > 0 && (

@@ -92,6 +92,48 @@ TESTING:
 A test prompt to try (updates Testing Mode)
 \`\`\`
 
+GUIDED GPT PROMPT:
+\`\`\`guidedprompt
+The guided GPT prompt text (replaces guided prompt field)
+\`\`\`
+
+CREATING NEW CATEGORIES (additive - won't erase anything):
+\`\`\`newcategory
+name: Kitchen Surfaces
+options: Countertops, Backsplash, Cabinet Fronts, Sink Area, Island Top
+\`\`\`
+Creates a new placeholder category with comma-separated options. If a category with the same name already exists, new options are MERGED (not replaced).
+
+ADDING OPTIONS TO EXISTING CATEGORIES (additive):
+\`\`\`addoptions
+category: Kitchen Surfaces
+options: Stove Top, Microwave Interior, Range Hood
+\`\`\`
+Finds existing category by name and appends new options. Duplicates are automatically skipped.
+
+CREATING NEW GUIDED GPT RULES (additive):
+\`\`\`newguidedrule
+title: Kitchen lighting consistency
+text: All kitchen images should show warm overhead lighting with no harsh shadows.
+tag: H
+\`\`\`
+Creates a new Guided GPT rule. Tag should match an existing avatar tag (H, J, C, etc.) or "Global".
+
+CREATING NEW LEGACY/SMART PROMPT RULES (additive):
+\`\`\`newlegacyrule
+title: Color palette rule
+text: Maintain warm earth tones across all bathroom images.
+tag: Global
+\`\`\`
+Creates a new Legacy/Smart Prompt rule.
+
+You can use MULTIPLE \`\`\`newcategory, \`\`\`addoptions, \`\`\`newguidedrule, or \`\`\`newlegacyrule blocks in a single response to create several items at once.
+
+IMPORTANT SAFETY RULES:
+- Blocks that REPLACE existing content (mainprompt, instructions, uniform, etc.) will show a confirmation prompt if the field is non-empty. The user must click "Apply" to accept.
+- Additive blocks (newcategory, addoptions, newguidedrule, newlegacyrule) auto-apply immediately since they don't erase anything.
+- When possible, prefer additive blocks. Only use replacement blocks when the user specifically asks to rewrite a field.
+
 Use these blocks when you and the user agree on changes. You can update multiple fields in one response.
 
 SUGGESTING WITHOUT APPLYING:
