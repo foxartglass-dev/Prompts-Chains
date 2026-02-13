@@ -20,7 +20,7 @@ import { createPortal } from 'react-dom';
 import FeedbackPopup from './FeedbackPopup';
 import SetScopeGrid, { ScopeGridRow } from './shared/SetScopeGrid';
 import VersionHistoryBrowser from './VersionHistoryBrowser';
-import TestingSlotsSelector, { TestingSlot, TestingSlotContent } from './TestingSlotsSelector';
+import TestingSlotsSelector, { TestingSlot, TestingSlotContent, TestingSlotProject } from './TestingSlotsSelector';
 import { useVersionControl, VersionEntityType } from '../hooks/useVersionControl';
 import {
   parseAndApplyCodeBlocks,
@@ -638,6 +638,7 @@ interface ImageCreationSettings {
   // ========== TESTING SLOTS SYSTEM (Phase 3) ==========
   testing_slots: TestingSlot[];
   active_testing_slot: string | null; // UUID of active slot, null = Main/Live
+  testing_slot_projects: TestingSlotProject[];
 }
 
 enum LogStatus {
@@ -752,6 +753,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   // ========== TESTING SLOTS SYSTEM (Phase 3) ==========
   testing_slots: [],
   active_testing_slot: null,
+  testing_slot_projects: [],
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -1177,6 +1179,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Testing Mode state - sandbox for generating test images with MULTIPLE TABS
   const [testingModeOpen, setTestingModeOpen] = useState(false);
   const [testingModeLoading, setTestingModeLoading] = useState(false);
+  const [testSlotRunning, setTestSlotRunning] = useState(false); // Run Test for test slots
 
   // Multi-tab testing system - each tab is an independent testing session
   interface TestingTab {
@@ -1951,9 +1954,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       smartPromptPrompts: settings.smart_prompt_prompts || [],
       matchingRules: {
         rule1: settings.matching_rule_1,
+        rule1_title: settings.matching_rule_1_title,
         rule2: settings.matching_rule_2,
+        rule2_title: settings.matching_rule_2_title,
         rule3: settings.matching_rule_3,
+        rule3_title: settings.matching_rule_3_title,
         rule4: settings.matching_rule_4,
+        rule4_title: settings.matching_rule_4_title,
       },
       mainPromptPersistent: settings.main_prompt_persistent || '',
       guidedInstructionsPersistent: settings.guided_instructions_persistent || '',
@@ -2026,6 +2033,17 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     if (slot.content.smartPromptPersistent !== undefined) {
       updates.smart_prompt_persistent = slot.content.smartPromptPersistent;
     }
+    if (slot.content.matchingRules !== undefined) {
+      const mr = slot.content.matchingRules;
+      if (mr.rule1 !== undefined) (updates as any).matching_rule_1 = mr.rule1;
+      if (mr.rule1_title !== undefined) (updates as any).matching_rule_1_title = mr.rule1_title;
+      if (mr.rule2 !== undefined) (updates as any).matching_rule_2 = mr.rule2;
+      if (mr.rule2_title !== undefined) (updates as any).matching_rule_2_title = mr.rule2_title;
+      if (mr.rule3 !== undefined) (updates as any).matching_rule_3 = mr.rule3;
+      if (mr.rule3_title !== undefined) (updates as any).matching_rule_3_title = mr.rule3_title;
+      if (mr.rule4 !== undefined) (updates as any).matching_rule_4 = mr.rule4;
+      if (mr.rule4_title !== undefined) (updates as any).matching_rule_4_title = mr.rule4_title;
+    }
 
     updateSettings(updates);
     showNotification(`Promoted "${slot.name}" to Main. Backup saved to version history.`, 'success');
@@ -2056,6 +2074,68 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Helper: check if we're viewing a test slot
   const isViewingTestSlot = !!settings.active_testing_slot && !!activeTestingSlot;
+
+  // Run test: execute prompt chain with test slot content and store result
+  const handleRunTest = useCallback(async () => {
+    if (!activeTestingSlot || !activeAvatar) return;
+    const slotContent = activeTestingSlot.content;
+    const keyword = activeAvatar.name || 'test-keyword';
+    const tag = activeAvatar.tag || 'H';
+
+    setTestSlotRunning(true);
+    try {
+      // Build the prompt from slot content, falling back to main for missing fields
+      const mainPrompt = slotContent.mainPrompt ?? activeAvatar.mainPrompt ?? '';
+      const persistentPrompt = slotContent.mainPromptPersistent ?? settings.main_prompt_persistent ?? '';
+      const fullPrompt = persistentPrompt
+        ? `${mainPrompt}\n\n--- All-Tags Prompt ---\n${persistentPrompt}`
+        : mainPrompt;
+
+      if (!fullPrompt.trim()) {
+        showNotification('No prompt content in test slot to run', 'error');
+        setTestSlotRunning(false);
+        return;
+      }
+
+      // Call a test generation endpoint
+      const res = await fetch('/api/prompt-assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: settings.guided_model || 'gpt-4o',
+          messages: [{
+            role: 'user',
+            content: `Generate a complete SEO article using the following prompt template. Replace any placeholders with realistic examples for the keyword "${keyword}" (tag: ${tag}).\n\nPrompt Template:\n${fullPrompt}\n\nWrite the complete article now. Include a title, headers, and body text. Make it about 500-800 words.`,
+          }],
+          context: null,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Store result in the slot
+        const testResult = {
+          id: crypto.randomUUID ? crypto.randomUUID() : `tr-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          articleContent: data.response,
+          keyword,
+          tag,
+          model: settings.guided_model || 'gpt-4o',
+        };
+        const existingResults = slotContent.testResults || [];
+        updateActiveSlotContent({
+          testResults: [testResult, ...existingResults].slice(0, 10), // Keep last 10
+        });
+        showNotification(`Test run complete! Result saved to slot.`, 'success');
+      } else {
+        showNotification(data.error || 'Test run failed', 'error');
+      }
+    } catch (error) {
+      console.error('[Test Run] Error:', error);
+      showNotification('Test run failed', 'error');
+    }
+    setTestSlotRunning(false);
+  }, [activeTestingSlot, activeAvatar, settings, updateActiveSlotContent, showNotification]);
 
   // Provide header controls to parent component (for rendering in section header)
   useEffect(() => {
@@ -3140,7 +3220,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Add a new Guided GPT rule
   const handleAddGuidedRule = (tag: string) => {
-    const existingRules = settings.guided_gpt_rules || [];
+    const existingRules = isViewingTestSlot
+      ? (activeTestingSlot?.content.guidedRules || [])
+      : (settings.guided_gpt_rules || []);
     const rulesForTag = getRulesForTag(existingRules, tag);
     const newRule: TagBasedRule = {
       id: `gr-${Date.now()}`,
@@ -3152,18 +3234,22 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    updateSettings({
-      guided_gpt_rules: [...existingRules, newRule]
-    });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ guidedRules: [...existingRules, newRule] });
+    } else {
+      updateSettings({ guided_gpt_rules: [...existingRules, newRule] });
+    }
     setGuidedRulesEditingId(newRule.id);
   };
 
   // Update a Guided GPT rule
   const handleUpdateGuidedRule = (ruleId: string, updates: Partial<TagBasedRule>) => {
-    const existingRules = settings.guided_gpt_rules || [];
+    const existingRules = isViewingTestSlot
+      ? (activeTestingSlot?.content.guidedRules || [])
+      : (settings.guided_gpt_rules || []);
 
-    // Auto-snapshot rule text before change
-    if (updates.text !== undefined || updates.title !== undefined) {
+    // Auto-snapshot rule text before change (skip for test slots)
+    if (!isViewingTestSlot && (updates.text !== undefined || updates.title !== undefined)) {
       const currentRule = existingRules.find(r => r.id === ruleId);
       if (currentRule && currentRule.text) {
         saveVersionSnapshot('guided_gpt_rule', ruleId, { title: currentRule.title, text: currentRule.text }, 'auto-save');
@@ -3173,14 +3259,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     const updatedRules = existingRules.map(r =>
       r.id === ruleId ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
     );
-    updateSettings({ guided_gpt_rules: updatedRules });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ guidedRules: updatedRules });
+    } else {
+      updateSettings({ guided_gpt_rules: updatedRules });
+    }
   };
 
   // Remove a Guided GPT rule
   const handleRemoveGuidedRule = (ruleId: string) => {
-    const existingRules = settings.guided_gpt_rules || [];
+    const existingRules = isViewingTestSlot
+      ? (activeTestingSlot?.content.guidedRules || [])
+      : (settings.guided_gpt_rules || []);
     const updatedRules = existingRules.filter(r => r.id !== ruleId);
-    updateSettings({ guided_gpt_rules: updatedRules });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ guidedRules: updatedRules });
+    } else {
+      updateSettings({ guided_gpt_rules: updatedRules });
+    }
     if (guidedRulesEditingId === ruleId) {
       setGuidedRulesEditingId(null);
     }
@@ -3188,7 +3284,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Add a new Legacy Prompt rule
   const handleAddLegacyRule = (tag: string) => {
-    const existingRules = settings.legacy_prompt_rules || [];
+    const existingRules = isViewingTestSlot
+      ? (activeTestingSlot?.content.legacyRules || [])
+      : (settings.legacy_prompt_rules || []);
     const rulesForTag = getRulesForTag(existingRules, tag);
     const newRule: TagBasedRule = {
       id: `lr-${Date.now()}`,
@@ -3200,18 +3298,22 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    updateSettings({
-      legacy_prompt_rules: [...existingRules, newRule]
-    });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ legacyRules: [...existingRules, newRule] });
+    } else {
+      updateSettings({ legacy_prompt_rules: [...existingRules, newRule] });
+    }
     setLegacyRulesEditingId(newRule.id);
   };
 
   // Update a Legacy Prompt rule
   const handleUpdateLegacyRule = (ruleId: string, updates: Partial<TagBasedRule>) => {
-    const existingRules = settings.legacy_prompt_rules || [];
+    const existingRules = isViewingTestSlot
+      ? (activeTestingSlot?.content.legacyRules || [])
+      : (settings.legacy_prompt_rules || []);
 
-    // Auto-snapshot rule text before change
-    if (updates.text !== undefined || updates.title !== undefined) {
+    // Auto-snapshot rule text before change (skip for test slots)
+    if (!isViewingTestSlot && (updates.text !== undefined || updates.title !== undefined)) {
       const currentRule = existingRules.find(r => r.id === ruleId);
       if (currentRule && currentRule.text) {
         saveVersionSnapshot('legacy_prompt_rule', ruleId, { title: currentRule.title, text: currentRule.text }, 'auto-save');
@@ -3221,23 +3323,35 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     const updatedRules = existingRules.map(r =>
       r.id === ruleId ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
     );
-    updateSettings({ legacy_prompt_rules: updatedRules });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ legacyRules: updatedRules });
+    } else {
+      updateSettings({ legacy_prompt_rules: updatedRules });
+    }
   };
 
   // Remove a Legacy Prompt rule
   const handleRemoveLegacyRule = (ruleId: string) => {
-    const existingRules = settings.legacy_prompt_rules || [];
+    const existingRules = isViewingTestSlot
+      ? (activeTestingSlot?.content.legacyRules || [])
+      : (settings.legacy_prompt_rules || []);
     const updatedRules = existingRules.filter(r => r.id !== ruleId);
-    updateSettings({ legacy_prompt_rules: updatedRules });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ legacyRules: updatedRules });
+    } else {
+      updateSettings({ legacy_prompt_rules: updatedRules });
+    }
     if (legacyRulesEditingId === ruleId) {
       setLegacyRulesEditingId(null);
     }
   };
 
   // ========== PHASE 3: TAG-BASED MULTI-PROMPT HANDLERS ==========
-  // Helper to get prompts for a specific tag
+  // Helper to get prompts for a specific tag (test-slot-aware)
   const getGuidedPromptsForTag = (tag: string): GuidedGptPrompt[] => {
-    const prompts = settings.guided_gpt_prompts || [];
+    const prompts = isViewingTestSlot
+      ? (activeTestingSlot?.content.guidedGptPrompts || [])
+      : (settings.guided_gpt_prompts || []);
     if (tag === 'Global') {
       return prompts.filter(p => p.tag === 'Global');
     }
@@ -3245,7 +3359,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   };
 
   const getSmartPromptsForTag = (tag: string): SmartPromptPrompt[] => {
-    const prompts = settings.smart_prompt_prompts || [];
+    const prompts = isViewingTestSlot
+      ? (activeTestingSlot?.content.smartPromptPrompts || [])
+      : (settings.smart_prompt_prompts || []);
     if (tag === 'Global') {
       return prompts.filter(p => p.tag === 'Global');
     }
@@ -3309,8 +3425,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Add a new Guided GPT prompt
   const handleAddGuidedPrompt = (tag: string) => {
-    const existingPrompts = settings.guided_gpt_prompts || [];
-    const promptsForTag = getGuidedPromptsForTag(tag);
+    const existingPrompts = isViewingTestSlot
+      ? (activeTestingSlot?.content.guidedGptPrompts || [])
+      : (settings.guided_gpt_prompts || []);
+    const promptsForTag = existingPrompts.filter(p => p.tag === tag);
     const newPrompt: GuidedGptPrompt = {
       id: `gp-${Date.now()}`,
       tag,
@@ -3328,19 +3446,23 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    updateSettings({
-      guided_gpt_prompts: [...existingPrompts, newPrompt]
-    });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ guidedGptPrompts: [...existingPrompts, newPrompt] });
+    } else {
+      updateSettings({ guided_gpt_prompts: [...existingPrompts, newPrompt] });
+    }
     setGuidedPromptsActiveId(newPrompt.id);
   };
 
   // Update a Guided GPT prompt
   const handleUpdateGuidedPrompt = (promptId: string, updates: Partial<GuidedGptPrompt>) => {
-    const existingPrompts = settings.guided_gpt_prompts || [];
+    const existingPrompts = isViewingTestSlot
+      ? (activeTestingSlot?.content.guidedGptPrompts || [])
+      : (settings.guided_gpt_prompts || []);
     const currentPrompt = existingPrompts.find(p => p.id === promptId);
 
-    // Auto-snapshot guardrails before change
-    if (currentPrompt && updates.guardrails) {
+    // Auto-snapshot guardrails before change (skip for test slots)
+    if (!isViewingTestSlot && currentPrompt && updates.guardrails) {
       const currentGuardrails = currentPrompt.guardrails;
       if (currentGuardrails && (currentGuardrails.instructions || currentGuardrails.uniformDescription || currentGuardrails.defaultSubject || currentGuardrails.avoidList)) {
         saveVersionSnapshot('guardrails', `guided-${promptId}`, currentGuardrails, 'auto-save');
@@ -3350,18 +3472,28 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     const updatedPrompts = existingPrompts.map(p =>
       p.id === promptId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
     );
-    updateSettings({ guided_gpt_prompts: updatedPrompts });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ guidedGptPrompts: updatedPrompts });
+    } else {
+      updateSettings({ guided_gpt_prompts: updatedPrompts });
+    }
   };
 
   // Remove a Guided GPT prompt
   const handleRemoveGuidedPrompt = (promptId: string) => {
-    const existingPrompts = settings.guided_gpt_prompts || [];
+    const existingPrompts = isViewingTestSlot
+      ? (activeTestingSlot?.content.guidedGptPrompts || [])
+      : (settings.guided_gpt_prompts || []);
     if (existingPrompts.length <= 1) {
       showNotification('Must have at least one prompt', 'error');
       return;
     }
     const updatedPrompts = existingPrompts.filter(p => p.id !== promptId);
-    updateSettings({ guided_gpt_prompts: updatedPrompts });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ guidedGptPrompts: updatedPrompts });
+    } else {
+      updateSettings({ guided_gpt_prompts: updatedPrompts });
+    }
     if (guidedPromptsActiveId === promptId) {
       setGuidedPromptsActiveId(updatedPrompts[0]?.id || null);
     }
@@ -3393,8 +3525,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Add a new Smart Prompt prompt
   const handleAddSmartPrompt = (tag: string) => {
-    const existingPrompts = settings.smart_prompt_prompts || [];
-    const promptsForTag = getSmartPromptsForTag(tag);
+    const existingPrompts = isViewingTestSlot
+      ? (activeTestingSlot?.content.smartPromptPrompts || [])
+      : (settings.smart_prompt_prompts || []);
+    const promptsForTag = existingPrompts.filter(p => p.tag === tag);
     const newPrompt: SmartPromptPrompt = {
       id: `sp-${Date.now()}`,
       tag,
@@ -3404,18 +3538,22 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    updateSettings({
-      smart_prompt_prompts: [...existingPrompts, newPrompt]
-    });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ smartPromptPrompts: [...existingPrompts, newPrompt] });
+    } else {
+      updateSettings({ smart_prompt_prompts: [...existingPrompts, newPrompt] });
+    }
     setSmartPromptsActiveId(newPrompt.id);
   };
 
   // Update a Smart Prompt prompt
   const handleUpdateSmartPrompt = (promptId: string, updates: Partial<SmartPromptPrompt>) => {
-    const existingPrompts = settings.smart_prompt_prompts || [];
+    const existingPrompts = isViewingTestSlot
+      ? (activeTestingSlot?.content.smartPromptPrompts || [])
+      : (settings.smart_prompt_prompts || []);
 
-    // Auto-snapshot guidance before change
-    if (updates.guidance !== undefined) {
+    // Auto-snapshot guidance before change (skip for test slots)
+    if (!isViewingTestSlot && updates.guidance !== undefined) {
       const currentPrompt = existingPrompts.find(p => p.id === promptId);
       if (currentPrompt && currentPrompt.guidance) {
         saveVersionSnapshot('smart_prompt_guidance', promptId, currentPrompt.guidance, 'auto-save');
@@ -3425,18 +3563,28 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     const updatedPrompts = existingPrompts.map(p =>
       p.id === promptId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
     );
-    updateSettings({ smart_prompt_prompts: updatedPrompts });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ smartPromptPrompts: updatedPrompts });
+    } else {
+      updateSettings({ smart_prompt_prompts: updatedPrompts });
+    }
   };
 
   // Remove a Smart Prompt prompt
   const handleRemoveSmartPrompt = (promptId: string) => {
-    const existingPrompts = settings.smart_prompt_prompts || [];
+    const existingPrompts = isViewingTestSlot
+      ? (activeTestingSlot?.content.smartPromptPrompts || [])
+      : (settings.smart_prompt_prompts || []);
     if (existingPrompts.length <= 1) {
       showNotification('Must have at least one prompt', 'error');
       return;
     }
     const updatedPrompts = existingPrompts.filter(p => p.id !== promptId);
-    updateSettings({ smart_prompt_prompts: updatedPrompts });
+    if (isViewingTestSlot) {
+      updateActiveSlotContent({ smartPromptPrompts: updatedPrompts });
+    } else {
+      updateSettings({ smart_prompt_prompts: updatedPrompts });
+    }
     if (smartPromptsActiveId === promptId) {
       setSmartPromptsActiveId(updatedPrompts[0]?.id || null);
     }
@@ -3464,6 +3612,53 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setSmartPromptsActiveTag(targetTag);
     setSmartPromptsActiveId(newPrompt.id);
     showNotification(`Copied prompt to ${targetTag}`, 'success');
+  };
+
+  // ========== MATCHING RULES HELPERS (Test-Slot-Aware) ==========
+  const handleMatchingRuleChange = (ruleNum: 1|2|3|4, field: 'title'|'content', value: string) => {
+    if (isViewingTestSlot) {
+      const currentRules = activeTestingSlot?.content.matchingRules || {};
+      const ruleKey = field === 'content' ? `rule${ruleNum}` : `rule${ruleNum}`;
+      // Store both title and content in slot matchingRules
+      // Use convention: rule1 = content, rule1_title stored alongside
+      const titleKey = `rule${ruleNum}_title` as string;
+      const contentKey = `rule${ruleNum}` as string;
+      updateActiveSlotContent({
+        matchingRules: {
+          ...currentRules,
+          [field === 'title' ? titleKey : contentKey]: value,
+        }
+      });
+    } else if (selectedRulesTag) {
+      const tagKey = field === 'title' ? `rule_${ruleNum}_title` : `rule_${ruleNum}`;
+      updateSettings({
+        smart_matching_rules_by_tag: {
+          ...settings.smart_matching_rules_by_tag,
+          [selectedRulesTag]: {
+            ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
+            [tagKey]: value
+          }
+        }
+      });
+    } else {
+      const settingsKey = field === 'title' ? `matching_rule_${ruleNum}_title` : `matching_rule_${ruleNum}`;
+      updateSettings({ [settingsKey]: value });
+    }
+  };
+
+  const getMatchingRuleValue = (ruleNum: 1|2|3|4, field: 'title'|'content', defaultValue: string): string => {
+    if (isViewingTestSlot) {
+      const slotRules = activeTestingSlot?.content.matchingRules || {};
+      const key = field === 'title' ? `rule${ruleNum}_title` : `rule${ruleNum}`;
+      return (slotRules as any)[key] ?? defaultValue;
+    }
+    if (selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]) {
+      const tagRules = settings.smart_matching_rules_by_tag[selectedRulesTag];
+      const tagKey = field === 'title' ? `rule_${ruleNum}_title` : `rule_${ruleNum}`;
+      return (tagRules as any)[tagKey] ?? defaultValue;
+    }
+    const settingsKey = field === 'title' ? `matching_rule_${ruleNum}_title` : `matching_rule_${ruleNum}`;
+    return (settings as any)[settingsKey] || defaultValue;
   };
 
   // ========== PROMPT LIBRARY FUNCTIONS ==========
@@ -5677,10 +5872,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     const anyTagSelected = (rowKey: string) =>
       tagNames.some(t => isSelected(t, rowKey)) || chatScopeSelections.includes(`All-${rowKey}`);
 
+    // When viewing a test slot, pull data from slot content; otherwise from main settings
+    const slotContent = isViewingTestSlot ? activeTestingSlot?.content : null;
+
     // Main Prompt: template + variations + avatars + persistent
     if (anyTagSelected('prompt')) {
-      context.mainPrompt = activeAvatar?.mainPrompt || '';
-      context.mainPromptPersistent = settings.main_prompt_persistent || '';
+      context.mainPrompt = slotContent?.mainPrompt ?? (activeAvatar?.mainPrompt || '');
+      context.mainPromptPersistent = slotContent?.mainPromptPersistent ?? (settings.main_prompt_persistent || '');
       context.variations = activeAvatar?.variations?.map(v => ({
         name: v.name, prompt: v.prompt, orientation: v.orientation,
       })) || [];
@@ -5688,33 +5886,49 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       context.allAvatars = settings.audience_avatars.map((a: any) => ({
         name: a.name, tag: a.tag, hasPrompt: !!a.mainPrompt,
       }));
+      if (isViewingTestSlot) {
+        context.viewingTestSlot = {
+          name: activeTestingSlot?.name,
+          number: activeTestingSlot?.number,
+        };
+      }
     }
 
     // Main Categories: placeholder categories/groups
     if (anyTagSelected('categories')) {
       context.placeholderMode = activeAvatar?.placeholderMode || 'simple';
-      context.placeholderCategories = activeAvatar?.placeholderCategories?.map(cat => ({
+      const categories = slotContent?.placeholderCategories ?? activeAvatar?.placeholderCategories;
+      context.placeholderCategories = categories?.map(cat => ({
         name: cat.name, placeholder: cat.placeholder,
         isRandomized: cat.isRandomized,
         options: cat.options.map(opt => ({
           number: opt.number, text: opt.text,
           primaryKeywords: opt.primaryKeywords,
-          secondaryKeywords: opt.useSecondaryKeywords ? opt.secondaryKeywords : undefined,
+          secondaryKeywords: (opt as any).useSecondaryKeywords ? opt.secondaryKeywords : undefined,
         })),
       })) || [];
     }
 
     // Guided Prompt: guardrails/instructions
     if (anyTagSelected('guardrails')) {
-      context.guardrails = settings.guided_guardrails;
-      context.guidedInstructionsPersistent = settings.guided_instructions_persistent || '';
+      const guidedPrompts = slotContent?.guidedGptPrompts ?? (settings.guided_gpt_prompts || []);
+      context.guardrails = slotContent?.guidedGuardrails ?? settings.guided_guardrails;
+      context.guidedInstructionsPersistent = slotContent?.guidedInstructionsPersistent ?? (settings.guided_instructions_persistent || '');
+      context.guidedGptPrompts = guidedPrompts.map((p: any) => ({
+        tag: p.tag, name: p.name, guidance: p.guidance,
+        guardrails: p.guardrails,
+      }));
     }
 
     // Guided Rules: uniform, subject, avoid
     if (anyTagSelected('guided-rules')) {
+      const guidedRules = slotContent?.guidedRules ?? (settings.guided_gpt_rules || []);
+      context.guidedRules = guidedRules.map((r: any) => ({
+        tag: r.tag, title: r.title, text: r.text,
+      }));
       // If guardrails not already included, include just the rules portion
       if (!context.guardrails) {
-        context.guardrails = {
+        context.guardrails = slotContent?.guidedGuardrails ?? {
           uniformRules: (settings.guided_guardrails as any)?.uniformRules,
           subjectRules: (settings.guided_guardrails as any)?.subjectRules,
           avoidRules: (settings.guided_guardrails as any)?.avoidRules,
@@ -5724,16 +5938,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
     // Smart Prompt: smart prompt + matching/placement rules
     if (anyTagSelected('smart') || anyTagSelected('smart-rules')) {
-      context.smartPromptGuidance = settings.smart_prompt_guidance || '';
-      context.smartPromptPersistent = settings.smart_prompt_persistent || '';
+      context.smartPromptGuidance = slotContent?.smartPromptGuidance ?? (settings.smart_prompt_guidance || '');
+      context.smartPromptPersistent = slotContent?.smartPromptPersistent ?? (settings.smart_prompt_persistent || '');
+      const slotMatchingRules = slotContent?.matchingRules;
       context.matchingRules = {
-        rule1: settings.matching_rule_1 || '',
-        rule2: settings.matching_rule_2 || '',
-        rule3: settings.matching_rule_3 || '',
-        rule4: settings.matching_rule_4 || '',
+        rule1: slotMatchingRules?.rule1 ?? (settings.matching_rule_1 || ''),
+        rule2: slotMatchingRules?.rule2 ?? (settings.matching_rule_2 || ''),
+        rule3: slotMatchingRules?.rule3 ?? (settings.matching_rule_3 || ''),
+        rule4: slotMatchingRules?.rule4 ?? (settings.matching_rule_4 || ''),
       };
-      context.placementRule = settings.placement_rule || '';
-      context.smartMatchingRule = settings.smart_matching_rule || '';
+      context.placementRule = slotMatchingRules?.placement ?? (settings.placement_rule || '');
+      context.smartMatchingRule = slotMatchingRules?.smart ?? (settings.smart_matching_rule || '');
+      const smartPrompts = slotContent?.smartPromptPrompts ?? (settings.smart_prompt_prompts || []);
+      context.smartPromptPrompts = smartPrompts.map((p: any) => ({
+        tag: p.tag, name: p.name, guidance: p.guidance,
+      }));
     }
 
     // Independent toggles
@@ -9277,6 +9496,37 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     {label}
                                   </button>
                                 ))}
+                                {/* Test Slot Quick Switcher */}
+                                {(settings.testing_slots || []).length > 0 && (
+                                  <>
+                                    <div className="w-px h-4 bg-slate-500/60"></div>
+                                    <button
+                                      onClick={() => handleActiveSlotChange(null)}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        !settings.active_testing_slot
+                                          ? 'bg-green-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-green-400 hover:bg-slate-600/80'
+                                      }`}
+                                      title="Switch to Main (Live) prompts"
+                                    >
+                                      Main
+                                    </button>
+                                    {(settings.testing_slots || []).slice(0, 5).map((slot: TestingSlot) => (
+                                      <button
+                                        key={slot.id}
+                                        onClick={() => handleActiveSlotChange(slot.id)}
+                                        className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                          settings.active_testing_slot === slot.id
+                                            ? 'bg-orange-600 text-white font-medium'
+                                            : 'bg-slate-700/80 text-orange-400 hover:bg-slate-600/80'
+                                        }`}
+                                        title={`Switch to Test ${slot.number}: ${slot.name}`}
+                                      >
+                                        T{slot.number}
+                                      </button>
+                                    ))}
+                                  </>
+                                )}
                               </div>
 
                               {/* Chat Input */}
@@ -10961,6 +11211,37 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     {label}
                                   </button>
                                 ))}
+                                {/* Test Slot Quick Switcher */}
+                                {(settings.testing_slots || []).length > 0 && (
+                                  <>
+                                    <div className="w-px h-4 bg-slate-500/60"></div>
+                                    <button
+                                      onClick={() => handleActiveSlotChange(null)}
+                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                        !settings.active_testing_slot
+                                          ? 'bg-green-600 text-white font-medium'
+                                          : 'bg-slate-700/80 text-green-400 hover:bg-slate-600/80'
+                                      }`}
+                                      title="Switch to Main (Live) prompts"
+                                    >
+                                      Main
+                                    </button>
+                                    {(settings.testing_slots || []).slice(0, 5).map((slot: TestingSlot) => (
+                                      <button
+                                        key={slot.id}
+                                        onClick={() => handleActiveSlotChange(slot.id)}
+                                        className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                          settings.active_testing_slot === slot.id
+                                            ? 'bg-orange-600 text-white font-medium'
+                                            : 'bg-slate-700/80 text-orange-400 hover:bg-slate-600/80'
+                                        }`}
+                                        title={`Switch to Test ${slot.number}: ${slot.name}`}
+                                      >
+                                        T{slot.number}
+                                      </button>
+                                    ))}
+                                  </>
+                                )}
                               </div>
 
                               {/* Chat Input */}
@@ -13350,46 +13631,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <div className="flex-1">
                           <input
                             type="text"
-                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
-                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_1_title
-                              : (settings.matching_rule_1_title || 'Primary Keywords Rule')}
-                            onChange={(e) => {
-                              if (selectedRulesTag) {
-                                updateSettings({
-                                  smart_matching_rules_by_tag: {
-                                    ...settings.smart_matching_rules_by_tag,
-                                    [selectedRulesTag]: {
-                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
-                                      rule_1_title: e.target.value
-                                    }
-                                  }
-                                });
-                              } else {
-                                updateSettings({ matching_rule_1_title: e.target.value });
-                              }
-                            }}
+                            value={getMatchingRuleValue(1, 'title', 'Primary Keywords Rule')}
+                            onChange={(e) => handleMatchingRuleChange(1, 'title', e.target.value)}
                             className="text-xs text-emerald-400 font-semibold mb-1 block bg-transparent border-b border-transparent hover:border-emerald-500/50 focus:border-emerald-500 focus:outline-none w-full"
                             placeholder="Rule title..."
                           />
                           <textarea
-                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
-                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_1
-                              : (settings.matching_rule_1 || 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.')}
-                            onChange={(e) => {
-                              if (selectedRulesTag) {
-                                updateSettings({
-                                  smart_matching_rules_by_tag: {
-                                    ...settings.smart_matching_rules_by_tag,
-                                    [selectedRulesTag]: {
-                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
-                                      rule_1: e.target.value
-                                    }
-                                  }
-                                });
-                              } else {
-                                updateSettings({ matching_rule_1: e.target.value });
-                              }
-                            }}
+                            value={getMatchingRuleValue(1, 'content', 'Always try to match Primary Keywords first. Search for primary keywords within the word range around image placement.')}
+                            onChange={(e) => handleMatchingRuleChange(1, 'content', e.target.value)}
                             className="w-full bg-slate-800 border border-emerald-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-emerald-500"
                             rows={2}
                             placeholder="Rule for primary keyword matching..."
@@ -13426,46 +13675,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <div className="flex-1">
                           <input
                             type="text"
-                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
-                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_2_title
-                              : (settings.matching_rule_2_title || 'Secondary Keywords Fallback Rule')}
-                            onChange={(e) => {
-                              if (selectedRulesTag) {
-                                updateSettings({
-                                  smart_matching_rules_by_tag: {
-                                    ...settings.smart_matching_rules_by_tag,
-                                    [selectedRulesTag]: {
-                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
-                                      rule_2_title: e.target.value
-                                    }
-                                  }
-                                });
-                              } else {
-                                updateSettings({ matching_rule_2_title: e.target.value });
-                              }
-                            }}
+                            value={getMatchingRuleValue(2, 'title', 'Secondary Keywords Fallback Rule')}
+                            onChange={(e) => handleMatchingRuleChange(2, 'title', e.target.value)}
                             className="text-xs text-amber-400 font-semibold mb-1 block bg-transparent border-b border-transparent hover:border-amber-500/50 focus:border-amber-500 focus:outline-none w-full"
                             placeholder="Rule title..."
                           />
                           <textarea
-                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
-                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_2
-                              : (settings.matching_rule_2 || 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.')}
-                            onChange={(e) => {
-                              if (selectedRulesTag) {
-                                updateSettings({
-                                  smart_matching_rules_by_tag: {
-                                    ...settings.smart_matching_rules_by_tag,
-                                    [selectedRulesTag]: {
-                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
-                                      rule_2: e.target.value
-                                    }
-                                  }
-                                });
-                              } else {
-                                updateSettings({ matching_rule_2: e.target.value });
-                              }
-                            }}
+                            value={getMatchingRuleValue(2, 'content', 'If no primary match, fall back to Secondary Keywords. Only if secondary keywords are enabled for that option.')}
+                            onChange={(e) => handleMatchingRuleChange(2, 'content', e.target.value)}
                             className="w-full bg-slate-800 border border-amber-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-amber-500"
                             rows={2}
                             placeholder="Rule for secondary keyword fallback..."
@@ -13502,46 +13719,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <div className="flex-1">
                           <input
                             type="text"
-                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
-                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_3_title
-                              : (settings.matching_rule_3_title || 'No Duplicate Primaries Rule')}
-                            onChange={(e) => {
-                              if (selectedRulesTag) {
-                                updateSettings({
-                                  smart_matching_rules_by_tag: {
-                                    ...settings.smart_matching_rules_by_tag,
-                                    [selectedRulesTag]: {
-                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
-                                      rule_3_title: e.target.value
-                                    }
-                                  }
-                                });
-                              } else {
-                                updateSettings({ matching_rule_3_title: e.target.value });
-                              }
-                            }}
+                            value={getMatchingRuleValue(3, 'title', 'No Duplicate Primaries Rule')}
+                            onChange={(e) => handleMatchingRuleChange(3, 'title', e.target.value)}
                             className="text-xs text-red-400 font-semibold mb-1 block bg-transparent border-b border-transparent hover:border-red-500/50 focus:border-red-500 focus:outline-none w-full"
                             placeholder="Rule title..."
                           />
                           <textarea
-                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
-                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_3
-                              : (settings.matching_rule_3 || 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).')}
-                            onChange={(e) => {
-                              if (selectedRulesTag) {
-                                updateSettings({
-                                  smart_matching_rules_by_tag: {
-                                    ...settings.smart_matching_rules_by_tag,
-                                    [selectedRulesTag]: {
-                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
-                                      rule_3: e.target.value
-                                    }
-                                  }
-                                });
-                              } else {
-                                updateSettings({ matching_rule_3: e.target.value });
-                              }
-                            }}
+                            value={getMatchingRuleValue(3, 'content', 'Never use the same Primary Keyword twice on a page. Each primary keyword can only appear once per article (no duplicate stove images).')}
+                            onChange={(e) => handleMatchingRuleChange(3, 'content', e.target.value)}
                             className="w-full bg-slate-800 border border-red-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-red-500"
                             rows={2}
                             placeholder="Rule for preventing duplicate primary keywords..."
@@ -13578,46 +13763,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                         <div className="flex-1">
                           <input
                             type="text"
-                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
-                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_4_title
-                              : (settings.matching_rule_4_title || 'Different Primaries for Secondary Matches Rule')}
-                            onChange={(e) => {
-                              if (selectedRulesTag) {
-                                updateSettings({
-                                  smart_matching_rules_by_tag: {
-                                    ...settings.smart_matching_rules_by_tag,
-                                    [selectedRulesTag]: {
-                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
-                                      rule_4_title: e.target.value
-                                    }
-                                  }
-                                });
-                              } else {
-                                updateSettings({ matching_rule_4_title: e.target.value });
-                              }
-                            }}
+                            value={getMatchingRuleValue(4, 'title', 'Different Primaries for Secondary Matches Rule')}
+                            onChange={(e) => handleMatchingRuleChange(4, 'title', e.target.value)}
                             className="text-xs text-purple-400 font-semibold mb-1 block bg-transparent border-b border-transparent hover:border-purple-500/50 focus:border-purple-500 focus:outline-none w-full"
                             placeholder="Rule title..."
                           />
                           <textarea
-                            value={selectedRulesTag && settings.smart_matching_rules_by_tag?.[selectedRulesTag]
-                              ? settings.smart_matching_rules_by_tag[selectedRulesTag].rule_4
-                              : (settings.matching_rule_4 || 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).')}
-                            onChange={(e) => {
-                              if (selectedRulesTag) {
-                                updateSettings({
-                                  smart_matching_rules_by_tag: {
-                                    ...settings.smart_matching_rules_by_tag,
-                                    [selectedRulesTag]: {
-                                      ...(settings.smart_matching_rules_by_tag?.[selectedRulesTag] || {}),
-                                      rule_4: e.target.value
-                                    }
-                                  }
-                                });
-                              } else {
-                                updateSettings({ matching_rule_4: e.target.value });
-                              }
-                            }}
+                            value={getMatchingRuleValue(4, 'content', 'Secondary keyword matches must have different primaries. If "kitchen" matches twice, each must be a different primary (stove, then sink).')}
+                            onChange={(e) => handleMatchingRuleChange(4, 'content', e.target.value)}
                             className="w-full bg-slate-800 border border-purple-500/30 rounded px-3 py-2 text-white text-sm resize-none focus:outline-none focus:border-purple-500"
                             rows={2}
                             placeholder="Rule for secondary keyword primary diversity..."
@@ -14319,6 +14472,10 @@ Start by introducing yourself and asking about their business in a friendly way.
               onActiveSlotChange={handleActiveSlotChange}
               onPromoteToMain={handlePromoteToMain}
               getMainContent={getMainContent}
+              projects={settings.testing_slot_projects || []}
+              onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+              onRunTest={handleRunTest}
+              testRunning={testSlotRunning}
             />
 
             {/* ========== TWO-LEVEL TAB SYSTEM ========== */}
