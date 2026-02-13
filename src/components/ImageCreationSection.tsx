@@ -20,6 +20,7 @@ import { createPortal } from 'react-dom';
 import FeedbackPopup from './FeedbackPopup';
 import SetScopeGrid, { ScopeGridRow } from './shared/SetScopeGrid';
 import VersionHistoryBrowser from './VersionHistoryBrowser';
+import TestingSlotsSelector, { TestingSlot, TestingSlotContent } from './TestingSlotsSelector';
 import { useVersionControl, VersionEntityType } from '../hooks/useVersionControl';
 
 // Types for Feedback System
@@ -338,6 +339,8 @@ interface TagBasedRule {
   updatedAt: string;
 }
 
+// Testing Slots interfaces (TestingSlot, TestingSlotContent) imported from TestingSlotsSelector.tsx
+
 // Models that support vision/images (for chat assistants)
 const IMAGE_CAPABLE_MODELS = ['gpt-image-1.5', 'gpt-4o', 'gpt-5.2-2025-12-11', 'claude-sonnet-4-5-20250929', 'claude-3-5-sonnet-20241022', 'gemini-2.5-pro'];
 
@@ -624,6 +627,9 @@ interface ImageCreationSettings {
   main_prompt_persistent: string;       // Main Prompt: persistent portion below unique avatar prompt
   guided_instructions_persistent: string; // Guided GPT: persistent instructions below unique tag instructions
   smart_prompt_persistent: string;      // Smart Prompt: persistent guidance below unique tag guidance
+  // ========== TESTING SLOTS SYSTEM (Phase 3) ==========
+  testing_slots: TestingSlot[];
+  active_testing_slot: string | null; // UUID of active slot, null = Main/Live
 }
 
 enum LogStatus {
@@ -735,6 +741,9 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   main_prompt_persistent: '',
   guided_instructions_persistent: '',
   smart_prompt_persistent: '',
+  // ========== TESTING SLOTS SYSTEM (Phase 3) ==========
+  testing_slots: [],
+  active_testing_slot: null,
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -1904,6 +1913,137 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       return newSettings;
     });
   }, [loaded, saveSettings]);
+
+  // ========== TESTING SLOTS SYSTEM (Phase 3) ==========
+  // Handlers for testing slot operations
+
+  const handleSlotsChange = useCallback((newSlots: TestingSlot[]) => {
+    updateSettings({ testing_slots: newSlots });
+  }, [updateSettings]);
+
+  const handleActiveSlotChange = useCallback((slotId: string | null) => {
+    updateSettings({ active_testing_slot: slotId });
+  }, [updateSettings]);
+
+  // Get current main prompt content for "Duplicate from Main"
+  const getMainContent = useCallback((): TestingSlotContent => {
+    const activeAvatar = settings.audience_avatars?.find(a => a.id === activeAvatarId);
+    return {
+      mainPrompt: activeAvatar?.mainPrompt || '',
+      placeholderCategories: activeAvatar?.placeholderCategories || [],
+      guidedGuardrails: settings.guided_guardrails || null,
+      smartPromptGuidance: settings.smart_prompt_guidance || '',
+      guidedRules: settings.guided_gpt_rules || [],
+      legacyRules: settings.legacy_prompt_rules || [],
+      guidedGptPrompts: settings.guided_gpt_prompts || [],
+      smartPromptPrompts: settings.smart_prompt_prompts || [],
+      matchingRules: {
+        rule1: settings.matching_rule_1,
+        rule2: settings.matching_rule_2,
+        rule3: settings.matching_rule_3,
+        rule4: settings.matching_rule_4,
+      },
+      mainPromptPersistent: settings.main_prompt_persistent || '',
+      guidedInstructionsPersistent: settings.guided_instructions_persistent || '',
+      smartPromptPersistent: settings.smart_prompt_persistent || '',
+    };
+  }, [settings, activeAvatarId]);
+
+  // Promote a test slot to become the main/live content
+  const handlePromoteToMain = useCallback((slot: TestingSlot) => {
+    // Step 1: Auto-snapshot current Main to version_history
+    const currentContent = getMainContent();
+    if (currentContent.mainPrompt) {
+      saveVersionSnapshot('main_prompt', `avatar-${activeAvatarId}`, currentContent.mainPrompt, 'auto-save', 'Pre-promote backup');
+    }
+    if (currentContent.guidedGuardrails) {
+      saveVersionSnapshot('guardrails', 'global', currentContent.guidedGuardrails, 'auto-save', 'Pre-promote backup');
+    }
+    if (currentContent.smartPromptGuidance) {
+      saveVersionSnapshot('smart_prompt_guidance', 'global', currentContent.smartPromptGuidance, 'auto-save', 'Pre-promote backup');
+    }
+    if (currentContent.mainPromptPersistent) {
+      saveVersionSnapshot('main_prompt_persistent', 'all-tags', currentContent.mainPromptPersistent, 'auto-save', 'Pre-promote backup');
+    }
+    if (currentContent.guidedInstructionsPersistent) {
+      saveVersionSnapshot('guided_instructions_persistent', 'all-tags', currentContent.guidedInstructionsPersistent, 'auto-save', 'Pre-promote backup');
+    }
+    if (currentContent.smartPromptPersistent) {
+      saveVersionSnapshot('smart_prompt_persistent', 'all-tags', currentContent.smartPromptPersistent, 'auto-save', 'Pre-promote backup');
+    }
+
+    // Step 2: Copy slot content over Main
+    const updates: Partial<ImageCreationSettings> = {};
+
+    if (slot.content.mainPrompt !== undefined) {
+      const updatedAvatars = settings.audience_avatars.map(a =>
+        a.id === activeAvatarId ? { ...a, mainPrompt: slot.content.mainPrompt || '' } : a
+      );
+      updates.audience_avatars = updatedAvatars;
+    }
+    if (slot.content.placeholderCategories !== undefined) {
+      const updatedAvatars = (updates.audience_avatars || settings.audience_avatars).map(a =>
+        a.id === activeAvatarId ? { ...a, placeholderCategories: slot.content.placeholderCategories || [] } : a
+      );
+      updates.audience_avatars = updatedAvatars;
+    }
+    if (slot.content.guidedGuardrails !== undefined) {
+      updates.guided_guardrails = slot.content.guidedGuardrails;
+    }
+    if (slot.content.smartPromptGuidance !== undefined) {
+      updates.smart_prompt_guidance = slot.content.smartPromptGuidance;
+    }
+    if (slot.content.guidedRules !== undefined) {
+      updates.guided_gpt_rules = slot.content.guidedRules;
+    }
+    if (slot.content.legacyRules !== undefined) {
+      updates.legacy_prompt_rules = slot.content.legacyRules;
+    }
+    if (slot.content.guidedGptPrompts !== undefined) {
+      updates.guided_gpt_prompts = slot.content.guidedGptPrompts;
+    }
+    if (slot.content.smartPromptPrompts !== undefined) {
+      updates.smart_prompt_prompts = slot.content.smartPromptPrompts;
+    }
+    if (slot.content.mainPromptPersistent !== undefined) {
+      updates.main_prompt_persistent = slot.content.mainPromptPersistent;
+    }
+    if (slot.content.guidedInstructionsPersistent !== undefined) {
+      updates.guided_instructions_persistent = slot.content.guidedInstructionsPersistent;
+    }
+    if (slot.content.smartPromptPersistent !== undefined) {
+      updates.smart_prompt_persistent = slot.content.smartPromptPersistent;
+    }
+
+    updateSettings(updates);
+    showNotification(`Promoted "${slot.name}" to Main. Backup saved to version history.`, 'success');
+  }, [settings, activeAvatarId, getMainContent, updateSettings, saveVersionSnapshot, showNotification]);
+
+  // Update content within the active test slot
+  const updateActiveSlotContent = useCallback((contentUpdates: Partial<TestingSlotContent>) => {
+    const activeSlotId = settings.active_testing_slot;
+    if (!activeSlotId) return; // Should not happen - only called when a slot is active
+
+    const updatedSlots = settings.testing_slots.map(slot => {
+      if (slot.id !== activeSlotId) return slot;
+      return {
+        ...slot,
+        content: { ...slot.content, ...contentUpdates },
+        updatedAt: new Date().toISOString(),
+        lastEditedBy: 'user',
+      };
+    });
+    updateSettings({ testing_slots: updatedSlots });
+  }, [settings.active_testing_slot, settings.testing_slots, updateSettings]);
+
+  // Helper: get the active slot object (or null for Main)
+  const activeTestingSlot = useMemo(() => {
+    if (!settings.active_testing_slot) return null;
+    return settings.testing_slots.find(s => s.id === settings.active_testing_slot) || null;
+  }, [settings.active_testing_slot, settings.testing_slots]);
+
+  // Helper: check if we're viewing a test slot
+  const isViewingTestSlot = !!settings.active_testing_slot && !!activeTestingSlot;
 
   // Provide header controls to parent component (for rendering in section header)
   useEffect(() => {
@@ -9787,10 +9927,18 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   />
                                 </div>
                                 <textarea
-                                  value={settings.guided_instructions_persistent || ''}
-                                  onChange={(e) => updateSettings({ guided_instructions_persistent: e.target.value })}
+                                  value={isViewingTestSlot ? (activeTestingSlot?.content.guidedInstructionsPersistent ?? '') : (settings.guided_instructions_persistent || '')}
+                                  onChange={(e) => {
+                                    if (isViewingTestSlot) {
+                                      updateActiveSlotContent({ guidedInstructionsPersistent: e.target.value });
+                                    } else {
+                                      updateSettings({ guided_instructions_persistent: e.target.value });
+                                    }
+                                  }}
                                   placeholder="Persistent guardrails for ALL tags — shared rules, brand guidelines, safety constraints..."
-                                  className="w-full p-2 pt-5 text-xs bg-slate-900/80 border border-emerald-500/20 rounded-b text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                  className={`w-full p-2 pt-5 text-xs bg-slate-900/80 border rounded-b text-white placeholder-slate-500 resize-y min-h-[40px] ${
+                                    isViewingTestSlot ? 'border-orange-500/20' : 'border-emerald-500/20'
+                                  }`}
                                   rows={2}
                                 />
                               </div>
@@ -12177,10 +12325,18 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   />
                                 </div>
                                 <textarea
-                                  value={settings.smart_prompt_persistent || ''}
-                                  onChange={(e) => updateSettings({ smart_prompt_persistent: e.target.value })}
+                                  value={isViewingTestSlot ? (activeTestingSlot?.content.smartPromptPersistent ?? '') : (settings.smart_prompt_persistent || '')}
+                                  onChange={(e) => {
+                                    if (isViewingTestSlot) {
+                                      updateActiveSlotContent({ smartPromptPersistent: e.target.value });
+                                    } else {
+                                      updateSettings({ smart_prompt_persistent: e.target.value });
+                                    }
+                                  }}
                                   placeholder="Persistent guidance for ALL tags — shared rules, brand guidelines, style requirements..."
-                                  className="w-full p-2 pt-5 text-xs bg-slate-900/80 border border-purple-500/20 rounded-b text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                  className={`w-full p-2 pt-5 text-xs bg-slate-900/80 border rounded-b text-white placeholder-slate-500 resize-y min-h-[40px] ${
+                                    isViewingTestSlot ? 'border-orange-500/20' : 'border-purple-500/20'
+                                  }`}
                                   rows={2}
                                 />
                               </div>
@@ -14154,7 +14310,11 @@ Start by introducing yourself and asking about their business in a friendly way.
           {/* ═══════════════════ SECTION: audience_avatars ═══════════════════ */}
           <div style={{ order: getSectionOrder('audience_avatars') }}>
           {/* Audience Avatars - Simple collapsible section */}
-          <div className="bg-slate-900 rounded-lg border-[3px] border-brand-gold/50 p-4 shadow-[0_0_20px_rgba(212,175,55,0.45)]">
+          <div className={`bg-slate-900 rounded-lg border-[3px] p-4 ${
+            isViewingTestSlot
+              ? 'border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.35)]'
+              : 'border-brand-gold/50 shadow-[0_0_20px_rgba(212,175,55,0.45)]'
+          }`}>
             {/* Header - Always visible */}
             <div
               className="flex items-center justify-between cursor-pointer"
@@ -14191,6 +14351,16 @@ Start by introducing yourself and asking about their business in a friendly way.
             </div>
 
             {!avatarsCollapsed && <div className="mt-3">
+
+            {/* ========== TESTING SLOTS SELECTOR (Phase 3) ========== */}
+            <TestingSlotsSelector
+              slots={settings.testing_slots || []}
+              activeSlotId={settings.active_testing_slot || null}
+              onSlotsChange={handleSlotsChange}
+              onActiveSlotChange={handleActiveSlotChange}
+              onPromoteToMain={handlePromoteToMain}
+              getMainContent={getMainContent}
+            />
 
             {/* ========== TWO-LEVEL TAB SYSTEM ========== */}
             {/* Level 1: Tag tabs (H, J, C) + Global */}
@@ -14445,12 +14615,18 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </div>
                     <textarea
                       ref={mainPromptRef}
-                      value={activeAvatar.mainPrompt}
+                      value={isViewingTestSlot ? (activeTestingSlot?.content.mainPrompt ?? '') : activeAvatar.mainPrompt}
                       onChange={(e) => {
-                        handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
+                        if (isViewingTestSlot) {
+                          updateActiveSlotContent({ mainPrompt: e.target.value });
+                        } else {
+                          handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
+                        }
                         autoResizeTextarea(e.target);
                       }}
-                      className="w-full bg-slate-900 border border-amber-500/50 rounded-t px-3 py-2 pt-5 text-white text-sm font-mono resize-none min-h-[80px]"
+                      className={`w-full bg-slate-900 border rounded-t px-3 py-2 pt-5 text-white text-sm font-mono resize-none min-h-[80px] ${
+                        isViewingTestSlot ? 'border-orange-500/50' : 'border-amber-500/50'
+                      }`}
                       placeholder={activeAvatar.placeholderMode === 'advanced'
                         ? "Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
                         : "Professional cleaning photo, {variation}, bright natural lighting..."}
@@ -14472,11 +14648,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                       />
                     </div>
                     <textarea
-                      value={settings.main_prompt_persistent || ''}
+                      value={isViewingTestSlot ? (activeTestingSlot?.content.mainPromptPersistent ?? '') : (settings.main_prompt_persistent || '')}
                       onChange={(e) => {
-                        updateSettings({ main_prompt_persistent: e.target.value });
+                        if (isViewingTestSlot) {
+                          updateActiveSlotContent({ mainPromptPersistent: e.target.value });
+                        } else {
+                          updateSettings({ main_prompt_persistent: e.target.value });
+                        }
                       }}
-                      className="w-full bg-slate-900/80 border border-amber-500/30 rounded-b px-3 py-2 pt-5 text-white text-sm font-mono resize-none min-h-[60px]"
+                      className={`w-full bg-slate-900/80 border rounded-b px-3 py-2 pt-5 text-white text-sm font-mono resize-none min-h-[60px] ${
+                        isViewingTestSlot ? 'border-orange-500/30' : 'border-amber-500/30'
+                      }`}
                       placeholder="Persistent rules for ALL tags — pose/camera angle, uniform info, logo strategy, diversity requirements..."
                     />
                   </div>
@@ -18050,9 +18232,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                         />
                       </label>
                       <textarea
-                        value={activeAvatar.mainPrompt}
+                        value={isViewingTestSlot ? (activeTestingSlot?.content.mainPrompt ?? '') : activeAvatar.mainPrompt}
                         onChange={(e) => {
-                          handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
+                          if (isViewingTestSlot) {
+                            updateActiveSlotContent({ mainPrompt: e.target.value });
+                          } else {
+                            handleUpdateAvatar(activeAvatar.id, { mainPrompt: e.target.value });
+                          }
                           // Auto-expand to fit content
                           e.target.style.height = 'auto';
                           e.target.style.height = `${Math.max(e.target.scrollHeight, 150)}px`;
@@ -18064,7 +18250,9 @@ Start by introducing yourself and asking about their business in a friendly way.
                             el.style.height = `${Math.max(el.scrollHeight, 150)}px`;
                           }
                         }}
-                        className="w-full bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm font-mono min-h-[150px] resize-none overflow-hidden"
+                        className={`w-full bg-slate-900 border rounded px-3 py-2 text-white text-sm font-mono min-h-[150px] resize-none overflow-hidden ${
+                          isViewingTestSlot ? 'border-orange-500/50' : 'border-brand-gold/50'
+                        }`}
                         placeholder="Professional photo of {Gender_Age} {Cleaning_Item}, bright natural lighting..."
                       />
                     </div>
