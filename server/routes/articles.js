@@ -1456,4 +1456,353 @@ router.post('/:articleId/push-meta', requireDb, async (req, res) => {
   }
 });
 
+// POST regenerate meta titles and/or descriptions for an article
+// Uses the article's final_content + keyword to generate fresh options via LLM
+router.post('/:articleId/regenerate-meta', requireDb, async (req, res) => {
+  try {
+    const { articleId } = req.params;
+    const { titleCount = 0, descriptionCount = 0 } = req.body;
+
+    console.log(`[Regenerate Meta] Article ${articleId}: titles=${titleCount}, descriptions=${descriptionCount}`);
+
+    if (titleCount === 0 && descriptionCount === 0) {
+      return res.status(400).json({ error: 'Set at least one count above 0' });
+    }
+
+    if (titleCount > 5 || descriptionCount > 5) {
+      return res.status(400).json({ error: 'Maximum 5 options per field' });
+    }
+
+    // 1. Fetch article
+    const articles = await sql`SELECT * FROM articles WHERE id = ${articleId}`;
+    if (articles.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    const article = articles[0];
+    if (!article.final_content) {
+      return res.status(400).json({ error: 'Article has no content to generate meta from' });
+    }
+
+    // 2. Build a focused meta-generation prompt
+    // Use first ~500 words of content for context (enough for meta, saves tokens)
+    const contentPreview = article.final_content.split(/\s+/).slice(0, 500).join(' ');
+    const keyword = article.keyword || 'the topic';
+
+    let promptParts = [];
+    promptParts.push(`You are an SEO expert. Based on the article content below, generate optimized meta data for the keyword "${keyword}".`);
+    promptParts.push('');
+
+    if (titleCount > 0) {
+      promptParts.push(`Generate exactly ${titleCount} meta title${titleCount > 1 ? 's' : ''}.`);
+      promptParts.push('- Each should be 50-60 characters for optimal display in search results');
+      promptParts.push('- Include the primary keyword naturally');
+      promptParts.push('- Make each variation distinct in approach (e.g., benefit-focused, action-oriented, question-based)');
+      promptParts.push('');
+    }
+
+    if (descriptionCount > 0) {
+      promptParts.push(`Generate exactly ${descriptionCount} meta description${descriptionCount > 1 ? 's' : ''}.`);
+      promptParts.push('- Each should be 150-160 characters for optimal display in search results');
+      promptParts.push('- Include the primary keyword naturally');
+      promptParts.push('- Include a call to action');
+      promptParts.push('- Make each variation distinct');
+      promptParts.push('');
+    }
+
+    promptParts.push('Format your response EXACTLY like this (include only the sections requested):');
+    if (titleCount > 0) {
+      promptParts.push('---META TITLES---');
+      promptParts.push('1. First title');
+      if (titleCount > 1) promptParts.push(`2. Second title`);
+      if (titleCount > 2) promptParts.push('...');
+    }
+    if (descriptionCount > 0) {
+      promptParts.push('---META DESCRIPTIONS---');
+      promptParts.push('1. First description');
+      if (descriptionCount > 1) promptParts.push('2. Second description');
+      if (descriptionCount > 2) promptParts.push('...');
+    }
+
+    promptParts.push('');
+    promptParts.push('Article content:');
+    promptParts.push(contentPreview);
+
+    const prompt = promptParts.join('\n');
+
+    // 3. Get model from workflow or use default
+    let model = 'claude-sonnet-4-5-20250929';
+    if (article.workflow_id) {
+      try {
+        const [workflow] = await sql`SELECT state FROM workflows WHERE id = ${article.workflow_id}`;
+        if (workflow?.state) {
+          const workflowState = JSON.parse(workflow.state || '{}');
+          model = workflowState.defaultModel || model;
+        }
+      } catch (e) {
+        console.warn('[Regenerate Meta] Could not fetch workflow model:', e.message);
+      }
+    }
+
+    // 4. Call LLM
+    console.log(`[Regenerate Meta] Calling LLM with model: ${model}`);
+    const llmResponse = await fetch(`http://localhost:${process.env.PORT || 3001}/api/llm/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        prompt,
+        maxTokens: 1024,
+      }),
+    });
+
+    const llmResult = await llmResponse.json();
+
+    if (!llmResult.success || !llmResult.content) {
+      console.error('[Regenerate Meta] LLM error:', llmResult.error);
+      return res.status(500).json({ error: llmResult.error || 'LLM failed to generate meta' });
+    }
+
+    const output = llmResult.content;
+
+    // 5. Parse the response (same pattern as workflow generation)
+    let newTitles = null;
+    let newDescriptions = null;
+
+    if (titleCount > 0) {
+      const titleMatch = output.match(/---META TITLES---\s*([\s\S]*?)(?:---META DESCRIPTIONS---|$)/i);
+      if (titleMatch) {
+        newTitles = titleMatch[1]
+          .split('\n')
+          .map(line => line.replace(/^\d+\.\s*/, '').trim())
+          .filter(Boolean);
+      }
+    }
+
+    if (descriptionCount > 0) {
+      const descMatch = output.match(/---META DESCRIPTIONS---\s*([\s\S]*?)$/i);
+      if (descMatch) {
+        newDescriptions = descMatch[1]
+          .split('\n')
+          .map(line => line.replace(/^\d+\.\s*/, '').trim())
+          .filter(Boolean);
+      }
+    }
+
+    if (!newTitles && titleCount > 0) newTitles = [];
+    if (!newDescriptions && descriptionCount > 0) newDescriptions = [];
+
+    console.log(`[Regenerate Meta] Parsed: ${newTitles?.length || 0} titles, ${newDescriptions?.length || 0} descriptions`);
+
+    // 6. Update article in database
+    // Only update the fields that were requested (0 = leave unchanged)
+    if (newTitles !== null && newDescriptions !== null) {
+      await sql`
+        UPDATE articles
+        SET meta_titles = ${JSON.stringify(newTitles)},
+            meta_descriptions = ${JSON.stringify(newDescriptions)},
+            selected_meta_title = NULL,
+            selected_meta_description = NULL,
+            meta_seo_status = 'pending',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${articleId}
+      `;
+    } else if (newTitles !== null) {
+      await sql`
+        UPDATE articles
+        SET meta_titles = ${JSON.stringify(newTitles)},
+            selected_meta_title = NULL,
+            meta_seo_status = 'pending',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${articleId}
+      `;
+    } else if (newDescriptions !== null) {
+      await sql`
+        UPDATE articles
+        SET meta_descriptions = ${JSON.stringify(newDescriptions)},
+            selected_meta_description = NULL,
+            meta_seo_status = 'pending',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${articleId}
+      `;
+    }
+
+    res.json({
+      success: true,
+      metaTitles: newTitles,
+      metaDescriptions: newDescriptions,
+      message: `Generated ${newTitles?.length || 0} titles and ${newDescriptions?.length || 0} descriptions`
+    });
+
+  } catch (error) {
+    console.error('[Regenerate Meta] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST regenerate article content (re-run prompt chain with same keyword)
+router.post('/:articleId/regenerate-article', requireDb, async (req, res) => {
+  try {
+    const { articleId } = req.params;
+
+    console.log(`[Regenerate Article] Starting for article ${articleId}`);
+
+    // 1. Fetch article
+    const articles = await sql`SELECT * FROM articles WHERE id = ${articleId}`;
+    if (articles.length === 0) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    const article = articles[0];
+    if (!article.workflow_id) {
+      return res.status(400).json({ error: 'Article has no linked workflow — cannot regenerate' });
+    }
+
+    // 2. Fetch workflow with prompt chain
+    const workflows = await sql`
+      SELECT w.*, ws.id as website_id, c.id as client_id
+      FROM workflows w
+      LEFT JOIN websites ws ON w.website_id = ws.id
+      LEFT JOIN clients c ON w.client_id = c.id
+      WHERE w.id = ${article.workflow_id}
+    `;
+
+    if (workflows.length === 0) {
+      return res.status(404).json({ error: 'Linked workflow not found' });
+    }
+
+    const workflow = workflows[0];
+    const workflowState = JSON.parse(workflow.state || '{}');
+    const promptTemplates = workflowState.promptTemplates || [];
+
+    if (promptTemplates.length === 0) {
+      return res.status(400).json({ error: 'Workflow has no prompt templates configured' });
+    }
+
+    // 3. Build placeholder context (same as generate-for-node)
+    const placeholders = workflowState.placeholders || [];
+    const keyword = article.keyword || 'Untitled';
+    const defaultModel = workflowState.defaultModel || 'claude-sonnet-4-5-20250929';
+
+    // 4. Execute prompt chain
+    const chainOutputs = {};
+    let finalContent = '';
+    let metaTitles = [];
+    let metaDescriptions = [];
+
+    for (const promptConfig of promptTemplates) {
+      const { key, systemPrompt, userPrompt, model, maxTokens } = promptConfig;
+
+      if (!userPrompt) continue;
+
+      // Fill placeholders
+      let filledPrompt = userPrompt;
+      filledPrompt = filledPrompt.replace(/{item_name}/g, keyword);
+      filledPrompt = filledPrompt.replace(/{keyword}/g, keyword);
+      filledPrompt = filledPrompt.replace(/{page_type}/g, 'service');
+
+      // Replace [output_key] with previous outputs
+      filledPrompt = filledPrompt.replace(/\[([^\]]+)\]/g, (match, outputKey) => {
+        return chainOutputs[outputKey.trim()] || match;
+      });
+
+      // Replace global placeholders {key}
+      placeholders.forEach(p => {
+        if (!p.tag) {
+          const regex = new RegExp(`\\{${p.key}\\}`, 'g');
+          filledPrompt = filledPrompt.replace(regex, p.value || '');
+        }
+      });
+
+      const fullPrompt = systemPrompt
+        ? `${systemPrompt}\n\n${filledPrompt}`
+        : filledPrompt;
+
+      console.log(`[Regenerate Article] Running prompt "${key}" for "${keyword}"`);
+
+      try {
+        const llmResponse = await fetch(`http://localhost:${process.env.PORT || 3001}/api/llm/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: model || defaultModel,
+            prompt: fullPrompt,
+            maxTokens: maxTokens || 4096,
+          }),
+        });
+
+        const llmResult = await llmResponse.json();
+
+        if (llmResult.success && llmResult.content) {
+          chainOutputs[key] = llmResult.content;
+
+          // Check if this is the final output
+          if (key === 'final' || key === 'article' || key === 'content' ||
+              promptConfig === promptTemplates[promptTemplates.length - 1]) {
+            finalContent = llmResult.content;
+
+            // Parse meta titles and descriptions
+            const metaTitleMatch = finalContent.match(/---META TITLES---\s*([\s\S]*?)(?:---META DESCRIPTIONS---|$)/i);
+            const metaDescMatch = finalContent.match(/---META DESCRIPTIONS---\s*([\s\S]*?)$/i);
+
+            if (metaTitleMatch) {
+              metaTitles = metaTitleMatch[1]
+                .split('\n')
+                .map(line => line.replace(/^\d+\.\s*/, '').trim())
+                .filter(Boolean);
+              finalContent = finalContent.split('---META TITLES---')[0].trim();
+            }
+
+            if (metaDescMatch) {
+              metaDescriptions = metaDescMatch[1]
+                .split('\n')
+                .map(line => line.replace(/^\d+\.\s*/, '').trim())
+                .filter(Boolean);
+            }
+          }
+        } else {
+          console.error(`[Regenerate Article] LLM error for prompt "${key}":`, llmResult.error);
+        }
+      } catch (llmError) {
+        console.error(`[Regenerate Article] LLM call failed for "${key}":`, llmError.message);
+      }
+    }
+
+    if (!finalContent) {
+      return res.status(500).json({ error: 'Failed to regenerate — no output from prompt chain' });
+    }
+
+    const wordCount = finalContent.split(/\s+/).filter(Boolean).length;
+
+    // 5. Update the article (preserve images, clear meta selections for re-review)
+    await sql`
+      UPDATE articles
+      SET final_content = ${finalContent},
+          meta_titles = ${JSON.stringify(metaTitles)},
+          meta_descriptions = ${JSON.stringify(metaDescriptions)},
+          chain_outputs = ${JSON.stringify(chainOutputs)},
+          word_count = ${wordCount},
+          selected_meta_title = NULL,
+          selected_meta_description = NULL,
+          meta_seo_status = 'pending',
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${articleId}
+    `;
+
+    console.log(`[Regenerate Article] Complete: ${wordCount} words, ${metaTitles.length} titles, ${metaDescriptions.length} descriptions`);
+
+    res.json({
+      success: true,
+      wordCount,
+      metaTitles: metaTitles.length,
+      metaDescriptions: metaDescriptions.length,
+      message: `Article regenerated: ${wordCount} words`
+    });
+
+  } catch (error) {
+    console.error('[Regenerate Article] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

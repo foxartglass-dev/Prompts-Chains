@@ -151,6 +151,14 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
   // Page Editor state (Phase 6: Surgical Page Editing)
   const [showPageEditor, setShowPageEditor] = useState(false);
 
+  // Regenerate meta state
+  const [regenTitleCount, setRegenTitleCount] = useState(3);
+  const [regenDescCount, setRegenDescCount] = useState(3);
+  const [regeneratingMeta, setRegeneratingMeta] = useState(false);
+
+  // Regenerate article state
+  const [regeneratingArticle, setRegeneratingArticle] = useState(false);
+
   // Post-publish image generation state
   const [generatingImages, setGeneratingImages] = useState(false);
   const [regeneratingAllImages, setRegeneratingAllImages] = useState(false);
@@ -952,6 +960,82 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
       setError('Failed to push meta to WordPress');
     } finally {
       setPushingMeta(false);
+    }
+  };
+
+  // Regenerate meta titles and/or descriptions via LLM
+  const regenerateMeta = async () => {
+    if (!selectedArticle) return;
+    if (regenTitleCount === 0 && regenDescCount === 0) {
+      setError('Set at least one count above 0');
+      return;
+    }
+
+    setRegeneratingMeta(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/articles/${selectedArticle.id}/regenerate-meta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titleCount: regenTitleCount,
+          descriptionCount: regenDescCount
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Reset selections since we have new options
+        setSelectedTitleIndex(null);
+        setSelectedDescIndex(null);
+        setUseCustomTitle(false);
+        setUseCustomDesc(false);
+        setMetaSaved(false);
+        // Refresh article data
+        await fetchArticleDetails(selectedArticle.id);
+        await fetchArticles();
+      } else {
+        setError(data.error || 'Failed to regenerate meta');
+      }
+    } catch (err) {
+      setError('Failed to regenerate meta');
+    } finally {
+      setRegeneratingMeta(false);
+    }
+  };
+
+  // Regenerate entire article content (re-run prompt chain)
+  const regenerateArticle = async () => {
+    if (!selectedArticle) return;
+    if (!confirm('This will regenerate the article with fresh content from the AI. Your current article text will be replaced. Images will be preserved. Continue?')) return;
+
+    setRegeneratingArticle(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/articles/${selectedArticle.id}/regenerate-article`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Reset meta selections since new content = new meta
+        setSelectedTitleIndex(null);
+        setSelectedDescIndex(null);
+        setUseCustomTitle(false);
+        setUseCustomDesc(false);
+        setMetaSaved(false);
+        // Refresh article data
+        await fetchArticleDetails(selectedArticle.id);
+        await fetchArticles();
+      } else {
+        setError(data.error || 'Failed to regenerate article');
+      }
+    } catch (err) {
+      setError('Failed to regenerate article');
+    } finally {
+      setRegeneratingArticle(false);
     }
   };
 
@@ -2200,12 +2284,31 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                     <h4 className="text-lg font-medium text-white">Article Content</h4>
                     <div className="flex gap-2">
                       {!isEditing ? (
-                        <button
-                          onClick={() => setIsEditing(true)}
-                          className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm transition"
-                        >
-                          Edit Content
-                        </button>
+                        <>
+                          <button
+                            onClick={() => setIsEditing(true)}
+                            className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan/80 rounded text-slate-900 font-medium text-sm transition"
+                          >
+                            Edit Content
+                          </button>
+                          <button
+                            onClick={regenerateArticle}
+                            disabled={regeneratingArticle}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded text-white font-medium text-sm transition disabled:opacity-50 flex items-center gap-2"
+                          >
+                            {regeneratingArticle ? (
+                              <>
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Regenerating...
+                              </>
+                            ) : (
+                              'Regenerate Article'
+                            )}
+                          </button>
+                        </>
                       ) : (
                         <>
                           <button
@@ -2659,7 +2762,7 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-8">
+                    <div className="grid grid-cols-[1fr_1fr_auto] gap-6">
                       {/* Meta Titles */}
                       <div>
                         <h5 className="text-sm font-medium text-brand-gold mb-3 flex items-center gap-2">
@@ -2823,6 +2926,100 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
                           </div>
                         ) : (
                           <p className="text-sm text-gray-500">No meta descriptions generated</p>
+                        )}
+                      </div>
+
+                      {/* Regenerate Meta Panel */}
+                      <div className="border-l border-slate-700 pl-5 flex flex-col gap-4 min-w-[140px]">
+                        <h5 className="text-sm font-medium text-purple-400 mb-1">Regenerate</h5>
+
+                        {/* Title Count Toggle */}
+                        <div>
+                          <label className="text-xs text-brand-gold block mb-1.5">Meta Titles</label>
+                          <div className="flex items-center gap-1">
+                            {[0, 1, 2, 3, 5].map(n => (
+                              <button
+                                key={n}
+                                onClick={() => setRegenTitleCount(n)}
+                                className={`w-7 h-7 rounded text-xs font-medium transition ${
+                                  regenTitleCount === n
+                                    ? 'bg-brand-gold text-slate-900'
+                                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                                }`}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Description Count Toggle */}
+                        <div>
+                          <label className="text-xs text-brand-cyan block mb-1.5">Meta Descriptions</label>
+                          <div className="flex items-center gap-1">
+                            {[0, 1, 2, 3, 5].map(n => (
+                              <button
+                                key={n}
+                                onClick={() => setRegenDescCount(n)}
+                                className={`w-7 h-7 rounded text-xs font-medium transition ${
+                                  regenDescCount === n
+                                    ? 'bg-brand-cyan text-slate-900'
+                                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                                }`}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Regenerate Button */}
+                        <button
+                          onClick={regenerateMeta}
+                          disabled={regeneratingMeta || (regenTitleCount === 0 && regenDescCount === 0)}
+                          className={`px-3 py-2 rounded text-sm font-medium transition flex items-center justify-center gap-2 ${
+                            regenTitleCount === 0 && regenDescCount === 0
+                              ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                              : 'bg-purple-600 hover:bg-purple-500 text-white'
+                          }`}
+                        >
+                          {regeneratingMeta ? (
+                            <>
+                              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Generating...
+                            </>
+                          ) : (
+                            'Regenerate'
+                          )}
+                        </button>
+
+                        {/* Push Meta to WP Button */}
+                        {metaSaved && (
+                          <button
+                            onClick={pushMetaToWordPress}
+                            disabled={pushingMeta}
+                            className="px-3 py-2 rounded text-sm font-medium transition flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white"
+                          >
+                            {pushingMeta ? (
+                              <>
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Pushing...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                Push Meta to WP
+                              </>
+                            )}
+                          </button>
                         )}
                       </div>
                     </div>
