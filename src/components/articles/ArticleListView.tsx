@@ -486,6 +486,9 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
     try {
       // Step 1: Upload images to WordPress Media Library FIRST
       // This ensures images have WordPress URLs before page creation
+      // If article already has a WP page, push-images also rebuilds it (delete old + create new with same slug)
+      // We must capture the new wp_post_id so Step 3 meta push targets the correct page
+      let rebuiltPageId: number | null = null;
       const hasImages = selectedArticle.generated_images && selectedArticle.generated_images.length > 0;
       if (hasImages) {
         console.log('[Push All] Step 1: Uploading images to Media Library...');
@@ -499,11 +502,17 @@ const ArticleListView: React.FC<ArticleListViewProps> = ({ websiteId, onEditVisu
           console.warn('Images upload warning:', imagesData.error);
         } else {
           console.log(`[Push All] Uploaded ${imagesData.pushed} images to Media Library`);
+          // If push-images rebuilt the page, capture the new wp_post_id
+          if (imagesData.pageUpdated && imagesData.newPageId) {
+            rebuiltPageId = imagesData.newPageId;
+            console.log(`[Push All] Page rebuilt during image push, new page ID: ${rebuiltPageId}`);
+          }
         }
       }
 
       // Step 2: Publish article (now with uploaded image URLs)
-      let wpPostId = selectedArticle.wp_post_id;
+      // Use rebuiltPageId if push-images already rebuilt the page (new ID after delete+recreate)
+      let wpPostId = rebuiltPageId || selectedArticle.wp_post_id;
       if (!wpPostId) {
         console.log('[Push All] Step 2: Creating WordPress page...');
         console.log('[Push All] DEBUG - workflow_id being sent:', selectedArticle.workflow_id, '| article id:', selectedArticle.id);
