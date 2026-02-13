@@ -487,9 +487,9 @@ export default function TestingSlotsSelector({
               </button>
             )}
             {/* Test results count */}
-            {(activeSlot.content.testResults || []).length > 0 && (
+            {(activeSlot.content?.testResults || []).length > 0 && (
               <span className="px-1.5 py-0.5 text-[10px] rounded bg-brand-cyan/20 text-brand-cyan">
-                {(activeSlot.content.testResults || []).length} results
+                {(activeSlot.content?.testResults || []).length} results
               </span>
             )}
             <button
