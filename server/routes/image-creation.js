@@ -1124,7 +1124,9 @@ router.put('/settings/website/:websiteId', requireDb, async (req, res) => {
           guided_gpt_prompts,
           smart_prompt_prompts,
           guided_gpt_rules,
-          legacy_prompt_rules
+          legacy_prompt_rules,
+          testing_slots,
+          active_testing_slot
         ) VALUES (
           ${websiteId},
           ${settingsData.enabled ?? false},
@@ -1163,7 +1165,9 @@ router.put('/settings/website/:websiteId', requireDb, async (req, res) => {
           ${JSON.stringify(settingsData.guided_gpt_prompts ?? [])},
           ${JSON.stringify(settingsData.smart_prompt_prompts ?? [])},
           ${JSON.stringify(settingsData.guided_gpt_rules ?? [])},
-          ${JSON.stringify(settingsData.legacy_prompt_rules ?? [])}
+          ${JSON.stringify(settingsData.legacy_prompt_rules ?? [])},
+          ${JSON.stringify(settingsData.testing_slots ?? [])},
+          ${settingsData.active_testing_slot ?? null}
         )
       `;
       console.log('[Image Creation API] Created new website settings record');
@@ -1209,6 +1213,8 @@ router.put('/settings/website/:websiteId', requireDb, async (req, res) => {
           smart_prompt_prompts = COALESCE(${settingsData.smart_prompt_prompts ? JSON.stringify(settingsData.smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
           guided_gpt_rules = COALESCE(${settingsData.guided_gpt_rules ? JSON.stringify(settingsData.guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
           legacy_prompt_rules = COALESCE(${settingsData.legacy_prompt_rules ? JSON.stringify(settingsData.legacy_prompt_rules) : null}::jsonb, legacy_prompt_rules),
+          testing_slots = COALESCE(${settingsData.testing_slots ? JSON.stringify(settingsData.testing_slots) : null}::jsonb, testing_slots),
+          active_testing_slot = COALESCE(${settingsData.active_testing_slot ?? null}, active_testing_slot),
           updated_at = CURRENT_TIMESTAMP
         WHERE website_id = ${websiteId}
       `;
@@ -1407,7 +1413,10 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           unified_chat_history: [],
           unified_chat_conversations: [],
           unified_chat_files: [],
-          chat_scope_selections: []
+          chat_scope_selections: [],
+          // Testing Slots System
+          testing_slots: [],
+          active_testing_slot: null
         },
         isNew: true
       });
@@ -1499,7 +1508,10 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         unified_chat_history: results[0].unified_chat_history || [],
         unified_chat_conversations: results[0].unified_chat_conversations || [],
         unified_chat_files: results[0].unified_chat_files || [],
-        chat_scope_selections: results[0].chat_scope_selections || []
+        chat_scope_selections: results[0].chat_scope_selections || [],
+        // Testing Slots System
+        testing_slots: results[0].testing_slots || [],
+        active_testing_slot: results[0].active_testing_slot || null
       },
       imageBankMigrated  // Tell frontend to use new /api/image-bank API
     });
@@ -1611,7 +1623,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       // Persistent prompt portions (shared across all tags)
       main_prompt_persistent,
       guided_instructions_persistent,
-      smart_prompt_persistent
+      smart_prompt_persistent,
+      // Testing Slots System (Phase 3)
+      testing_slots,
+      active_testing_slot
     } = req.body;
 
     // DEBUG: Log what Test Mode is sending
@@ -2396,6 +2411,43 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       }
     };
 
+    // Separate function to update testing_slots columns (silently fail if migration 034 hasn't run)
+    const tryUpdateTestingSlots = async () => {
+      const hasSlots = testing_slots !== undefined;
+      const hasActiveSlot = active_testing_slot !== undefined;
+
+      if (!hasSlots && !hasActiveSlot) return false;
+
+      try {
+        const slotsJson = hasSlots ? JSON.stringify(testing_slots ?? []) : null;
+        if (saveToWebsite) {
+          await sql`
+            UPDATE image_creation_settings
+            SET
+              testing_slots = COALESCE(${slotsJson}::jsonb, testing_slots),
+              active_testing_slot = ${hasActiveSlot ? (active_testing_slot ?? null) : null}
+            WHERE website_id = ${websiteId}
+          `;
+        } else {
+          await sql`
+            UPDATE image_creation_settings
+            SET
+              testing_slots = COALESCE(${slotsJson}::jsonb, testing_slots),
+              active_testing_slot = ${hasActiveSlot ? (active_testing_slot ?? null) : null}
+            WHERE workflow_id = ${workflowId}
+          `;
+        }
+        console.log('[Image Creation API] Successfully saved testing_slots:', testing_slots?.length ?? 0, 'active_slot:', active_testing_slot);
+        return true;
+      } catch (err) {
+        if (err.message?.includes('testing_slots') || err.message?.includes('active_testing_slot')) {
+          console.log('[Image Creation API] testing_slots columns not available yet (run migration 034)');
+          return false;
+        }
+        throw err;
+      }
+    };
+
     if (existing.length === 0) {
       // Insert new settings
       console.log('[Image Creation API] Creating new settings record...');
@@ -2410,6 +2462,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
       // Ensure live_prompt_mode is saved (fallback may have skipped it)
       await tryUpdateLivePromptMode();
+
+      // Save testing slots if provided
+      await tryUpdateTestingSlots();
 
       return res.json({ success: true, id: newId, created: true });
     }
@@ -2426,6 +2481,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
     // Ensure live_prompt_mode is saved (fallback may have skipped it)
     await tryUpdateLivePromptMode();
+
+    // Save testing slots if provided
+    await tryUpdateTestingSlots();
 
     // VERIFICATION: Read back what was saved to confirm (wrapped in try/catch for missing columns)
     try {

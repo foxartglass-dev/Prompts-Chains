@@ -317,6 +317,11 @@ CREATE TABLE IF NOT EXISTS image_creation_settings (
   -- Tag-based rules for Smart/Legacy Prompt
   -- Array of {id, tag, title, text, order, globalAppliesTo}
   legacy_prompt_rules JSONB DEFAULT '[]',
+  -- Testing Slots System (Phase 3)
+  -- Array of {id, number, name, createdAt, updatedAt, createdBy, content: {mainPrompt?, placeholderCategories?, guidedPrompt?, guidedGuardrails?, smartPromptGuidance?, guidedRules?, legacyRules?, matchingRules?}}
+  testing_slots JSONB DEFAULT '[]',
+  -- UUID of the currently active testing slot (NULL = viewing Main/Live)
+  active_testing_slot VARCHAR(255) DEFAULT NULL,
   -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
