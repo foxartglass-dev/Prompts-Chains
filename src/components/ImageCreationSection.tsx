@@ -18,6 +18,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import FeedbackPopup from './FeedbackPopup';
+import SetScopeGrid, { ScopeGridRow } from './shared/SetScopeGrid';
 import VersionHistoryBrowser from './VersionHistoryBrowser';
 import { useVersionControl, VersionEntityType } from '../hooks/useVersionControl';
 
@@ -179,6 +180,8 @@ interface ChatMessage {
   content: string;
   images?: string[];
   timestamp: string;
+  /** Which chat section this message was sent from (for unified chat) */
+  section?: 'main_prompt' | 'guided_gpt' | 'smart_prompt';
 }
 
 // ========== CHAT FILE SYSTEM (like Claude Projects) ==========
@@ -521,6 +524,12 @@ interface ImageCreationSettings {
   main_prompt_chat_model: string;
   // Cross-chat references for ping system between assistants
   chat_cross_references: ChatCrossReference[];
+  // Unified chat system (replaces separate histories)
+  unified_chat_history: ChatMessage[];
+  unified_chat_conversations: ChatConversation[];
+  unified_chat_files: ChatFile[];
+  // Chat scope selections (grid-based, replaces contextToggles)
+  chat_scope_selections: string[];
   image_prompt_model: string; // Model for Image Prompt chat (can be image or chat model)
   integration_mode: 'live' | 'bank';
   fallback_to_live: boolean;
@@ -664,6 +673,11 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   main_prompt_chat_model: 'gpt-4o', // Default to vision model
   // Cross-chat references for ping system
   chat_cross_references: [],
+  // Unified chat system
+  unified_chat_history: [],
+  unified_chat_conversations: [],
+  unified_chat_files: [],
+  chat_scope_selections: [],
   image_prompt_model: 'gpt-image-1.5', // Default to OpenAI image model for testing prompts
   integration_mode: 'live',
   fallback_to_live: true,
@@ -1035,19 +1049,43 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [renamingItemId, setRenamingItemId] = useState<string | null>(null);
   const [renamingValue, setRenamingValue] = useState('');
 
-  // Context toggles — controls what gets sent with each chat message
-  // Default: all OFF (just chat, no extra context payload)
-  // Three prompt systems (each with sub-toggles) + three independent sections
+  // Context toggles — LEGACY: kept for backward compatibility during migration
+  // Replaced by chatScopeSelections (grid-based) for new unified chat
   const [contextToggles, setContextToggles] = useState({
-    mainPrompt: false,       // Main Prompt: template + variations + avatars
-    mainCategories: false,   // Main Prompt: placeholder categories/groups
-    guidedPrompt: false,     // Guided GPT: prompt/instructions
-    guidedRules: false,      // Guided GPT: rules (uniform, subject, avoid)
-    smartPrompt: false,      // Smart Prompt: smart prompt + matching/placement rules
-    testing: false,          // Testing: testing mode + articles (independent)
-    problems: false,         // Problems: problem areas + solved problems (independent)
-    imageBank: false,        // Image Bank: bank examples + reference images + logos (independent)
+    mainPrompt: false,
+    mainCategories: false,
+    guidedPrompt: false,
+    guidedRules: false,
+    smartPrompt: false,
+    testing: false,
+    problems: false,
+    imageBank: false,
   });
+
+  // ========== UNIFIED CHAT SYSTEM ==========
+  // Chat scope selections — grid-based (replaces 9-pill bar)
+  // Format: ["H-prompt", "H-categories", "J-guardrails", "All-smart", ...]
+  const [chatScopeSelections, setChatScopeSelections] = useState<string[]>([]);
+  // Independent toggle pills (testing, problems, bank) — kept as simple booleans
+  const [scopeTestingOn, setScopeTestingOn] = useState(false);
+  const [scopeProblemsOn, setScopeProblemsOn] = useState(false);
+  const [scopeBankOn, setScopeBankOn] = useState(false);
+  // Set Scope grid modal visibility
+  const [showChatScopeGrid, setShowChatScopeGrid] = useState(false);
+  // Unified chat messages (shared across all 3 entry points)
+  const [unifiedChatMessages, setUnifiedChatMessages] = useState<ChatMessage[]>([]);
+  // Unified chat loading state per section (so each entry point has its own spinner)
+  const [unifiedChatLoading, setUnifiedChatLoading] = useState<Record<string, boolean>>({});
+
+  // Scope grid row definitions (reusable)
+  const scopeGridRows: ScopeGridRow[] = useMemo(() => [
+    { key: 'prompt', label: 'Main Prompt' },
+    { key: 'categories', label: 'Main Categories' },
+    { key: 'guardrails', label: 'Guided Prompt' },
+    { key: 'guided-rules', label: 'Guided Rules' },
+    { key: 'smart', label: 'Smart Prompt' },
+    { key: 'smart-rules', label: 'Smart Rules' },
+  ], []);
 
   // Main Prompt AI Assistant Chat state (mirrors Guided GPT assistant)
   const [mainPromptAssistantOpen, setMainPromptAssistantOpen] = useState(false);
@@ -1411,6 +1449,59 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       }, 100);
     }
   }, [loaded]); // Only run once when settings first load
+
+  // ========== UNIFIED CHAT: Migration + Sync ==========
+  // Migrate old separate chat histories into unified_chat_history on first load
+  useEffect(() => {
+    if (!loaded) return;
+
+    // Load chat scope selections from DB
+    if (settings.chat_scope_selections && settings.chat_scope_selections.length > 0) {
+      setChatScopeSelections(settings.chat_scope_selections);
+    }
+
+    // If unified history already exists, just load it
+    if (settings.unified_chat_history && settings.unified_chat_history.length > 0) {
+      setUnifiedChatMessages(settings.unified_chat_history);
+      console.log('[Unified Chat] Loaded', settings.unified_chat_history.length, 'messages from database');
+      return;
+    }
+
+    // Migration: merge old separate histories into unified
+    const oldConsultant = settings.consultant_chat_history || [];
+    const oldMainPrompt = settings.main_prompt_chat_history || [];
+    // Guided assistant uses consultant_chat_history (same storage)
+    // so we tag consultant history as guided_gpt, main prompt as main_prompt
+
+    if (oldConsultant.length === 0 && oldMainPrompt.length === 0) return;
+
+    const migratedMessages: ChatMessage[] = [];
+
+    // Tag consultant/guided messages
+    oldConsultant.forEach(msg => {
+      migratedMessages.push({
+        ...msg,
+        section: msg.section || 'guided_gpt',
+      });
+    });
+
+    // Tag main prompt messages
+    oldMainPrompt.forEach(msg => {
+      migratedMessages.push({
+        ...msg,
+        section: msg.section || 'main_prompt',
+      });
+    });
+
+    // Sort by timestamp
+    migratedMessages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    if (migratedMessages.length > 0) {
+      setUnifiedChatMessages(migratedMessages);
+      updateSettings({ unified_chat_history: migratedMessages });
+      console.log('[Unified Chat] Migrated', migratedMessages.length, 'messages from old format');
+    }
+  }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-scroll AI Prompt Assistant chat to bottom when messages change
   useEffect(() => {
@@ -5376,6 +5467,301 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     }, 100);
   };
 
+  // ========== UNIFIED CHAT HANDLER ==========
+  /**
+   * Single handler for all 3 chat entry points.
+   * Builds context from Set Scope grid selections (chatScopeSelections)
+   * and routes through /api/prompt-assistant/chat.
+   * Each message is tagged with its source section.
+   */
+  const handleSendUnifiedChat = async (
+    section: 'main_prompt' | 'guided_gpt' | 'smart_prompt',
+    inputText: string,
+    images: string[],
+    document: { name: string; content: string } | null,
+    clearInput: () => void,
+  ) => {
+    if (!inputText.trim() && images.length === 0 && !document) return;
+
+    // Build message content including document if attached
+    let messageContent = inputText;
+    if (document) {
+      messageContent = `${inputText}\n\n📄 **Attached Document: ${document.name}**\n\`\`\`\n${document.content}\n\`\`\``;
+    }
+
+    const newMessage: ChatMessage = {
+      role: 'user',
+      content: messageContent,
+      images: images.length > 0 ? images : undefined,
+      timestamp: new Date().toISOString(),
+      section,
+    };
+
+    // Add a section-switch system message if last user message was from a different section
+    const lastUserMsg = [...unifiedChatMessages].reverse().find(m => m.role === 'user');
+    const sectionLabels: Record<string, string> = {
+      main_prompt: 'Main Prompt',
+      guided_gpt: 'Guided GPT',
+      smart_prompt: 'Smart Prompt',
+    };
+    let messagesToAdd: ChatMessage[] = [];
+    if (lastUserMsg && lastUserMsg.section && lastUserMsg.section !== section) {
+      messagesToAdd.push({
+        role: 'system',
+        content: `--- Switched to ${sectionLabels[section]} ---`,
+        timestamp: new Date().toISOString(),
+        section,
+      });
+    }
+    messagesToAdd.push(newMessage);
+
+    const updatedHistory = [...unifiedChatMessages, ...messagesToAdd];
+    setUnifiedChatMessages(updatedHistory);
+    // Also mirror to old local state for backward compat with existing UI
+    if (section === 'guided_gpt') {
+      setGuidedAssistantMessages(updatedHistory.filter(m => m.role !== 'system' || m.section === 'guided_gpt'));
+    } else if (section === 'main_prompt') {
+      setMainPromptAssistantMessages(updatedHistory.filter(m => m.role !== 'system' || m.section === 'main_prompt'));
+    }
+    // Persist to database immediately
+    updateSettings({ unified_chat_history: updatedHistory });
+    clearInput();
+    setUnifiedChatLoading(prev => ({ ...prev, [section]: true }));
+
+    try {
+      // Build context from Set Scope grid selections
+      const context = buildScopeBasedContext(section);
+
+      // Pick the model for this section
+      let model = 'gpt-4o';
+      if (section === 'guided_gpt') model = settings.guided_model || 'gpt-5.2-2025-12-11';
+      else if (section === 'main_prompt') model = settings.main_prompt_chat_model || 'gpt-4o';
+      else if (section === 'smart_prompt') model = settings.guided_model || 'gpt-4o';
+
+      // Send last 8 messages + current for AI memory without token bloat
+      const recentMessages = [...unifiedChatMessages.slice(-8), ...messagesToAdd];
+
+      const res = await fetch('/api/prompt-assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: recentMessages.map(m => ({
+            role: m.role,
+            content: m.content,
+            images: m.images,
+          })),
+          context: (chatScopeSelections.length > 0 || scopeTestingOn || scopeProblemsOn || scopeBankOn) ? context : null,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const responseContent = data.response;
+        const updatedFields: string[] = [];
+
+        // Handle code block write-backs from AI response (same as existing handlers)
+        // ```mainprompt blocks
+        const mainPromptMatch = responseContent.match(/```mainprompt\n?([\s\S]*?)```/);
+        if (mainPromptMatch && activeAvatar) {
+          const newMainPrompt = mainPromptMatch[1].trim();
+          const updatedAvatars = settings.audience_avatars.map((a: any) =>
+            a.id === activeAvatar.id ? { ...a, mainPrompt: newMainPrompt } : a
+          );
+          updateSettings({ audience_avatars: updatedAvatars });
+          updatedFields.push('Main Prompt');
+        }
+
+        // ```testprompt blocks
+        const testPromptMatch = responseContent.match(/```testprompt\n?([\s\S]*?)```/);
+        if (testPromptMatch) {
+          const newPrompt = testPromptMatch[1].trim();
+          setTestingModeOpen(true);
+          updateActiveTabPrompt(newPrompt);
+          updatedFields.push('Test Prompt');
+        }
+
+        // ```instructions blocks
+        const instructionsMatch = responseContent.match(/```instructions\n?([\s\S]*?)```/);
+        if (instructionsMatch) {
+          const newInstructions = instructionsMatch[1].trim();
+          updateSettings({
+            guided_guardrails: {
+              ...settings.guided_guardrails,
+              instructions: newInstructions,
+            } as any,
+          });
+          updatedFields.push('Instructions');
+        }
+
+        if (updatedFields.length > 0) {
+          showNotification(`✓ Updated: ${updatedFields.join(', ')}`, 'success');
+        }
+
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: responseContent,
+          timestamp: new Date().toISOString(),
+          section,
+        };
+        const finalHistory = [...updatedHistory, assistantMessage];
+        setUnifiedChatMessages(finalHistory);
+        // Persist assistant response to database
+        updateSettings({ unified_chat_history: finalHistory });
+
+        // Mirror to legacy local state
+        if (section === 'guided_gpt') {
+          setGuidedAssistantMessages(prev => [...prev, assistantMessage]);
+        } else if (section === 'main_prompt') {
+          setMainPromptAssistantMessages(prev => [...prev, assistantMessage]);
+        }
+      } else {
+        showNotification(data.error || 'Chat failed', 'error');
+      }
+    } catch (error) {
+      console.error(`[Unified Chat] ${section} error:`, error);
+      showNotification('Failed to send message', 'error');
+    }
+
+    setUnifiedChatLoading(prev => ({ ...prev, [section]: false }));
+  };
+
+  /**
+   * Build context based on Set Scope grid selections.
+   * Selections are in format "TagName-rowKey" (e.g., "H-prompt", "All-categories").
+   * Independent toggles (testing, problems, bank) are separate booleans.
+   */
+  const buildScopeBasedContext = (section: string) => {
+    const context: Record<string, any> = {
+      assistantMode: section,
+    };
+
+    const tagNames = tags.map(t => t.name);
+
+    // Helper: check if a specific tag+section is selected
+    const isSelected = (tag: string, rowKey: string) =>
+      chatScopeSelections.includes(`${tag}-${rowKey}`) ||
+      chatScopeSelections.includes(`All-${rowKey}`);
+
+    // Helper: check if ANY tag has a given row selected
+    const anyTagSelected = (rowKey: string) =>
+      tagNames.some(t => isSelected(t, rowKey)) || chatScopeSelections.includes(`All-${rowKey}`);
+
+    // Main Prompt: template + variations + avatars + persistent
+    if (anyTagSelected('prompt')) {
+      context.mainPrompt = activeAvatar?.mainPrompt || '';
+      context.mainPromptPersistent = settings.main_prompt_persistent || '';
+      context.variations = activeAvatar?.variations?.map(v => ({
+        name: v.name, prompt: v.prompt, orientation: v.orientation,
+      })) || [];
+      context.activeAvatar = activeAvatar ? { name: activeAvatar.name, tag: activeAvatar.tag } : null;
+      context.allAvatars = settings.audience_avatars.map((a: any) => ({
+        name: a.name, tag: a.tag, hasPrompt: !!a.mainPrompt,
+      }));
+    }
+
+    // Main Categories: placeholder categories/groups
+    if (anyTagSelected('categories')) {
+      context.placeholderMode = activeAvatar?.placeholderMode || 'simple';
+      context.placeholderCategories = activeAvatar?.placeholderCategories?.map(cat => ({
+        name: cat.name, placeholder: cat.placeholder,
+        isRandomized: cat.isRandomized,
+        options: cat.options.map(opt => ({
+          number: opt.number, text: opt.text,
+          primaryKeywords: opt.primaryKeywords,
+          secondaryKeywords: opt.useSecondaryKeywords ? opt.secondaryKeywords : undefined,
+        })),
+      })) || [];
+    }
+
+    // Guided Prompt: guardrails/instructions
+    if (anyTagSelected('guardrails')) {
+      context.guardrails = settings.guided_guardrails;
+      context.guidedInstructionsPersistent = settings.guided_instructions_persistent || '';
+    }
+
+    // Guided Rules: uniform, subject, avoid
+    if (anyTagSelected('guided-rules')) {
+      // If guardrails not already included, include just the rules portion
+      if (!context.guardrails) {
+        context.guardrails = {
+          uniformRules: (settings.guided_guardrails as any)?.uniformRules,
+          subjectRules: (settings.guided_guardrails as any)?.subjectRules,
+          avoidRules: (settings.guided_guardrails as any)?.avoidRules,
+        };
+      }
+    }
+
+    // Smart Prompt: smart prompt + matching/placement rules
+    if (anyTagSelected('smart') || anyTagSelected('smart-rules')) {
+      context.smartPromptGuidance = settings.smart_prompt_guidance || '';
+      context.smartPromptPersistent = settings.smart_prompt_persistent || '';
+      context.matchingRules = {
+        rule1: settings.matching_rule_1 || '',
+        rule2: settings.matching_rule_2 || '',
+        rule3: settings.matching_rule_3 || '',
+        rule4: settings.matching_rule_4 || '',
+      };
+      context.placementRule = settings.placement_rule || '';
+      context.smartMatchingRule = settings.smart_matching_rule || '';
+    }
+
+    // Independent toggles
+    if (scopeTestingOn) {
+      context.testingMode = {
+        isOpen: testingModeOpen,
+        activeTab: activeTestingTab.name,
+        currentPrompt: activeTestingTab.prompt,
+        fullHistory: activeTestingTab.history.slice(-5).map((h: any) => ({
+          prompt: h.prompt, imageUrl: h.url, model: h.model, timestamp: h.timestamp,
+        })),
+        model: settings.default_model || 'gpt-image-1.5',
+      };
+      context.articles = loadedArticles.length > 0 ? {
+        count: loadedArticles.length,
+        items: loadedArticles.map(a => ({
+          id: a.id, keyword: a.keyword, tag: a.tag,
+          wordCount: a.wordCount, websiteName: a.websiteName, clientName: a.clientName,
+        })),
+      } : null;
+    }
+
+    if (scopeProblemsOn) {
+      context.problemAreas = (settings.prompt_problem_areas || [])
+        .filter((a: PromptProblemArea) => a.status === 'active')
+        .map((a: PromptProblemArea) => ({
+          name: a.name, context: a.context, priority: a.priority,
+          solutions: a.prompts.map(p => ({
+            miniContext: p.miniContext, promptText: p.promptText, status: p.status, notes: p.notes,
+          })),
+        }));
+      context.solvedProblems = (settings.prompt_problem_areas || [])
+        .filter((a: PromptProblemArea) => a.status === 'solved')
+        .map((a: PromptProblemArea) => {
+          const solvedPrompt = a.prompts.find(p => p.id === a.solvedPromptId);
+          return {
+            name: a.name, context: a.context,
+            solvedWith: solvedPrompt?.promptText, solvedNotes: a.solvedNotes,
+          };
+        });
+    }
+
+    if (scopeBankOn) {
+      context.imageBankExamples = (settings.image_bank || [])
+        .slice(0, 10)
+        .map((img: BankImage) => ({
+          title: img.title, prompt: img.prompt, variation: img.variation,
+          model: img.model, used: img.used, avatarTag: img.avatarTag,
+        }));
+      context.referenceImages = settings.reference_images.map((img: any, idx: number) => ({
+        index: idx + 1, filename: img.filename || `Reference ${idx + 1}`,
+        tags: img.tags || [], hasUrl: !!img.url,
+      }));
+    }
+
+    return context;
+  };
+
   /**
    * Fetch article summary (counts by website/client) for selection UI
    */
@@ -8723,18 +9109,38 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     </div>
                                   </div>
                                 ) : (
-                                  mainPromptAssistantMessages.map((msg, idx) => (
+                                  unifiedChatMessages.map((msg, idx) => (
+                                    msg.role === 'system' && msg.content.startsWith('---') ? (
+                                      <div key={idx} className="flex justify-center py-1">
+                                        <span className="text-[9px] text-slate-500 italic">{msg.content}</span>
+                                      </div>
+                                    ) : (
                                     <div
                                       key={idx}
                                       className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                                     >
                                       <div
-                                        className={`max-w-[85%] rounded-lg p-2.5 ${
+                                        className={`max-w-[85%] rounded-lg p-2.5 border-l-2 ${
                                           msg.role === 'user'
                                             ? 'bg-brand-gold/20 text-brand-gold'
                                             : 'bg-slate-800 text-slate-200'
+                                        } ${
+                                          msg.section === 'main_prompt' ? 'border-l-amber-500' :
+                                          msg.section === 'guided_gpt' ? 'border-l-emerald-500' :
+                                          msg.section === 'smart_prompt' ? 'border-l-purple-500' :
+                                          'border-l-transparent'
                                         }`}
                                       >
+                                        {/* Section badge */}
+                                        {msg.section && msg.role === 'user' && (
+                                          <span className={`inline-block text-[8px] px-1.5 py-0.5 rounded-full mb-1 ${
+                                            msg.section === 'main_prompt' ? 'bg-amber-600/30 text-amber-300' :
+                                            msg.section === 'guided_gpt' ? 'bg-emerald-600/30 text-emerald-300' :
+                                            'bg-purple-600/30 text-purple-300'
+                                          }`}>
+                                            {msg.section === 'main_prompt' ? 'Main' : msg.section === 'guided_gpt' ? 'Guided' : 'Smart'}
+                                          </span>
+                                        )}
                                         {msg.images && msg.images.length > 0 && (
                                           <div className="flex flex-wrap gap-1 mb-2">
                                             {msg.images.map((img, imgIdx) => (
@@ -8759,9 +9165,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         )}
                                       </div>
                                     </div>
+                                    )
                                   ))
                                 )}
-                                {mainPromptAssistantLoading && (
+                                {(unifiedChatLoading['main_prompt'] || mainPromptAssistantLoading) && (
                                   <div className="flex justify-start">
                                     <div className="bg-slate-800 rounded-lg p-2.5">
                                       <div className="flex items-center gap-1.5">
@@ -8810,108 +9217,36 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               )}
 
-                              {/* Context Toggles — unified 9-pill bar shared by both chats */}
-                              <div className="flex items-center flex-wrap gap-x-3 gap-y-1 px-1 pb-1.5">
-                                {/* Main Prompt group */}
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-amber-300 font-medium">Main:</span>
-                                  {([
-                                    ['mainPrompt', 'Prompt'],
-                                    ['mainCategories', 'Categories'],
-                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
-                                    <button
-                                      key={key}
-                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
-                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        contextToggles[key]
-                                          ? 'bg-amber-600 text-white font-medium'
-                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
+                              {/* Set Scope + Independent Toggles */}
+                              <div className="flex items-center flex-wrap gap-x-2 gap-y-1 px-1 pb-1.5">
+                                <button
+                                  onClick={() => setShowChatScopeGrid(true)}
+                                  className={`px-2.5 py-0.5 text-[10px] rounded-full transition font-medium ${
+                                    chatScopeSelections.length > 0
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                >
+                                  Set Scope{chatScopeSelections.length > 0 ? ` (${chatScopeSelections.length})` : ''}
+                                </button>
                                 <div className="w-px h-4 bg-slate-500/60"></div>
-                                {/* Guided GPT group */}
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-emerald-300 font-medium">Guided:</span>
-                                  {([
-                                    ['guidedPrompt', 'Prompt'],
-                                    ['guidedRules', 'Rules'],
-                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
-                                    <button
-                                      key={key}
-                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
-                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        contextToggles[key]
-                                          ? 'bg-emerald-600 text-white font-medium'
-                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                                <div className="w-px h-4 bg-slate-500/60"></div>
-                                {/* Smart Prompt group */}
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-purple-300 font-medium">Smart:</span>
+                                {([
+                                  ['testing', 'Testing', scopeTestingOn, setScopeTestingOn],
+                                  ['problems', 'Problems', scopeProblemsOn, setScopeProblemsOn],
+                                  ['bank', 'Bank', scopeBankOn, setScopeBankOn],
+                                ] as [string, string, boolean, React.Dispatch<React.SetStateAction<boolean>>][]).map(([key, label, isOn, setFn]) => (
                                   <button
-                                    onClick={() => setContextToggles(prev => ({ ...prev, smartPrompt: !prev.smartPrompt }))}
+                                    key={key}
+                                    onClick={() => setFn(!isOn)}
                                     className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                      contextToggles.smartPrompt
-                                        ? 'bg-purple-600 text-white font-medium'
+                                      isOn
+                                        ? 'bg-sky-600 text-white font-medium'
                                         : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
                                     }`}
                                   >
-                                    Prompt
+                                    {label}
                                   </button>
-                                </div>
-                                <div className="w-px h-4 bg-slate-500/60"></div>
-                                {/* Independent sections */}
-                                <div className="flex items-center gap-1">
-                                  {([
-                                    ['testing', 'Testing'],
-                                    ['problems', 'Problems'],
-                                    ['imageBank', 'Bank'],
-                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
-                                    <button
-                                      key={key}
-                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
-                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        contextToggles[key]
-                                          ? 'bg-sky-600 text-white font-medium'
-                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                                <div className="w-px h-4 bg-slate-500/60"></div>
-                                {/* All toggle */}
-                                <button
-                                  onClick={() => {
-                                    const allOn = Object.values(contextToggles).every(v => v);
-                                    const v = !allOn;
-                                    setContextToggles({
-                                      mainPrompt: v, mainCategories: v,
-                                      guidedPrompt: v, guidedRules: v,
-                                      smartPrompt: v,
-                                      testing: v, problems: v, imageBank: v,
-                                    });
-                                  }}
-                                  className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
-                                    Object.values(contextToggles).every(v => v)
-                                      ? 'bg-sky-600 text-white'
-                                      : Object.values(contextToggles).some(v => v)
-                                        ? 'bg-sky-600/40 text-sky-200'
-                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                  }`}
-                                >
-                                  All
-                                </button>
+                                ))}
                               </div>
 
                               {/* Chat Input */}
@@ -8975,7 +9310,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                       e.preventDefault();
-                                      handleMainPromptAssistantSend();
+                                      handleSendUnifiedChat(
+                                        'main_prompt',
+                                        mainPromptAssistantInput,
+                                        mainPromptAssistantImages,
+                                        mainPromptAssistantDocument,
+                                        () => {
+                                          setMainPromptAssistantInput('');
+                                          setMainPromptAssistantImages([]);
+                                          setMainPromptAssistantDocument(null);
+                                        },
+                                      );
                                     }
                                   }}
                                   onPaste={async (e) => {
@@ -9005,7 +9350,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   rows={1}
                                 />
                                 <button
-                                  onClick={handleMainPromptAssistantSend}
+                                  onClick={() => handleSendUnifiedChat(
+                                    'main_prompt',
+                                    mainPromptAssistantInput,
+                                    mainPromptAssistantImages,
+                                    mainPromptAssistantDocument,
+                                    () => {
+                                      setMainPromptAssistantInput('');
+                                      setMainPromptAssistantImages([]);
+                                      setMainPromptAssistantDocument(null);
+                                    },
+                                  )}
                                   disabled={mainPromptAssistantLoading || (!mainPromptAssistantInput.trim() && mainPromptAssistantImages.length === 0)}
                                   className="px-4 py-2 bg-brand-gold hover:bg-brand-gold-light disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg text-slate-900 text-xs font-medium transition"
                                 >
@@ -10176,7 +10531,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 ref={guidedAssistantChatRef}
                                 className={`${chatHeightClasses[chatHeight]} overflow-y-auto bg-slate-950 rounded-lg p-3 space-y-3 border border-emerald-500/20 transition-all duration-300`}
                               >
-                                {guidedAssistantMessages.length === 0 ? (
+                                {unifiedChatMessages.length === 0 ? (
                                   <div className="h-full flex items-center justify-center text-slate-500 text-xs">
                                     <div className="text-center">
                                       <svg className="w-8 h-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -10186,19 +10541,39 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     </div>
                                   </div>
                                 ) : (
-                                  guidedAssistantMessages.map((msg, idx) => (
+                                  unifiedChatMessages.map((msg, idx) => (
+                                    msg.role === 'system' && msg.content.startsWith('---') ? (
+                                      <div key={idx} className="flex justify-center py-1">
+                                        <span className="text-[9px] text-slate-500 italic">{msg.content}</span>
+                                      </div>
+                                    ) : (
                                     <div
                                       key={idx}
                                       data-msg-index={idx}
                                       className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} transition-all duration-300`}
                                     >
                                       <div
-                                        className={`max-w-[85%] rounded-lg p-2.5 ${
+                                        className={`max-w-[85%] rounded-lg p-2.5 border-l-2 ${
                                           msg.role === 'user'
                                             ? 'bg-emerald-600 text-white'
                                             : 'bg-slate-800 text-slate-200'
+                                        } ${
+                                          msg.section === 'main_prompt' ? 'border-l-amber-500' :
+                                          msg.section === 'guided_gpt' ? 'border-l-emerald-500' :
+                                          msg.section === 'smart_prompt' ? 'border-l-purple-500' :
+                                          'border-l-transparent'
                                         }`}
                                       >
+                                        {/* Section badge */}
+                                        {msg.section && msg.role === 'user' && (
+                                          <span className={`inline-block text-[8px] px-1.5 py-0.5 rounded-full mb-1 ${
+                                            msg.section === 'main_prompt' ? 'bg-amber-600/30 text-amber-300' :
+                                            msg.section === 'guided_gpt' ? 'bg-emerald-600/30 text-emerald-300' :
+                                            'bg-purple-600/30 text-purple-300'
+                                          }`}>
+                                            {msg.section === 'main_prompt' ? 'Main' : msg.section === 'guided_gpt' ? 'Guided' : 'Smart'}
+                                          </span>
+                                        )}
                                         {/* Show attached images */}
                                         {msg.images && msg.images.length > 0 && (
                                           <div className="flex flex-wrap gap-1 mb-2">
@@ -10305,9 +10680,10 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         )}
                                       </div>
                                     </div>
+                                    )
                                   ))
                                 )}
-                                {guidedAssistantLoading && (
+                                {(unifiedChatLoading['guided_gpt'] || guidedAssistantLoading) && (
                                   <div className="flex justify-start">
                                     <div className="bg-slate-800 rounded-lg p-2.5">
                                       <div className="flex items-center gap-1.5">
@@ -10448,108 +10824,36 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 </div>
                               )}
 
-                              {/* Context Toggles — unified 9-pill bar shared by both chats */}
-                              <div className="flex items-center flex-wrap gap-x-3 gap-y-1 px-1 pb-1.5">
-                                {/* Main Prompt group */}
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-amber-300 font-medium">Main:</span>
-                                  {([
-                                    ['mainPrompt', 'Prompt'],
-                                    ['mainCategories', 'Categories'],
-                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
-                                    <button
-                                      key={key}
-                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
-                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        contextToggles[key]
-                                          ? 'bg-amber-600 text-white font-medium'
-                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
+                              {/* Set Scope + Independent Toggles */}
+                              <div className="flex items-center flex-wrap gap-x-2 gap-y-1 px-1 pb-1.5">
+                                <button
+                                  onClick={() => setShowChatScopeGrid(true)}
+                                  className={`px-2.5 py-0.5 text-[10px] rounded-full transition font-medium ${
+                                    chatScopeSelections.length > 0
+                                      ? 'bg-indigo-600 text-white'
+                                      : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                >
+                                  Set Scope{chatScopeSelections.length > 0 ? ` (${chatScopeSelections.length})` : ''}
+                                </button>
                                 <div className="w-px h-4 bg-slate-500/60"></div>
-                                {/* Guided GPT group */}
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-emerald-300 font-medium">Guided:</span>
-                                  {([
-                                    ['guidedPrompt', 'Prompt'],
-                                    ['guidedRules', 'Rules'],
-                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
-                                    <button
-                                      key={key}
-                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
-                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        contextToggles[key]
-                                          ? 'bg-emerald-600 text-white font-medium'
-                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                                <div className="w-px h-4 bg-slate-500/60"></div>
-                                {/* Smart Prompt group */}
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] text-purple-300 font-medium">Smart:</span>
+                                {([
+                                  ['testing', 'Testing', scopeTestingOn, setScopeTestingOn],
+                                  ['problems', 'Problems', scopeProblemsOn, setScopeProblemsOn],
+                                  ['bank', 'Bank', scopeBankOn, setScopeBankOn],
+                                ] as [string, string, boolean, React.Dispatch<React.SetStateAction<boolean>>][]).map(([key, label, isOn, setFn]) => (
                                   <button
-                                    onClick={() => setContextToggles(prev => ({ ...prev, smartPrompt: !prev.smartPrompt }))}
+                                    key={key}
+                                    onClick={() => setFn(!isOn)}
                                     className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                      contextToggles.smartPrompt
-                                        ? 'bg-purple-600 text-white font-medium'
+                                      isOn
+                                        ? 'bg-sky-600 text-white font-medium'
                                         : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
                                     }`}
                                   >
-                                    Prompt
+                                    {label}
                                   </button>
-                                </div>
-                                <div className="w-px h-4 bg-slate-500/60"></div>
-                                {/* Independent sections */}
-                                <div className="flex items-center gap-1">
-                                  {([
-                                    ['testing', 'Testing'],
-                                    ['problems', 'Problems'],
-                                    ['imageBank', 'Bank'],
-                                  ] as [keyof typeof contextToggles, string][]).map(([key, label]) => (
-                                    <button
-                                      key={key}
-                                      onClick={() => setContextToggles(prev => ({ ...prev, [key]: !prev[key] }))}
-                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        contextToggles[key]
-                                          ? 'bg-sky-600 text-white font-medium'
-                                          : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                                <div className="w-px h-4 bg-slate-500/60"></div>
-                                {/* All toggle */}
-                                <button
-                                  onClick={() => {
-                                    const allOn = Object.values(contextToggles).every(v => v);
-                                    const v = !allOn;
-                                    setContextToggles({
-                                      mainPrompt: v, mainCategories: v,
-                                      guidedPrompt: v, guidedRules: v,
-                                      smartPrompt: v,
-                                      testing: v, problems: v, imageBank: v,
-                                    });
-                                  }}
-                                  className={`px-2 py-0.5 text-[10px] rounded-full transition font-bold ${
-                                    Object.values(contextToggles).every(v => v)
-                                      ? 'bg-sky-600 text-white'
-                                      : Object.values(contextToggles).some(v => v)
-                                        ? 'bg-sky-600/40 text-sky-200'
-                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
-                                  }`}
-                                >
-                                  All
-                                </button>
+                                ))}
                               </div>
 
                               {/* Chat Input */}
@@ -10615,7 +10919,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                       e.preventDefault();
-                                      handleSendGuidedAssistant();
+                                      handleSendUnifiedChat(
+                                        'guided_gpt',
+                                        guidedAssistantInput,
+                                        guidedAssistantImages,
+                                        guidedAssistantDocument,
+                                        () => {
+                                          setGuidedAssistantInput('');
+                                          setGuidedAssistantImages([]);
+                                          setGuidedAssistantDocument(null);
+                                        },
+                                      );
                                     }
                                   }}
                                   onPaste={async (e) => {
@@ -10646,7 +10960,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   rows={1}
                                 />
                                 <button
-                                  onClick={handleSendGuidedAssistant}
+                                  onClick={() => handleSendUnifiedChat(
+                                    'guided_gpt',
+                                    guidedAssistantInput,
+                                    guidedAssistantImages,
+                                    guidedAssistantDocument,
+                                    () => {
+                                      setGuidedAssistantInput('');
+                                      setGuidedAssistantImages([]);
+                                      setGuidedAssistantDocument(null);
+                                    },
+                                  )}
                                   disabled={guidedAssistantLoading || (!guidedAssistantInput.trim() && guidedAssistantImages.length === 0)}
                                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg text-white text-xs font-medium transition"
                                 >
@@ -18671,6 +18995,22 @@ Start by introducing yourself and asking about their business in a friendly way.
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Chat Scope Grid Modal */}
+      {showChatScopeGrid && (
+        <SetScopeGrid
+          rows={scopeGridRows}
+          columns={[...tags.map(t => t.name), 'All']}
+          selected={chatScopeSelections}
+          onSave={(updated) => {
+            setChatScopeSelections(updated);
+            updateSettings({ chat_scope_selections: updated });
+          }}
+          onClose={() => setShowChatScopeGrid(false)}
+          title="Chat Scope — Select Context"
+          colorScheme="indigo"
+        />
       )}
 
       {/* Rules Checkbox Grid Popup (Portal) */}

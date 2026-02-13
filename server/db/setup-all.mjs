@@ -339,6 +339,51 @@ async function setup() {
       console.log('  - prompt_problem_areas already exists');
     }
 
+    // Migration: Unified Chat System columns
+    const hasUnifiedChatHistory = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'unified_chat_history'
+    `;
+    if (hasUnifiedChatHistory.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN unified_chat_history JSONB DEFAULT '[]'`;
+      console.log('  ✓ Added unified_chat_history column');
+    } else {
+      console.log('  - unified_chat_history already exists');
+    }
+
+    const hasUnifiedChatConversations = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'unified_chat_conversations'
+    `;
+    if (hasUnifiedChatConversations.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN unified_chat_conversations JSONB DEFAULT '[]'`;
+      console.log('  ✓ Added unified_chat_conversations column');
+    } else {
+      console.log('  - unified_chat_conversations already exists');
+    }
+
+    const hasUnifiedChatFiles = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'unified_chat_files'
+    `;
+    if (hasUnifiedChatFiles.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN unified_chat_files JSONB DEFAULT '[]'`;
+      console.log('  ✓ Added unified_chat_files column');
+    } else {
+      console.log('  - unified_chat_files already exists');
+    }
+
+    const hasChatScopeSelections = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'image_creation_settings' AND column_name = 'chat_scope_selections'
+    `;
+    if (hasChatScopeSelections.length === 0) {
+      await sql`ALTER TABLE image_creation_settings ADD COLUMN chat_scope_selections JSONB DEFAULT '[]'`;
+      console.log('  ✓ Added chat_scope_selections column');
+    } else {
+      console.log('  - chat_scope_selections already exists');
+    }
+
     console.log('');
 
     // ================================
