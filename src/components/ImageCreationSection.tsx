@@ -19,6 +19,8 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom';
 import FeedbackPopup from './FeedbackPopup';
 import SetScopeGrid, { ScopeGridRow } from './shared/SetScopeGrid';
+import VersionHistoryBrowser from './VersionHistoryBrowser';
+import { useVersionControl, VersionEntityType } from '../hooks/useVersionControl';
 
 // Types for Feedback System
 interface GeneratedImage {
@@ -1037,6 +1039,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [historySortOrder, setHistorySortOrder] = useState<'newest' | 'oldest'>('newest');
 
+  // Version History hook — auto-snapshot and browse prompt versions
+  const { saveVersionSnapshot } = useVersionControl(workflowId);
+
   // Chat File System state (like Claude Projects)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [expandedFileIds, setExpandedFileIds] = useState<Set<string>>(new Set());
@@ -1842,6 +1847,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       console.log('[Image Creation] Skipping update - not loaded yet');
       return;
     }
+
+    // Auto-snapshot persistent prompt fields before they change
+    setSettings(current => {
+      if (updates.main_prompt_persistent !== undefined && current.main_prompt_persistent) {
+        saveVersionSnapshot('main_prompt_persistent', 'all-tags', current.main_prompt_persistent, 'auto-save');
+      }
+      if (updates.guided_instructions_persistent !== undefined && current.guided_instructions_persistent) {
+        saveVersionSnapshot('guided_instructions_persistent', 'all-tags', current.guided_instructions_persistent, 'auto-save');
+      }
+      if (updates.smart_prompt_persistent !== undefined && current.smart_prompt_persistent) {
+        saveVersionSnapshot('smart_prompt_persistent', 'all-tags', current.smart_prompt_persistent, 'auto-save');
+      }
+      return current; // Don't mutate here — actual update happens below
+    });
+
     setSettings(current => {
       // 🛡️ PROTECTION: Prevent accidental erasure of audience_avatars content
       if (updates.audience_avatars) {
@@ -2859,6 +2879,20 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         if (Object.keys(safeUpdates).length === 0) return; // Nothing left to update
         updates = safeUpdates as Partial<AudienceAvatar>;
       }
+
+      // Auto-snapshot mainPrompt before change
+      if (currentAvatar.mainPrompt && currentAvatar.mainPrompt.length > 0) {
+        const entityId = currentAvatar.tag || currentAvatar.name || String(id);
+        saveVersionSnapshot('main_prompt', entityId, currentAvatar.mainPrompt, 'auto-save');
+      }
+    }
+
+    // Auto-snapshot categories before change
+    if (currentAvatar && updates.placeholderCategories !== undefined) {
+      if (currentAvatar.placeholderCategories && currentAvatar.placeholderCategories.length > 0) {
+        const entityId = currentAvatar.tag || currentAvatar.name || String(id);
+        saveVersionSnapshot('categories', entityId, currentAvatar.placeholderCategories, 'auto-save');
+      }
     }
 
     const newAvatars = settings.audience_avatars.map(a =>
@@ -2941,6 +2975,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Update a Guided GPT rule
   const handleUpdateGuidedRule = (ruleId: string, updates: Partial<TagBasedRule>) => {
     const existingRules = settings.guided_gpt_rules || [];
+
+    // Auto-snapshot rule text before change
+    if (updates.text !== undefined || updates.title !== undefined) {
+      const currentRule = existingRules.find(r => r.id === ruleId);
+      if (currentRule && currentRule.text) {
+        saveVersionSnapshot('guided_gpt_rule', ruleId, { title: currentRule.title, text: currentRule.text }, 'auto-save');
+      }
+    }
+
     const updatedRules = existingRules.map(r =>
       r.id === ruleId ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
     );
@@ -2980,6 +3023,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Update a Legacy Prompt rule
   const handleUpdateLegacyRule = (ruleId: string, updates: Partial<TagBasedRule>) => {
     const existingRules = settings.legacy_prompt_rules || [];
+
+    // Auto-snapshot rule text before change
+    if (updates.text !== undefined || updates.title !== undefined) {
+      const currentRule = existingRules.find(r => r.id === ruleId);
+      if (currentRule && currentRule.text) {
+        saveVersionSnapshot('legacy_prompt_rule', ruleId, { title: currentRule.title, text: currentRule.text }, 'auto-save');
+      }
+    }
+
     const updatedRules = existingRules.map(r =>
       r.id === ruleId ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
     );
@@ -3099,6 +3151,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Update a Guided GPT prompt
   const handleUpdateGuidedPrompt = (promptId: string, updates: Partial<GuidedGptPrompt>) => {
     const existingPrompts = settings.guided_gpt_prompts || [];
+    const currentPrompt = existingPrompts.find(p => p.id === promptId);
+
+    // Auto-snapshot guardrails before change
+    if (currentPrompt && updates.guardrails) {
+      const currentGuardrails = currentPrompt.guardrails;
+      if (currentGuardrails && (currentGuardrails.instructions || currentGuardrails.uniformDescription || currentGuardrails.defaultSubject || currentGuardrails.avoidList)) {
+        saveVersionSnapshot('guardrails', `guided-${promptId}`, currentGuardrails, 'auto-save');
+      }
+    }
+
     const updatedPrompts = existingPrompts.map(p =>
       p.id === promptId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
     );
@@ -3165,6 +3227,15 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Update a Smart Prompt prompt
   const handleUpdateSmartPrompt = (promptId: string, updates: Partial<SmartPromptPrompt>) => {
     const existingPrompts = settings.smart_prompt_prompts || [];
+
+    // Auto-snapshot guidance before change
+    if (updates.guidance !== undefined) {
+      const currentPrompt = existingPrompts.find(p => p.id === promptId);
+      if (currentPrompt && currentPrompt.guidance) {
+        saveVersionSnapshot('smart_prompt_guidance', promptId, currentPrompt.guidance, 'auto-save');
+      }
+    }
+
     const updatedPrompts = existingPrompts.map(p =>
       p.id === promptId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
     );
@@ -9665,7 +9736,26 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                             {/* Guardrails — Top/Bottom split */}
                             <div className="space-y-0">
-                              <label className="text-[10px] text-emerald-400 block mb-1">Guardrails / Instructions:</label>
+                              <label className="text-[10px] text-emerald-400 mb-1 flex items-center gap-1">
+                                Guardrails / Instructions:
+                                <VersionHistoryBrowser
+                                  entityType="guardrails"
+                                  entityId={`guided-${activeGuidedPrompt.id}`}
+                                  workflowId={workflowId}
+                                  onRestore={(content) => {
+                                    if (content && typeof content === 'object' && !content.text) {
+                                      handleUpdateGuidedPrompt(activeGuidedPrompt.id, { guardrails: content });
+                                    } else {
+                                      const text = typeof content === 'string' ? content : content?.text || '';
+                                      handleUpdateGuidedPrompt(activeGuidedPrompt.id, {
+                                        guardrails: { ...activeGuidedPrompt.guardrails, instructions: text }
+                                      });
+                                    }
+                                  }}
+                                  showNotification={showNotification}
+                                  accentColor="emerald"
+                                />
+                              </label>
                               {/* Top: Unique to this tag's prompt */}
                               <div className="relative">
                                 <div className="absolute top-1 right-2 text-[9px] text-emerald-400/60 pointer-events-none">
@@ -9685,8 +9775,16 @@ Start by introducing yourself and asking about their business in a friendly way.
                               <div className="h-px bg-emerald-500/30 mx-1" />
                               {/* Bottom: Persistent across ALL tags */}
                               <div className="relative">
-                                <div className="absolute top-1 right-2 text-[9px] text-emerald-400/60 pointer-events-none">
+                                <div className="absolute top-1 right-2 text-[9px] text-emerald-400/60 pointer-events-none flex items-center gap-1">
                                   All Tags
+                                  <VersionHistoryBrowser
+                                    entityType="guided_instructions_persistent"
+                                    entityId="all-tags"
+                                    workflowId={workflowId}
+                                    onRestore={(content) => updateSettings({ guided_instructions_persistent: content })}
+                                    showNotification={showNotification}
+                                    accentColor="emerald"
+                                  />
                                 </div>
                                 <textarea
                                   value={settings.guided_instructions_persistent || ''}
@@ -9854,13 +9952,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                                           />
                                         </div>
                                         <div className="flex items-center gap-1">
-                                          <button
-                                            onClick={() => openVersionHistory('guided_gpt_rule', rule.id, rule.title)}
-                                            className="text-blue-400 hover:text-blue-300 p-1 rounded hover:bg-blue-900/30 transition text-xs"
-                                            title="View version history"
-                                          >
-                                            History
-                                          </button>
+                                          <VersionHistoryBrowser
+                                            entityType="guided_gpt_rule"
+                                            entityId={rule.id}
+                                            workflowId={workflowId}
+                                            onRestore={(content) => {
+                                              if (content && typeof content === 'object' && content.text !== undefined) {
+                                                handleUpdateGuidedRule(rule.id, { title: content.title || rule.title, text: content.text });
+                                              } else {
+                                                handleUpdateGuidedRule(rule.id, { text: typeof content === 'string' ? content : String(content) });
+                                              }
+                                            }}
+                                            showNotification={showNotification}
+                                            accentColor="amber"
+                                          />
                                           <button
                                             onClick={() => {
                                               setGuidedRulesEditingId(rule.id);
@@ -12032,7 +12137,17 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                             {/* Guidance — Top/Bottom split */}
                             <div className="space-y-0">
-                              <label className="text-[10px] text-purple-400 mb-1 block">Guidance / Guardrails:</label>
+                              <label className="text-[10px] text-purple-400 mb-1 flex items-center gap-1">
+                                Guidance / Guardrails:
+                                <VersionHistoryBrowser
+                                  entityType="smart_prompt_guidance"
+                                  entityId={activeSmartPrompt.id}
+                                  workflowId={workflowId}
+                                  onRestore={(content) => handleUpdateSmartPrompt(activeSmartPrompt.id, { guidance: content })}
+                                  showNotification={showNotification}
+                                  accentColor="purple"
+                                />
+                              </label>
                               {/* Top: Unique to this tag's prompt */}
                               <div className="relative">
                                 <div className="absolute top-1 right-2 text-[9px] text-purple-400/60 pointer-events-none">
@@ -12050,8 +12165,16 @@ Start by introducing yourself and asking about their business in a friendly way.
                               <div className="h-px bg-purple-500/30 mx-1" />
                               {/* Bottom: Persistent across ALL tags */}
                               <div className="relative">
-                                <div className="absolute top-1 right-2 text-[9px] text-purple-400/60 pointer-events-none">
+                                <div className="absolute top-1 right-2 text-[9px] text-purple-400/60 pointer-events-none flex items-center gap-1">
                                   All Tags
+                                  <VersionHistoryBrowser
+                                    entityType="smart_prompt_persistent"
+                                    entityId="all-tags"
+                                    workflowId={workflowId}
+                                    onRestore={(content) => updateSettings({ smart_prompt_persistent: content })}
+                                    showNotification={showNotification}
+                                    accentColor="purple"
+                                  />
                                 </div>
                                 <textarea
                                   value={settings.smart_prompt_persistent || ''}
@@ -12181,13 +12304,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                                           />
                                         </div>
                                         <div className="flex items-center gap-1">
-                                          <button
-                                            onClick={() => openVersionHistory('smart_prompt_rule', rule.id, rule.title)}
-                                            className="text-blue-400 hover:text-blue-300 p-1 rounded hover:bg-blue-900/30 transition text-xs"
-                                            title="View version history"
-                                          >
-                                            History
-                                          </button>
+                                          <VersionHistoryBrowser
+                                            entityType="legacy_prompt_rule"
+                                            entityId={rule.id}
+                                            workflowId={workflowId}
+                                            onRestore={(content) => {
+                                              if (content && typeof content === 'object' && content.text !== undefined) {
+                                                handleUpdateLegacyRule(rule.id, { title: content.title || rule.title, text: content.text });
+                                              } else {
+                                                handleUpdateLegacyRule(rule.id, { text: typeof content === 'string' ? content : String(content) });
+                                              }
+                                            }}
+                                            showNotification={showNotification}
+                                            accentColor="purple"
+                                          />
                                           <button
                                             onClick={() => {
                                               setLegacyRulesEditingId(rule.id);
@@ -14293,8 +14423,16 @@ Start by introducing yourself and asking about their business in a friendly way.
                 {/* Main Prompt - shown in both modes */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs text-brand-gold/70">
+                    <label className="flex items-center gap-1 text-xs text-brand-gold/70">
                       Main Prompt {(activeAvatar.placeholderMode || 'simple') === 'simple' ? `(use {'{variation}'} placeholder)` : '(use placeholder categories below)'}
+                      <VersionHistoryBrowser
+                        entityType="main_prompt"
+                        entityId={activeAvatar.tag || activeAvatar.name || String(activeAvatar.id)}
+                        workflowId={workflowId}
+                        onRestore={(content) => handleUpdateAvatar(activeAvatar.id, { mainPrompt: content })}
+                        showNotification={showNotification}
+                        accentColor="amber"
+                      />
                     </label>
                     {(activeAvatar.placeholderMode || 'simple') === 'simple' && (
                       <button onClick={insertVariationPlaceholder} className="text-xs text-brand-cyan hover:text-brand-cyan-light">+ Insert {'{variation}'}</button>
@@ -14322,8 +14460,16 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <div className="h-px bg-amber-500/30 mx-1" />
                   {/* Bottom: Persistent across ALL tags */}
                   <div className="relative">
-                    <div className="absolute top-1 right-2 text-[9px] text-amber-400/60 pointer-events-none">
+                    <div className="absolute top-1 right-2 text-[9px] text-amber-400/60 pointer-events-none flex items-center gap-1">
                       All Tags
+                      <VersionHistoryBrowser
+                        entityType="main_prompt_persistent"
+                        entityId="all-tags"
+                        workflowId={workflowId}
+                        onRestore={(content) => updateSettings({ main_prompt_persistent: content })}
+                        showNotification={showNotification}
+                        accentColor="amber"
+                      />
                     </div>
                     <textarea
                       value={settings.main_prompt_persistent || ''}
@@ -14381,7 +14527,21 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 space-y-3 h-fit xl:sticky xl:top-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <label className="text-sm text-purple-300 font-medium">Placeholder Categories</label>
+                        <label className="text-sm text-purple-300 font-medium flex items-center gap-1">
+                          Placeholder Categories
+                          <VersionHistoryBrowser
+                            entityType="categories"
+                            entityId={activeAvatar.tag || activeAvatar.name || String(activeAvatar.id)}
+                            workflowId={workflowId}
+                            onRestore={(content) => {
+                              if (Array.isArray(content)) {
+                                handleUpdateAvatar(activeAvatar.id, { placeholderCategories: content });
+                              }
+                            }}
+                            showNotification={showNotification}
+                            accentColor="purple"
+                          />
+                        </label>
                         {(activeAvatar.placeholderCategories || []).length > 0 && (
                           <span className="text-xs text-purple-400/70 bg-slate-800 px-2 py-0.5 rounded">
                             {(activeAvatar.placeholderCategories || []).length} categories
@@ -17878,8 +18038,16 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                     {/* Main Prompt */}
                     <div>
-                      <label className="block text-xs text-brand-gold/70 mb-1">
+                      <label className="text-xs text-brand-gold/70 mb-1 flex items-center gap-1">
                         Main Prompt {(activeAvatar.placeholderMode || 'simple') === 'simple' ? `(use {'{variation}'} placeholder)` : '(use placeholder categories)'}
+                        <VersionHistoryBrowser
+                          entityType="main_prompt"
+                          entityId={activeAvatar.tag || activeAvatar.name || String(activeAvatar.id)}
+                          workflowId={workflowId}
+                          onRestore={(content) => handleUpdateAvatar(activeAvatar.id, { mainPrompt: content })}
+                          showNotification={showNotification}
+                          accentColor="amber"
+                        />
                       </label>
                       <textarea
                         value={activeAvatar.mainPrompt}
@@ -17932,7 +18100,21 @@ Start by introducing yourself and asking about their business in a friendly way.
                 <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-3 space-y-3 h-fit">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <label className="text-sm text-purple-300 font-medium">Placeholder Categories</label>
+                      <label className="text-sm text-purple-300 font-medium flex items-center gap-1">
+                        Placeholder Categories
+                        <VersionHistoryBrowser
+                          entityType="categories"
+                          entityId={activeAvatar.tag || activeAvatar.name || String(activeAvatar.id)}
+                          workflowId={workflowId}
+                          onRestore={(content) => {
+                            if (Array.isArray(content)) {
+                              handleUpdateAvatar(activeAvatar.id, { placeholderCategories: content });
+                            }
+                          }}
+                          showNotification={showNotification}
+                          accentColor="purple"
+                        />
+                      </label>
                       {(activeAvatar.placeholderCategories || []).length > 0 && (
                         <span className="text-xs text-purple-400/70 bg-slate-800 px-2 py-0.5 rounded">
                           {(activeAvatar.placeholderCategories || []).length} categories
