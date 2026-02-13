@@ -158,7 +158,7 @@ When creating image plans, consider:
 Be concise but thorough. Focus on practical, actionable advice based on how modern image AI actually works.`;
 
 // Call OpenAI API with vision support
-async function callOpenAI(messages, model, apiKey, maxTokens = 2048) {
+async function callOpenAI(messages, model, apiKey, maxTokens = 2048, systemPrompt = ASSISTANT_SYSTEM_PROMPT) {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -169,7 +169,7 @@ async function callOpenAI(messages, model, apiKey, maxTokens = 2048) {
       model,
       max_completion_tokens: maxTokens,
       messages: [
-        { role: 'system', content: ASSISTANT_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         ...messages
       ],
     }),
@@ -191,7 +191,7 @@ async function callOpenAI(messages, model, apiKey, maxTokens = 2048) {
 }
 
 // Call Anthropic API with vision support
-async function callAnthropic(messages, model, apiKey, maxTokens = 2048) {
+async function callAnthropic(messages, model, apiKey, maxTokens = 2048, systemPrompt = ASSISTANT_SYSTEM_PROMPT) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -202,7 +202,7 @@ async function callAnthropic(messages, model, apiKey, maxTokens = 2048) {
     body: JSON.stringify({
       model,
       max_tokens: maxTokens,
-      system: ASSISTANT_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages,
     }),
   });
@@ -223,7 +223,7 @@ async function callAnthropic(messages, model, apiKey, maxTokens = 2048) {
 }
 
 // Call Google Gemini API with vision support
-async function callGemini(messages, model, apiKey, maxTokens = 2048) {
+async function callGemini(messages, model, apiKey, maxTokens = 2048, systemPrompt = ASSISTANT_SYSTEM_PROMPT) {
   // Convert messages to Gemini format
   const geminiMessages = messages.map(msg => ({
     role: msg.role === 'assistant' ? 'model' : 'user',
@@ -251,7 +251,7 @@ async function callGemini(messages, model, apiKey, maxTokens = 2048) {
 
   // Add system instruction as first user message if needed
   const contents = [
-    { role: 'user', parts: [{ text: ASSISTANT_SYSTEM_PROMPT + '\n\nNow, please respond to the following:' }] },
+    { role: 'user', parts: [{ text: systemPrompt + '\n\nNow, please respond to the following:' }] },
     { role: 'model', parts: [{ text: 'Understood! I\'m ready to help you craft effective image prompts. What would you like to work on?' }] },
     ...geminiMessages
   ];
@@ -591,36 +591,41 @@ router.post('/chat', async (req, res) => {
       }
     }
 
-    // Inject context into the first user message
-    const processedMessages = messages.map((msg, idx) => {
-      if (idx === 0 && msg.role === 'user' && contextMessage) {
-        return { ...msg, content: contextMessage + msg.content };
-      }
-      return msg;
-    });
+    // Build the system prompt — append scope context so the AI ALWAYS sees it
+    // Previously context was injected into messages[0] only if it was a user message,
+    // which failed when conversation history started with an assistant response.
+    const systemPrompt = contextMessage
+      ? `${ASSISTANT_SYSTEM_PROMPT}\n\n${contextMessage}`
+      : ASSISTANT_SYSTEM_PROMPT;
 
     // Call the appropriate API
     let result;
     switch (modelInfo.provider) {
       case 'openai':
         result = await callOpenAI(
-          processedMessages.map(formatOpenAIMessage),
+          messages.map(formatOpenAIMessage),
           model,
-          apiKey
+          apiKey,
+          2048,
+          systemPrompt
         );
         break;
       case 'anthropic':
         result = await callAnthropic(
-          processedMessages.map(formatAnthropicMessage),
+          messages.map(formatAnthropicMessage),
           model,
-          apiKey
+          apiKey,
+          2048,
+          systemPrompt
         );
         break;
       case 'google':
         result = await callGemini(
-          processedMessages.map(formatOpenAIMessage), // Gemini uses similar format
+          messages.map(formatOpenAIMessage), // Gemini uses similar format
           model,
-          apiKey
+          apiKey,
+          2048,
+          systemPrompt
         );
         break;
     }

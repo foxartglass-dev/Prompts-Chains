@@ -5594,7 +5594,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       else if (section === 'smart_prompt') model = settings.guided_model || 'gpt-4o';
 
       // Send last 8 messages + current for AI memory without token bloat
-      const recentMessages = [...unifiedChatMessages.slice(-8), ...messagesToAdd];
+      // Filter out internal system messages (section switches) — they confuse the AI
+      const recentMessages = [...unifiedChatMessages.slice(-8), ...messagesToAdd]
+        .filter(m => m.role !== 'system');
 
       const res = await fetch('/api/prompt-assistant/chat', {
         method: 'POST',
