@@ -1108,6 +1108,10 @@ router.put('/settings/website/:websiteId', requireDb, async (req, res) => {
           main_prompt_chat_conversations,
           main_prompt_chat_model,
           chat_cross_references,
+          unified_chat_history,
+          unified_chat_conversations,
+          unified_chat_files,
+          chat_scope_selections,
           integration_mode,
           fallback_to_live,
           image_order,
@@ -1143,6 +1147,10 @@ router.put('/settings/website/:websiteId', requireDb, async (req, res) => {
           ${JSON.stringify(settingsData.main_prompt_chat_conversations ?? [])},
           ${settingsData.main_prompt_chat_model ?? 'gpt-4o'},
           ${JSON.stringify(settingsData.chat_cross_references ?? [])},
+          ${JSON.stringify(settingsData.unified_chat_history ?? [])},
+          ${JSON.stringify(settingsData.unified_chat_conversations ?? [])},
+          ${JSON.stringify(settingsData.unified_chat_files ?? [])},
+          ${JSON.stringify(settingsData.chat_scope_selections ?? [])},
           ${settingsData.integration_mode ?? 'bank'},
           ${settingsData.fallback_to_live ?? true},
           ${JSON.stringify(settingsData.image_order ?? [])},
@@ -1184,6 +1192,10 @@ router.put('/settings/website/:websiteId', requireDb, async (req, res) => {
           main_prompt_chat_conversations = COALESCE(${settingsData.main_prompt_chat_conversations ? JSON.stringify(settingsData.main_prompt_chat_conversations) : null}::jsonb, main_prompt_chat_conversations),
           main_prompt_chat_model = COALESCE(${settingsData.main_prompt_chat_model}, main_prompt_chat_model),
           chat_cross_references = COALESCE(${settingsData.chat_cross_references ? JSON.stringify(settingsData.chat_cross_references) : null}::jsonb, chat_cross_references),
+          unified_chat_history = COALESCE(${settingsData.unified_chat_history ? JSON.stringify(settingsData.unified_chat_history) : null}::jsonb, unified_chat_history),
+          unified_chat_conversations = COALESCE(${settingsData.unified_chat_conversations ? JSON.stringify(settingsData.unified_chat_conversations) : null}::jsonb, unified_chat_conversations),
+          unified_chat_files = COALESCE(${settingsData.unified_chat_files ? JSON.stringify(settingsData.unified_chat_files) : null}::jsonb, unified_chat_files),
+          chat_scope_selections = COALESCE(${settingsData.chat_scope_selections ? JSON.stringify(settingsData.chat_scope_selections) : null}::jsonb, chat_scope_selections),
           integration_mode = COALESCE(${settingsData.integration_mode}, integration_mode),
           fallback_to_live = COALESCE(${settingsData.fallback_to_live}, fallback_to_live),
           image_order = COALESCE(${settingsData.image_order ? JSON.stringify(settingsData.image_order) : null}::jsonb, image_order),
@@ -1390,7 +1402,12 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           guided_guardrails: {},
           // Chat Files and Conversations
           consultant_chat_files: [],
-          consultant_chat_conversations: []
+          consultant_chat_conversations: [],
+          // Unified Chat System
+          unified_chat_history: [],
+          unified_chat_conversations: [],
+          unified_chat_files: [],
+          chat_scope_selections: []
         },
         isNew: true
       });
@@ -1477,7 +1494,12 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         guided_guardrails: results[0].guided_guardrails || {},
         // Chat Files and Conversations
         consultant_chat_files: results[0].consultant_chat_files || [],
-        consultant_chat_conversations: results[0].consultant_chat_conversations || []
+        consultant_chat_conversations: results[0].consultant_chat_conversations || [],
+        // Unified Chat System
+        unified_chat_history: results[0].unified_chat_history || [],
+        unified_chat_conversations: results[0].unified_chat_conversations || [],
+        unified_chat_files: results[0].unified_chat_files || [],
+        chat_scope_selections: results[0].chat_scope_selections || []
       },
       imageBankMigrated  // Tell frontend to use new /api/image-bank API
     });
@@ -1576,6 +1598,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       // Chat Files and Conversations (for organized chat sessions)
       consultant_chat_files,
       consultant_chat_conversations,
+      // Unified Chat System
+      unified_chat_history,
+      unified_chat_conversations,
+      unified_chat_files,
+      chat_scope_selections,
       // Guided GPT and Smart Prompt prompts/rules (for Generate Live persistence)
       guided_gpt_prompts,
       smart_prompt_prompts,
@@ -1915,7 +1942,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   text_snippets,
                   category_templates,
                   consultant_chat_files,
-                  consultant_chat_conversations
+                  consultant_chat_conversations,
+                  unified_chat_history,
+                  unified_chat_conversations,
+                  unified_chat_files,
+                  chat_scope_selections
                 ) VALUES (
                   ${websiteId},
                   ${enabled ?? false},
@@ -1942,7 +1973,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   ${JSON.stringify(text_snippets ?? [])},
                   ${JSON.stringify(category_templates ?? [])},
                   ${JSON.stringify(consultant_chat_files ?? [])},
-                  ${JSON.stringify(consultant_chat_conversations ?? [])}
+                  ${JSON.stringify(consultant_chat_conversations ?? [])},
+                  ${JSON.stringify(unified_chat_history ?? [])},
+                  ${JSON.stringify(unified_chat_conversations ?? [])},
+                  ${JSON.stringify(unified_chat_files ?? [])},
+                  ${JSON.stringify(chat_scope_selections ?? [])}
                 )
                 RETURNING id
               `
@@ -1973,7 +2008,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   text_snippets,
                   category_templates,
                   consultant_chat_files,
-                  consultant_chat_conversations
+                  consultant_chat_conversations,
+                  unified_chat_history,
+                  unified_chat_conversations,
+                  unified_chat_files,
+                  chat_scope_selections
                 ) VALUES (
                   ${workflowId},
                 ${enabled ?? false},
@@ -2000,7 +2039,11 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 ${JSON.stringify(text_snippets ?? [])},
                 ${JSON.stringify(category_templates ?? [])},
                 ${JSON.stringify(consultant_chat_files ?? [])},
-                ${JSON.stringify(consultant_chat_conversations ?? [])}
+                ${JSON.stringify(consultant_chat_conversations ?? [])},
+                ${JSON.stringify(unified_chat_history ?? [])},
+                ${JSON.stringify(unified_chat_conversations ?? [])},
+                ${JSON.stringify(unified_chat_files ?? [])},
+                ${JSON.stringify(chat_scope_selections ?? [])}
               )
               RETURNING id
             `;
@@ -2047,6 +2090,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
                 consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
                 consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
+                unified_chat_history = COALESCE(${unified_chat_history ? JSON.stringify(unified_chat_history) : null}::jsonb, unified_chat_history),
+                unified_chat_conversations = COALESCE(${unified_chat_conversations ? JSON.stringify(unified_chat_conversations) : null}::jsonb, unified_chat_conversations),
+                unified_chat_files = COALESCE(${unified_chat_files ? JSON.stringify(unified_chat_files) : null}::jsonb, unified_chat_files),
+                chat_scope_selections = COALESCE(${chat_scope_selections ? JSON.stringify(chat_scope_selections) : null}::jsonb, chat_scope_selections),
                 guided_gpt_prompts = COALESCE(${guided_gpt_prompts ? JSON.stringify(guided_gpt_prompts) : null}::jsonb, guided_gpt_prompts),
                 smart_prompt_prompts = COALESCE(${smart_prompt_prompts ? JSON.stringify(smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
                 guided_gpt_rules = COALESCE(${guided_gpt_rules ? JSON.stringify(guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
@@ -2093,6 +2140,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                 category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
                 consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
                 consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
+                unified_chat_history = COALESCE(${unified_chat_history ? JSON.stringify(unified_chat_history) : null}::jsonb, unified_chat_history),
+                unified_chat_conversations = COALESCE(${unified_chat_conversations ? JSON.stringify(unified_chat_conversations) : null}::jsonb, unified_chat_conversations),
+                unified_chat_files = COALESCE(${unified_chat_files ? JSON.stringify(unified_chat_files) : null}::jsonb, unified_chat_files),
+                chat_scope_selections = COALESCE(${chat_scope_selections ? JSON.stringify(chat_scope_selections) : null}::jsonb, chat_scope_selections),
                 guided_gpt_prompts = COALESCE(${guided_gpt_prompts ? JSON.stringify(guided_gpt_prompts) : null}::jsonb, guided_gpt_prompts),
                 smart_prompt_prompts = COALESCE(${smart_prompt_prompts ? JSON.stringify(smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
                 guided_gpt_rules = COALESCE(${guided_gpt_rules ? JSON.stringify(guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
@@ -2140,6 +2191,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
                   consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
                   consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
+                  unified_chat_history = COALESCE(${unified_chat_history ? JSON.stringify(unified_chat_history) : null}::jsonb, unified_chat_history),
+                  unified_chat_conversations = COALESCE(${unified_chat_conversations ? JSON.stringify(unified_chat_conversations) : null}::jsonb, unified_chat_conversations),
+                  unified_chat_files = COALESCE(${unified_chat_files ? JSON.stringify(unified_chat_files) : null}::jsonb, unified_chat_files),
+                  chat_scope_selections = COALESCE(${chat_scope_selections ? JSON.stringify(chat_scope_selections) : null}::jsonb, chat_scope_selections),
                   guided_gpt_prompts = COALESCE(${guided_gpt_prompts ? JSON.stringify(guided_gpt_prompts) : null}::jsonb, guided_gpt_prompts),
                   smart_prompt_prompts = COALESCE(${smart_prompt_prompts ? JSON.stringify(smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
                   guided_gpt_rules = COALESCE(${guided_gpt_rules ? JSON.stringify(guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
@@ -2176,6 +2231,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
                   category_templates = COALESCE(${category_templates ? JSON.stringify(category_templates) : null}::jsonb, category_templates),
                   consultant_chat_files = COALESCE(${consultant_chat_files ? JSON.stringify(consultant_chat_files) : null}::jsonb, consultant_chat_files),
                   consultant_chat_conversations = COALESCE(${consultant_chat_conversations ? JSON.stringify(consultant_chat_conversations) : null}::jsonb, consultant_chat_conversations),
+                  unified_chat_history = COALESCE(${unified_chat_history ? JSON.stringify(unified_chat_history) : null}::jsonb, unified_chat_history),
+                  unified_chat_conversations = COALESCE(${unified_chat_conversations ? JSON.stringify(unified_chat_conversations) : null}::jsonb, unified_chat_conversations),
+                  unified_chat_files = COALESCE(${unified_chat_files ? JSON.stringify(unified_chat_files) : null}::jsonb, unified_chat_files),
+                  chat_scope_selections = COALESCE(${chat_scope_selections ? JSON.stringify(chat_scope_selections) : null}::jsonb, chat_scope_selections),
                   guided_gpt_prompts = COALESCE(${guided_gpt_prompts ? JSON.stringify(guided_gpt_prompts) : null}::jsonb, guided_gpt_prompts),
                   smart_prompt_prompts = COALESCE(${smart_prompt_prompts ? JSON.stringify(smart_prompt_prompts) : null}::jsonb, smart_prompt_prompts),
                   guided_gpt_rules = COALESCE(${guided_gpt_rules ? JSON.stringify(guided_gpt_rules) : null}::jsonb, guided_gpt_rules),
