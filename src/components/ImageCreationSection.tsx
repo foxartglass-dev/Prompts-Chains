@@ -10166,6 +10166,20 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                           {!guidedRulesCollapsed && (
                             <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-brand-gold/20">
+                              {/* Testing Slots Bar (Guided GPT Rules) */}
+                              <TestingSlotsSelector
+                                slots={settings.testing_slots || []}
+                                activeSlotId={settings.active_testing_slot}
+                                onSlotsChange={handleSlotsChange}
+                                onActiveSlotChange={handleActiveSlotChange}
+                                onPromoteToMain={handlePromoteToMain}
+                                getMainContent={getMainContent}
+                                projects={settings.testing_slot_projects || []}
+                                onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                                onRunTest={handleRunTest}
+                                testRunning={testSlotRunning}
+                              />
+
                               <p className="text-[10px] text-brand-gold/60">
                                 Define rules per tag that guide GPT when generating image prompts. Rules replace the old placement rules.
                               </p>
@@ -12324,6 +12338,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                     )}
                     {settings.live_prompt_mode === 'smart_prompt' && (
                       <div className="space-y-3 mt-2">
+                        {/* Testing Slots Bar (Smart Prompt) */}
+                        <TestingSlotsSelector
+                          slots={settings.testing_slots || []}
+                          activeSlotId={settings.active_testing_slot}
+                          onSlotsChange={handleSlotsChange}
+                          onActiveSlotChange={handleActiveSlotChange}
+                          onPromoteToMain={handlePromoteToMain}
+                          getMainContent={getMainContent}
+                          projects={settings.testing_slot_projects || []}
+                          onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                          onRunTest={handleRunTest}
+                          testRunning={testSlotRunning}
+                        />
+
                         <p className="text-[10px] text-purple-300/70 bg-purple-500/10 p-2 rounded">
                           Legacy mode: GPT-4o-mini creates prompts automatically. Create different guidance per tag (H, J, C) or use Global for all.
                         </p>
@@ -12635,6 +12663,20 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                           {!legacyRulesCollapsed && (
                             <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-purple-500/20">
+                              {/* Testing Slots Bar (Legacy Prompt Rules) */}
+                              <TestingSlotsSelector
+                                slots={settings.testing_slots || []}
+                                activeSlotId={settings.active_testing_slot}
+                                onSlotsChange={handleSlotsChange}
+                                onActiveSlotChange={handleActiveSlotChange}
+                                onPromoteToMain={handlePromoteToMain}
+                                getMainContent={getMainContent}
+                                projects={settings.testing_slot_projects || []}
+                                onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                                onRunTest={handleRunTest}
+                                testRunning={testSlotRunning}
+                              />
+
                               <p className="text-[10px] text-purple-300/60">
                                 Define rules per tag that guide GPT when generating image prompts. Rules replace the old placement rules.
                               </p>
@@ -13573,6 +13615,22 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-600/30 text-emerald-300">
                     ALWAYS ON
                   </span>
+                </div>
+
+                {/* Testing Slots Bar (Smart Matching Rules) */}
+                <div className="mb-3">
+                  <TestingSlotsSelector
+                    slots={settings.testing_slots || []}
+                    activeSlotId={settings.active_testing_slot}
+                    onSlotsChange={handleSlotsChange}
+                    onActiveSlotChange={handleActiveSlotChange}
+                    onPromoteToMain={handlePromoteToMain}
+                    getMainContent={getMainContent}
+                    projects={settings.testing_slot_projects || []}
+                    onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                    onRunTest={handleRunTest}
+                    testRunning={testSlotRunning}
+                  />
                 </div>
 
                 {/* 4 COLORED RULES - Smart Matching always ON */}
