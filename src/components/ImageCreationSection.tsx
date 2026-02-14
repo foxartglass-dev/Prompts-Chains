@@ -2079,68 +2079,6 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Helper: check if we're viewing a test slot
   const isViewingTestSlot = !!settings.active_testing_slot && !!activeTestingSlot;
 
-  // Run test: execute prompt chain with test slot content and store result
-  const handleRunTest = useCallback(async () => {
-    if (!activeTestingSlot || !activeAvatar) return;
-    const slotContent = activeTestingSlot.content;
-    const keyword = activeAvatar.name || 'test-keyword';
-    const tag = activeAvatar.tag || 'H';
-
-    setTestSlotRunning(true);
-    try {
-      // Build the prompt from slot content, falling back to main for missing fields
-      const mainPrompt = slotContent.mainPrompt ?? activeAvatar.mainPrompt ?? '';
-      const persistentPrompt = slotContent.mainPromptPersistent ?? settings.main_prompt_persistent ?? '';
-      const fullPrompt = persistentPrompt
-        ? `${mainPrompt}\n\n--- All-Tags Prompt ---\n${persistentPrompt}`
-        : mainPrompt;
-
-      if (!fullPrompt.trim()) {
-        showNotification('No prompt content in test slot to run', 'error');
-        setTestSlotRunning(false);
-        return;
-      }
-
-      // Call a test generation endpoint
-      const res = await fetch('/api/prompt-assistant/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: settings.guided_model || 'gpt-4o',
-          messages: [{
-            role: 'user',
-            content: `Generate a complete SEO article using the following prompt template. Replace any placeholders with realistic examples for the keyword "${keyword}" (tag: ${tag}).\n\nPrompt Template:\n${fullPrompt}\n\nWrite the complete article now. Include a title, headers, and body text. Make it about 500-800 words.`,
-          }],
-          context: null,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        // Store result in the slot
-        const testResult = {
-          id: crypto.randomUUID ? crypto.randomUUID() : `tr-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          articleContent: data.response,
-          keyword,
-          tag,
-          model: settings.guided_model || 'gpt-4o',
-        };
-        const existingResults = slotContent.testResults || [];
-        updateActiveSlotContent({
-          testResults: [testResult, ...existingResults].slice(0, 10), // Keep last 10
-        });
-        showNotification(`Test run complete! Result saved to slot.`, 'success');
-      } else {
-        showNotification(data.error || 'Test run failed', 'error');
-      }
-    } catch (error) {
-      console.error('[Test Run] Error:', error);
-      showNotification('Test run failed', 'error');
-    }
-    setTestSlotRunning(false);
-  }, [activeTestingSlot, activeAvatar, settings.main_prompt_persistent, settings.guided_model, updateActiveSlotContent, showNotification]);
-
   // Provide header controls to parent component (for rendering in section header)
   useEffect(() => {
     if (!onHeaderControlsReady || loading) return;
@@ -2249,6 +2187,68 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   // Get active avatar
   const activeAvatar = settings.audience_avatars.find(a => a.id === activeAvatarId) || settings.audience_avatars[0];
+
+  // Run test: execute prompt chain with test slot content and store result
+  const handleRunTest = useCallback(async () => {
+    if (!activeTestingSlot || !activeAvatar) return;
+    const slotContent = activeTestingSlot.content;
+    const keyword = activeAvatar.name || 'test-keyword';
+    const tag = activeAvatar.tag || 'H';
+
+    setTestSlotRunning(true);
+    try {
+      // Build the prompt from slot content, falling back to main for missing fields
+      const mainPrompt = slotContent.mainPrompt ?? activeAvatar.mainPrompt ?? '';
+      const persistentPrompt = slotContent.mainPromptPersistent ?? settings.main_prompt_persistent ?? '';
+      const fullPrompt = persistentPrompt
+        ? `${mainPrompt}\n\n--- All-Tags Prompt ---\n${persistentPrompt}`
+        : mainPrompt;
+
+      if (!fullPrompt.trim()) {
+        showNotification('No prompt content in test slot to run', 'error');
+        setTestSlotRunning(false);
+        return;
+      }
+
+      // Call a test generation endpoint
+      const res = await fetch('/api/prompt-assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: settings.guided_model || 'gpt-4o',
+          messages: [{
+            role: 'user',
+            content: `Generate a complete SEO article using the following prompt template. Replace any placeholders with realistic examples for the keyword "${keyword}" (tag: ${tag}).\n\nPrompt Template:\n${fullPrompt}\n\nWrite the complete article now. Include a title, headers, and body text. Make it about 500-800 words.`,
+          }],
+          context: null,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Store result in the slot
+        const testResult = {
+          id: crypto.randomUUID ? crypto.randomUUID() : `tr-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          articleContent: data.response,
+          keyword,
+          tag,
+          model: settings.guided_model || 'gpt-4o',
+        };
+        const existingResults = slotContent.testResults || [];
+        updateActiveSlotContent({
+          testResults: [testResult, ...existingResults].slice(0, 10), // Keep last 10
+        });
+        showNotification(`Test run complete! Result saved to slot.`, 'success');
+      } else {
+        showNotification(data.error || 'Test run failed', 'error');
+      }
+    } catch (error) {
+      console.error('[Test Run] Error:', error);
+      showNotification('Test run failed', 'error');
+    }
+    setTestSlotRunning(false);
+  }, [activeTestingSlot, activeAvatar, settings.main_prompt_persistent, settings.guided_model, updateActiveSlotContent, showNotification]);
 
   // ========== Multi-prompt per tag system ==========
   // Group avatars by tag (including global ones)
