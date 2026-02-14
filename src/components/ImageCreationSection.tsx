@@ -1180,6 +1180,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [testingModeOpen, setTestingModeOpen] = useState(false);
   const [testingModeLoading, setTestingModeLoading] = useState(false);
   const [testSlotRunning, setTestSlotRunning] = useState(false); // Run Test for test slots
+  const [showMainPromptSlots, setShowMainPromptSlots] = useState(false); // Testing slots bar in Main Prompt chat
+  const [showGuidedSlots, setShowGuidedSlots] = useState(false); // Testing slots bar in Guided GPT chat
 
   // Multi-tab testing system - each tab is an independent testing session
   interface TestingTab {
@@ -9501,38 +9503,47 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     {label}
                                   </button>
                                 ))}
-                                {/* Test Slot Quick Switcher */}
-                                {(settings.testing_slots || []).length > 0 && (
-                                  <>
-                                    <div className="w-px h-4 bg-slate-500/60"></div>
-                                    <button
-                                      onClick={() => handleActiveSlotChange(null)}
-                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        !settings.active_testing_slot
-                                          ? 'bg-green-600 text-white font-medium'
-                                          : 'bg-slate-700/80 text-green-400 hover:bg-slate-600/80'
-                                      }`}
-                                      title="Switch to Main (Live) prompts"
-                                    >
-                                      Main
-                                    </button>
-                                    {(settings.testing_slots || []).slice(0, 5).map((slot: TestingSlot) => (
-                                      <button
-                                        key={slot.id}
-                                        onClick={() => handleActiveSlotChange(slot.id)}
-                                        className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                          settings.active_testing_slot === slot.id
-                                            ? 'bg-orange-600 text-white font-medium'
-                                            : 'bg-slate-700/80 text-orange-400 hover:bg-slate-600/80'
-                                        }`}
-                                        title={`Switch to Test ${slot.number}: ${slot.name}`}
-                                      >
-                                        T{slot.number}
-                                      </button>
-                                    ))}
-                                  </>
-                                )}
+                                {/* Test Slots Toggle */}
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                <button
+                                  onClick={() => setShowMainPromptSlots(!showMainPromptSlots)}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                    showMainPromptSlots
+                                      ? 'bg-orange-600 text-white font-medium'
+                                      : settings.active_testing_slot
+                                        ? 'bg-orange-500/30 text-orange-300 hover:bg-orange-500/50'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                  title="Toggle Testing Slots bar"
+                                >
+                                  Slots{(settings.testing_slots || []).length > 0 ? ` (${(settings.testing_slots || []).length})` : ''}
+                                </button>
+                                {/* Quick active slot indicator when bar is closed */}
+                                {settings.active_testing_slot && !showMainPromptSlots && (() => {
+                                  const slot = (settings.testing_slots || []).find(s => s.id === settings.active_testing_slot);
+                                  return slot ? (
+                                    <span className="text-[9px] text-orange-400/70">T{slot.number}</span>
+                                  ) : null;
+                                })()}
                               </div>
+
+                              {/* Testing Slots Bar (Main Prompt chat) */}
+                              {showMainPromptSlots && (
+                                <div className="px-1 pb-1.5">
+                                  <TestingSlotsSelector
+                                    slots={settings.testing_slots || []}
+                                    activeSlotId={settings.active_testing_slot}
+                                    onSlotsChange={handleSlotsChange}
+                                    onActiveSlotChange={handleActiveSlotChange}
+                                    onPromoteToMain={handlePromoteToMain}
+                                    getMainContent={getMainContent}
+                                    projects={settings.testing_slot_projects || []}
+                                    onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                                    onRunTest={handleRunTest}
+                                    testRunning={testSlotRunning}
+                                  />
+                                </div>
+                              )}
 
                               {/* Chat Input */}
                               <div className="flex gap-2">
@@ -10155,6 +10166,20 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                           {!guidedRulesCollapsed && (
                             <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-brand-gold/20">
+                              {/* Testing Slots Bar (Guided GPT Rules) */}
+                              <TestingSlotsSelector
+                                slots={settings.testing_slots || []}
+                                activeSlotId={settings.active_testing_slot}
+                                onSlotsChange={handleSlotsChange}
+                                onActiveSlotChange={handleActiveSlotChange}
+                                onPromoteToMain={handlePromoteToMain}
+                                getMainContent={getMainContent}
+                                projects={settings.testing_slot_projects || []}
+                                onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                                onRunTest={handleRunTest}
+                                testRunning={testSlotRunning}
+                              />
+
                               <p className="text-[10px] text-brand-gold/60">
                                 Define rules per tag that guide GPT when generating image prompts. Rules replace the old placement rules.
                               </p>
@@ -11216,38 +11241,47 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     {label}
                                   </button>
                                 ))}
-                                {/* Test Slot Quick Switcher */}
-                                {(settings.testing_slots || []).length > 0 && (
-                                  <>
-                                    <div className="w-px h-4 bg-slate-500/60"></div>
-                                    <button
-                                      onClick={() => handleActiveSlotChange(null)}
-                                      className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                        !settings.active_testing_slot
-                                          ? 'bg-green-600 text-white font-medium'
-                                          : 'bg-slate-700/80 text-green-400 hover:bg-slate-600/80'
-                                      }`}
-                                      title="Switch to Main (Live) prompts"
-                                    >
-                                      Main
-                                    </button>
-                                    {(settings.testing_slots || []).slice(0, 5).map((slot: TestingSlot) => (
-                                      <button
-                                        key={slot.id}
-                                        onClick={() => handleActiveSlotChange(slot.id)}
-                                        className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                          settings.active_testing_slot === slot.id
-                                            ? 'bg-orange-600 text-white font-medium'
-                                            : 'bg-slate-700/80 text-orange-400 hover:bg-slate-600/80'
-                                        }`}
-                                        title={`Switch to Test ${slot.number}: ${slot.name}`}
-                                      >
-                                        T{slot.number}
-                                      </button>
-                                    ))}
-                                  </>
-                                )}
+                                {/* Test Slots Toggle */}
+                                <div className="w-px h-4 bg-slate-500/60"></div>
+                                <button
+                                  onClick={() => setShowGuidedSlots(!showGuidedSlots)}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                    showGuidedSlots
+                                      ? 'bg-orange-600 text-white font-medium'
+                                      : settings.active_testing_slot
+                                        ? 'bg-orange-500/30 text-orange-300 hover:bg-orange-500/50'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                  title="Toggle Testing Slots bar"
+                                >
+                                  Slots{(settings.testing_slots || []).length > 0 ? ` (${(settings.testing_slots || []).length})` : ''}
+                                </button>
+                                {/* Quick active slot indicator when bar is closed */}
+                                {settings.active_testing_slot && !showGuidedSlots && (() => {
+                                  const slot = (settings.testing_slots || []).find(s => s.id === settings.active_testing_slot);
+                                  return slot ? (
+                                    <span className="text-[9px] text-orange-400/70">T{slot.number}</span>
+                                  ) : null;
+                                })()}
                               </div>
+
+                              {/* Testing Slots Bar (Guided GPT chat) */}
+                              {showGuidedSlots && (
+                                <div className="px-1 pb-1.5">
+                                  <TestingSlotsSelector
+                                    slots={settings.testing_slots || []}
+                                    activeSlotId={settings.active_testing_slot}
+                                    onSlotsChange={handleSlotsChange}
+                                    onActiveSlotChange={handleActiveSlotChange}
+                                    onPromoteToMain={handlePromoteToMain}
+                                    getMainContent={getMainContent}
+                                    projects={settings.testing_slot_projects || []}
+                                    onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                                    onRunTest={handleRunTest}
+                                    testRunning={testSlotRunning}
+                                  />
+                                </div>
+                              )}
 
                               {/* Chat Input */}
                               <div className="flex gap-2">
@@ -12304,6 +12338,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                     )}
                     {settings.live_prompt_mode === 'smart_prompt' && (
                       <div className="space-y-3 mt-2">
+                        {/* Testing Slots Bar (Smart Prompt) */}
+                        <TestingSlotsSelector
+                          slots={settings.testing_slots || []}
+                          activeSlotId={settings.active_testing_slot}
+                          onSlotsChange={handleSlotsChange}
+                          onActiveSlotChange={handleActiveSlotChange}
+                          onPromoteToMain={handlePromoteToMain}
+                          getMainContent={getMainContent}
+                          projects={settings.testing_slot_projects || []}
+                          onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                          onRunTest={handleRunTest}
+                          testRunning={testSlotRunning}
+                        />
+
                         <p className="text-[10px] text-purple-300/70 bg-purple-500/10 p-2 rounded">
                           Legacy mode: GPT-4o-mini creates prompts automatically. Create different guidance per tag (H, J, C) or use Global for all.
                         </p>
@@ -12615,6 +12663,20 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                           {!legacyRulesCollapsed && (
                             <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-purple-500/20">
+                              {/* Testing Slots Bar (Legacy Prompt Rules) */}
+                              <TestingSlotsSelector
+                                slots={settings.testing_slots || []}
+                                activeSlotId={settings.active_testing_slot}
+                                onSlotsChange={handleSlotsChange}
+                                onActiveSlotChange={handleActiveSlotChange}
+                                onPromoteToMain={handlePromoteToMain}
+                                getMainContent={getMainContent}
+                                projects={settings.testing_slot_projects || []}
+                                onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                                onRunTest={handleRunTest}
+                                testRunning={testSlotRunning}
+                              />
+
                               <p className="text-[10px] text-purple-300/60">
                                 Define rules per tag that guide GPT when generating image prompts. Rules replace the old placement rules.
                               </p>
@@ -13553,6 +13615,22 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-600/30 text-emerald-300">
                     ALWAYS ON
                   </span>
+                </div>
+
+                {/* Testing Slots Bar (Smart Matching Rules) */}
+                <div className="mb-3">
+                  <TestingSlotsSelector
+                    slots={settings.testing_slots || []}
+                    activeSlotId={settings.active_testing_slot}
+                    onSlotsChange={handleSlotsChange}
+                    onActiveSlotChange={handleActiveSlotChange}
+                    onPromoteToMain={handlePromoteToMain}
+                    getMainContent={getMainContent}
+                    projects={settings.testing_slot_projects || []}
+                    onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                    onRunTest={handleRunTest}
+                    testRunning={testSlotRunning}
+                  />
                 </div>
 
                 {/* 4 COLORED RULES - Smart Matching always ON */}
