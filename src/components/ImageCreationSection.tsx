@@ -1182,6 +1182,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [testSlotRunning, setTestSlotRunning] = useState(false); // Run Test for test slots
   const [showMainPromptSlots, setShowMainPromptSlots] = useState(false); // Testing slots bar in Main Prompt chat
   const [showGuidedSlots, setShowGuidedSlots] = useState(false); // Testing slots bar in Guided GPT chat
+  const [showSmartSlots, setShowSmartSlots] = useState(false); // Testing slots bar in Smart Prompt chat
 
   // Multi-tab testing system - each tab is an independent testing session
   interface TestingTab {
@@ -9503,10 +9504,14 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     {label}
                                   </button>
                                 ))}
-                                {/* Test Slots Toggle */}
+                                {/* Test Slots Toggles - Main, Guided, Smart */}
                                 <div className="w-px h-4 bg-slate-500/60"></div>
                                 <button
-                                  onClick={() => setShowMainPromptSlots(!showMainPromptSlots)}
+                                  onClick={() => {
+                                    setShowMainPromptSlots(!showMainPromptSlots);
+                                    setShowGuidedSlots(false);
+                                    setShowSmartSlots(false);
+                                  }}
                                   className={`px-2 py-0.5 text-[10px] rounded-full transition ${
                                     showMainPromptSlots
                                       ? 'bg-orange-600 text-white font-medium'
@@ -9514,12 +9519,46 @@ Start by introducing yourself and asking about their business in a friendly way.
                                         ? 'bg-orange-500/30 text-orange-300 hover:bg-orange-500/50'
                                         : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
                                   }`}
-                                  title="Toggle Testing Slots bar"
+                                  title="Toggle Main Prompt Testing Slots"
                                 >
-                                  Slots{(settings.testing_slots || []).length > 0 ? ` (${(settings.testing_slots || []).length})` : ''}
+                                  Main{(settings.testing_slots || []).length > 0 ? ` (${(settings.testing_slots || []).length})` : ''}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setShowGuidedSlots(!showGuidedSlots);
+                                    setShowMainPromptSlots(false);
+                                    setShowSmartSlots(false);
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                    showGuidedSlots
+                                      ? 'bg-emerald-600 text-white font-medium'
+                                      : settings.active_testing_slot
+                                        ? 'bg-emerald-500/30 text-emerald-300 hover:bg-emerald-500/50'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                  title="Toggle Guided GPT Testing Slots"
+                                >
+                                  Guided{(settings.testing_slots || []).length > 0 ? ` (${(settings.testing_slots || []).length})` : ''}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setShowSmartSlots(!showSmartSlots);
+                                    setShowMainPromptSlots(false);
+                                    setShowGuidedSlots(false);
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                    showSmartSlots
+                                      ? 'bg-purple-600 text-white font-medium'
+                                      : settings.active_testing_slot
+                                        ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                  title="Toggle Smart Prompt Testing Slots"
+                                >
+                                  Smart{(settings.testing_slots || []).length > 0 ? ` (${(settings.testing_slots || []).length})` : ''}
                                 </button>
                                 {/* Quick active slot indicator when bar is closed */}
-                                {settings.active_testing_slot && !showMainPromptSlots && (() => {
+                                {settings.active_testing_slot && !showMainPromptSlots && !showGuidedSlots && !showSmartSlots && (() => {
                                   const slot = (settings.testing_slots || []).find(s => s.id === settings.active_testing_slot);
                                   return slot ? (
                                     <span className="text-[9px] text-orange-400/70">T{slot.number}</span>
@@ -9529,6 +9568,40 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                               {/* Testing Slots Bar (Main Prompt chat) */}
                               {showMainPromptSlots && (
+                                <div className="px-1 pb-1.5">
+                                  <TestingSlotsSelector
+                                    slots={settings.testing_slots || []}
+                                    activeSlotId={settings.active_testing_slot}
+                                    onSlotsChange={handleSlotsChange}
+                                    onActiveSlotChange={handleActiveSlotChange}
+                                    onPromoteToMain={handlePromoteToMain}
+                                    getMainContent={getMainContent}
+                                    projects={settings.testing_slot_projects || []}
+                                    onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                                    onRunTest={handleRunTest}
+                                    testRunning={testSlotRunning}
+                                  />
+                                </div>
+                              )}
+                              {/* Testing Slots Bar (Guided GPT - from Main Prompt chat) */}
+                              {showGuidedSlots && (
+                                <div className="px-1 pb-1.5">
+                                  <TestingSlotsSelector
+                                    slots={settings.testing_slots || []}
+                                    activeSlotId={settings.active_testing_slot}
+                                    onSlotsChange={handleSlotsChange}
+                                    onActiveSlotChange={handleActiveSlotChange}
+                                    onPromoteToMain={handlePromoteToMain}
+                                    getMainContent={getMainContent}
+                                    projects={settings.testing_slot_projects || []}
+                                    onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                                    onRunTest={handleRunTest}
+                                    testRunning={testSlotRunning}
+                                  />
+                                </div>
+                              )}
+                              {/* Testing Slots Bar (Smart Prompt - from Main Prompt chat) */}
+                              {showSmartSlots && (
                                 <div className="px-1 pb-1.5">
                                   <TestingSlotsSelector
                                     slots={settings.testing_slots || []}
@@ -9773,6 +9846,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                     )}
                     {settings.live_prompt_mode === 'guided_gpt' && (
                       <div className="space-y-3 mt-2">
+                        {/* Testing Slots Bar (Guided GPT) */}
+                        <TestingSlotsSelector
+                          slots={settings.testing_slots || []}
+                          activeSlotId={settings.active_testing_slot}
+                          onSlotsChange={handleSlotsChange}
+                          onActiveSlotChange={handleActiveSlotChange}
+                          onPromoteToMain={handlePromoteToMain}
+                          getMainContent={getMainContent}
+                          projects={settings.testing_slot_projects || []}
+                          onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                          onRunTest={handleRunTest}
+                          testRunning={testSlotRunning}
+                        />
+
                         <p className="text-[10px] text-emerald-300/70 bg-emerald-500/10 p-2 rounded">
                           GPT reads your article and creates prompts following your guardrails. Create different prompts per tag (H, J, C) or use Global for all.
                         </p>
@@ -11241,23 +11328,61 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     {label}
                                   </button>
                                 ))}
-                                {/* Test Slots Toggle */}
+                                {/* Test Slots Toggles - Main, Guided, Smart */}
                                 <div className="w-px h-4 bg-slate-500/60"></div>
                                 <button
-                                  onClick={() => setShowGuidedSlots(!showGuidedSlots)}
+                                  onClick={() => {
+                                    setShowMainPromptSlots(!showMainPromptSlots);
+                                    setShowGuidedSlots(false);
+                                    setShowSmartSlots(false);
+                                  }}
                                   className={`px-2 py-0.5 text-[10px] rounded-full transition ${
-                                    showGuidedSlots
+                                    showMainPromptSlots
                                       ? 'bg-orange-600 text-white font-medium'
                                       : settings.active_testing_slot
                                         ? 'bg-orange-500/30 text-orange-300 hover:bg-orange-500/50'
                                         : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
                                   }`}
-                                  title="Toggle Testing Slots bar"
+                                  title="Toggle Main Prompt Testing Slots"
                                 >
-                                  Slots{(settings.testing_slots || []).length > 0 ? ` (${(settings.testing_slots || []).length})` : ''}
+                                  Main{(settings.testing_slots || []).length > 0 ? ` (${(settings.testing_slots || []).length})` : ''}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setShowGuidedSlots(!showGuidedSlots);
+                                    setShowMainPromptSlots(false);
+                                    setShowSmartSlots(false);
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                    showGuidedSlots
+                                      ? 'bg-emerald-600 text-white font-medium'
+                                      : settings.active_testing_slot
+                                        ? 'bg-emerald-500/30 text-emerald-300 hover:bg-emerald-500/50'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                  title="Toggle Guided GPT Testing Slots"
+                                >
+                                  Guided{(settings.testing_slots || []).length > 0 ? ` (${(settings.testing_slots || []).length})` : ''}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setShowSmartSlots(!showSmartSlots);
+                                    setShowMainPromptSlots(false);
+                                    setShowGuidedSlots(false);
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] rounded-full transition ${
+                                    showSmartSlots
+                                      ? 'bg-purple-600 text-white font-medium'
+                                      : settings.active_testing_slot
+                                        ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/50'
+                                        : 'bg-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-600/80'
+                                  }`}
+                                  title="Toggle Smart Prompt Testing Slots"
+                                >
+                                  Smart{(settings.testing_slots || []).length > 0 ? ` (${(settings.testing_slots || []).length})` : ''}
                                 </button>
                                 {/* Quick active slot indicator when bar is closed */}
-                                {settings.active_testing_slot && !showGuidedSlots && (() => {
+                                {settings.active_testing_slot && !showMainPromptSlots && !showGuidedSlots && !showSmartSlots && (() => {
                                   const slot = (settings.testing_slots || []).find(s => s.id === settings.active_testing_slot);
                                   return slot ? (
                                     <span className="text-[9px] text-orange-400/70">T{slot.number}</span>
@@ -11265,8 +11390,42 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 })()}
                               </div>
 
+                              {/* Testing Slots Bar (Main Prompt - from Guided GPT chat) */}
+                              {showMainPromptSlots && (
+                                <div className="px-1 pb-1.5">
+                                  <TestingSlotsSelector
+                                    slots={settings.testing_slots || []}
+                                    activeSlotId={settings.active_testing_slot}
+                                    onSlotsChange={handleSlotsChange}
+                                    onActiveSlotChange={handleActiveSlotChange}
+                                    onPromoteToMain={handlePromoteToMain}
+                                    getMainContent={getMainContent}
+                                    projects={settings.testing_slot_projects || []}
+                                    onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                                    onRunTest={handleRunTest}
+                                    testRunning={testSlotRunning}
+                                  />
+                                </div>
+                              )}
                               {/* Testing Slots Bar (Guided GPT chat) */}
                               {showGuidedSlots && (
+                                <div className="px-1 pb-1.5">
+                                  <TestingSlotsSelector
+                                    slots={settings.testing_slots || []}
+                                    activeSlotId={settings.active_testing_slot}
+                                    onSlotsChange={handleSlotsChange}
+                                    onActiveSlotChange={handleActiveSlotChange}
+                                    onPromoteToMain={handlePromoteToMain}
+                                    getMainContent={getMainContent}
+                                    projects={settings.testing_slot_projects || []}
+                                    onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
+                                    onRunTest={handleRunTest}
+                                    testRunning={testSlotRunning}
+                                  />
+                                </div>
+                              )}
+                              {/* Testing Slots Bar (Smart Prompt - from Guided GPT chat) */}
+                              {showSmartSlots && (
                                 <div className="px-1 pb-1.5">
                                   <TestingSlotsSelector
                                     slots={settings.testing_slots || []}
