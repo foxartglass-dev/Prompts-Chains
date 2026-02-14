@@ -2054,7 +2054,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     const activeSlotId = settings.active_testing_slot;
     if (!activeSlotId) return; // Should not happen - only called when a slot is active
 
-    const updatedSlots = settings.testing_slots.map(slot => {
+    const updatedSlots = (settings.testing_slots || []).map(slot => {
       if (slot.id !== activeSlotId) return slot;
       return {
         ...slot,
@@ -2069,7 +2069,11 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Helper: get the active slot object (or null for Main)
   const activeTestingSlot = useMemo(() => {
     if (!settings.active_testing_slot) return null;
-    return settings.testing_slots.find(s => s.id === settings.active_testing_slot) || null;
+    const slot = (settings.testing_slots || []).find(s => s.id === settings.active_testing_slot);
+    if (!slot) return null;
+    // Ensure content is always a valid object (guard against DB corruption/null)
+    if (!slot.content) return { ...slot, content: {} as TestingSlotContent };
+    return slot;
   }, [settings.active_testing_slot, settings.testing_slots]);
 
   // Helper: check if we're viewing a test slot
@@ -2135,7 +2139,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       showNotification('Test run failed', 'error');
     }
     setTestSlotRunning(false);
-  }, [activeTestingSlot, activeAvatar, settings, updateActiveSlotContent, showNotification]);
+  }, [activeTestingSlot, activeAvatar, settings.main_prompt_persistent, settings.guided_model, updateActiveSlotContent, showNotification]);
 
   // Provide header controls to parent component (for rendering in section header)
   useEffect(() => {
@@ -5259,7 +5263,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           name: cat.name,
           placeholder: cat.placeholder,
           isRandomized: cat.isRandomized,
-          options: cat.options.map(opt => ({
+          options: (cat.options || []).map(opt => ({
             number: opt.number,
             text: opt.text,
             primaryKeywords: opt.primaryKeywords,
@@ -5578,7 +5582,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           name: cat.name,
           placeholder: cat.placeholder,
           isRandomized: cat.isRandomized,
-          options: cat.options.map(opt => ({
+          options: (cat.options || []).map(opt => ({
             number: opt.number,
             text: opt.text,
             primaryKeywords: opt.primaryKeywords,
@@ -5901,7 +5905,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       context.placeholderCategories = categories?.map(cat => ({
         name: cat.name, placeholder: cat.placeholder,
         isRandomized: cat.isRandomized,
-        options: cat.options.map(opt => ({
+        options: (cat.options || []).map(opt => ({
           number: opt.number, text: opt.text,
           primaryKeywords: opt.primaryKeywords,
           secondaryKeywords: (opt as any).useSecondaryKeywords ? opt.secondaryKeywords : undefined,
@@ -8316,12 +8320,13 @@ Start by introducing yourself and asking about their business in a friendly way.
     const categories = activeAvatar.placeholderCategories || [];
     const updatedCategories = categories.map(cat => {
       if (cat.id === categoryId) {
-        const nextNumber = cat.options.length > 0
-          ? Math.max(...cat.options.map(o => o.number)) + 1
+        const opts = cat.options || [];
+        const nextNumber = opts.length > 0
+          ? Math.max(...opts.map(o => o.number)) + 1
           : 1;
         return {
           ...cat,
-          options: [...cat.options, {
+          options: [...opts, {
             number: nextNumber,
             text: '',
             primaryKeywords: [],
@@ -8342,7 +8347,7 @@ Start by introducing yourself and asking about their business in a friendly way.
       if (cat.id === categoryId) {
         return {
           ...cat,
-          options: cat.options.map(opt =>
+          options: (cat.options || []).map(opt =>
             opt.number === optionNumber ? { ...opt, ...updates } : opt
           )
         };
