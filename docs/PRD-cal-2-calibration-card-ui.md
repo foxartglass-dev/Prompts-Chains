@@ -4,8 +4,8 @@
 **Phase:** Cal-2 of 3
 **Source:** BlueprintPage.tsx → PRD 3 (Calibration System Full Spec)
 **Branch:** Assigned per implementation session
-**Status:** Not Started
-**Depends On:** Cal-1 (data model + injection layer must exist first)
+**Status:** Implemented
+**Depends On:** Cal-1 (data model + injection layer must exist first) — Cal-1 gap (buildScopeBasedContext) also fixed in this session
 
 ---
 
