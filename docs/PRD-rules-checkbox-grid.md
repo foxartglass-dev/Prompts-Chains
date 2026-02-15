@@ -3,45 +3,86 @@
 **Track:** Non-Calibration
 **Phase:** 3 of 3
 **Source:** HANDOFF-PRD.md → Phase 3
-**Branch:** `claude/fix-prompt-button-S8BcZ`
-**Status:** Not Started
+**Status:** Partially Implemented (UI only)
 
 ---
 
 ## What
 
-The Rules system already exists (Guided GPT Rules section, Smart Matching Rules section). The current "Applies to: [x] H [x] J [x] C" checkboxes need to be replaced with a more powerful grid system.
+The Rules system already exists (Guided GPT Rules section, Smart Matching Rules section). Each rule needs a granular scope grid that controls which tags and prompt systems the rule applies to.
 
-## Current State
+## Current State (What Already Exists)
 
-- Each rule has a text box + "Applies to: ☑H ☑J ☑C" inline checkboxes
-- Simple per-tag checkboxes
+The grid UI is already built:
 
-## New Behavior
+- **"Set Scope" button** on each rule opens a popup checkbox grid (`ImageCreationSection.tsx` ~lines 19630-19790)
+- **Grid structure** (~lines 19650-19657):
+  - **Columns:** Dynamic tag names (H, J, C, etc.) + "All" — not hardcoded
+  - **Rows:** Main Prompt, Main Categories, Guided Prompt, Guided Rules, Smart Prompt, Smart Rules
+- **Cell IDs** use format `{tag}-{rowKey}` (e.g., `H-prompt`, `J-categories`, `All-guardrails`)
+- **Bulk controls:** Column toggle, row toggle, Select All, Clear All
+- **Display:** Button shows count "Scope (N)" when configured; abbreviations shown on rule card
+- **TagBasedRule interface** (`ImageCreationSection.tsx` ~lines 338-348) includes `appliesTo?: string[]`
+- **Database:** `guided_gpt_rules` and `legacy_prompt_rules` JSONB columns store the rules with their `appliesTo` arrays (`server/db/schema.sql` ~lines 314-319)
 
-- Each rule gets a **button** that opens a **popup checkbox grid**
-- The grid is like a spreadsheet — rows and columns representing all segments:
-  - **Columns:** Each tag (H, J, C, etc.) + "All Tags"
-  - **Rows:** Each sub-segment (Main Prompt, Main Categories, Guided Prompt, Guided Rules, Smart Prompt, Smart Rules)
-- User checks which boxes the rule applies to
-- When grid is closed: show checked items as **comma-separated abbreviations** along the top of the rule box (e.g., "H-Prompt, J-Categories, All-Guardrails")
-- Click the button again to reopen, edit checkboxes, close to save
+**What does NOT work yet:**
+- The `appliesTo` array is stored but **never read during image generation**
+- `server/services/image-pipeline.js` does not check any rule's `appliesTo` field
+- Rules are not injected into prompts based on their scope — they are organizational metadata only
 
 ## Data Model
 
-Add to each rule:
+Already exists on each rule:
 
 ```typescript
-rule.appliesTo = ['H-prompt', 'H-categories', 'J-prompt', 'All-guardrails', ...]
+interface TagBasedRule {
+  id: string;
+  tag: string;                    // 'H', 'J', 'C', or 'Global'
+  title: string;
+  text: string;
+  order: number;
+  globalAppliesTo?: string[];     // For Global rules: which tags they apply to
+  appliesTo?: string[];           // Grid-selected targets: ['H-prompt', 'J-categories', 'All-guardrails']
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+## Remaining Work
+
+### Pipeline Integration
+The image pipeline needs to read rules and inject them based on `appliesTo`:
+
+1. **Load rules** — `buildPipelineOptions()` in `server/routes/articles.js` should pass `guided_gpt_rules` and `legacy_prompt_rules` to the pipeline
+2. **Filter by tag + segment** — For each article's tag, find rules where `appliesTo` includes `{tag}-{segment}` or `All-{segment}`
+3. **Inject into the correct pipeline stage:**
+   - `*-prompt` → Append rule text to the main prompt for that system
+   - `*-categories` → Apply rule as a filter/modifier to placeholder category matching
+   - `*-guardrails` → Append rule text to Guided GPT guardrails instructions
+   - `*-guided-rules` → Include in Guided GPT rules context
+   - `*-smart` → Append rule text to Smart Prompt system instructions
+   - `*-smart-rules` → Include in Smart Prompt rules context
+
+### Injection Logic (Suggested Pattern)
+```javascript
+function getRulesForScope(allRules, tag, segment) {
+  return allRules.filter(rule => {
+    const targets = rule.appliesTo || [];
+    return targets.includes(`${tag}-${segment}`) || targets.includes(`All-${segment}`);
+  });
+}
 ```
 
 ## Affected Files
 
-- `src/components/ImageCreationSection.tsx` — Guided GPT Rules section (~search for "Guided GPT Rules"), Smart Matching Rules section
-- Settings/database model for storing appliesTo array
+- `server/routes/articles.js` — pass rules to pipeline via `buildPipelineOptions()`
+- `server/services/image-pipeline.js` — read and inject rules at each pipeline stage
+- `src/components/ImageCreationSection.tsx` — UI already done (Guided GPT Rules ~line 10260, Smart Matching Rules ~line 13820, Grid popup ~line 19630)
 
 ## Key Rules
 
 - Don't rename variables that other code depends on
 - Don't rip out context injection blocks from chat functions
 - Don't merge the 3 prompt systems together — they are SEPARATE systems
+- Tags (H, J, C, etc.) are audience avatar tags
+- "Global" is its own actual tag — don't use "Global" to mean "persistent across all tags"
