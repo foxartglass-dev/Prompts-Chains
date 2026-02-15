@@ -3,8 +3,7 @@
 **Track:** Non-Calibration
 **Phase:** 1 of 3
 **Source:** HANDOFF-PRD.md → Phase 1
-**Branch:** `claude/fix-prompt-button-S8BcZ`
-**Status:** Not Started
+**Status:** Completed
 
 ---
 
@@ -26,43 +25,54 @@ Every prompt text area in all 3 systems gets split into two text areas with a vi
 - **Change to:** TWO big text boxes stacked vertically with a line between them
 - Top = unique instructions for this tag
 - Bottom = persistent instructions across all tags
-- The Uniform/Appearance, Default Subject, Avoid fields below can stay as-is OR also get the same split (user can clarify)
+- The Uniform/Appearance, Default Subject, Avoid sub-fields stay as-is (tag-specific, no split needed)
 
-## Data Model Changes
+## Data Model
 
-Currently prompts are stored per-avatar. Need to add persistent storage:
+Three persistent columns added via migration 032 (`032_add_persistent_prompt_fields.sql`):
 
-### For Main Prompt:
-```
-// Per avatar (unique per tag) — already exists
-activeAvatar.mainPrompt → becomes the TOP (unique) portion
-
-// New field — persistent across all tags
-settings.mainPromptPersistent → the BOTTOM portion
-// OR store on each avatar but sync across all:
-activeAvatar.mainPromptPersistent
+```sql
+ALTER TABLE image_creation_settings ADD COLUMN IF NOT EXISTS main_prompt_persistent TEXT DEFAULT '';
+ALTER TABLE image_creation_settings ADD COLUMN IF NOT EXISTS guided_instructions_persistent TEXT DEFAULT '';
+ALTER TABLE image_creation_settings ADD COLUMN IF NOT EXISTS smart_prompt_persistent TEXT DEFAULT '';
 ```
 
-### For Guided GPT:
-```
-// Currently per-tag prompts in guided_prompts array
-// Need: per-tag unique portion + shared persistent portion
-```
+### Storage Pattern:
+- **Top (unique):** Stored per-avatar as before (`activeAvatar.mainPrompt`, per-tag `guided_prompts`, per-tag `smart_prompts`)
+- **Bottom (persistent):** Stored at settings level (`settings.main_prompt_persistent`, `settings.guided_instructions_persistent`, `settings.smart_prompt_persistent`)
 
-### For Smart Prompt:
-```
-// Similar split needed
-```
+## UI
 
-## UI Change
+One text area becomes two stacked text areas. A subtle horizontal divider line separates them with labels "Unique to [tag]" (top) and "All Tags" (bottom).
 
-One text area becomes two stacked text areas. Add a subtle horizontal divider line between them with labels like "Unique to [H]" and "All Tags" so the user knows which is which.
+All three prompt systems have this split:
+- **Main Prompt** — `ImageCreationSection.tsx` (~line 15025)
+- **Guided GPT** — `ImageCreationSection.tsx` (~line 10167)
+- **Smart Prompt** — `ImageCreationSection.tsx` (~line 12801)
+
+## Pipeline Integration
+
+Persistent prompts are concatenated during image generation in `server/services/image-pipeline.js`:
+
+- **Main Prompt mode** (~lines 385-389, 445-449): Appends `mainPromptPersistent` to each prompt
+- **Guided GPT mode** (~lines 489-494): Merges `guidedInstructionsPersistent` into guardrails instructions
+- **Smart Prompt mode** (~lines 618-628): Appends `smartPromptPersistent` to each AI-generated prompt
+
+Wiring in `server/routes/articles.js` `buildPipelineOptions()` (~lines 116-119) passes all three persistent fields to the pipeline.
 
 ## Affected Files
 
-- `src/components/ImageCreationSection.tsx` — Main Prompt text area, Guided GPT prompt areas
-- Database/settings model — new fields for persistent prompt portions
-- Backend routes if they read prompt data
+- `src/components/ImageCreationSection.tsx` — UI split for all 3 prompt systems
+- `server/db/migrations/032_add_persistent_prompt_fields.sql` — DB columns
+- `server/routes/articles.js` — `buildPipelineOptions()` passes persistent fields
+- `server/services/image-pipeline.js` — concatenation during generation
+- `src/components/TestingSlotsSelector.tsx` — `TestingSlotContent` interface includes persistent fields
+
+## Known Pre-Existing Issues (Not Introduced by This PRD)
+
+- **Guided GPT top textarea** (~line 10172) doesn't check `isViewingTestSlot` — edits while viewing a test slot go to the live prompt
+- **Smart Prompt top textarea** (~line 12806) — same issue
+- These are pre-existing from before the split. The bottom (persistent) textareas correctly handle test slot mode. Fixing the top ones requires changes to per-tag array handling in `TestingSlotContent` — recommend as a separate task.
 
 ## Key Rules
 
