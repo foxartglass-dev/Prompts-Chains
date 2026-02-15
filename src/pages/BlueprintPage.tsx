@@ -4684,6 +4684,53 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">February 2026</h3>
 
       <div className="space-y-4">
+        {/* Feb 15 (late) - Calibration System PRD Expansion */}
+        <div className="border-l-4 border-purple-500 pl-4">
+          <div className="text-sm text-purple-400 font-semibold">Feb 15, 2026 (late session) - PRD 3 Calibration System Full Spec</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">DOCS</span>
+              <div>
+                <strong>PRD 3 expanded from simple text-box to full calibration system spec</strong>
+                <div className="text-xs text-gray-500">
+                  Based on detailed AI chat consultation. Now includes: 3-phase workflow (pre-calibration → near-miss logging → reusable entries),
+                  15-field entry schema (id, title, tags[], priority hard/med/soft, human_note + model_instruction dual fields, trigger, do/avoid,
+                  enforcement tactics, evidence images, per-tag test status), 3 templates (UI Card, Drop-in Line format, Calibration Pack),
+                  injection stack order (System → Global Guardrails → Tag Guardrails → Calibration Pack → Page context → Output contract),
+                  query logic (filter by tag, sort priority desc, limit 12-20), conflict resolution rules, two debug modes
+                  (Show Injection + Disable Calibration A/B toggle), atomic entries rule.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">DOCS</span>
+              <div>
+                <strong>Calibration tag model: per-tag with progressive expansion</strong>
+                <div className="text-xs text-gray-500">NOT binary global/per-tag. Each entry starts on one tested tag, accumulates tags as testing proves them out. Multi-select tag picker. "All" = verified global.</div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">DOCS</span>
+              <div>
+                <strong>Phase 3 summary updated in Phased Implementation Plan</strong>
+                <div className="text-xs text-gray-500">Reflects expanded PRD 3 with schema details, injection stack, debug modes. Points to full PRD 3 section above.</div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Key Files:</span>
+            <span className="text-gray-400 ml-2">BlueprintPage.tsx only (documentation session — no code changes)</span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Commits:</span>
+            <span className="text-gray-400 ml-2">f5121e3, fb6776a, 24dd9da</span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Next priority:</span>
+            <span className="text-gray-400 ml-2">User wants to focus on getting images working for the website AS-IS (not building calibration yet). Calibration is for later / enterprise / Guided GPT. No code work pending from this session.</span>
+          </div>
+        </div>
+
         {/* Feb 15 - Testing System Completion + Diff Modal + Username System */}
         <div className="border-l-4 border-orange-500 pl-4">
           <div className="text-sm text-orange-400 font-semibold">Feb 15, 2026 - Testing System UI Completion + Compare to Main Diff Modal + Username System</div>
