@@ -458,6 +458,13 @@ router.post('/chat', async (req, res) => {
         parts.push(context.guidedInstructionsPersistent);
       }
 
+      // CALIBRATION PACK (DYNAMIC) — injected after guardrails, before page context
+      // Per PRD injection stack: System > Guardrails > Tag Guardrails > Calibration Pack > Page context > Output contract
+      if (context.calibrationPack) {
+        parts.push('\n## Calibration Pack (Dynamic Quality Rules):');
+        parts.push(context.calibrationPack);
+      }
+
       // Reference images with detail
       if (context.referenceImages?.length > 0) {
         parts.push(`\n## Reference Images (${context.referenceImages.length} uploaded):`);

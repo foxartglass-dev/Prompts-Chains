@@ -1416,7 +1416,10 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
           chat_scope_selections: [],
           // Testing Slots System
           testing_slots: [],
-          active_testing_slot: null
+          active_testing_slot: null,
+          // Calibration System
+          calibration_entries: [],
+          calibration_version: 0
         },
         isNew: true
       });
@@ -1511,7 +1514,10 @@ router.get('/settings/:workflowId', requireDb, async (req, res) => {
         chat_scope_selections: results[0].chat_scope_selections || [],
         // Testing Slots System
         testing_slots: results[0].testing_slots || [],
-        active_testing_slot: results[0].active_testing_slot || null
+        active_testing_slot: results[0].active_testing_slot || null,
+        // Calibration System (may not exist if migration 035 hasn't run)
+        calibration_entries: results[0].calibration_entries || [],
+        calibration_version: results[0].calibration_version || 0
       },
       imageBankMigrated  // Tell frontend to use new /api/image-bank API
     });
@@ -1626,7 +1632,10 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       smart_prompt_persistent,
       // Testing Slots System (Phase 3)
       testing_slots,
-      active_testing_slot
+      active_testing_slot,
+      // Calibration System (Cal-1)
+      calibration_entries,
+      calibration_version
     } = req.body;
 
     // DEBUG: Log what Test Mode is sending
@@ -2448,6 +2457,43 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
       }
     };
 
+    // Separate function to update calibration columns (silently fail if migration 035 hasn't run)
+    const tryUpdateCalibration = async () => {
+      const hasEntries = calibration_entries !== undefined;
+      const hasVersion = calibration_version !== undefined;
+
+      if (!hasEntries && !hasVersion) return false;
+
+      try {
+        const entriesJson = hasEntries ? JSON.stringify(calibration_entries ?? []) : null;
+        if (saveToWebsite) {
+          await sql`
+            UPDATE image_creation_settings
+            SET
+              calibration_entries = COALESCE(${entriesJson}::jsonb, calibration_entries),
+              calibration_version = COALESCE(${hasVersion ? calibration_version : null}, calibration_version)
+            WHERE website_id = ${websiteId}
+          `;
+        } else {
+          await sql`
+            UPDATE image_creation_settings
+            SET
+              calibration_entries = COALESCE(${entriesJson}::jsonb, calibration_entries),
+              calibration_version = COALESCE(${hasVersion ? calibration_version : null}, calibration_version)
+            WHERE workflow_id = ${workflowId}
+          `;
+        }
+        console.log('[Image Creation API] Successfully saved calibration_entries:', calibration_entries?.length ?? 0, 'version:', calibration_version);
+        return true;
+      } catch (err) {
+        if (err.message?.includes('calibration_entries') || err.message?.includes('calibration_version')) {
+          console.log('[Image Creation API] calibration columns not available yet (run migration 035)');
+          return false;
+        }
+        throw err;
+      }
+    };
+
     if (existing.length === 0) {
       // Insert new settings
       console.log('[Image Creation API] Creating new settings record...');
@@ -2465,6 +2511,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
       // Save testing slots if provided
       await tryUpdateTestingSlots();
+
+      // Save calibration entries if provided
+      await tryUpdateCalibration();
 
       return res.json({ success: true, id: newId, created: true });
     }
@@ -2484,6 +2533,9 @@ router.put('/settings/:workflowId', requireDb, async (req, res) => {
 
     // Save testing slots if provided
     await tryUpdateTestingSlots();
+
+    // Save calibration entries if provided
+    await tryUpdateCalibration();
 
     // VERIFICATION: Read back what was saved to confirm (wrapped in try/catch for missing columns)
     try {

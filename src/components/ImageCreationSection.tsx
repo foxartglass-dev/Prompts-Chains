@@ -170,6 +170,27 @@ interface PromptSolution {
   notes?: string; // Optional notes on results
 }
 
+// ========== CALIBRATION SYSTEM (Cal-1) ==========
+interface CalibrationEntry {
+  id: string;                    // e.g. "CAL-007"
+  title: string;                 // e.g. "Avoid model glam"
+  tags: string[];                // tags this applies to; "All" = global
+  priority: 'hard' | 'medium' | 'soft';
+  human_note: string;            // for the user: readable description
+  model_instruction: string;     // for the AI: drop-in line injected into prompts
+  trigger: string;               // when to apply
+  do_preferred: string;          // preferred outcome
+  avoid_antipattern: string;     // what to avoid
+  enforcement_tactics: string[];
+  negative_constraints?: string[];
+  evidence_bad_image_ids?: string[];
+  evidence_good_image_ids?: string[];
+  per_tag_test_status?: Record<string, { pass: boolean; testedAt: string }>;
+  createdAt: string;
+  updatedAt: string;
+  source_test_image_id?: string;
+}
+
 interface PromptProblemArea {
   id: string;
   name: string; // e.g., "Logo Visibility"
@@ -640,6 +661,9 @@ interface ImageCreationSettings {
   active_testing_slot: string | null; // UUID of active slot, null = Main/Live
   testing_slot_projects: TestingSlotProject[];
   testing_usernames: string[]; // Usernames for tagging who created test slots
+  // ========== CALIBRATION SYSTEM (Cal-1) ==========
+  calibration_entries: CalibrationEntry[];
+  calibration_version: number;
 }
 
 enum LogStatus {
@@ -756,6 +780,9 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   active_testing_slot: null,
   testing_slot_projects: [],
   testing_usernames: [],
+  // ========== CALIBRATION SYSTEM (Cal-1) ==========
+  calibration_entries: [],
+  calibration_version: 0,
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -1631,7 +1658,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           smart_prompt_prompts: data.settings.smart_prompt_prompts || [],
           // Tag-based rules system
           guided_gpt_rules: data.settings.guided_gpt_rules || [],
-          legacy_prompt_rules: data.settings.legacy_prompt_rules || []
+          legacy_prompt_rules: data.settings.legacy_prompt_rules || [],
+          // Calibration system
+          calibration_entries: data.settings.calibration_entries || [],
+          calibration_version: data.settings.calibration_version || 0
         };
         setSettings(loadedSettings);
         if (loadedSettings.audience_avatars.length > 0) {
@@ -5251,11 +5281,41 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     try {
       // Build COMPREHENSIVE context from current settings
       // The AI Prompt Assistant should see EVERYTHING to help craft better prompts
+      // Compile calibration pack for active tag (client-side, mirrors backend logic)
+      const activeTag = activeAvatar?.tag || '';
+      let calibrationPack = '';
+      if (activeTag && settings.calibration_entries?.length > 0) {
+        const PRIORITY_ORDER: Record<string, number> = { hard: 0, medium: 1, soft: 2 };
+        const matched = settings.calibration_entries
+          .filter((e: CalibrationEntry) => (e.tags || []).includes('All') || (e.tags || []).includes(activeTag))
+          .sort((a: CalibrationEntry, b: CalibrationEntry) => {
+            const pa = PRIORITY_ORDER[a.priority] ?? 1;
+            const pb = PRIORITY_ORDER[b.priority] ?? 1;
+            if (pa !== pb) return pa - pb;
+            return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+          })
+          .slice(0, 16);
+
+        if (matched.length > 0) {
+          const lines = [`Calibration Pack — Tag ${activeTag} (sorted by priority):`];
+          matched.forEach((entry: CalibrationEntry, idx: number) => {
+            const label = (entry.priority || 'medium').charAt(0).toUpperCase() + (entry.priority || 'medium').slice(1);
+            lines.push(`${idx + 1}. (${label}) ${entry.model_instruction}`);
+          });
+          lines.push('');
+          lines.push('If a calibration item conflicts with guardrails, guardrails win. If two calibration items conflict, higher priority wins; if same priority, most recent wins.');
+          calibrationPack = lines.join('\n');
+        }
+      }
+
       const context = {
         // Guardrails / instructions
         guardrails: settings.guided_guardrails,
         // Guided GPT persistent instructions (shared across all tags)
         guidedInstructionsPersistent: settings.guided_instructions_persistent || '',
+
+        // CALIBRATION PACK (DYNAMIC) — compiled from calibration entries for active tag
+        calibrationPack: calibrationPack || undefined,
 
         // Main prompt template from active avatar (unique portion)
         mainPrompt: activeAvatar?.mainPrompt || '',
