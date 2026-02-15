@@ -112,7 +112,11 @@ function buildPipelineOptions(config, article) {
     heroImageSide: 'right',
     smartMatchingConfig,
     guidedGuardrails,
-    guidedModel: config.guided_model || 'gpt-4o'
+    guidedModel: config.guided_model || 'gpt-4o',
+    // Persistent prompt portions (shared across ALL tags)
+    mainPromptPersistent: config.main_prompt_persistent || '',
+    guidedInstructionsPersistent: config.guided_instructions_persistent || '',
+    smartPromptPersistent: config.smart_prompt_persistent || ''
   };
 }
 
