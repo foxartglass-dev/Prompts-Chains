@@ -4801,17 +4801,36 @@ const ChangelogDiagram: React.FC = () => (
               </div>
             </div>
 
-            {/* PRD 3: Calibration Section */}
+            {/* PRD 3: Calibration System (Full Workflow) */}
             <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
-              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 3: Calibration Section (AI vs Human Perception)</div>
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 3: Calibration System (AI vs Human Perception — Full Workflow)</div>
               <div className="text-xs text-gray-400 space-y-1">
-                <p><strong>What:</strong> A text box per prompt type (Main, Guided GPT, Smart Prompt) that stores the difference between what AI thinks is a perfect image vs what a human thinks is perfect.</p>
-                <p><strong>Purpose:</strong> Correction prompt that gets fed into the AI when generating/evaluating prompts so it accounts for known AI blind spots.</p>
-                <p><strong>Where it goes:</strong> New section in each prompt type area (alongside the existing persistent text areas). Could be a collapsible "Calibration" section.</p>
-                <p><strong>Data model:</strong> Add to ImageCreationSettings: <code className="bg-slate-900 px-1 rounded">calibration_main_prompt</code>, <code className="bg-slate-900 px-1 rounded">calibration_guided_gpt</code>, <code className="bg-slate-900 px-1 rounded">calibration_smart_prompt</code> (strings). Also add to TestingSlotContent so test slots can have their own calibration.</p>
-                <p><strong>Copy between types:</strong> Button to copy calibration from one prompt type to the others (e.g., Main → Guided + Smart). Then each can be independently adjusted.</p>
-                <p><strong>System prompt integration:</strong> Feed calibration text into the AI chat system prompt (around line 5386) so the AI always remembers the corrections.</p>
-                <p><strong>AI chat visibility:</strong> The AI should be able to read and write the calibration text.</p>
+                <p><strong>What:</strong> A living calibration system that evolves through real testing. NOT a one-time text box — it's an iterative workflow: see near-miss → annotate → distill into ranked rules → inject into AI prompts. Calibration = taste + acceptance criteria that only becomes clear when you see real outputs.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Phase 1 — Pre-Calibration (guardrails only):</p>
+                <p>Already done via existing guardrails (uniform, pose, logo suppression, no text, realism, non-model directive). Gets to "mostly acceptable" images.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Phase 2 — Calibration Triggers (near-miss logging):</p>
+                <p>When user spots an image that's *nearly* right but slightly off, they log a calibration case. Each case captures: (1) reference image (the near-miss — from test slot's <code className="bg-slate-900 px-1 rounded">testImages</code>), (2) what's wrong (1-2 sentences), (3) what correct looks like (1-2 sentences), (4) optional corrected example image after prompt adjustment.</p>
+                <p><strong>Integration with test slots:</strong> Add <code className="bg-slate-900 px-1 rounded">calibrationNote?: string</code> and <code className="bg-slate-900 px-1 rounded">correctedPrompt?: string</code> fields to the <code className="bg-slate-900 px-1 rounded">testImages</code> array items in TestingSlotContent (already at <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:114-123</code>). A near-miss is literally a test slot image + annotation.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Phase 3 — Reusable Calibration Entries:</p>
+                <p>Each annotated near-miss gets distilled into a short, crisp rule bullet. Stored as ranked entries (Top 5 = non-negotiable). Examples: "Prefer forearm occluding left-chest area vs any visible chest mark, even blurred." / "Avoid beauty-ad lighting; prefer realistic indoor daylight with mild imperfections."</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Data Model:</p>
+                <p>Add to ImageCreationSettings:</p>
+                <p><code className="bg-slate-900 px-1 rounded">calibration_entries: Array&lt;{'{'} id, rank, text, scope: 'global'|tag-specific, version, createdAt, source?: testImageId {'}'}&gt;</code></p>
+                <p><code className="bg-slate-900 px-1 rounded">calibration_version: number</code> (auto-increments when entries change, enables v1/v2/v3 tracking and rollback)</p>
+                <p>Storage pattern: <strong>Global + per-tag overrides.</strong> "No glam/model look" is global; "construction PPE allowed" is tag-specific.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">UI:</p>
+                <p>Dedicated collapsible "Calibration" sub-section under each prompt type area (not buried in test slots). Populated FROM test slot evidence. Flow: see near-miss in test slot → annotate it → "Promote to Calibration" button creates a ranked bullet in the calibration section. Drag to reorder rank. Version history visible.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">System Prompt Injection:</p>
+                <p>Inject calibration entries into system prompt builder (<code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~5386</code>). Top 5 non-negotiables first, then tag-specific overrides for current tag. AI chat can read, write, and propose new calibration entries.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">AI Chat Role in Calibration:</p>
+                <p>When user pastes near-miss evidence (image + prompt), AI should: (1) diagnose why it happened (prompt phrasing, rule conflict, missing negative), (2) propose a calibration entry (short bullet), (3) suggest a targeted test to verify the fix.</p>
               </div>
             </div>
 
@@ -4895,7 +4914,7 @@ const ChangelogDiagram: React.FC = () => (
                 <div className="text-xs text-purple-400 font-bold mb-2">PHASE 3 — AI Chat Intelligence (PRDs 2, 3, 4)</div>
                 <div className="text-xs text-gray-400 space-y-1">
                   <p><strong>PRD 2:</strong> AI Chat Full Autonomy Over Testing System — AI can create/switch/fill/duplicate/promote test slots. Needs new tool definitions in the system prompt builder (<code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~5386</code>), new handler functions, and integration with the slot management API. Biggest PRD.</p>
-                  <p><strong>PRD 3:</strong> Calibration Section — per-prompt-type section where user teaches the AI about perception gaps (e.g. "when I say warm, I mean X"). Stored in settings, injected into system prompt. New UI section + settings fields.</p>
+                  <p><strong>PRD 3:</strong> Calibration System (Full Workflow) — iterative near-miss logging → ranked rule bullets → system prompt injection. Data model: <code className="bg-slate-900 px-1 rounded">calibration_entries</code> array with rank, scope (global/per-tag), version tracking. UI: collapsible section per prompt type, "Promote to Calibration" from test slot annotations. AI diagnoses near-misses and proposes entries. See full PRD 3 above for complete workflow.</p>
                   <p><strong>PRD 4:</strong> Article Image Visibility for AI Chat — let the AI see article images (thumbnails or URLs) in its context so it can reference previous results. Requires reading from <code className="bg-slate-900 px-1 rounded">articles.generated_images</code> and including in chat system prompt.</p>
                   <p><strong>Estimated scope:</strong> Largest phase — significant system prompt changes, new handler functions, new UI sections. AI autonomy (PRD 2) is the most complex single feature.</p>
                 </div>
