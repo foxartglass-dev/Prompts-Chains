@@ -3,7 +3,7 @@
 **Track:** Calibration
 **Phase:** Cal-2 of 3
 **Source:** BlueprintPage.tsx → PRD 3 (Calibration System Full Spec)
-**Branch:** `claude/fix-prompt-button-S8BcZ`
+**Branch:** Assigned per implementation session
 **Status:** Not Started
 **Depends On:** Cal-1 (data model + injection layer must exist first)
 
@@ -22,10 +22,12 @@ Each entry renders as a card with these fields:
 | Title | Short name (e.g. "Avoid model glam") |
 | Tags | Multi-select of tags this applies to |
 | Priority | Hard / Med / Soft selector |
+| Human Note | FOR THE USER: what's off and what we want — the `human_note` field (readable description) |
 | Trigger | When to apply (e.g. "any portrait with visible chest area") |
 | Do (preferred) | What the preferred outcome looks like |
 | Avoid (anti-pattern) | What to avoid |
-| Enforcement wording | Drop-in line — the `model_instruction` field |
+| Enforcement wording | FOR THE AI: drop-in line injected into prompts — the `model_instruction` field |
+| Enforcement tactics | 1-3 bullet tactics (camera/occlusion/crop/lighting wording) |
 | Evidence | Bad/good image IDs (linked thumbnails) |
 | Status | Pass/fail per tag + last tested timestamp |
 

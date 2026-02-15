@@ -3,7 +3,7 @@
 **Track:** Calibration
 **Phase:** Cal-3 of 3
 **Source:** BlueprintPage.tsx → PRD 3 (Calibration System Full Spec)
-**Branch:** `claude/fix-prompt-button-S8BcZ`
+**Branch:** Assigned per implementation session
 **Status:** Not Started
 **Depends On:** Cal-1 (injection layer) and Cal-2 (UI exists)
 
