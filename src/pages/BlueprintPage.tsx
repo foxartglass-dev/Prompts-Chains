@@ -4837,6 +4837,71 @@ const ChangelogDiagram: React.FC = () => (
                 <p><strong>Fix:</strong> Increase max height (or remove cap). Add CSS <code className="bg-slate-900 px-1 rounded">resize: vertical</code> for manual handle. Set <code className="bg-slate-900 px-1 rounded">scrollTop = scrollHeight</code> after value change to keep bottom visible. Default small, grows with content.</p>
               </div>
             </div>
+
+            {/* PRD 6: Auto-Approve Toggle for Confirmation Guards */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 6: Auto-Approve Toggle for Confirmation Guards</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> Add a toggle switch in the AI chat toolbar that lets the user turn off confirmation guards (Apply/Skip buttons). When ON, the AI can write directly to fields without asking. When OFF (default), the existing Apply/Skip flow continues.</p>
+                <p><strong>Current behavior:</strong> Every time the AI wants to write to a field, a PendingConfirmation object is created and the user must click Apply or Skip. This is safe but slow for power users who trust the AI.</p>
+                <p><strong>Where:</strong> <code className="bg-slate-900 px-1 rounded">pendingConfirmations</code> state at <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~893</code>. <code className="bg-slate-900 px-1 rounded">handleApplyConfirmation</code> at <code className="bg-slate-900 px-1 rounded">:~3210</code>. <code className="bg-slate-900 px-1 rounded">handleSkipConfirmation</code> at <code className="bg-slate-900 px-1 rounded">:~3226</code>. Guard UI rendered at <code className="bg-slate-900 px-1 rounded">:~11150</code>. PendingConfirmation type in <code className="bg-slate-900 px-1 rounded">src/utils/parseCodeBlocks.ts:47-55</code>.</p>
+                <p><strong>Implementation:</strong> (1) Add <code className="bg-slate-900 px-1 rounded">autoApproveAI: boolean</code> to settings (default false). (2) Add toggle in chat toolbar (both Main Prompt and Guided GPT toolbars). (3) In the code that creates PendingConfirmation objects, check if autoApproveAI is true — if so, call handleApplyConfirmation immediately instead of queueing. (4) Visual indicator: gold/green glow when auto-approve is ON so user remembers.</p>
+              </div>
+            </div>
+
+            {/* PRD 7: Chat Scope Grid "All" Column Reactionary Logic */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 7: Chat Scope Grid "All" Column Reactionary Logic</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> Make the "All" column in the Chat Scope Grid bidirectionally linked with the individual tag columns (H, J, C). Currently "All" is just another independent column with no special behavior.</p>
+                <p><strong>Current behavior:</strong> Clicking "All" for a row only toggles the "All-rowKey" cell. It does NOT check/uncheck H, J, C for that row. Similarly, checking all of H, J, C does NOT auto-check "All".</p>
+                <p><strong>Where:</strong> <code className="bg-slate-900 px-1 rounded">src/components/shared/SetScopeGrid.tsx</code> — <code className="bg-slate-900 px-1 rounded">toggleCell</code> at line 43, <code className="bg-slate-900 px-1 rounded">toggleColumn</code> at line 51, <code className="bg-slate-900 px-1 rounded">toggleRow</code> at line 60. Cell ID format: <code className="bg-slate-900 px-1 rounded">"ColumnName-rowKey"</code> (e.g. "All-prompt", "H-guardrails").</p>
+                <p><strong>Implementation:</strong> (1) In <code className="bg-slate-900 px-1 rounded">toggleCell</code>: if col is "All", also toggle all other columns for that row. If col is NOT "All" but after toggling, all non-"All" columns are now checked for that row, auto-check "All" too (and vice versa — if unchecking breaks the full set, uncheck "All"). (2) In <code className="bg-slate-900 px-1 rounded">toggleColumn</code>: if toggling "All" column, toggle every cell in every column. If toggling a non-"All" column, update "All" cells for any rows that now have all tags checked/unchecked. (3) The grid must know which columns are "regular" vs "All" — pass an <code className="bg-slate-900 px-1 rounded">allColumnName</code> prop (default "All") or detect it internally.</p>
+              </div>
+            </div>
+
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* PHASED IMPLEMENTATION PLAN */}
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            <div className="mt-4 bg-slate-900/80 rounded-lg p-4 border-2 border-yellow-500/40">
+              <div className="text-sm text-yellow-400 font-bold mb-1">PHASED IMPLEMENTATION PLAN</div>
+              <p className="text-xs text-gray-400 mb-3">Each phase is sized to ~45% of an agent's context window. Give the agent ONLY its phase's PRDs plus the relevant file locations. Do NOT combine phases.</p>
+
+              {/* Phase 1 */}
+              <div className="bg-slate-800/70 rounded-lg p-3 border border-green-500/30 mb-3">
+                <div className="text-xs text-green-400 font-bold mb-2">PHASE 1 — Quick Wins (PRDs 5, 6, 7)</div>
+                <div className="text-xs text-gray-400 space-y-1">
+                  <p><strong>PRD 5:</strong> Chat Textarea Auto-Expand + Resize Handle — remove 200px cap, add resize handle, scroll to bottom. Guided GPT textarea at <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~11546</code>. Small CSS/JS change.</p>
+                  <p><strong>PRD 6:</strong> Auto-Approve Toggle — add <code className="bg-slate-900 px-1 rounded">autoApproveAI</code> boolean to settings, toggle in both chat toolbars, short-circuit PendingConfirmation when ON. Touches settings interface (~line 642), toolbar (~9507 and ~11331), guard logic (~3210).</p>
+                  <p><strong>PRD 7:</strong> Scope Grid "All" Reactionary Logic — update <code className="bg-slate-900 px-1 rounded">SetScopeGrid.tsx</code> toggleCell/toggleColumn/toggleRow to bidirectionally link "All" with individual columns. Self-contained in one 170-line file.</p>
+                  <p><strong>Estimated scope:</strong> ~3 files touched. Mostly small, focused changes. Good warm-up phase.</p>
+                </div>
+              </div>
+
+              {/* Phase 2 */}
+              <div className="bg-slate-800/70 rounded-lg p-3 border border-blue-500/30 mb-3">
+                <div className="text-xs text-blue-400 font-bold mb-2">PHASE 2 — Test Image System (PRD 1 expanded)</div>
+                <div className="text-xs text-gray-400 space-y-1">
+                  <p><strong>PRD 1a:</strong> Test Image Gallery UI — horizontal scrollable strip of numbered images inside each test slot. Auto date/time stamps. Per-project image buttons that filter/scroll to matching images. Data model already exists in <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx</code> (testImages field on TestingSlotContent interface, lines 114-123).</p>
+                  <p><strong>PRD 1b:</strong> Test Images Stored WITH Prompts — clicking a slot tab opens a popup showing the prompt text + associated test images for that slot. Gallery is inside the popup. Dividers between test runs (grouped by timestamp/run).</p>
+                  <p><strong>PRD 1c:</strong> Test Image Tab in Diff Modal — add an "Images" tab to the existing Compare to Main diff modal (already built at <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:830-1068</code>). Shows test slot images vs main images side-by-side.</p>
+                  <p><strong>PRD 1d:</strong> Connect Image Generation to Test Slots — when a test slot is active and user generates images, store them in that slot's <code className="bg-slate-900 px-1 rounded">testImages</code> array. Hook into the existing image generation flow in <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx</code>.</p>
+                  <p><strong>Estimated scope:</strong> Primarily <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx</code> + some integration points in <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx</code>. Medium complexity — new UI components + data flow.</p>
+                </div>
+              </div>
+
+              {/* Phase 3 */}
+              <div className="bg-slate-800/70 rounded-lg p-3 border border-purple-500/30">
+                <div className="text-xs text-purple-400 font-bold mb-2">PHASE 3 — AI Chat Intelligence (PRDs 2, 3, 4)</div>
+                <div className="text-xs text-gray-400 space-y-1">
+                  <p><strong>PRD 2:</strong> AI Chat Full Autonomy Over Testing System — AI can create/switch/fill/duplicate/promote test slots. Needs new tool definitions in the system prompt builder (<code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~5386</code>), new handler functions, and integration with the slot management API. Biggest PRD.</p>
+                  <p><strong>PRD 3:</strong> Calibration Section — per-prompt-type section where user teaches the AI about perception gaps (e.g. "when I say warm, I mean X"). Stored in settings, injected into system prompt. New UI section + settings fields.</p>
+                  <p><strong>PRD 4:</strong> Article Image Visibility for AI Chat — let the AI see article images (thumbnails or URLs) in its context so it can reference previous results. Requires reading from <code className="bg-slate-900 px-1 rounded">articles.generated_images</code> and including in chat system prompt.</p>
+                  <p><strong>Estimated scope:</strong> Largest phase — significant system prompt changes, new handler functions, new UI sections. AI autonomy (PRD 2) is the most complex single feature.</p>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 
