@@ -110,6 +110,17 @@ export interface TestingSlotContent {
     tag: string;
     model: string;
   }>;
+  // Test images generated during testing
+  testImages?: Array<{
+    id: string;
+    url: string;
+    timestamp: string;
+    number: number;
+    projectName?: string;
+    createdBy?: string;
+    prompt?: string;
+    model?: string;
+  }>;
 }
 
 export interface TestingSlotProject {
@@ -147,6 +158,9 @@ interface TestingSlotsSelectorProps {
   // Run test callback
   onRunTest?: () => void;
   testRunning?: boolean;
+  // Username system
+  usernames?: string[];
+  onUsernamesChange?: (usernames: string[]) => void;
 }
 
 const MAX_SLOTS = 20;
@@ -181,6 +195,8 @@ export default function TestingSlotsSelector({
   onProjectsChange,
   onRunTest,
   testRunning = false,
+  usernames = [],
+  onUsernamesChange,
 }: TestingSlotsSelectorProps) {
   // Dialog states
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -192,6 +208,8 @@ export default function TestingSlotsSelector({
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
   const [showProjectDialog, setShowProjectDialog] = useState(false);
   const [activeProjectFilter, setActiveProjectFilter] = useState<string | null>(null); // null = show all
+  const [showDiffModal, setShowDiffModal] = useState(false);
+  const [diffActiveTab, setDiffActiveTab] = useState('mainPrompt');
 
   // Form states
   const [newSlotName, setNewSlotName] = useState('');
@@ -199,6 +217,9 @@ export default function TestingSlotsSelector({
   const [renameName, setRenameName] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
   const [newSlotProjectId, setNewSlotProjectId] = useState<string>('');
+  const [newSlotUsername, setNewSlotUsername] = useState<string>('');
+  const [addingUsername, setAddingUsername] = useState(false);
+  const [newUsernameInput, setNewUsernameInput] = useState('');
 
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
@@ -225,7 +246,7 @@ export default function TestingSlotsSelector({
       name,
       createdAt: now,
       updatedAt: now,
-      createdBy: 'user',
+      createdBy: newSlotUsername || 'user',
       projectId: newSlotProjectId || undefined,
       content: copyFromMain ? { ...getMainContent() } : {},
     };
@@ -235,7 +256,7 @@ export default function TestingSlotsSelector({
     setNewSlotName('');
     setCopyFromMain(false);
     setNewSlotProjectId('');
-  }, [slots, newSlotName, copyFromMain, newSlotProjectId, onSlotsChange, onActiveSlotChange, getMainContent]);
+  }, [slots, newSlotName, copyFromMain, newSlotProjectId, newSlotUsername, onSlotsChange, onActiveSlotChange, getMainContent]);
 
   const handleCreateProject = useCallback(() => {
     const name = newProjectName.trim();
@@ -414,10 +435,11 @@ export default function TestingSlotsSelector({
                   ? 'bg-slate-700 text-orange-400 border-l-2 border-orange-400'
                   : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
               }`}
-              title={`Test ${slot.number}: ${slot.name}${project ? ` (${project.name})` : ''} — Right-click for options`}
+              title={`Test ${slot.number}: ${slot.name}${project ? ` (${project.name})` : ''}${slot.createdBy && slot.createdBy !== 'user' ? ` by ${slot.createdBy}` : ''} — ${new Date(slot.createdAt).toLocaleDateString()} ${new Date(slot.createdAt).toLocaleTimeString()} — Right-click for options`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block"></span>
               {project && <span className="text-[8px] px-1 py-0 rounded bg-orange-500/20 text-orange-300/70">{project.name.slice(0, 8)}</span>}
+              {slot.createdBy && slot.createdBy !== 'user' && <span className="text-[8px] px-1 py-0 rounded bg-purple-500/20 text-purple-300/70">{slot.createdBy.slice(0, 6)}</span>}
               T{slot.number}: {slot.name.length > 18 ? slot.name.slice(0, 18) + '...' : slot.name}
               {/* Inline menu button */}
               <span
@@ -492,6 +514,21 @@ export default function TestingSlotsSelector({
                 {(activeSlot.content?.testResults || []).length} results
               </span>
             )}
+            {/* Created by badge */}
+            {activeSlot.createdBy && activeSlot.createdBy !== 'user' && (
+              <span className="px-1.5 py-0.5 text-[10px] rounded bg-purple-500/20 text-purple-300">
+                {activeSlot.createdBy}
+              </span>
+            )}
+            <button
+              onClick={() => { setDiffActiveTab('mainPrompt'); setShowDiffModal(true); }}
+              className="px-2 py-1 bg-blue-500/20 hover:bg-blue-500/30 rounded text-blue-300 transition-colors flex items-center gap-1"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+              </svg>
+              Compare to Main
+            </button>
             <button
               onClick={() => setShowPromoteConfirm(activeSlot.id)}
               className="px-2 py-1 bg-orange-500/20 hover:bg-orange-500/30 rounded text-orange-200 transition-colors"
@@ -627,6 +664,83 @@ export default function TestingSlotsSelector({
                 ))}
               </select>
             )}
+            {/* Username selector */}
+            {(usernames.length > 0 || onUsernamesChange) && (
+              <div className="mb-3">
+                <label className="block text-[10px] text-slate-500 mb-1">Created by</label>
+                {!addingUsername ? (
+                  <div className="flex gap-2">
+                    <select
+                      value={newSlotUsername}
+                      onChange={(e) => setNewSlotUsername(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-slate-900 border border-slate-600 rounded text-sm text-white focus:border-purple-500 focus:outline-none"
+                    >
+                      <option value="">Select user...</option>
+                      {usernames.map(u => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                    {onUsernamesChange && (
+                      <button
+                        onClick={() => setAddingUsername(true)}
+                        className="px-2 py-1 text-[10px] bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 rounded transition"
+                        title="Add new user"
+                      >
+                        + User
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newUsernameInput}
+                      onChange={(e) => setNewUsernameInput(e.target.value)}
+                      placeholder="Enter name..."
+                      className="flex-1 px-3 py-2 bg-slate-900 border border-slate-600 rounded text-sm text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newUsernameInput.trim()) {
+                          const name = newUsernameInput.trim();
+                          if (!usernames.includes(name)) {
+                            onUsernamesChange?.([...usernames, name]);
+                          }
+                          setNewSlotUsername(name);
+                          setNewUsernameInput('');
+                          setAddingUsername(false);
+                        }
+                        if (e.key === 'Escape') {
+                          setAddingUsername(false);
+                          setNewUsernameInput('');
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const name = newUsernameInput.trim();
+                        if (name) {
+                          if (!usernames.includes(name)) {
+                            onUsernamesChange?.([...usernames, name]);
+                          }
+                          setNewSlotUsername(name);
+                        }
+                        setNewUsernameInput('');
+                        setAddingUsername(false);
+                      }}
+                      className="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-500 transition"
+                    >
+                      Add
+                    </button>
+                    <button
+                      onClick={() => { setAddingUsername(false); setNewUsernameInput(''); }}
+                      className="px-2 py-1 text-xs text-slate-400 hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <label className="flex items-center gap-2 text-xs text-slate-400 mb-4 cursor-pointer">
               <input
                 type="checkbox"
@@ -638,7 +752,7 @@ export default function TestingSlotsSelector({
             </label>
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => { setShowCreateDialog(false); setNewSlotName(''); setCopyFromMain(false); }}
+                onClick={() => { setShowCreateDialog(false); setNewSlotName(''); setCopyFromMain(false); setNewSlotUsername(''); }}
                 className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
               >
                 Cancel
@@ -821,6 +935,246 @@ export default function TestingSlotsSelector({
               >
                 Create Project
               </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Diff Preview Modal - Compare Test Slot vs Main */}
+      {showDiffModal && activeSlot && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70" onClick={() => setShowDiffModal(false)}>
+          <div className="bg-slate-900 border border-slate-600 rounded-xl w-[90vw] max-w-[1200px] h-[80vh] shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700">
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-semibold text-white">Compare to Main</h3>
+                <span className="px-2 py-0.5 text-[10px] rounded bg-orange-500/20 text-orange-300">
+                  T{activeSlot.number}: {activeSlot.name}
+                </span>
+                {activeSlot.createdBy && activeSlot.createdBy !== 'user' && (
+                  <span className="px-1.5 py-0.5 text-[10px] rounded bg-purple-500/20 text-purple-300">{activeSlot.createdBy}</span>
+                )}
+                <span className="text-[10px] text-slate-500">
+                  {new Date(activeSlot.updatedAt).toLocaleDateString()} {new Date(activeSlot.updatedAt).toLocaleTimeString()}
+                </span>
+              </div>
+              <button onClick={() => setShowDiffModal(false)} className="text-slate-400 hover:text-white transition p-1">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Section Tabs */}
+            <div className="flex items-center gap-1 px-5 py-2 border-b border-slate-800 overflow-x-auto">
+              {([
+                ['mainPrompt', 'Main Prompt'],
+                ['categories', 'Categories'],
+                ['guidedGuardrails', 'Guided Guardrails'],
+                ['guidedRules', 'Guided Rules'],
+                ['smartPrompt', 'Smart Prompt'],
+                ['persistent', 'Persistent Text'],
+                ['matchingRules', 'Matching Rules'],
+              ] as [string, string][]).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setDiffActiveTab(key)}
+                  className={`px-3 py-1.5 text-xs rounded whitespace-nowrap transition ${
+                    diffActiveTab === key
+                      ? 'bg-blue-600 text-white font-medium'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  {label}
+                  {(() => {
+                    const mainContent = getMainContent();
+                    const slotContent = activeSlot.content || {};
+                    let mainVal = '', slotVal = '';
+                    if (key === 'mainPrompt') { mainVal = mainContent.mainPrompt || ''; slotVal = slotContent.mainPrompt || ''; }
+                    else if (key === 'categories') { mainVal = JSON.stringify(mainContent.placeholderCategories || []); slotVal = JSON.stringify(slotContent.placeholderCategories || []); }
+                    else if (key === 'guidedGuardrails') { mainVal = JSON.stringify(mainContent.guidedGuardrails || {}); slotVal = JSON.stringify(slotContent.guidedGuardrails || {}); }
+                    else if (key === 'guidedRules') { mainVal = JSON.stringify(mainContent.guidedRules || []); slotVal = JSON.stringify(slotContent.guidedRules || []); }
+                    else if (key === 'smartPrompt') { mainVal = mainContent.smartPromptGuidance || ''; slotVal = slotContent.smartPromptGuidance || ''; }
+                    else if (key === 'persistent') { mainVal = (mainContent.mainPromptPersistent || '') + (mainContent.guidedInstructionsPersistent || '') + (mainContent.smartPromptPersistent || ''); slotVal = (slotContent.mainPromptPersistent || '') + (slotContent.guidedInstructionsPersistent || '') + (slotContent.smartPromptPersistent || ''); }
+                    else if (key === 'matchingRules') { mainVal = JSON.stringify(mainContent.matchingRules || {}); slotVal = JSON.stringify(slotContent.matchingRules || {}); }
+                    if (mainVal === slotVal) return <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-green-400 inline-block" title="Identical"></span>;
+                    if (!slotVal || slotVal === '{}' || slotVal === '[]') return <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-slate-500 inline-block" title="Empty in slot"></span>;
+                    return <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" title="Modified"></span>;
+                  })()}
+                </button>
+              ))}
+            </div>
+
+            {/* Diff Content */}
+            <div className="flex-1 overflow-auto p-5">
+              {(() => {
+                const mainContent = getMainContent();
+                const slotContent = activeSlot.content || {};
+
+                // Helper to render a side-by-side text diff
+                const renderTextDiff = (mainText: string, slotText: string, label: string) => {
+                  const isIdentical = mainText === slotText;
+                  const mainEmpty = !mainText.trim();
+                  const slotEmpty = !slotText.trim();
+
+                  if (isIdentical) {
+                    return (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="px-2 py-0.5 text-[10px] rounded bg-green-500/20 text-green-400 font-medium">Identical</span>
+                          <span className="text-xs text-slate-500">{label}</span>
+                        </div>
+                        <pre className="text-xs text-slate-400 whitespace-pre-wrap bg-slate-800/50 rounded-lg p-4 border border-slate-700 max-h-[50vh] overflow-auto">{mainText || '(empty)'}</pre>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="px-2 py-0.5 text-[10px] rounded bg-amber-500/20 text-amber-400 font-medium">Modified</span>
+                        <span className="text-xs text-slate-500">{label}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-[10px] text-green-400 font-medium mb-1.5 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                            Main (Live)
+                          </div>
+                          <pre className="text-xs whitespace-pre-wrap bg-slate-800/50 rounded-lg p-4 border border-green-500/20 max-h-[50vh] overflow-auto text-slate-300">{mainEmpty ? <span className="text-slate-600 italic">(empty)</span> : mainText}</pre>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-orange-400 font-medium mb-1.5 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-orange-400"></span>
+                            Test Slot T{activeSlot.number}
+                          </div>
+                          <pre className="text-xs whitespace-pre-wrap bg-slate-800/50 rounded-lg p-4 border border-orange-500/20 max-h-[50vh] overflow-auto text-slate-300">{slotEmpty ? <span className="text-slate-600 italic">(empty)</span> : slotText}</pre>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                };
+
+                // Helper to render structured data diff (rules, categories, etc.)
+                const renderStructuredDiff = (mainData: any[], slotData: any[], label: string, itemLabel: (item: any) => string) => {
+                  const mainJson = JSON.stringify(mainData);
+                  const slotJson = JSON.stringify(slotData);
+                  const isIdentical = mainJson === slotJson;
+
+                  if (isIdentical) {
+                    return (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="px-2 py-0.5 text-[10px] rounded bg-green-500/20 text-green-400 font-medium">Identical</span>
+                          <span className="text-xs text-slate-500">{label} ({mainData.length} items)</span>
+                        </div>
+                        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700 max-h-[50vh] overflow-auto space-y-1">
+                          {mainData.length === 0 ? <span className="text-xs text-slate-600 italic">(none)</span> : mainData.map((item, i) => (
+                            <div key={i} className="text-xs text-slate-400 py-1 border-b border-slate-700/50 last:border-0">{itemLabel(item)}</div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="px-2 py-0.5 text-[10px] rounded bg-amber-500/20 text-amber-400 font-medium">Modified</span>
+                        <span className="text-xs text-slate-500">{label}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-[10px] text-green-400 font-medium mb-1.5">Main (Live) — {mainData.length} items</div>
+                          <div className="bg-slate-800/50 rounded-lg p-3 border border-green-500/20 max-h-[50vh] overflow-auto space-y-1">
+                            {mainData.length === 0 ? <span className="text-xs text-slate-600 italic">(none)</span> : mainData.map((item, i) => (
+                              <div key={i} className="text-xs text-slate-300 py-1 border-b border-slate-700/50 last:border-0">{itemLabel(item)}</div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-orange-400 font-medium mb-1.5">Test Slot T{activeSlot.number} — {slotData.length} items</div>
+                          <div className="bg-slate-800/50 rounded-lg p-3 border border-orange-500/20 max-h-[50vh] overflow-auto space-y-1">
+                            {slotData.length === 0 ? <span className="text-xs text-slate-600 italic">(none)</span> : slotData.map((item, i) => (
+                              <div key={i} className="text-xs text-slate-300 py-1 border-b border-slate-700/50 last:border-0">{itemLabel(item)}</div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                };
+
+                switch (diffActiveTab) {
+                  case 'mainPrompt':
+                    return renderTextDiff(mainContent.mainPrompt || '', slotContent.mainPrompt || '', 'Main Prompt');
+                  case 'categories':
+                    return renderStructuredDiff(
+                      mainContent.placeholderCategories || [],
+                      slotContent.placeholderCategories || [],
+                      'Placeholder Categories',
+                      (cat: PlaceholderCategory) => `${cat.placeholder}: ${cat.name} (${cat.options?.length || 0} options${cat.enabled === false ? ', disabled' : ''})`
+                    );
+                  case 'guidedGuardrails': {
+                    const mg = mainContent.guidedGuardrails;
+                    const sg = slotContent.guidedGuardrails;
+                    const fields = ['instructions', 'uniformDescription', 'stylePreferences', 'avoidList', 'defaultSubject'] as const;
+                    return (
+                      <div className="space-y-4">
+                        {fields.map(field => (
+                          <div key={field}>
+                            {renderTextDiff(
+                              (mg as any)?.[field] || '',
+                              (sg as any)?.[field] || '',
+                              field.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  case 'guidedRules':
+                    return renderStructuredDiff(
+                      mainContent.guidedRules || [],
+                      slotContent.guidedRules || [],
+                      'Guided GPT Rules',
+                      (rule: TagBasedRule) => `[${rule.tag}] ${rule.title}: ${rule.text.substring(0, 100)}${rule.text.length > 100 ? '...' : ''}`
+                    );
+                  case 'smartPrompt':
+                    return renderTextDiff(mainContent.smartPromptGuidance || '', slotContent.smartPromptGuidance || '', 'Smart Prompt Guidance');
+                  case 'persistent':
+                    return (
+                      <div className="space-y-4">
+                        {renderTextDiff(mainContent.mainPromptPersistent || '', slotContent.mainPromptPersistent || '', 'Main Prompt Persistent')}
+                        {renderTextDiff(mainContent.guidedInstructionsPersistent || '', slotContent.guidedInstructionsPersistent || '', 'Guided Instructions Persistent')}
+                        {renderTextDiff(mainContent.smartPromptPersistent || '', slotContent.smartPromptPersistent || '', 'Smart Prompt Persistent')}
+                      </div>
+                    );
+                  case 'matchingRules': {
+                    const mr = mainContent.matchingRules || {};
+                    const sr = slotContent.matchingRules || {};
+                    const ruleKeys = ['rule1', 'rule2', 'rule3', 'rule4'] as const;
+                    return (
+                      <div className="space-y-4">
+                        {ruleKeys.map(key => (
+                          <div key={key}>
+                            {renderTextDiff(
+                              (mr as any)?.[key] || '',
+                              (sr as any)?.[key] || '',
+                              `${(mr as any)?.[`${key}_title`] || key.toUpperCase()}`
+                            )}
+                          </div>
+                        ))}
+                        {renderTextDiff((mr as any)?.placement || '', (sr as any)?.placement || '', 'Placement')}
+                        {renderTextDiff((mr as any)?.smart || '', (sr as any)?.smart || '', 'Smart')}
+                      </div>
+                    );
+                  }
+                  default:
+                    return <div className="text-slate-500 text-sm">Select a section to compare.</div>;
+                }
+              })()}
             </div>
           </div>
         </div>,

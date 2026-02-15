@@ -4684,6 +4684,426 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">February 2026</h3>
 
       <div className="space-y-4">
+        {/* Feb 15 (late) - Calibration System PRD Expansion */}
+        <div className="border-l-4 border-purple-500 pl-4">
+          <div className="text-sm text-purple-400 font-semibold">Feb 15, 2026 (late session) - PRD 3 Calibration System Full Spec</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">Documentation-only session. User brought detailed calibration design from external AI chat consultation. Coding agent reviewed, contributed design decisions, and documented everything in Blueprint PRDs.</p>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">DOCS</span>
+              <div>
+                <strong>PRD 3 expanded from simple text-box to full calibration system spec</strong>
+                <div className="text-xs text-gray-500">
+                  Original PRD 3 was just "a text box per prompt type that stores calibration corrections." Now a comprehensive
+                  engineering spec with: 3-phase workflow (pre-calibration → near-miss logging → reusable entries),
+                  15-field entry schema (id, title, tags[], priority hard/med/soft, human_note + model_instruction dual fields, trigger, do/avoid,
+                  enforcement tactics, evidence images, per-tag test status), 3 templates (UI Card, Drop-in Line format, Calibration Pack),
+                  injection stack order (System → Global Guardrails → Tag Guardrails → Calibration Pack → Page context → Output contract),
+                  query logic (filter by tag, sort priority desc, limit 12-20), conflict resolution rules, two debug modes
+                  (Show Injection + Disable Calibration A/B toggle), atomic entries rule (one idea per calibration for portability).
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DESIGN</span>
+              <div>
+                <strong>Coding agent design contributions (not from external chat)</strong>
+                <div className="text-xs text-gray-500">
+                  Agent identified that calibration entries map directly to existing test slot infrastructure — a "near miss" IS a test image + annotation.
+                  Proposed adding calibrationNote and correctedPrompt fields to existing testImages array items rather than building separate storage.
+                  Proposed "Promote to Calibration" button flow: annotate test image → promote to calibration library (not the other direction).
+                  Recommended calibration live as dedicated sub-section per prompt type, not buried in test slots.
+                  Suggested calibration version numbers with changelog for rollback capability.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DESIGN</span>
+              <div>
+                <strong>Calibration tag model: per-tag with progressive expansion (agent-designed)</strong>
+                <div className="text-xs text-gray-500">
+                  External chat originally proposed binary "global vs per-tag" choice. Agent redesigned to multi-select progressive expansion:
+                  each entry starts on ONE tested tag, accumulates tags as testing proves them out. "All" = verified global.
+                  Flow: create on "H" → test "J" → works → add "J" → eventually "All". Can always remove a tag if it stops working.
+                  per_tag_test_status field enables scientific tracking of whether a rule is niche or global over time.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">DOCS</span>
+              <div>
+                <strong>Injection stack order documented (from external chat)</strong>
+                <div className="text-xs text-gray-500">
+                  Critical design: calibration is a DYNAMIC LAYER between guardrails and page context. Never bake into permanent guardrails.
+                  Order: System/Role → Global Guardrails → Tag Guardrails → Calibration Pack (filtered, max 12-20) → Page context → Output contract.
+                  Calibration after guardrails prevents it from accidentally relaxing hard rules. Conflict resolution: guardrails {">"} calibration,
+                  higher priority wins, same priority → most recent wins.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">DOCS</span>
+              <div>
+                <strong>Drop-in line format standardized (from external chat)</strong>
+                <div className="text-xs text-gray-500">
+                  Each calibration entry has TWO text fields: human_note (for user understanding) and model_instruction (the actual injected line).
+                  Format: [CAL:Title | Strength] Do …; Avoid …; Prefer …
+                  Example: [CAL:Everyday employee look | Hard] Depict a realistic worker with natural skin texture; avoid glam styling; prefer practical hair.
+                  This is the key difference between "notes" and "usable calibration."
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">DOCS</span>
+              <div>
+                <strong>Two debug modes documented (from external chat)</strong>
+                <div className="text-xs text-gray-500">
+                  Mode A "Show Injection": display exact compiled context (guardrails + tag + calibration + page text) used for each generation, for diagnostics.
+                  Mode B "Disable Calibration": A/B toggle to run same prompt with calibration off, proving whether a calibration entry actually matters.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">DOCS</span>
+              <div>
+                <strong>Phase 3 summary updated in Phased Implementation Plan</strong>
+                <div className="text-xs text-gray-500">Reflects expanded PRD 3 with schema details, injection stack, debug modes. Points to full PRD 3 section for complete spec.</div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Key Files:</span>
+            <span className="text-gray-400 ml-2">BlueprintPage.tsx only (documentation session — no code changes)</span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Commits:</span>
+            <span className="text-gray-400 ml-2">f5121e3, fb6776a, 24dd9da, 9b47a21</span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Source of truth:</span>
+            <span className="text-gray-400 ml-2">PRD 3 in the HANDOFF PRDs section above is the single source of truth for calibration system design. All schema, templates, injection logic, and debug modes are documented there. Everything from the external AI chat has been captured.</span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Context for future rebuild:</span>
+            <span className="text-gray-400 ml-2">User plans to eventually use Opus 4.6 million-token context to reverse-engineer the entire spaghetti codebase into clean specs, then feed those specs into an auto-builder (Wiggins-based looper with Playwright + Claude computer-use testing) to rebuild everything properly. Calibration system will be part of that enterprise rebuild. For NOW: just get images working for the website with existing system.</span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Next priority:</span>
+            <span className="text-gray-400 ml-2">Get images working for the website AS-IS. Calibration is primarily for Guided GPT (where AI makes on-the-fly judgment calls). Main Prompt is more static and works well enough with existing guardrails. Do NOT start building calibration system yet.</span>
+          </div>
+        </div>
+
+        {/* Feb 15 - Testing System Completion + Diff Modal + Username System */}
+        <div className="border-l-4 border-orange-500 pl-4">
+          <div className="text-sm text-orange-400 font-semibold">Feb 15, 2026 - Testing System UI Completion + Compare to Main Diff Modal + Username System</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Testing Slots Bars for All 3 Prompt Types</strong>
+                <div className="text-xs text-gray-500">
+                  Added TestingSlotsSelector to top of Guided GPT prompt area (was missing - Smart Prompt already had one).
+                  <br/>All 3 prompt modes (Main, Guided GPT, Smart Prompt) now have testing bars at their section top.
+                  <br/>Files: <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:9875</code> (Guided GPT top bar)
+                  <br/>Reference: Smart Prompt bar at <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:12543</code>
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>3-Button Testing Pill in AI Chat Toolbars (Main, Guided, Smart)</strong>
+                <div className="text-xs text-gray-500">
+                  Both chat assistants (Main Prompt AI + Guided GPT AI) now have 3 labeled buttons in a gold pill:
+                  <br/>• "Main" (orange) - toggles Main Prompt testing bar
+                  <br/>• "Guided" (emerald) - toggles Guided GPT testing bar
+                  <br/>• "Smart" (purple) - toggles Smart Prompt testing bar
+                  <br/>Gold pill with "Testing" label wraps all 3. Only one bar shows at a time (clicking one closes others).
+                  <br/>Also renamed: "Testing" → "Testing Mode", "Bank" → "Image Bank" for clarity.
+                  <br/>State: <code className="bg-slate-900 px-1 rounded">showMainPromptSlots</code>, <code className="bg-slate-900 px-1 rounded">showGuidedSlots</code>, <code className="bg-slate-900 px-1 rounded">showSmartSlots</code> (line ~1185)
+                  <br/>Main chat toolbar: <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~9507</code>
+                  <br/>Guided chat toolbar: <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~11331</code>
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Compare to Main - Diff Preview Modal</strong>
+                <div className="text-xs text-gray-500">
+                  Blue "Compare to Main" button in active slot banner opens full-screen diff modal.
+                  <br/>7 tabbed sections: Main Prompt, Categories, Guided Guardrails, Guided Rules, Smart Prompt, Persistent Text, Matching Rules.
+                  <br/>Colored dots on tabs: green = identical, amber = modified, gray = empty in slot.
+                  <br/>Side-by-side panels: green border (Main/Live) vs orange border (Test Slot).
+                  <br/>File: <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:830-1068</code>
+                  <br/>Button: <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:501-509</code>
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Username System for Test Slots</strong>
+                <div className="text-xs text-gray-500">
+                  "Created by" dropdown in Create Slot dialog with "+ User" button to add names.
+                  <br/>Purple badge on slot tabs and active banner. Tooltip shows creator + date/time.
+                  <br/>Settings: <code className="bg-slate-900 px-1 rounded">testing_usernames: string[]</code> in ImageCreationSettings (line ~642)
+                  <br/>Props: <code className="bg-slate-900 px-1 rounded">usernames</code> + <code className="bg-slate-900 px-1 rounded">onUsernamesChange</code> on all 12 TestingSlotsSelector instances
+                  <br/>Create dialog: <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:630-706</code>
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-yellow-400 font-bold">DATA</span>
+              <div>
+                <strong>Test Image Data Model (for future gallery)</strong>
+                <div className="text-xs text-gray-500">
+                  Added <code className="bg-slate-900 px-1 rounded">testImages</code> field to <code className="bg-slate-900 px-1 rounded">TestingSlotContent</code> interface.
+                  <br/>Structure: id, url, timestamp, number, projectName, createdBy, prompt, model
+                  <br/>File: <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:114-123</code>
+                  <br/>UI not yet built - see HANDOFF PRDs below.
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        {/* HANDOFF PRDs for next agent */}
+        <div className="border-l-4 border-red-500 pl-4 bg-red-900/10 rounded-r-lg p-4">
+          <div className="text-sm text-red-400 font-semibold mb-2">HANDOFF PRDs - Feb 15, 2026 Session (for next agent)</div>
+          <p className="text-xs text-gray-400 mb-3">These features were planned/requested but not yet implemented. Data models and infrastructure are in place.</p>
+
+          <div className="space-y-4">
+            {/* PRD 1: Test Image Gallery */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 1: Test Image Gallery UI</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> Horizontal scrollable image strip showing test images per slot + per-project grouping.</p>
+                <p><strong>Where it goes:</strong> Two locations: (1) Below the testing bar in the prompt area as a collapsible section. (2) Inside the "Compare to Main" diff modal as a new tab alongside the existing 7 tabs.</p>
+                <p><strong>Data model ready:</strong> <code className="bg-slate-900 px-1 rounded">TestingSlotContent.testImages[]</code> in TestingSlotsSelector.tsx:114-123. Fields: id, url, timestamp, number, projectName, createdBy, prompt, model.</p>
+                <p><strong>Each image shows:</strong> Sequential number (1, 2, 3), auto date/time stamp, project name, model used.</p>
+                <p><strong>Grouping:</strong> Images from different test runs separated by a divider line. Above each group: timestamp, test number, model name.</p>
+                <p><strong>Scrolling:</strong> Most recent centered, scroll left/right for older. Horizontal infinite scroll.</p>
+                <p><strong>Click to expand:</strong> Clicking an image opens it larger.</p>
+                <p><strong>Per-project buttons:</strong> Each project in the testing bar gets a button that scrolls to and highlights its images in the gallery.</p>
+                <p><strong>Popup from tab:</strong> Clicking a test slot tab should open a popup showing: the prompt text that was in that test + the image gallery for that test. This reuses the existing diff modal infrastructure.</p>
+                <p><strong>Image storage hook:</strong> Need to connect the image generation flow (handleBatchGenerate around line 7532) to store images in the active test slot's testImages array when a test is running.</p>
+              </div>
+            </div>
+
+            {/* PRD 2: AI Chat Full Autonomy */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 2: AI Chat Full Autonomy Over Testing System</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> The AI Prompt Assistant chat (both Main + Guided) should be able to programmatically control the entire testing workflow.</p>
+                <p><strong>Currently it can:</strong> Read prompts via Set Scope grid, write to categories (add/edit), write to prompt text fields, see rules.</p>
+                <p><strong>Needs to also:</strong></p>
+                <p>• Create new test slots (programmatically call handleCreateSlot)</p>
+                <p>• Switch between slots (call handleActiveSlotChange)</p>
+                <p>• Fill in ALL fields: main prompt, categories, rules, guardrails, persistent text</p>
+                <p>• Trigger "Run Test" (call handleRunTest)</p>
+                <p>• See the test image gallery results and read image IDs</p>
+                <p>• Match images back to which test prompt generated them (via shared timestamps/IDs)</p>
+                <p>• See the current model dropdown selection (so it knows prompting style for that model)</p>
+                <p><strong>Where to implement:</strong> The unified chat handler is at <code className="bg-slate-900 px-1 rounded">handleSendUnifiedChat</code> (~line 5200). The system prompt builder is around line 5386 (section: "GUIDED GPT PROMPT SETTINGS"). Add new "tool" capabilities the AI can invoke via structured responses, similar to how it already creates categories.</p>
+                <p><strong>Model visibility:</strong> The model dropdown is <code className="bg-slate-900 px-1 rounded">settings.guided_model</code> for Guided GPT and the image model is <code className="bg-slate-900 px-1 rounded">settings.image_model</code>. Pass these into the system prompt so the AI knows.</p>
+              </div>
+            </div>
+
+            {/* PRD 3: Calibration System (Full Workflow + Schema + Injection) */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 3: Calibration System (AI vs Human Perception — Full Spec)</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> A living calibration system that evolves through real testing. NOT a one-time text box — it's an iterative workflow: see near-miss → annotate → distill into ranked rules → inject into AI prompts. Calibration = taste + acceptance criteria that only becomes clear when you see real outputs. Calibration items must be <strong>atomic</strong> (one idea per entry — don't bundle "logo suppression" with "non-model attractiveness").</p>
+
+                <p className="text-orange-400/80 font-bold mt-3">═══ WORKFLOW PHASES ═══</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Phase 1 — Pre-Calibration (guardrails only):</p>
+                <p>Already done via existing guardrails (uniform, pose, logo suppression, no text, realism, non-model directive). Gets to "mostly acceptable" images.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Phase 2 — Calibration Triggers (near-miss logging):</p>
+                <p>When user spots an image that's *nearly* right but slightly off, they log a calibration case from a test slot image. Each case captures: (1) reference image (the near-miss), (2) what's wrong (1-2 sentences), (3) what correct looks like (1-2 sentences), (4) optional corrected example image after prompt adjustment.</p>
+                <p><strong>Integration with test slots:</strong> Add <code className="bg-slate-900 px-1 rounded">calibrationNote?: string</code> and <code className="bg-slate-900 px-1 rounded">correctedPrompt?: string</code> fields to the <code className="bg-slate-900 px-1 rounded">testImages</code> array items in TestingSlotContent (already at <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:114-123</code>). A near-miss is literally a test slot image + annotation. Add a <strong>"Create Calibration from This Result"</strong> button on each test image that pre-fills fields + attaches the image/prompt.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Phase 3 — Reusable Calibration Entries:</p>
+                <p>Each annotated near-miss gets distilled into a calibration entry. Entries must be <strong>atomic</strong> (one idea each) for easy portability across tags. Keep entries short and crisp — models comply better with concise constraints.</p>
+
+                <p className="text-orange-400/80 font-bold mt-3">═══ DATA MODEL (CALIBRATION ENTRY SCHEMA) ═══</p>
+                <p>Each calibration entry stores:</p>
+                <p><code className="bg-slate-900 px-1 rounded">calibration_entries: Array&lt;{'{'}</code></p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">id: string</code> — unique ID (e.g. CAL-007)</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">title: string</code> — short name (e.g. "Avoid model glam")</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">tags: string[]</code> — multi-select tags this applies to; "All" = global</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">priority: 'hard' | 'medium' | 'soft'</code> — enforcement strength (hard = non-negotiable)</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">human_note: string</code> — FOR THE USER: what's off and what we want (human-readable description)</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">model_instruction: string</code> — FOR THE AI: the actual drop-in line injected into prompts</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">trigger: string</code> — when to apply (e.g. "any portrait with visible chest area")</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">do_preferred: string</code> — what the preferred outcome looks like</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">avoid_antipattern: string</code> — what to avoid</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">enforcement_tactics: string[]</code> — 1-3 bullet tactics (camera/occlusion/crop/lighting wording)</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">negative_constraints?: string[]</code> — optional short negative list</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">evidence_bad_image_ids?: string[]</code> — near-miss image references</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">evidence_good_image_ids?: string[]</code> — target/good image references</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">per_tag_test_status?: Record&lt;string, {'{'} pass: boolean, testedAt: string {'}'}&gt;</code> — pass/fail + timestamp per tag</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">createdAt: string, updatedAt: string</code></p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">source_test_image_id?: string</code> — links back to the test image that triggered it</p>
+                <p><code className="bg-slate-900 px-1 rounded">{'}'}&gt;</code></p>
+                <p><code className="bg-slate-900 px-1 rounded">calibration_version: number</code> — auto-increments when entries change (v1/v2/v3 tracking + rollback)</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Key difference — two text fields per entry:</p>
+                <p>(1) <strong>human_note</strong> — for the user: "What's off and what we want" (readable description)</p>
+                <p>(2) <strong>model_instruction</strong> — for the AI: the actual drop-in line used in prompts. This is the critical field.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Tag management:</p>
+                <p><strong>Per-tag with progressive expansion.</strong> Each entry starts attached to the ONE tag it was tested on. As you verify it works on more tags, add them via multi-select. Once verified on all tags, check "All" for global. You can always remove a tag if it stops working. The <code className="bg-slate-900 px-1 rounded">per_tag_test_status</code> field lets you scientifically track whether a rule is niche or global over time.</p>
+
+                <p className="text-orange-400/80 font-bold mt-3">═══ UI TEMPLATES ═══</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Template 1 — Calibration Card (CRUD UI):</p>
+                <p>Each entry renders as a card with these fields: Title | Tags (multi-select) | Priority (Hard/Med/Soft) | Trigger (when to apply) | Do (preferred) | Avoid (anti-pattern) | Enforcement wording (drop-in line) | Evidence (bad/good image IDs) | Status (pass/fail per tag + last tested). Forces each calibration to be actionable with literal injectable wording.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Template 2 — Drop-in Line Format (what AI actually reads):</p>
+                <p>Each entry's <code className="bg-slate-900 px-1 rounded">model_instruction</code> should follow this format:</p>
+                <p><code className="bg-slate-900 px-1 rounded">[CAL:Title | Strength] Do …; Avoid …; Prefer …</code></p>
+                <p>Example: <code className="bg-slate-900 px-1 rounded">[CAL:Everyday employee look | Hard] Depict a realistic worker with natural skin texture and minimal makeup; avoid glam/influencer styling; prefer practical hair and functional posture.</code></p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Template 3 — Calibration Pack (compiled block for injection):</p>
+                <p>When generating for a specific tag, compile a block like:</p>
+                <p><code className="bg-slate-900 px-1 rounded">Calibration Pack — Tag H (sorted by priority):</code></p>
+                <p><code className="bg-slate-900 px-1 rounded">1. (Hard) [drop-in line]</code></p>
+                <p><code className="bg-slate-900 px-1 rounded">2. (Hard) [drop-in line]</code></p>
+                <p><code className="bg-slate-900 px-1 rounded">3. (Medium) [drop-in line]</code></p>
+                <p>Meta-instruction included: "If a calibration item conflicts with guardrails, guardrails win. If two calibration items conflict, higher priority wins; if same priority, most recent wins."</p>
+
+                <p className="text-orange-400/80 font-bold mt-3">═══ INJECTION STACK (where calibration goes in the prompt) ═══</p>
+                <p><strong>Critical: Calibration is a DYNAMIC LAYER between guardrails and page context. Never bake it into permanent guardrails.</strong></p>
+                <p>When generating an image prompt (Guided GPT flow), build context in this exact order:</p>
+                <p className="pl-4">1. <strong>System / Role</strong> (already exists)</p>
+                <p className="pl-4">2. <strong>Global Guardrails</strong> (persistent instructions — always included)</p>
+                <p className="pl-4">3. <strong>Tag Guardrails</strong> (only for the active tag)</p>
+                <p className="pl-4">4. <strong>Calibration Pack (DYNAMIC)</strong> — filtered by tag, sorted by priority, limited to top 12-20</p>
+                <p className="pl-4">5. <strong>Page context</strong> (the ~75 words around image placement)</p>
+                <p className="pl-4">6. <strong>Output contract</strong> ("Output ONLY the final prompt…")</p>
+                <p><strong>Why this order:</strong> Calibration refines output without overriding fundamentals. Placing it after guardrails prevents calibration from accidentally relaxing hard rules.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Query Logic (what gets injected):</p>
+                <p>Given <code className="bg-slate-900 px-1 rounded">active_tag</code>:</p>
+                <p className="pl-4">1. Include items where <code className="bg-slate-900 px-1 rounded">active_tag in tags[]</code></p>
+                <p className="pl-4">2. Also include items marked "All" (global)</p>
+                <p className="pl-4">3. Sort by priority desc (Hard → Med → Soft), then updatedAt desc</p>
+                <p className="pl-4">4. Limit to <strong>12-20 max</strong> (avoid prompt bloat)</p>
+                <p className="pl-4">5. Render as numbered bullet list using Template 3 format</p>
+                <p>Inject into system prompt builder at <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~5386</code>.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Conflict Resolution:</p>
+                <p>Simple rule: (1) Guardrails always beat calibration. (2) Higher priority calibration wins. (3) Same priority → most recent wins.</p>
+
+                <p className="text-orange-400/80 font-bold mt-3">═══ DEBUG MODES ═══</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Mode A — "Show Injection" (transparency):</p>
+                <p>In the test viewer, show the <strong>exact compiled context</strong> that was used for a generation: guardrails block + tag block + calibration pack block + page text. If something goes wrong, you can see whether calibration was missing or ignored.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Mode B — "Disable Calibration" (A/B toggle):</p>
+                <p>Toggle to run the same prompt generation <strong>with calibration off</strong> for quick proof that a calibration item actually matters. Side-by-side comparison: with vs without.</p>
+
+                <p className="text-orange-400/80 font-bold mt-3">═══ UI LAYOUT ═══</p>
+                <p>Dedicated collapsible "Calibration Library" sub-section under each prompt type area (not buried in test slots). Populated FROM test slot evidence. Flow: see near-miss in test slot → annotate it → "Create Calibration from This Result" button pre-fills card fields + attaches image/prompt → entry appears in Calibration Library. Drag to reorder priority. Version history visible. Each tag page can show "calibration entries affecting this tag" filtered view.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">AI Chat Role in Calibration:</p>
+                <p>When user pastes near-miss evidence (image + prompt), AI should: (1) diagnose why it happened (prompt phrasing, rule conflict, missing negative), (2) propose a calibration entry with both <code className="bg-slate-900 px-1 rounded">human_note</code> and <code className="bg-slate-900 px-1 rounded">model_instruction</code>, (3) suggest a targeted test to verify the fix. AI defaults to tagging new entries with only the current tag being tested.</p>
+              </div>
+            </div>
+
+            {/* PRD 4: Article Image Visibility */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 4: Article Image Visibility for AI Chat</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> Let the AI chat see images that were generated for actual published article pages.</p>
+                <p><strong>Purpose:</strong> AI can evaluate real-world results, compare against what it thinks is ideal, feeds into calibration.</p>
+                <p><strong>Where images live:</strong> <code className="bg-slate-900 px-1 rounded">settings.image_bank</code> has BankImage objects with url, wpUrl, prompt, model, variation, etc.</p>
+                <p><strong>Article images:</strong> Stored in <code className="bg-slate-900 px-1 rounded">articles.generated_images</code> (per article, in the database).</p>
+                <p><strong>Implementation:</strong> Add article images to the AI chat system prompt context when the "Image Bank" scope toggle is on. Could use the existing loadArticles mechanism (line ~11136).</p>
+              </div>
+            </div>
+
+            {/* PRD 5: Chat Textarea Auto-Expand + Resize Handle */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 5: Chat Textarea Auto-Expand + Resize Handle</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> (1) Textarea auto-expands with text as you type (grows taller). (2) Manual resize handle so user can drag to make it bigger/smaller. (3) Always show the BOTTOM of the text (newest typing) not the top.</p>
+                <p><strong>Current behavior:</strong> Auto-expand exists but capped at 200px max. No manual resize handle. Top of text stays visible while new text disappears below.</p>
+                <p><strong>Where:</strong> Guided GPT chat textarea at <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~11546</code>. Main Prompt chat textarea similarly structured.</p>
+                <p><strong>Fix:</strong> Increase max height (or remove cap). Add CSS <code className="bg-slate-900 px-1 rounded">resize: vertical</code> for manual handle. Set <code className="bg-slate-900 px-1 rounded">scrollTop = scrollHeight</code> after value change to keep bottom visible. Default small, grows with content.</p>
+              </div>
+            </div>
+
+            {/* PRD 6: Auto-Approve Toggle for Confirmation Guards */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 6: Auto-Approve Toggle for Confirmation Guards</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> Add a toggle switch in the AI chat toolbar that lets the user turn off confirmation guards (Apply/Skip buttons). When ON, the AI can write directly to fields without asking. When OFF (default), the existing Apply/Skip flow continues.</p>
+                <p><strong>Current behavior:</strong> Every time the AI wants to write to a field, a PendingConfirmation object is created and the user must click Apply or Skip. This is safe but slow for power users who trust the AI.</p>
+                <p><strong>Where:</strong> <code className="bg-slate-900 px-1 rounded">pendingConfirmations</code> state at <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~893</code>. <code className="bg-slate-900 px-1 rounded">handleApplyConfirmation</code> at <code className="bg-slate-900 px-1 rounded">:~3210</code>. <code className="bg-slate-900 px-1 rounded">handleSkipConfirmation</code> at <code className="bg-slate-900 px-1 rounded">:~3226</code>. Guard UI rendered at <code className="bg-slate-900 px-1 rounded">:~11150</code>. PendingConfirmation type in <code className="bg-slate-900 px-1 rounded">src/utils/parseCodeBlocks.ts:47-55</code>.</p>
+                <p><strong>Implementation:</strong> (1) Add <code className="bg-slate-900 px-1 rounded">autoApproveAI: boolean</code> to settings (default false). (2) Add toggle in chat toolbar (both Main Prompt and Guided GPT toolbars). (3) In the code that creates PendingConfirmation objects, check if autoApproveAI is true — if so, call handleApplyConfirmation immediately instead of queueing. (4) Visual indicator: gold/green glow when auto-approve is ON so user remembers.</p>
+              </div>
+            </div>
+
+            {/* PRD 7: Chat Scope Grid "All" Column Reactionary Logic */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 7: Chat Scope Grid "All" Column Reactionary Logic</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> Make the "All" column in the Chat Scope Grid bidirectionally linked with the individual tag columns (H, J, C). Currently "All" is just another independent column with no special behavior.</p>
+                <p><strong>Current behavior:</strong> Clicking "All" for a row only toggles the "All-rowKey" cell. It does NOT check/uncheck H, J, C for that row. Similarly, checking all of H, J, C does NOT auto-check "All".</p>
+                <p><strong>Where:</strong> <code className="bg-slate-900 px-1 rounded">src/components/shared/SetScopeGrid.tsx</code> — <code className="bg-slate-900 px-1 rounded">toggleCell</code> at line 43, <code className="bg-slate-900 px-1 rounded">toggleColumn</code> at line 51, <code className="bg-slate-900 px-1 rounded">toggleRow</code> at line 60. Cell ID format: <code className="bg-slate-900 px-1 rounded">"ColumnName-rowKey"</code> (e.g. "All-prompt", "H-guardrails").</p>
+                <p><strong>Implementation:</strong> (1) In <code className="bg-slate-900 px-1 rounded">toggleCell</code>: if col is "All", also toggle all other columns for that row. If col is NOT "All" but after toggling, all non-"All" columns are now checked for that row, auto-check "All" too (and vice versa — if unchecking breaks the full set, uncheck "All"). (2) In <code className="bg-slate-900 px-1 rounded">toggleColumn</code>: if toggling "All" column, toggle every cell in every column. If toggling a non-"All" column, update "All" cells for any rows that now have all tags checked/unchecked. (3) The grid must know which columns are "regular" vs "All" — pass an <code className="bg-slate-900 px-1 rounded">allColumnName</code> prop (default "All") or detect it internally.</p>
+              </div>
+            </div>
+
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            {/* PHASED IMPLEMENTATION PLAN */}
+            {/* ═══════════════════════════════════════════════════════════════ */}
+            <div className="mt-4 bg-slate-900/80 rounded-lg p-4 border-2 border-yellow-500/40">
+              <div className="text-sm text-yellow-400 font-bold mb-1">PHASED IMPLEMENTATION PLAN</div>
+              <p className="text-xs text-gray-400 mb-3">Each phase is sized to ~45% of an agent's context window. Give the agent ONLY its phase's PRDs plus the relevant file locations. Do NOT combine phases.</p>
+
+              {/* Phase 1 */}
+              <div className="bg-slate-800/70 rounded-lg p-3 border border-green-500/30 mb-3">
+                <div className="text-xs text-green-400 font-bold mb-2">PHASE 1 — Quick Wins (PRDs 5, 6, 7)</div>
+                <div className="text-xs text-gray-400 space-y-1">
+                  <p><strong>PRD 5:</strong> Chat Textarea Auto-Expand + Resize Handle — remove 200px cap, add resize handle, scroll to bottom. Guided GPT textarea at <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~11546</code>. Small CSS/JS change.</p>
+                  <p><strong>PRD 6:</strong> Auto-Approve Toggle — add <code className="bg-slate-900 px-1 rounded">autoApproveAI</code> boolean to settings, toggle in both chat toolbars, short-circuit PendingConfirmation when ON. Touches settings interface (~line 642), toolbar (~9507 and ~11331), guard logic (~3210).</p>
+                  <p><strong>PRD 7:</strong> Scope Grid "All" Reactionary Logic — update <code className="bg-slate-900 px-1 rounded">SetScopeGrid.tsx</code> toggleCell/toggleColumn/toggleRow to bidirectionally link "All" with individual columns. Self-contained in one 170-line file.</p>
+                  <p><strong>Estimated scope:</strong> ~3 files touched. Mostly small, focused changes. Good warm-up phase.</p>
+                </div>
+              </div>
+
+              {/* Phase 2 */}
+              <div className="bg-slate-800/70 rounded-lg p-3 border border-blue-500/30 mb-3">
+                <div className="text-xs text-blue-400 font-bold mb-2">PHASE 2 — Test Image System (PRD 1 expanded)</div>
+                <div className="text-xs text-gray-400 space-y-1">
+                  <p><strong>PRD 1a:</strong> Test Image Gallery UI — horizontal scrollable strip of numbered images inside each test slot. Auto date/time stamps. Per-project image buttons that filter/scroll to matching images. Data model already exists in <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx</code> (testImages field on TestingSlotContent interface, lines 114-123).</p>
+                  <p><strong>PRD 1b:</strong> Test Images Stored WITH Prompts — clicking a slot tab opens a popup showing the prompt text + associated test images for that slot. Gallery is inside the popup. Dividers between test runs (grouped by timestamp/run).</p>
+                  <p><strong>PRD 1c:</strong> Test Image Tab in Diff Modal — add an "Images" tab to the existing Compare to Main diff modal (already built at <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:830-1068</code>). Shows test slot images vs main images side-by-side.</p>
+                  <p><strong>PRD 1d:</strong> Connect Image Generation to Test Slots — when a test slot is active and user generates images, store them in that slot's <code className="bg-slate-900 px-1 rounded">testImages</code> array. Hook into the existing image generation flow in <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx</code>.</p>
+                  <p><strong>Estimated scope:</strong> Primarily <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx</code> + some integration points in <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx</code>. Medium complexity — new UI components + data flow.</p>
+                </div>
+              </div>
+
+              {/* Phase 3 */}
+              <div className="bg-slate-800/70 rounded-lg p-3 border border-purple-500/30">
+                <div className="text-xs text-purple-400 font-bold mb-2">PHASE 3 — AI Chat Intelligence (PRDs 2, 3, 4)</div>
+                <div className="text-xs text-gray-400 space-y-1">
+                  <p><strong>PRD 2:</strong> AI Chat Full Autonomy Over Testing System — AI can create/switch/fill/duplicate/promote test slots. Needs new tool definitions in the system prompt builder (<code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~5386</code>), new handler functions, and integration with the slot management API. Biggest PRD.</p>
+                  <p><strong>PRD 3:</strong> Calibration System (Full Spec) — complete schema with per-entry fields: title, tags (multi-select), priority (Hard/Med/Soft), human_note + model_instruction (two-field design), trigger, do/avoid, enforcement tactics, evidence images, per-tag test status. Three templates: UI Card, Drop-in Line format (<code className="bg-slate-900 px-1 rounded">[CAL:Title|Strength] Do…; Avoid…; Prefer…</code>), Calibration Pack (compiled injection block). Injection stack: System → Global Guardrails → Tag Guardrails → <strong>Calibration Pack (dynamic, 12-20 max)</strong> → Page context → Output contract. Two debug modes: "Show Injection" (see compiled context) + "Disable Calibration" (A/B toggle). See full PRD 3 above for complete spec.</p>
+                  <p><strong>PRD 4:</strong> Article Image Visibility for AI Chat — let the AI see article images (thumbnails or URLs) in its context so it can reference previous results. Requires reading from <code className="bg-slate-900 px-1 rounded">articles.generated_images</code> and including in chat system prompt.</p>
+                  <p><strong>Estimated scope:</strong> Largest phase — significant system prompt changes, new handler functions, new UI sections. AI autonomy (PRD 2) is the most complex single feature.</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
         {/* Feb 5 - VibeCoder Notepad Image Consolidation + Drip Feed Hybrid + UI Fixes */}
         <div className="border-l-4 border-purple-500 pl-4">
           <div className="text-sm text-purple-400 font-semibold">Feb 5, 2026 - VibeCoder Notepad Image Consolidation + Drip Feed Optimization + UI Improvements</div>

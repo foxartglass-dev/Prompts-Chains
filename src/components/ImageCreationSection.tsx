@@ -639,6 +639,7 @@ interface ImageCreationSettings {
   testing_slots: TestingSlot[];
   active_testing_slot: string | null; // UUID of active slot, null = Main/Live
   testing_slot_projects: TestingSlotProject[];
+  testing_usernames: string[]; // Usernames for tagging who created test slots
 }
 
 enum LogStatus {
@@ -754,6 +755,7 @@ const DEFAULT_SETTINGS: ImageCreationSettings = {
   testing_slots: [],
   active_testing_slot: null,
   testing_slot_projects: [],
+  testing_usernames: [],
 };
 
 // Chat models - for discussing/planning images (NOT gpt-image-1.5, it only generates)
@@ -9595,6 +9597,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
                                     onRunTest={handleRunTest}
                                     testRunning={testSlotRunning}
+                                    usernames={settings.testing_usernames || []}
+                                    onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
                                   />
                                 </div>
                               )}
@@ -9612,6 +9616,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
                                     onRunTest={handleRunTest}
                                     testRunning={testSlotRunning}
+                                    usernames={settings.testing_usernames || []}
+                                    onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
                                   />
                                 </div>
                               )}
@@ -9629,6 +9635,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
                                     onRunTest={handleRunTest}
                                     testRunning={testSlotRunning}
+                                    usernames={settings.testing_usernames || []}
+                                    onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
                                   />
                                 </div>
                               )}
@@ -9873,6 +9881,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                           onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
                           onRunTest={handleRunTest}
                           testRunning={testSlotRunning}
+                          usernames={settings.testing_usernames || []}
+                          onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
                         />
 
                         <p className="text-[10px] text-emerald-300/70 bg-emerald-500/10 p-2 rounded">
@@ -10280,6 +10290,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
                                 onRunTest={handleRunTest}
                                 testRunning={testSlotRunning}
+                                usernames={settings.testing_usernames || []}
+                                onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
                               />
 
                               <p className="text-[10px] text-brand-gold/60">
@@ -11434,6 +11446,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
                                     onRunTest={handleRunTest}
                                     testRunning={testSlotRunning}
+                                    usernames={settings.testing_usernames || []}
+                                    onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
                                   />
                                 </div>
                               )}
@@ -11451,6 +11465,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
                                     onRunTest={handleRunTest}
                                     testRunning={testSlotRunning}
+                                    usernames={settings.testing_usernames || []}
+                                    onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
                                   />
                                 </div>
                               )}
@@ -11468,6 +11484,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                                     onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
                                     onRunTest={handleRunTest}
                                     testRunning={testSlotRunning}
+                                    usernames={settings.testing_usernames || []}
+                                    onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
                                   />
                                 </div>
                               )}
@@ -12539,6 +12557,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                           onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
                           onRunTest={handleRunTest}
                           testRunning={testSlotRunning}
+                          usernames={settings.testing_usernames || []}
+                          onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
                         />
 
                         <p className="text-[10px] text-purple-300/70 bg-purple-500/10 p-2 rounded">
@@ -12864,6 +12884,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
                                 onRunTest={handleRunTest}
                                 testRunning={testSlotRunning}
+                                usernames={settings.testing_usernames || []}
+                                onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
                               />
 
                               <p className="text-[10px] text-purple-300/60">
@@ -13819,6 +13841,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                     onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
                     onRunTest={handleRunTest}
                     testRunning={testSlotRunning}
+                    usernames={settings.testing_usernames || []}
+                    onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
                   />
                 </div>
 
@@ -14748,6 +14772,8 @@ Start by introducing yourself and asking about their business in a friendly way.
               onProjectsChange={(projects) => updateSettings({ testing_slot_projects: projects })}
               onRunTest={handleRunTest}
               testRunning={testSlotRunning}
+              usernames={settings.testing_usernames || []}
+              onUsernamesChange={(u: string[]) => updateSettings({ testing_usernames: u })}
             />
 
             {/* ========== TWO-LEVEL TAB SYSTEM ========== */}
