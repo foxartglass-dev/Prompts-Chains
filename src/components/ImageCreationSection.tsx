@@ -295,6 +295,7 @@ interface PlaceholderCategoryTemplate {
   placeholder: string; // The placeholder text: "{Cleaning_Item}"
   options: PlaceholderOption[];
   isRandomized?: boolean;
+  categoryScope?: 'unique' | 'persistent'; // Preserved from source category's unique/persistent scope
   createdAt: string;
   scope?: 'website' | 'app'; // website = current website only, app = all websites
 }
@@ -2193,6 +2194,19 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Get active avatar
   const activeAvatar = settings.audience_avatars.find(a => a.id === activeAvatarId) || settings.audience_avatars[0];
 
+  // Compute persistent categories from OTHER avatars (for cross-avatar display)
+  const persistentFromOtherAvatars = useMemo(() => {
+    if (!activeAvatar) return [];
+    const activeIds = new Set((activeAvatar.placeholderCategories || []).map(c => c.id));
+    return settings.audience_avatars
+      .filter(a => a.id !== activeAvatar.id)
+      .flatMap(a => (a.placeholderCategories || [])
+        .filter(cat => cat.scope === 'persistent')
+        .map(cat => ({ ...cat, _sourceAvatarName: a.name, _sourceAvatarTag: a.tag }))
+      )
+      .filter(cat => !activeIds.has(cat.id)); // Deduplicate
+  }, [activeAvatar, settings.audience_avatars]);
+
   // Run test: execute prompt chain with test slot content and store result
   const handleRunTest = useCallback(async () => {
     if (!activeTestingSlot || !activeAvatar) return;
@@ -2532,6 +2546,7 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       placeholder: category.placeholder,
       options: category.options,
       isRandomized: category.isRandomized,
+      categoryScope: category.scope || 'unique', // Preserve unique/persistent scope from source category
       createdAt: new Date().toISOString()
     };
 
@@ -2552,7 +2567,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       name: template.name,
       placeholder: template.placeholder,
       options: template.options.map(opt => ({ ...opt })),
-      isRandomized: template.isRandomized
+      isRandomized: template.isRandomized,
+      scope: template.categoryScope || 'unique' // Restore unique/persistent scope from template
     };
 
     const existingCategories = activeAvatar.placeholderCategories || [];
@@ -15138,9 +15154,12 @@ Start by introducing yourself and asking about their business in a friendly way.
                             accentColor="purple"
                           />
                         </label>
-                        {(activeAvatar.placeholderCategories || []).length > 0 && (
+                        {((activeAvatar.placeholderCategories || []).length > 0 || persistentFromOtherAvatars.length > 0) && (
                           <span className="text-xs text-purple-400/70 bg-slate-800 px-2 py-0.5 rounded">
                             {(activeAvatar.placeholderCategories || []).length} categories
+                            {persistentFromOtherAvatars.length > 0 && (
+                              <span className="text-sky-400"> + {persistentFromOtherAvatars.length} persistent</span>
+                            )}
                           </span>
                         )}
                       </div>
@@ -15162,7 +15181,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                     </div>
 
                     {/* Quick Category Toggles - Compact row showing all categories with on/off */}
-                    {(activeAvatar.placeholderCategories || []).length > 0 && (
+                    {((activeAvatar.placeholderCategories || []).length > 0 || persistentFromOtherAvatars.length > 0) && (
                       <div className="flex flex-wrap items-center gap-2 px-2 py-2 bg-slate-900/50 rounded-lg border border-purple-500/20">
                         <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle Off:</span>
                         {(activeAvatar.placeholderCategories || []).map(cat => (
@@ -15179,6 +15198,24 @@ Start by introducing yourself and asking about their business in a friendly way.
                             {cat.enabled !== false ? '✓' : '○'} {cat.name}
                           </button>
                         ))}
+                        {persistentFromOtherAvatars.length > 0 && (
+                          <>
+                            <span className="text-[10px] text-sky-400/70 font-medium ml-1">|</span>
+                            {persistentFromOtherAvatars.map(cat => (
+                              <span
+                                key={`persistent-${cat.id}`}
+                                className={`px-2 py-1 rounded text-xs font-medium ${
+                                  cat.enabled !== false
+                                    ? 'bg-sky-600/30 border border-sky-500/50 text-sky-300'
+                                    : 'bg-slate-700/50 border border-slate-600 text-slate-500 line-through'
+                                }`}
+                                title={`Persistent from ${(cat as any)._sourceAvatarName || 'other avatar'} — edit on that avatar's tab`}
+                              >
+                                {cat.enabled !== false ? '✓' : '○'} {cat.name}
+                              </span>
+                            ))}
+                          </>
+                        )}
                       </div>
                     )}
 
@@ -15434,8 +15471,37 @@ Start by introducing yourself and asking about their business in a friendly way.
                       </div>
                     )})}
 
-                    {(activeAvatar.placeholderCategories || []).length === 0 && (
+                    {(activeAvatar.placeholderCategories || []).length === 0 && persistentFromOtherAvatars.length === 0 && (
                       <p className="text-xs text-purple-400/50 text-center py-2">No categories yet. Add one to get started.</p>
+                    )}
+
+                    {/* Persistent Categories from Other Avatars */}
+                    {persistentFromOtherAvatars.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-sky-500/30">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[10px] text-sky-400 font-semibold uppercase tracking-wide">Persistent from other avatars</span>
+                          <span className="text-[10px] text-sky-400/60">({persistentFromOtherAvatars.length})</span>
+                        </div>
+                        {persistentFromOtherAvatars.map(cat => (
+                          <div key={cat.id} className="rounded-lg bg-sky-900/20 border border-sky-500/20 p-3 mb-2 opacity-80">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sky-400 text-xs">▶</span>
+                              <span className={`w-5 h-5 rounded flex items-center justify-center text-xs ${
+                                cat.enabled !== false ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-500'
+                              }`}>
+                                {cat.enabled !== false ? '✓' : '○'}
+                              </span>
+                              <span className="text-white text-sm">{cat.name}</span>
+                              <span className="text-xs text-purple-400 font-mono">{cat.placeholder}</span>
+                              <span className="px-2 py-0.5 bg-sky-600 border-sky-500 text-white text-[11px] rounded font-semibold">Persistent</span>
+                              <span className="text-[10px] text-sky-300/70 bg-sky-900/50 px-1.5 py-0.5 rounded">
+                                from {(cat as any)._sourceAvatarName || 'Unknown'}{(cat as any)._sourceAvatarTag ? ` (${(cat as any)._sourceAvatarTag})` : ''}
+                              </span>
+                              <span className="text-xs text-slate-500 ml-auto">{cat.options?.length || 0} options</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
                     </div>
                     {/* Resize Handle */}
@@ -18717,9 +18783,12 @@ Start by introducing yourself and asking about their business in a friendly way.
                           accentColor="purple"
                         />
                       </label>
-                      {(activeAvatar.placeholderCategories || []).length > 0 && (
+                      {((activeAvatar.placeholderCategories || []).length > 0 || persistentFromOtherAvatars.length > 0) && (
                         <span className="text-xs text-purple-400/70 bg-slate-800 px-2 py-0.5 rounded">
                           {(activeAvatar.placeholderCategories || []).length} categories
+                          {persistentFromOtherAvatars.length > 0 && (
+                            <span className="text-sky-400"> + {persistentFromOtherAvatars.length} persistent</span>
+                          )}
                         </span>
                       )}
                     </div>
@@ -18741,7 +18810,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   </div>
 
                   {/* Quick Category Toggles */}
-                  {(activeAvatar.placeholderCategories || []).length > 0 && (
+                  {((activeAvatar.placeholderCategories || []).length > 0 || persistentFromOtherAvatars.length > 0) && (
                     <div className="flex flex-wrap items-center gap-2 px-2 py-2 bg-slate-900/50 rounded-lg border border-purple-500/20">
                       <span className="text-[10px] text-purple-400/70 font-medium">Quick Toggle Off:</span>
                       {(activeAvatar.placeholderCategories || []).map(cat => (
@@ -18758,6 +18827,24 @@ Start by introducing yourself and asking about their business in a friendly way.
                           {cat.enabled !== false ? '✓' : '○'} {cat.name}
                         </button>
                       ))}
+                      {persistentFromOtherAvatars.length > 0 && (
+                        <>
+                          <span className="text-[10px] text-sky-400/70 font-medium ml-1">|</span>
+                          {persistentFromOtherAvatars.map(cat => (
+                            <span
+                              key={`persistent-${cat.id}`}
+                              className={`px-2 py-1 rounded text-xs font-medium ${
+                                cat.enabled !== false
+                                  ? 'bg-sky-600/30 border border-sky-500/50 text-sky-300'
+                                  : 'bg-slate-700/50 border border-slate-600 text-slate-500 line-through'
+                              }`}
+                              title={`Persistent from ${(cat as any)._sourceAvatarName || 'other avatar'} — edit on that avatar's tab`}
+                            >
+                              {cat.enabled !== false ? '✓' : '○'} {cat.name}
+                            </span>
+                          ))}
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -18948,6 +19035,35 @@ Start by introducing yourself and asking about their business in a friendly way.
                       )}
                     </div>
                   )})}
+
+                  {/* Persistent Categories from Other Avatars (Expanded View) */}
+                  {persistentFromOtherAvatars.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-sky-500/30">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[10px] text-sky-400 font-semibold uppercase tracking-wide">Persistent from other avatars</span>
+                        <span className="text-[10px] text-sky-400/60">({persistentFromOtherAvatars.length})</span>
+                      </div>
+                      {persistentFromOtherAvatars.map(cat => (
+                        <div key={cat.id} className="rounded-lg bg-sky-900/20 border border-sky-500/20 p-3 mb-2 opacity-80">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sky-400 text-xs">▶</span>
+                            <span className={`w-5 h-5 rounded flex items-center justify-center text-xs ${
+                              cat.enabled !== false ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-500'
+                            }`}>
+                              {cat.enabled !== false ? '✓' : '○'}
+                            </span>
+                            <span className="text-white text-sm">{cat.name}</span>
+                            <span className="text-xs text-purple-400 font-mono">{cat.placeholder}</span>
+                            <span className="px-2 py-0.5 bg-sky-600 border-sky-500 text-white text-[11px] rounded font-semibold">Persistent</span>
+                            <span className="text-[10px] text-sky-300/70 bg-sky-900/50 px-1.5 py-0.5 rounded">
+                              from {(cat as any)._sourceAvatarName || 'Unknown'}{(cat as any)._sourceAvatarTag ? ` (${(cat as any)._sourceAvatarTag})` : ''}
+                            </span>
+                            <span className="text-xs text-slate-500 ml-auto">{cat.options?.length || 0} options</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   </div>
 
                   {/* Resize Handle */}
@@ -18959,7 +19075,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                     <div className="w-12 h-1 bg-purple-500/30 group-hover:bg-purple-500/60 rounded-full transition-colors" />
                   </div>
 
-                  {(activeAvatar.placeholderCategories || []).length === 0 && (
+                  {(activeAvatar.placeholderCategories || []).length === 0 && persistentFromOtherAvatars.length === 0 && (
                     <p className="text-xs text-purple-400/50 text-center py-2">No categories yet. Add one to get started.</p>
                   )}
                 </div>

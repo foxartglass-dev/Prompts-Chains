@@ -61,6 +61,38 @@ function extractLocalContent(fullContent, position, wordRange = 75) {
 }
 
 /**
+ * Collect placeholder categories with cross-avatar persistent merging.
+ * Unique categories come only from the selected avatar.
+ * Persistent categories come from ALL avatars (deduplicated by id).
+ * Also filters out disabled categories (enabled === false).
+ *
+ * @param {object} selectedAvatar - The avatar chosen for this article's tag
+ * @param {Array} allAvatars - All audience avatars in settings
+ * @returns {Array} Merged and deduplicated placeholder categories
+ */
+function collectPlaceholderCategories(selectedAvatar, allAvatars) {
+  // Get unique-scoped categories from the selected avatar only
+  const unique = (selectedAvatar?.placeholderCategories || [])
+    .filter(cat => cat.scope !== 'persistent' && cat.enabled !== false);
+
+  // Get persistent-scoped categories from ALL avatars
+  const persistent = (allAvatars || [])
+    .flatMap(a => a.placeholderCategories || [])
+    .filter(cat => cat.scope === 'persistent' && cat.enabled !== false);
+
+  // Deduplicate by id (unique categories take priority)
+  const seen = new Set(unique.map(c => c.id));
+  const merged = [...unique, ...persistent.filter(c => !seen.has(c.id))];
+
+  if (persistent.length > 0) {
+    const fromOthers = persistent.filter(c => !seen.has(c.id)).length;
+    console.log(`[Placeholder Categories] ${unique.length} unique + ${persistent.length} persistent (${fromOthers} from other avatars) = ${merged.length} total`);
+  }
+
+  return merged;
+}
+
+/**
  * Smart Content Matching for a single image position
  * Matches LOCAL content around image position to placeholder options
  *
@@ -71,13 +103,15 @@ function extractLocalContent(fullContent, position, wordRange = 75) {
  * @param {boolean} matchPlurals - Whether to match plural forms
  * @param {number} positionIndex - Which image position (0=hero, 1=first inline, etc)
  * @param {object} config - Smart matching config { wordRange, primaryWeight, secondaryWeight }
+ * @param {Array} mergedCategories - Optional pre-merged categories (from collectPlaceholderCategories). If provided, uses these instead of avatar.placeholderCategories.
  * @returns {object} { replacements, matchedPrimaries: [] }
  */
-function smartMatchForPosition(localContent, avatar, usedPrimaries, usedOptionTexts, matchPlurals = true, positionIndex = 0, config = {}) {
+function smartMatchForPosition(localContent, avatar, usedPrimaries, usedOptionTexts, matchPlurals = true, positionIndex = 0, config = {}, mergedCategories = null) {
   const { primaryWeight = 10, secondaryWeight = 1 } = config;
 
-  if (!avatar?.placeholderCategories?.length) {
-    console.log(`[Smart Match #${positionIndex}] No placeholder categories found in avatar`);
+  const categories = mergedCategories || avatar?.placeholderCategories || [];
+  if (!categories.length) {
+    console.log(`[Smart Match #${positionIndex}] No placeholder categories found`);
     return { replacements: {}, matchedPrimaries: [] };
   }
 
@@ -85,8 +119,8 @@ function smartMatchForPosition(localContent, avatar, usedPrimaries, usedOptionTe
   const replacements = {};
   const newlyMatchedPrimaries = [];
 
-  // Process each placeholder category
-  for (const category of avatar.placeholderCategories) {
+  // Process each placeholder category (uses merged categories if provided)
+  for (const category of categories) {
     // Skip randomized categories - pick randomly
     if (category.isRandomized) {
       const randomOption = category.options?.[Math.floor(Math.random() * (category.options?.length || 1))];
@@ -246,6 +280,7 @@ export async function processArticleWithImages(content, options = {}) {
     // CRITICAL: Default to 'main_prompt' NOT 'smart_prompt' - user's preferred mode
     livePromptMode = 'main_prompt', // 'main_prompt', 'guided_gpt', or 'smart_prompt'
     targetAvatar = null, // Audience avatar with mainPrompt and placeholderCategories
+    allAvatars = [], // All avatars for cross-avatar persistent category merging
     smartPromptGuidance = '', // Optional guidance for smart_prompt mode
     matchPlurals = true, // Whether to match plural forms in smart matching
     heroImageSide = 'right', // Hero image side - inline images will alternate starting from opposite
@@ -352,6 +387,9 @@ export async function processArticleWithImages(content, options = {}) {
 
       console.log(`[Main Prompt Mode] Avatar: ${targetAvatar.name} | Hero side: ${heroImageSide}`);
 
+      // Merge persistent categories from all avatars with unique from selected avatar
+      const mergedCategories = collectPlaceholderCategories(targetAvatar, allAvatars);
+
       // Shared state across all image positions
       const usedPrimaries = new Set(); // Rule 3: No duplicate primaries across page
       const usedOptionTexts = new Set(); // Track used option texts to prevent duplicate fallbacks
@@ -376,7 +414,8 @@ export async function processArticleWithImages(content, options = {}) {
           usedOptionTexts,
           matchPlurals,
           0, // Position index 0 = hero
-          smartMatchingConfig
+          smartMatchingConfig,
+          mergedCategories
         );
 
         // Mark primaries as used for next images
@@ -436,7 +475,8 @@ export async function processArticleWithImages(content, options = {}) {
             usedOptionTexts,
             matchPlurals,
             imageCount, // Position index
-            smartMatchingConfig
+            smartMatchingConfig,
+            mergedCategories
           );
 
           // Mark primaries as used for next images

@@ -107,6 +107,7 @@ function buildPipelineOptions(config, article) {
     quality: config.image_quality || 'low',
     livePromptMode,
     targetAvatar,
+    allAvatars: avatars, // All avatars for cross-avatar persistent category merging
     smartPromptGuidance,
     matchPlurals,
     heroImageSide: 'right',

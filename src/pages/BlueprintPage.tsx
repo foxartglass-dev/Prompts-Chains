@@ -4684,6 +4684,53 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">February 2026</h3>
 
       <div className="space-y-4">
+        {/* Feb 15 - Categories Unique/Persistent Toggle (Phase 2) */}
+        <div className="border-l-4 border-sky-500 pl-4">
+          <div className="text-sm text-sky-400 font-semibold">Feb 15, 2026 - Categories Unique/Persistent Toggle (PRD Phase 2)</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">Completed the remaining work for placeholder category scope system. UI groundwork existed (toggle buttons, scope field on interface), but cross-avatar display and pipeline merging were missing.</p>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FEAT</span>
+              <div>
+                <strong>Cross-avatar persistent category display in UI</strong>
+                <div className="text-xs text-gray-500">
+                  When viewing Avatar J, the categories section now shows J's own categories (editable) PLUS a read-only "Persistent from other avatars" section
+                  showing persistent-scoped categories from H, C, etc. with source avatar badge. Applied to both normal and expanded (full-page) views.
+                  Quick Toggle Off bar also shows persistent categories from other avatars as read-only indicators.
+                  Category count updated to show "N categories + M persistent" format.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FEAT</span>
+              <div>
+                <strong>Pipeline cross-avatar category merging via collectPlaceholderCategories()</strong>
+                <div className="text-xs text-gray-500">
+                  New function in image-pipeline.js merges unique categories from selected avatar with persistent categories from ALL avatars.
+                  Deduplicates by ID (unique takes priority). Also filters out disabled categories (enabled === false).
+                  buildPipelineOptions() now passes allAvatars to the pipeline. smartMatchForPosition() accepts optional mergedCategories parameter.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FEAT</span>
+              <div>
+                <strong>Template scope preservation (categoryScope field)</strong>
+                <div className="text-xs text-gray-500">
+                  PlaceholderCategoryTemplate interface now includes categoryScope field. Saving a template preserves the source category's
+                  unique/persistent scope. Applying a template restores it. Defaults to 'unique' for backward compatibility with existing templates.
+                </div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-2 text-xs text-gray-500">
+            <strong>Files:</strong> ImageCreationSection.tsx (UI display + template scope), image-pipeline.js (collectPlaceholderCategories + smartMatchForPosition), articles.js (allAvatars pass-through)
+          </div>
+          <div className="mt-1 text-xs text-gray-500">
+            <strong>PRD:</strong> docs/PRD-categories-unique-persistent.md | <strong>Source:</strong> HANDOFF-PRD.md Phase 2
+          </div>
+        </div>
+
         {/* Feb 15 (late) - Calibration System PRD Expansion */}
         <div className="border-l-4 border-purple-500 pl-4">
           <div className="text-sm text-purple-400 font-semibold">Feb 15, 2026 (late session) - PRD 3 Calibration System Full Spec</div>
@@ -6768,6 +6815,126 @@ RENAME FOR CLARITY:
               </ul>
             </li>
           </ol>
+        </div>
+      </div>
+    </div>
+
+    {/* INVESTIGATION 5: Placeholder Category Scope System */}
+    <div className="bg-slate-800 rounded-xl p-6 border border-sky-500/50">
+      <div className="flex items-center gap-3 mb-4">
+        <span className="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold">COMPLETE</span>
+        <h3 className="text-xl font-bold text-white">Placeholder Category Scope System (Unique/Persistent)</h3>
+        <span className="text-gray-400 text-sm">Feb 15, 2026</span>
+      </div>
+
+      {/* Purpose */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Purpose</h4>
+        <p className="text-gray-300">
+          Each placeholder category can be scoped as <strong className="text-amber-400">Unique</strong> (only appears when its avatar's tag is active)
+          or <strong className="text-sky-400">Persistent</strong> (appears for ALL tags). This enables shared categories like "Worker Persona"
+          to be defined once on any avatar and automatically included when generating images for any tag.
+        </p>
+      </div>
+
+      {/* Architecture */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Current Architecture</h4>
+        <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs text-gray-300 overflow-x-auto">
+          <pre>{`UI Layer (ImageCreationSection.tsx)
+├── PlaceholderCategory.scope: 'unique' | 'persistent' (default: 'unique')
+├── Toggle buttons: Unique (amber) | Persistent (sky blue)
+├── persistentFromOtherAvatars = computed from all avatars ≠ activeAvatar
+│   └── Filtered: scope === 'persistent', deduplicated by ID
+├── Normal view: activeAvatar categories (editable) + persistent from others (read-only)
+└── Quick Toggle Off: own categories (clickable) + persistent (read-only indicators)
+
+Pipeline Layer (image-pipeline.js)
+├── collectPlaceholderCategories(selectedAvatar, allAvatars)
+│   ├── unique = selectedAvatar categories WHERE scope ≠ 'persistent' AND enabled ≠ false
+│   ├── persistent = ALL avatars categories WHERE scope === 'persistent' AND enabled ≠ false
+│   └── merged = unique + persistent (deduplicated by id, unique takes priority)
+├── smartMatchForPosition() accepts optional mergedCategories parameter
+│   └── Uses mergedCategories instead of avatar.placeholderCategories when provided
+└── Hero + inline image calls both pass mergedCategories
+
+Data Flow (articles.js → image-pipeline.js)
+├── buildPipelineOptions() now includes allAvatars: avatars
+├── processArticleWithImages() destructures allAvatars from options
+└── collectPlaceholderCategories() called once, result shared across all positions
+
+Template Layer (PlaceholderCategoryTemplate)
+├── categoryScope?: 'unique' | 'persistent' (new field, backward-compatible)
+├── Save: preserves source category's scope value
+└── Apply: restores scope when creating category from template`}</pre>
+        </div>
+      </div>
+
+      {/* Configuration Matrix */}
+      <div className="mb-6">
+        <h4 className="text-brand-cyan font-semibold mb-2">Configuration Matrix</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-gray-400">
+                <th className="text-left py-1 px-2">Setting</th>
+                <th className="text-left py-1 px-2">UI Location</th>
+                <th className="text-left py-1 px-2">DB Storage</th>
+                <th className="text-left py-1 px-2">Server Read</th>
+                <th className="text-left py-1 px-2">Default</th>
+                <th className="text-left py-1 px-2">Status</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-300">
+              <tr className="border-t border-slate-700">
+                <td className="py-2 px-2 text-sky-400">category.scope</td>
+                <td className="py-2 px-2">Avatar → Categories → Unique/Persistent toggle</td>
+                <td className="py-2 px-2">image_creation_settings.audience_avatars[].placeholderCategories[].scope</td>
+                <td className="py-2 px-2">collectPlaceholderCategories() in image-pipeline.js</td>
+                <td className="py-2 px-2 text-amber-400">'unique'</td>
+                <td className="py-2 px-2 text-green-400">Active</td>
+              </tr>
+              <tr className="border-t border-slate-700">
+                <td className="py-2 px-2 text-sky-400">category.enabled</td>
+                <td className="py-2 px-2">Avatar → Categories → On/Off toggle + Quick Toggle Off</td>
+                <td className="py-2 px-2">Same JSONB path as above</td>
+                <td className="py-2 px-2">collectPlaceholderCategories() filters enabled !== false</td>
+                <td className="py-2 px-2 text-green-400">true (undefined = true)</td>
+                <td className="py-2 px-2 text-green-400">Active</td>
+              </tr>
+              <tr className="border-t border-slate-700">
+                <td className="py-2 px-2 text-sky-400">template.categoryScope</td>
+                <td className="py-2 px-2">Template save/apply flow</td>
+                <td className="py-2 px-2">image_creation_settings.category_templates[].categoryScope</td>
+                <td className="py-2 px-2">handleApplyPlaceholderTemplate()</td>
+                <td className="py-2 px-2 text-amber-400">'unique'</td>
+                <td className="py-2 px-2 text-green-400">Active</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Files Touched */}
+      <div className="mb-4">
+        <h4 className="text-brand-cyan font-semibold mb-2">Files Touched</h4>
+        <div className="bg-slate-900 rounded-lg p-3 text-xs space-y-1">
+          <div className="text-gray-300"><code className="text-sky-400">src/components/ImageCreationSection.tsx</code> — UI display, template save/apply, persistentFromOtherAvatars computed</div>
+          <div className="text-gray-300"><code className="text-sky-400">server/services/image-pipeline.js</code> — collectPlaceholderCategories(), smartMatchForPosition() mergedCategories param</div>
+          <div className="text-gray-300"><code className="text-sky-400">server/routes/articles.js</code> — allAvatars passed through buildPipelineOptions()</div>
+        </div>
+      </div>
+
+      {/* Clean Version Recommendation */}
+      <div>
+        <h4 className="text-brand-cyan font-semibold mb-2">Clean Version Recommendation</h4>
+        <div className="bg-slate-900 rounded-lg p-4 text-xs text-gray-300 space-y-2">
+          <p><strong className="text-white">Current approach is reasonable.</strong> Categories stored per-avatar with scope flag is the right model.</p>
+          <p>For clean rewrite: Consider making <code className="text-sky-400">collectPlaceholderCategories()</code> a shared utility
+          used by both frontend (for display) and backend (for pipeline), rather than duplicating the merge logic in two places.</p>
+          <p>The <code className="text-sky-400">template.categoryScope</code> vs <code className="text-sky-400">template.scope</code> naming
+          could be unified — currently scope means 'website'|'app' on templates and 'unique'|'persistent' on categories. Clean rewrite
+          should use <code className="text-sky-400">visibility</code> for template scope and <code className="text-sky-400">scope</code> for category scope.</p>
         </div>
       </div>
     </div>
