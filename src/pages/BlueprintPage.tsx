@@ -4684,6 +4684,162 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">February 2026</h3>
 
       <div className="space-y-4">
+        {/* Feb 15 - Testing System Completion + Diff Modal + Username System */}
+        <div className="border-l-4 border-orange-500 pl-4">
+          <div className="text-sm text-orange-400 font-semibold">Feb 15, 2026 - Testing System UI Completion + Compare to Main Diff Modal + Username System</div>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Testing Slots Bars for All 3 Prompt Types</strong>
+                <div className="text-xs text-gray-500">
+                  Added TestingSlotsSelector to top of Guided GPT prompt area (was missing - Smart Prompt already had one).
+                  <br/>All 3 prompt modes (Main, Guided GPT, Smart Prompt) now have testing bars at their section top.
+                  <br/>Files: <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:9875</code> (Guided GPT top bar)
+                  <br/>Reference: Smart Prompt bar at <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:12543</code>
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>3-Button Testing Pill in AI Chat Toolbars (Main, Guided, Smart)</strong>
+                <div className="text-xs text-gray-500">
+                  Both chat assistants (Main Prompt AI + Guided GPT AI) now have 3 labeled buttons in a gold pill:
+                  <br/>• "Main" (orange) - toggles Main Prompt testing bar
+                  <br/>• "Guided" (emerald) - toggles Guided GPT testing bar
+                  <br/>• "Smart" (purple) - toggles Smart Prompt testing bar
+                  <br/>Gold pill with "Testing" label wraps all 3. Only one bar shows at a time (clicking one closes others).
+                  <br/>Also renamed: "Testing" → "Testing Mode", "Bank" → "Image Bank" for clarity.
+                  <br/>State: <code className="bg-slate-900 px-1 rounded">showMainPromptSlots</code>, <code className="bg-slate-900 px-1 rounded">showGuidedSlots</code>, <code className="bg-slate-900 px-1 rounded">showSmartSlots</code> (line ~1185)
+                  <br/>Main chat toolbar: <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~9507</code>
+                  <br/>Guided chat toolbar: <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~11331</code>
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Compare to Main - Diff Preview Modal</strong>
+                <div className="text-xs text-gray-500">
+                  Blue "Compare to Main" button in active slot banner opens full-screen diff modal.
+                  <br/>7 tabbed sections: Main Prompt, Categories, Guided Guardrails, Guided Rules, Smart Prompt, Persistent Text, Matching Rules.
+                  <br/>Colored dots on tabs: green = identical, amber = modified, gray = empty in slot.
+                  <br/>Side-by-side panels: green border (Main/Live) vs orange border (Test Slot).
+                  <br/>File: <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:830-1068</code>
+                  <br/>Button: <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:501-509</code>
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Username System for Test Slots</strong>
+                <div className="text-xs text-gray-500">
+                  "Created by" dropdown in Create Slot dialog with "+ User" button to add names.
+                  <br/>Purple badge on slot tabs and active banner. Tooltip shows creator + date/time.
+                  <br/>Settings: <code className="bg-slate-900 px-1 rounded">testing_usernames: string[]</code> in ImageCreationSettings (line ~642)
+                  <br/>Props: <code className="bg-slate-900 px-1 rounded">usernames</code> + <code className="bg-slate-900 px-1 rounded">onUsernamesChange</code> on all 12 TestingSlotsSelector instances
+                  <br/>Create dialog: <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:630-706</code>
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-yellow-400 font-bold">DATA</span>
+              <div>
+                <strong>Test Image Data Model (for future gallery)</strong>
+                <div className="text-xs text-gray-500">
+                  Added <code className="bg-slate-900 px-1 rounded">testImages</code> field to <code className="bg-slate-900 px-1 rounded">TestingSlotContent</code> interface.
+                  <br/>Structure: id, url, timestamp, number, projectName, createdBy, prompt, model
+                  <br/>File: <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:114-123</code>
+                  <br/>UI not yet built - see HANDOFF PRDs below.
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        {/* HANDOFF PRDs for next agent */}
+        <div className="border-l-4 border-red-500 pl-4 bg-red-900/10 rounded-r-lg p-4">
+          <div className="text-sm text-red-400 font-semibold mb-2">HANDOFF PRDs - Feb 15, 2026 Session (for next agent)</div>
+          <p className="text-xs text-gray-400 mb-3">These features were planned/requested but not yet implemented. Data models and infrastructure are in place.</p>
+
+          <div className="space-y-4">
+            {/* PRD 1: Test Image Gallery */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 1: Test Image Gallery UI</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> Horizontal scrollable image strip showing test images per slot + per-project grouping.</p>
+                <p><strong>Where it goes:</strong> Two locations: (1) Below the testing bar in the prompt area as a collapsible section. (2) Inside the "Compare to Main" diff modal as a new tab alongside the existing 7 tabs.</p>
+                <p><strong>Data model ready:</strong> <code className="bg-slate-900 px-1 rounded">TestingSlotContent.testImages[]</code> in TestingSlotsSelector.tsx:114-123. Fields: id, url, timestamp, number, projectName, createdBy, prompt, model.</p>
+                <p><strong>Each image shows:</strong> Sequential number (1, 2, 3), auto date/time stamp, project name, model used.</p>
+                <p><strong>Grouping:</strong> Images from different test runs separated by a divider line. Above each group: timestamp, test number, model name.</p>
+                <p><strong>Scrolling:</strong> Most recent centered, scroll left/right for older. Horizontal infinite scroll.</p>
+                <p><strong>Click to expand:</strong> Clicking an image opens it larger.</p>
+                <p><strong>Per-project buttons:</strong> Each project in the testing bar gets a button that scrolls to and highlights its images in the gallery.</p>
+                <p><strong>Popup from tab:</strong> Clicking a test slot tab should open a popup showing: the prompt text that was in that test + the image gallery for that test. This reuses the existing diff modal infrastructure.</p>
+                <p><strong>Image storage hook:</strong> Need to connect the image generation flow (handleBatchGenerate around line 7532) to store images in the active test slot's testImages array when a test is running.</p>
+              </div>
+            </div>
+
+            {/* PRD 2: AI Chat Full Autonomy */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 2: AI Chat Full Autonomy Over Testing System</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> The AI Prompt Assistant chat (both Main + Guided) should be able to programmatically control the entire testing workflow.</p>
+                <p><strong>Currently it can:</strong> Read prompts via Set Scope grid, write to categories (add/edit), write to prompt text fields, see rules.</p>
+                <p><strong>Needs to also:</strong></p>
+                <p>• Create new test slots (programmatically call handleCreateSlot)</p>
+                <p>• Switch between slots (call handleActiveSlotChange)</p>
+                <p>• Fill in ALL fields: main prompt, categories, rules, guardrails, persistent text</p>
+                <p>• Trigger "Run Test" (call handleRunTest)</p>
+                <p>• See the test image gallery results and read image IDs</p>
+                <p>• Match images back to which test prompt generated them (via shared timestamps/IDs)</p>
+                <p>• See the current model dropdown selection (so it knows prompting style for that model)</p>
+                <p><strong>Where to implement:</strong> The unified chat handler is at <code className="bg-slate-900 px-1 rounded">handleSendUnifiedChat</code> (~line 5200). The system prompt builder is around line 5386 (section: "GUIDED GPT PROMPT SETTINGS"). Add new "tool" capabilities the AI can invoke via structured responses, similar to how it already creates categories.</p>
+                <p><strong>Model visibility:</strong> The model dropdown is <code className="bg-slate-900 px-1 rounded">settings.guided_model</code> for Guided GPT and the image model is <code className="bg-slate-900 px-1 rounded">settings.image_model</code>. Pass these into the system prompt so the AI knows.</p>
+              </div>
+            </div>
+
+            {/* PRD 3: Calibration Section */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 3: Calibration Section (AI vs Human Perception)</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> A text box per prompt type (Main, Guided GPT, Smart Prompt) that stores the difference between what AI thinks is a perfect image vs what a human thinks is perfect.</p>
+                <p><strong>Purpose:</strong> Correction prompt that gets fed into the AI when generating/evaluating prompts so it accounts for known AI blind spots.</p>
+                <p><strong>Where it goes:</strong> New section in each prompt type area (alongside the existing persistent text areas). Could be a collapsible "Calibration" section.</p>
+                <p><strong>Data model:</strong> Add to ImageCreationSettings: <code className="bg-slate-900 px-1 rounded">calibration_main_prompt</code>, <code className="bg-slate-900 px-1 rounded">calibration_guided_gpt</code>, <code className="bg-slate-900 px-1 rounded">calibration_smart_prompt</code> (strings). Also add to TestingSlotContent so test slots can have their own calibration.</p>
+                <p><strong>Copy between types:</strong> Button to copy calibration from one prompt type to the others (e.g., Main → Guided + Smart). Then each can be independently adjusted.</p>
+                <p><strong>System prompt integration:</strong> Feed calibration text into the AI chat system prompt (around line 5386) so the AI always remembers the corrections.</p>
+                <p><strong>AI chat visibility:</strong> The AI should be able to read and write the calibration text.</p>
+              </div>
+            </div>
+
+            {/* PRD 4: Article Image Visibility */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 4: Article Image Visibility for AI Chat</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> Let the AI chat see images that were generated for actual published article pages.</p>
+                <p><strong>Purpose:</strong> AI can evaluate real-world results, compare against what it thinks is ideal, feeds into calibration.</p>
+                <p><strong>Where images live:</strong> <code className="bg-slate-900 px-1 rounded">settings.image_bank</code> has BankImage objects with url, wpUrl, prompt, model, variation, etc.</p>
+                <p><strong>Article images:</strong> Stored in <code className="bg-slate-900 px-1 rounded">articles.generated_images</code> (per article, in the database).</p>
+                <p><strong>Implementation:</strong> Add article images to the AI chat system prompt context when the "Image Bank" scope toggle is on. Could use the existing loadArticles mechanism (line ~11136).</p>
+              </div>
+            </div>
+
+            {/* PRD 5: Chat Textarea Auto-Expand + Resize Handle */}
+            <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 5: Chat Textarea Auto-Expand + Resize Handle</div>
+              <div className="text-xs text-gray-400 space-y-1">
+                <p><strong>What:</strong> (1) Textarea auto-expands with text as you type (grows taller). (2) Manual resize handle so user can drag to make it bigger/smaller. (3) Always show the BOTTOM of the text (newest typing) not the top.</p>
+                <p><strong>Current behavior:</strong> Auto-expand exists but capped at 200px max. No manual resize handle. Top of text stays visible while new text disappears below.</p>
+                <p><strong>Where:</strong> Guided GPT chat textarea at <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~11546</code>. Main Prompt chat textarea similarly structured.</p>
+                <p><strong>Fix:</strong> Increase max height (or remove cap). Add CSS <code className="bg-slate-900 px-1 rounded">resize: vertical</code> for manual handle. Set <code className="bg-slate-900 px-1 rounded">scrollTop = scrollHeight</code> after value change to keep bottom visible. Default small, grows with content.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Feb 5 - VibeCoder Notepad Image Consolidation + Drip Feed Hybrid + UI Fixes */}
         <div className="border-l-4 border-purple-500 pl-4">
           <div className="text-sm text-purple-400 font-semibold">Feb 5, 2026 - VibeCoder Notepad Image Consolidation + Drip Feed Optimization + UI Improvements</div>
