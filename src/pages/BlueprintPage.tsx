@@ -4819,15 +4819,15 @@ const ChangelogDiagram: React.FC = () => (
 
                 <p className="text-yellow-400/80 font-medium mt-2">Data Model:</p>
                 <p>Add to ImageCreationSettings:</p>
-                <p><code className="bg-slate-900 px-1 rounded">calibration_entries: Array&lt;{'{'} id, rank, text, scope: 'global'|tag-specific, version, createdAt, source?: testImageId {'}'}&gt;</code></p>
+                <p><code className="bg-slate-900 px-1 rounded">calibration_entries: Array&lt;{'{'} id, rank, text, tags: string[], version, createdAt, source?: testImageId {'}'}&gt;</code></p>
                 <p><code className="bg-slate-900 px-1 rounded">calibration_version: number</code> (auto-increments when entries change, enables v1/v2/v3 tracking and rollback)</p>
-                <p>Storage pattern: <strong>Global + per-tag overrides.</strong> "No glam/model look" is global; "construction PPE allowed" is tag-specific.</p>
+                <p>Storage pattern: <strong>Per-tag with progressive expansion.</strong> Each entry starts attached to the ONE tag it was tested on. As you verify it works on more tags, you add them via a multi-select tag picker on each entry. Once verified on all tags, check "All" to make it global. You can always remove a tag if it stops working for that one. This is NOT a binary global/per-tag choice — entries accumulate tags organically as testing proves them out. Example flow: create entry on "H" tag → test on "J" → works → add "J" → test on "C" → works → add "C" or just click "All".</p>
 
                 <p className="text-yellow-400/80 font-medium mt-2">UI:</p>
                 <p>Dedicated collapsible "Calibration" sub-section under each prompt type area (not buried in test slots). Populated FROM test slot evidence. Flow: see near-miss in test slot → annotate it → "Promote to Calibration" button creates a ranked bullet in the calibration section. Drag to reorder rank. Version history visible.</p>
 
                 <p className="text-yellow-400/80 font-medium mt-2">System Prompt Injection:</p>
-                <p>Inject calibration entries into system prompt builder (<code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~5386</code>). Top 5 non-negotiables first, then tag-specific overrides for current tag. AI chat can read, write, and propose new calibration entries.</p>
+                <p>Inject calibration entries into system prompt builder (<code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~5386</code>). Filter entries by current tag: include all entries whose <code className="bg-slate-900 px-1 rounded">tags</code> array includes the current tag OR "All". Sorted by rank (lowest rank = highest priority). AI chat can read, write, and propose new calibration entries. When proposing, AI should default to tagging the entry with only the current tag being tested.</p>
 
                 <p className="text-yellow-400/80 font-medium mt-2">AI Chat Role in Calibration:</p>
                 <p>When user pastes near-miss evidence (image + prompt), AI should: (1) diagnose why it happened (prompt phrasing, rule conflict, missing negative), (2) propose a calibration entry (short bullet), (3) suggest a targeted test to verify the fix.</p>
