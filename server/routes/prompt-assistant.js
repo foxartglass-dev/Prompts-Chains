@@ -460,7 +460,8 @@ router.post('/chat', async (req, res) => {
 
       // CALIBRATION PACK (DYNAMIC) — injected after guardrails, before page context
       // Per PRD injection stack: System > Guardrails > Tag Guardrails > Calibration Pack > Page context > Output contract
-      if (context.calibrationPack) {
+      // Cal-3: disableCalibration flag allows A/B testing — runtime-only toggle, skips injection
+      if (context.calibrationPack && !context.disableCalibration) {
         parts.push('\n## Calibration Pack (Dynamic Quality Rules):');
         parts.push(context.calibrationPack);
       }

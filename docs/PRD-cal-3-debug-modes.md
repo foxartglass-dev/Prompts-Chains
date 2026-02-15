@@ -4,8 +4,8 @@
 **Phase:** Cal-3 of 3
 **Source:** BlueprintPage.tsx → PRD 3 (Calibration System Full Spec)
 **Branch:** Assigned per implementation session
-**Status:** Not Started
-**Depends On:** Cal-1 (injection layer) and Cal-2 (UI exists)
+**Status:** Complete
+**Depends On:** Cal-1 (injection layer) — Cal-2 (UI) NOT required for debug modes
 
 ---
 
@@ -64,3 +64,22 @@ Toggle to run the same prompt generation **with calibration off** for quick proo
 - Show Injection must show the EXACT text sent to the AI — no summarization
 - Disable Calibration toggle should not affect saved state — it's a runtime-only switch
 - These are diagnostic tools — keep them unobtrusive (collapsible/toggle)
+
+## Implementation Notes (Post-Completion Review)
+
+**Verified correct:**
+- Mode A (Show Injection): Captures exact compiled context at send-time in `handleSendGuidedAssistant`, renders with section labels and calibration highlighting
+- Mode B (Disable Calibration): Runtime-only boolean, strips calibration at both client (context build) and server (prompt-assistant.js injection)
+- Both modes integrated into Testing Mode toolbar as compact toggle buttons
+- Warning bar appears when calibration is disabled (yellow A/B MODE indicator)
+- Show Injection panel is collapsible with Copy button for clipboard export
+
+**Also fixed Cal-1 gap:**
+- `buildScopeBasedContext()` (~line 6029) now compiles and injects calibration pack when "guardrails" scope is selected
+- Both code paths (handleSendGuidedAssistant + buildScopeBasedContext) respect disableCalibration toggle
+
+**Design decisions:**
+- Placed debug toolbar in Testing Mode (not in main prompt areas) since that's where testing/comparison happens
+- Show Injection panel displays all context sections, not just calibration — helps diagnose ANY prompt issue
+- Context capture happens after toggles are applied, so you see exactly what the AI receives
+- Calibration pack compiler is duplicated in 2 places (handleSendGuidedAssistant + buildScopeBasedContext) — in rebuild, extract to shared utility

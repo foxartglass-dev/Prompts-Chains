@@ -4877,6 +4877,67 @@ const ChangelogDiagram: React.FC = () => (
           </div>
         </div>
 
+        {/* Feb 15 - Cal-3 Debug Modes (Show Injection + A/B Toggle) IMPLEMENTED */}
+        <div className="border-l-4 border-green-500 pl-4">
+          <div className="text-sm text-green-400 font-semibold">Feb 15, 2026 - Cal-3: Debug Modes — Show Injection + A/B Toggle (IMPLEMENTED)</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">Two diagnostic tools for the calibration system: transparency panel to see exact injected context, and A/B toggle to prove calibration entries matter. Also fixed Cal-1 gap (buildScopeBasedContext missing calibration).</p>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">MODE A</span>
+              <div>
+                <strong>Show Injection — Transparency Panel</strong>
+                <div className="text-xs text-gray-500">
+                  Collapsible panel in Testing Mode that displays the EXACT compiled context sent to the AI.
+                  Shows each injection stack section with labels: Active Avatar, Main Prompt, Guardrails, Guided Instructions,
+                  Calibration Pack (highlighted in yellow), Smart Prompt. Calibration entries shown as numbered list with priority labels.
+                  Includes Copy button for clipboard export. Updates after every AI Assistant chat message.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">MODE B</span>
+              <div>
+                <strong>Disable Calibration — A/B Toggle</strong>
+                <div className="text-xs text-gray-500">
+                  Runtime-only toggle (not saved to settings) that strips calibration pack from injection stack.
+                  When ON: yellow warning bar shows "A/B MODE — Calibration disabled" in Testing Mode.
+                  Backend also respects disableCalibration flag in prompt-assistant.js context builder.
+                  Allows proving whether a specific calibration entry actually matters by comparing results with/without.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-yellow-400 font-bold">FIX</span>
+              <div>
+                <strong>Cal-1 gap: buildScopeBasedContext() now includes calibration pack</strong>
+                <div className="text-xs text-gray-500">
+                  The unified chat system (Set Scope grid) was missing calibration pack compilation.
+                  When "guardrails" scope is selected, calibration pack is now compiled and included in context
+                  (after guidedInstructionsPersistent, before guided rules). Mirrors handleSendGuidedAssistant logic.
+                  Both paths respect the disableCalibration A/B toggle.
+                </div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Key Files:</span>
+            <span className="text-gray-400 ml-2">
+              src/components/ImageCreationSection.tsx (state vars ~line 1230, handleSendGuidedAssistant context capture ~line 5315,
+              buildScopeBasedContext calibration ~line 6029, debug toolbar + show injection panel UI ~line 11975),
+              server/routes/prompt-assistant.js (disableCalibration flag ~line 463)
+            </span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">For rebuild:</span>
+            <span className="text-gray-400 ml-2">
+              The debug modes are lightweight diagnostic tools. Show Injection captures context at send-time and renders with
+              section highlighting. The A/B toggle is a single boolean that suppresses calibration pack at both client (context build)
+              and server (injection step) levels. In a rebuild, consider extracting the calibration pack compiler into a shared utility
+              instead of duplicating it across handleSendGuidedAssistant and buildScopeBasedContext.
+            </span>
+          </div>
+        </div>
+
         {/* Feb 15 (late) - Calibration System PRD Expansion */}
         <div className="border-l-4 border-purple-500 pl-4">
           <div className="text-sm text-purple-400 font-semibold">Feb 15, 2026 (late session) - PRD 3 Calibration System Full Spec</div>
