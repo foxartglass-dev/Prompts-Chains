@@ -4801,36 +4801,107 @@ const ChangelogDiagram: React.FC = () => (
               </div>
             </div>
 
-            {/* PRD 3: Calibration System (Full Workflow) */}
+            {/* PRD 3: Calibration System (Full Workflow + Schema + Injection) */}
             <div className="bg-slate-800/70 rounded-lg p-3 border border-slate-700">
-              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 3: Calibration System (AI vs Human Perception — Full Workflow)</div>
+              <div className="text-xs text-brand-cyan font-bold mb-1">PRD 3: Calibration System (AI vs Human Perception — Full Spec)</div>
               <div className="text-xs text-gray-400 space-y-1">
-                <p><strong>What:</strong> A living calibration system that evolves through real testing. NOT a one-time text box — it's an iterative workflow: see near-miss → annotate → distill into ranked rules → inject into AI prompts. Calibration = taste + acceptance criteria that only becomes clear when you see real outputs.</p>
+                <p><strong>What:</strong> A living calibration system that evolves through real testing. NOT a one-time text box — it's an iterative workflow: see near-miss → annotate → distill into ranked rules → inject into AI prompts. Calibration = taste + acceptance criteria that only becomes clear when you see real outputs. Calibration items must be <strong>atomic</strong> (one idea per entry — don't bundle "logo suppression" with "non-model attractiveness").</p>
+
+                <p className="text-orange-400/80 font-bold mt-3">═══ WORKFLOW PHASES ═══</p>
 
                 <p className="text-yellow-400/80 font-medium mt-2">Phase 1 — Pre-Calibration (guardrails only):</p>
                 <p>Already done via existing guardrails (uniform, pose, logo suppression, no text, realism, non-model directive). Gets to "mostly acceptable" images.</p>
 
                 <p className="text-yellow-400/80 font-medium mt-2">Phase 2 — Calibration Triggers (near-miss logging):</p>
-                <p>When user spots an image that's *nearly* right but slightly off, they log a calibration case. Each case captures: (1) reference image (the near-miss — from test slot's <code className="bg-slate-900 px-1 rounded">testImages</code>), (2) what's wrong (1-2 sentences), (3) what correct looks like (1-2 sentences), (4) optional corrected example image after prompt adjustment.</p>
-                <p><strong>Integration with test slots:</strong> Add <code className="bg-slate-900 px-1 rounded">calibrationNote?: string</code> and <code className="bg-slate-900 px-1 rounded">correctedPrompt?: string</code> fields to the <code className="bg-slate-900 px-1 rounded">testImages</code> array items in TestingSlotContent (already at <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:114-123</code>). A near-miss is literally a test slot image + annotation.</p>
+                <p>When user spots an image that's *nearly* right but slightly off, they log a calibration case from a test slot image. Each case captures: (1) reference image (the near-miss), (2) what's wrong (1-2 sentences), (3) what correct looks like (1-2 sentences), (4) optional corrected example image after prompt adjustment.</p>
+                <p><strong>Integration with test slots:</strong> Add <code className="bg-slate-900 px-1 rounded">calibrationNote?: string</code> and <code className="bg-slate-900 px-1 rounded">correctedPrompt?: string</code> fields to the <code className="bg-slate-900 px-1 rounded">testImages</code> array items in TestingSlotContent (already at <code className="bg-slate-900 px-1 rounded">TestingSlotsSelector.tsx:114-123</code>). A near-miss is literally a test slot image + annotation. Add a <strong>"Create Calibration from This Result"</strong> button on each test image that pre-fills fields + attaches the image/prompt.</p>
 
                 <p className="text-yellow-400/80 font-medium mt-2">Phase 3 — Reusable Calibration Entries:</p>
-                <p>Each annotated near-miss gets distilled into a short, crisp rule bullet. Stored as ranked entries (Top 5 = non-negotiable). Examples: "Prefer forearm occluding left-chest area vs any visible chest mark, even blurred." / "Avoid beauty-ad lighting; prefer realistic indoor daylight with mild imperfections."</p>
+                <p>Each annotated near-miss gets distilled into a calibration entry. Entries must be <strong>atomic</strong> (one idea each) for easy portability across tags. Keep entries short and crisp — models comply better with concise constraints.</p>
 
-                <p className="text-yellow-400/80 font-medium mt-2">Data Model:</p>
-                <p>Add to ImageCreationSettings:</p>
-                <p><code className="bg-slate-900 px-1 rounded">calibration_entries: Array&lt;{'{'} id, rank, text, tags: string[], version, createdAt, source?: testImageId {'}'}&gt;</code></p>
-                <p><code className="bg-slate-900 px-1 rounded">calibration_version: number</code> (auto-increments when entries change, enables v1/v2/v3 tracking and rollback)</p>
-                <p>Storage pattern: <strong>Per-tag with progressive expansion.</strong> Each entry starts attached to the ONE tag it was tested on. As you verify it works on more tags, you add them via a multi-select tag picker on each entry. Once verified on all tags, check "All" to make it global. You can always remove a tag if it stops working for that one. This is NOT a binary global/per-tag choice — entries accumulate tags organically as testing proves them out. Example flow: create entry on "H" tag → test on "J" → works → add "J" → test on "C" → works → add "C" or just click "All".</p>
+                <p className="text-orange-400/80 font-bold mt-3">═══ DATA MODEL (CALIBRATION ENTRY SCHEMA) ═══</p>
+                <p>Each calibration entry stores:</p>
+                <p><code className="bg-slate-900 px-1 rounded">calibration_entries: Array&lt;{'{'}</code></p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">id: string</code> — unique ID (e.g. CAL-007)</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">title: string</code> — short name (e.g. "Avoid model glam")</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">tags: string[]</code> — multi-select tags this applies to; "All" = global</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">priority: 'hard' | 'medium' | 'soft'</code> — enforcement strength (hard = non-negotiable)</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">human_note: string</code> — FOR THE USER: what's off and what we want (human-readable description)</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">model_instruction: string</code> — FOR THE AI: the actual drop-in line injected into prompts</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">trigger: string</code> — when to apply (e.g. "any portrait with visible chest area")</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">do_preferred: string</code> — what the preferred outcome looks like</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">avoid_antipattern: string</code> — what to avoid</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">enforcement_tactics: string[]</code> — 1-3 bullet tactics (camera/occlusion/crop/lighting wording)</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">negative_constraints?: string[]</code> — optional short negative list</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">evidence_bad_image_ids?: string[]</code> — near-miss image references</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">evidence_good_image_ids?: string[]</code> — target/good image references</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">per_tag_test_status?: Record&lt;string, {'{'} pass: boolean, testedAt: string {'}'}&gt;</code> — pass/fail + timestamp per tag</p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">createdAt: string, updatedAt: string</code></p>
+                <p className="pl-4"><code className="bg-slate-900 px-1 rounded">source_test_image_id?: string</code> — links back to the test image that triggered it</p>
+                <p><code className="bg-slate-900 px-1 rounded">{'}'}&gt;</code></p>
+                <p><code className="bg-slate-900 px-1 rounded">calibration_version: number</code> — auto-increments when entries change (v1/v2/v3 tracking + rollback)</p>
 
-                <p className="text-yellow-400/80 font-medium mt-2">UI:</p>
-                <p>Dedicated collapsible "Calibration" sub-section under each prompt type area (not buried in test slots). Populated FROM test slot evidence. Flow: see near-miss in test slot → annotate it → "Promote to Calibration" button creates a ranked bullet in the calibration section. Drag to reorder rank. Version history visible.</p>
+                <p className="text-yellow-400/80 font-medium mt-2">Key difference — two text fields per entry:</p>
+                <p>(1) <strong>human_note</strong> — for the user: "What's off and what we want" (readable description)</p>
+                <p>(2) <strong>model_instruction</strong> — for the AI: the actual drop-in line used in prompts. This is the critical field.</p>
 
-                <p className="text-yellow-400/80 font-medium mt-2">System Prompt Injection:</p>
-                <p>Inject calibration entries into system prompt builder (<code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~5386</code>). Filter entries by current tag: include all entries whose <code className="bg-slate-900 px-1 rounded">tags</code> array includes the current tag OR "All". Sorted by rank (lowest rank = highest priority). AI chat can read, write, and propose new calibration entries. When proposing, AI should default to tagging the entry with only the current tag being tested.</p>
+                <p className="text-yellow-400/80 font-medium mt-2">Tag management:</p>
+                <p><strong>Per-tag with progressive expansion.</strong> Each entry starts attached to the ONE tag it was tested on. As you verify it works on more tags, add them via multi-select. Once verified on all tags, check "All" for global. You can always remove a tag if it stops working. The <code className="bg-slate-900 px-1 rounded">per_tag_test_status</code> field lets you scientifically track whether a rule is niche or global over time.</p>
+
+                <p className="text-orange-400/80 font-bold mt-3">═══ UI TEMPLATES ═══</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Template 1 — Calibration Card (CRUD UI):</p>
+                <p>Each entry renders as a card with these fields: Title | Tags (multi-select) | Priority (Hard/Med/Soft) | Trigger (when to apply) | Do (preferred) | Avoid (anti-pattern) | Enforcement wording (drop-in line) | Evidence (bad/good image IDs) | Status (pass/fail per tag + last tested). Forces each calibration to be actionable with literal injectable wording.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Template 2 — Drop-in Line Format (what AI actually reads):</p>
+                <p>Each entry's <code className="bg-slate-900 px-1 rounded">model_instruction</code> should follow this format:</p>
+                <p><code className="bg-slate-900 px-1 rounded">[CAL:Title | Strength] Do …; Avoid …; Prefer …</code></p>
+                <p>Example: <code className="bg-slate-900 px-1 rounded">[CAL:Everyday employee look | Hard] Depict a realistic worker with natural skin texture and minimal makeup; avoid glam/influencer styling; prefer practical hair and functional posture.</code></p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Template 3 — Calibration Pack (compiled block for injection):</p>
+                <p>When generating for a specific tag, compile a block like:</p>
+                <p><code className="bg-slate-900 px-1 rounded">Calibration Pack — Tag H (sorted by priority):</code></p>
+                <p><code className="bg-slate-900 px-1 rounded">1. (Hard) [drop-in line]</code></p>
+                <p><code className="bg-slate-900 px-1 rounded">2. (Hard) [drop-in line]</code></p>
+                <p><code className="bg-slate-900 px-1 rounded">3. (Medium) [drop-in line]</code></p>
+                <p>Meta-instruction included: "If a calibration item conflicts with guardrails, guardrails win. If two calibration items conflict, higher priority wins; if same priority, most recent wins."</p>
+
+                <p className="text-orange-400/80 font-bold mt-3">═══ INJECTION STACK (where calibration goes in the prompt) ═══</p>
+                <p><strong>Critical: Calibration is a DYNAMIC LAYER between guardrails and page context. Never bake it into permanent guardrails.</strong></p>
+                <p>When generating an image prompt (Guided GPT flow), build context in this exact order:</p>
+                <p className="pl-4">1. <strong>System / Role</strong> (already exists)</p>
+                <p className="pl-4">2. <strong>Global Guardrails</strong> (persistent instructions — always included)</p>
+                <p className="pl-4">3. <strong>Tag Guardrails</strong> (only for the active tag)</p>
+                <p className="pl-4">4. <strong>Calibration Pack (DYNAMIC)</strong> — filtered by tag, sorted by priority, limited to top 12-20</p>
+                <p className="pl-4">5. <strong>Page context</strong> (the ~75 words around image placement)</p>
+                <p className="pl-4">6. <strong>Output contract</strong> ("Output ONLY the final prompt…")</p>
+                <p><strong>Why this order:</strong> Calibration refines output without overriding fundamentals. Placing it after guardrails prevents calibration from accidentally relaxing hard rules.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Query Logic (what gets injected):</p>
+                <p>Given <code className="bg-slate-900 px-1 rounded">active_tag</code>:</p>
+                <p className="pl-4">1. Include items where <code className="bg-slate-900 px-1 rounded">active_tag in tags[]</code></p>
+                <p className="pl-4">2. Also include items marked "All" (global)</p>
+                <p className="pl-4">3. Sort by priority desc (Hard → Med → Soft), then updatedAt desc</p>
+                <p className="pl-4">4. Limit to <strong>12-20 max</strong> (avoid prompt bloat)</p>
+                <p className="pl-4">5. Render as numbered bullet list using Template 3 format</p>
+                <p>Inject into system prompt builder at <code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~5386</code>.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Conflict Resolution:</p>
+                <p>Simple rule: (1) Guardrails always beat calibration. (2) Higher priority calibration wins. (3) Same priority → most recent wins.</p>
+
+                <p className="text-orange-400/80 font-bold mt-3">═══ DEBUG MODES ═══</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Mode A — "Show Injection" (transparency):</p>
+                <p>In the test viewer, show the <strong>exact compiled context</strong> that was used for a generation: guardrails block + tag block + calibration pack block + page text. If something goes wrong, you can see whether calibration was missing or ignored.</p>
+
+                <p className="text-yellow-400/80 font-medium mt-2">Mode B — "Disable Calibration" (A/B toggle):</p>
+                <p>Toggle to run the same prompt generation <strong>with calibration off</strong> for quick proof that a calibration item actually matters. Side-by-side comparison: with vs without.</p>
+
+                <p className="text-orange-400/80 font-bold mt-3">═══ UI LAYOUT ═══</p>
+                <p>Dedicated collapsible "Calibration Library" sub-section under each prompt type area (not buried in test slots). Populated FROM test slot evidence. Flow: see near-miss in test slot → annotate it → "Create Calibration from This Result" button pre-fills card fields + attaches image/prompt → entry appears in Calibration Library. Drag to reorder priority. Version history visible. Each tag page can show "calibration entries affecting this tag" filtered view.</p>
 
                 <p className="text-yellow-400/80 font-medium mt-2">AI Chat Role in Calibration:</p>
-                <p>When user pastes near-miss evidence (image + prompt), AI should: (1) diagnose why it happened (prompt phrasing, rule conflict, missing negative), (2) propose a calibration entry (short bullet), (3) suggest a targeted test to verify the fix.</p>
+                <p>When user pastes near-miss evidence (image + prompt), AI should: (1) diagnose why it happened (prompt phrasing, rule conflict, missing negative), (2) propose a calibration entry with both <code className="bg-slate-900 px-1 rounded">human_note</code> and <code className="bg-slate-900 px-1 rounded">model_instruction</code>, (3) suggest a targeted test to verify the fix. AI defaults to tagging new entries with only the current tag being tested.</p>
               </div>
             </div>
 
@@ -4914,7 +4985,7 @@ const ChangelogDiagram: React.FC = () => (
                 <div className="text-xs text-purple-400 font-bold mb-2">PHASE 3 — AI Chat Intelligence (PRDs 2, 3, 4)</div>
                 <div className="text-xs text-gray-400 space-y-1">
                   <p><strong>PRD 2:</strong> AI Chat Full Autonomy Over Testing System — AI can create/switch/fill/duplicate/promote test slots. Needs new tool definitions in the system prompt builder (<code className="bg-slate-900 px-1 rounded">ImageCreationSection.tsx:~5386</code>), new handler functions, and integration with the slot management API. Biggest PRD.</p>
-                  <p><strong>PRD 3:</strong> Calibration System (Full Workflow) — iterative near-miss logging → ranked rule bullets → system prompt injection. Data model: <code className="bg-slate-900 px-1 rounded">calibration_entries</code> array with rank, scope (global/per-tag), version tracking. UI: collapsible section per prompt type, "Promote to Calibration" from test slot annotations. AI diagnoses near-misses and proposes entries. See full PRD 3 above for complete workflow.</p>
+                  <p><strong>PRD 3:</strong> Calibration System (Full Spec) — complete schema with per-entry fields: title, tags (multi-select), priority (Hard/Med/Soft), human_note + model_instruction (two-field design), trigger, do/avoid, enforcement tactics, evidence images, per-tag test status. Three templates: UI Card, Drop-in Line format (<code className="bg-slate-900 px-1 rounded">[CAL:Title|Strength] Do…; Avoid…; Prefer…</code>), Calibration Pack (compiled injection block). Injection stack: System → Global Guardrails → Tag Guardrails → <strong>Calibration Pack (dynamic, 12-20 max)</strong> → Page context → Output contract. Two debug modes: "Show Injection" (see compiled context) + "Disable Calibration" (A/B toggle). See full PRD 3 above for complete spec.</p>
                   <p><strong>PRD 4:</strong> Article Image Visibility for AI Chat — let the AI see article images (thumbnails or URLs) in its context so it can reference previous results. Requires reading from <code className="bg-slate-900 px-1 rounded">articles.generated_images</code> and including in chat system prompt.</p>
                   <p><strong>Estimated scope:</strong> Largest phase — significant system prompt changes, new handler functions, new UI sections. AI autonomy (PRD 2) is the most complex single feature.</p>
                 </div>
