@@ -4687,33 +4687,87 @@ const ChangelogDiagram: React.FC = () => (
         {/* Feb 15 (late) - Calibration System PRD Expansion */}
         <div className="border-l-4 border-purple-500 pl-4">
           <div className="text-sm text-purple-400 font-semibold">Feb 15, 2026 (late session) - PRD 3 Calibration System Full Spec</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">Documentation-only session. User brought detailed calibration design from external AI chat consultation. Coding agent reviewed, contributed design decisions, and documented everything in Blueprint PRDs.</p>
           <ul className="mt-2 space-y-2 text-sm text-gray-300">
             <li className="flex items-start gap-2">
               <span className="text-blue-400 font-bold">DOCS</span>
               <div>
                 <strong>PRD 3 expanded from simple text-box to full calibration system spec</strong>
                 <div className="text-xs text-gray-500">
-                  Based on detailed AI chat consultation. Now includes: 3-phase workflow (pre-calibration → near-miss logging → reusable entries),
+                  Original PRD 3 was just "a text box per prompt type that stores calibration corrections." Now a comprehensive
+                  engineering spec with: 3-phase workflow (pre-calibration → near-miss logging → reusable entries),
                   15-field entry schema (id, title, tags[], priority hard/med/soft, human_note + model_instruction dual fields, trigger, do/avoid,
                   enforcement tactics, evidence images, per-tag test status), 3 templates (UI Card, Drop-in Line format, Calibration Pack),
                   injection stack order (System → Global Guardrails → Tag Guardrails → Calibration Pack → Page context → Output contract),
                   query logic (filter by tag, sort priority desc, limit 12-20), conflict resolution rules, two debug modes
-                  (Show Injection + Disable Calibration A/B toggle), atomic entries rule.
+                  (Show Injection + Disable Calibration A/B toggle), atomic entries rule (one idea per calibration for portability).
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DESIGN</span>
+              <div>
+                <strong>Coding agent design contributions (not from external chat)</strong>
+                <div className="text-xs text-gray-500">
+                  Agent identified that calibration entries map directly to existing test slot infrastructure — a "near miss" IS a test image + annotation.
+                  Proposed adding calibrationNote and correctedPrompt fields to existing testImages array items rather than building separate storage.
+                  Proposed "Promote to Calibration" button flow: annotate test image → promote to calibration library (not the other direction).
+                  Recommended calibration live as dedicated sub-section per prompt type, not buried in test slots.
+                  Suggested calibration version numbers with changelog for rollback capability.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">DESIGN</span>
+              <div>
+                <strong>Calibration tag model: per-tag with progressive expansion (agent-designed)</strong>
+                <div className="text-xs text-gray-500">
+                  External chat originally proposed binary "global vs per-tag" choice. Agent redesigned to multi-select progressive expansion:
+                  each entry starts on ONE tested tag, accumulates tags as testing proves them out. "All" = verified global.
+                  Flow: create on "H" → test "J" → works → add "J" → eventually "All". Can always remove a tag if it stops working.
+                  per_tag_test_status field enables scientific tracking of whether a rule is niche or global over time.
                 </div>
               </div>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-blue-400 font-bold">DOCS</span>
               <div>
-                <strong>Calibration tag model: per-tag with progressive expansion</strong>
-                <div className="text-xs text-gray-500">NOT binary global/per-tag. Each entry starts on one tested tag, accumulates tags as testing proves them out. Multi-select tag picker. "All" = verified global.</div>
+                <strong>Injection stack order documented (from external chat)</strong>
+                <div className="text-xs text-gray-500">
+                  Critical design: calibration is a DYNAMIC LAYER between guardrails and page context. Never bake into permanent guardrails.
+                  Order: System/Role → Global Guardrails → Tag Guardrails → Calibration Pack (filtered, max 12-20) → Page context → Output contract.
+                  Calibration after guardrails prevents it from accidentally relaxing hard rules. Conflict resolution: guardrails {">"} calibration,
+                  higher priority wins, same priority → most recent wins.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">DOCS</span>
+              <div>
+                <strong>Drop-in line format standardized (from external chat)</strong>
+                <div className="text-xs text-gray-500">
+                  Each calibration entry has TWO text fields: human_note (for user understanding) and model_instruction (the actual injected line).
+                  Format: [CAL:Title | Strength] Do …; Avoid …; Prefer …
+                  Example: [CAL:Everyday employee look | Hard] Depict a realistic worker with natural skin texture; avoid glam styling; prefer practical hair.
+                  This is the key difference between "notes" and "usable calibration."
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">DOCS</span>
+              <div>
+                <strong>Two debug modes documented (from external chat)</strong>
+                <div className="text-xs text-gray-500">
+                  Mode A "Show Injection": display exact compiled context (guardrails + tag + calibration + page text) used for each generation, for diagnostics.
+                  Mode B "Disable Calibration": A/B toggle to run same prompt with calibration off, proving whether a calibration entry actually matters.
+                </div>
               </div>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-blue-400 font-bold">DOCS</span>
               <div>
                 <strong>Phase 3 summary updated in Phased Implementation Plan</strong>
-                <div className="text-xs text-gray-500">Reflects expanded PRD 3 with schema details, injection stack, debug modes. Points to full PRD 3 section above.</div>
+                <div className="text-xs text-gray-500">Reflects expanded PRD 3 with schema details, injection stack, debug modes. Points to full PRD 3 section for complete spec.</div>
               </div>
             </li>
           </ul>
@@ -4723,11 +4777,19 @@ const ChangelogDiagram: React.FC = () => (
           </div>
           <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
             <span className="text-teal-400 font-semibold">Commits:</span>
-            <span className="text-gray-400 ml-2">f5121e3, fb6776a, 24dd9da</span>
+            <span className="text-gray-400 ml-2">f5121e3, fb6776a, 24dd9da, 9b47a21</span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Source of truth:</span>
+            <span className="text-gray-400 ml-2">PRD 3 in the HANDOFF PRDs section above is the single source of truth for calibration system design. All schema, templates, injection logic, and debug modes are documented there. Everything from the external AI chat has been captured.</span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Context for future rebuild:</span>
+            <span className="text-gray-400 ml-2">User plans to eventually use Opus 4.6 million-token context to reverse-engineer the entire spaghetti codebase into clean specs, then feed those specs into an auto-builder (Wiggins-based looper with Playwright + Claude computer-use testing) to rebuild everything properly. Calibration system will be part of that enterprise rebuild. For NOW: just get images working for the website with existing system.</span>
           </div>
           <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
             <span className="text-teal-400 font-semibold">Next priority:</span>
-            <span className="text-gray-400 ml-2">User wants to focus on getting images working for the website AS-IS (not building calibration yet). Calibration is for later / enterprise / Guided GPT. No code work pending from this session.</span>
+            <span className="text-gray-400 ml-2">Get images working for the website AS-IS. Calibration is primarily for Guided GPT (where AI makes on-the-fly judgment calls). Main Prompt is more static and works well enough with existing guardrails. Do NOT start building calibration system yet.</span>
           </div>
         </div>
 
