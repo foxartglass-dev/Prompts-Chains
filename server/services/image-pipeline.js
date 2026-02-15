@@ -17,6 +17,36 @@ import { generateArticleImages, generateImage, estimateCost } from './image-gene
 import { uploadMedia } from './wordpress-publisher.js';
 
 /**
+ * Get rules whose appliesTo scope matches a given tag + segment.
+ * Used to inject rules into the correct pipeline stage.
+ *
+ * @param {Array} allRules - Combined guided_gpt_rules + legacy_prompt_rules
+ * @param {string|null} tag - The article's tag (e.g., 'H', 'J', 'C')
+ * @param {string} segment - The pipeline segment key (e.g., 'prompt', 'guardrails', 'smart')
+ * @returns {Array} Matching rules sorted by order
+ */
+function getRulesForScope(allRules, tag, segment) {
+  if (!allRules || allRules.length === 0 || !segment) return [];
+
+  return allRules.filter(rule => {
+    const targets = rule.appliesTo || [];
+    if (targets.length === 0) return false; // No scope configured = not injected
+    // Match explicit tag-segment OR All-segment
+    return (tag && targets.includes(`${tag}-${segment}`)) || targets.includes(`All-${segment}`);
+  }).sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+/**
+ * Build a text block from matched rules for injection into prompts.
+ * @param {Array} rules - Filtered rules from getRulesForScope
+ * @returns {string} Joined rule text, or empty string
+ */
+function buildRulesBlock(rules) {
+  if (!rules || rules.length === 0) return '';
+  return rules.map(r => r.text).filter(Boolean).join('\n\n');
+}
+
+/**
  * Helper: Generate plural forms of a word
  */
 function getPluralForms(word, matchPlurals = true) {
@@ -262,6 +292,10 @@ export async function processArticleWithImages(content, options = {}) {
     guidedInstructionsPersistent = '',
     smartPromptPersistent = '',
 
+    // Rules (tag-based rules with appliesTo scope grid)
+    allRules = [],       // Combined guided_gpt_rules + legacy_prompt_rules
+    articleTag = null,    // The article's audience tag (e.g., 'H', 'J', 'C')
+
     // Callbacks
     onProgress = null
   } = options;
@@ -345,10 +379,27 @@ export async function processArticleWithImages(content, options = {}) {
     }
     console.log('[Image Pipeline] ================================================\n');
 
+    // Rules injection: filter rules by tag + segment for each pipeline stage
+    if (allRules.length > 0 && articleTag) {
+      console.log(`[Rules] ${allRules.length} total rules loaded for tag "${articleTag}"`);
+    }
+
     if (useMainPromptMode) {
       // MAIN_PROMPT MODE: Use avatar's mainPrompt with smart-matched placeholders
       // KEY FIX: Match EACH image position to LOCAL content (75 words around it)
       progress('smart_matching', { message: 'Smart matching content to placeholders per image position...' });
+
+      // Pre-filter rules for main prompt segments
+      const promptRules = getRulesForScope(allRules, articleTag, 'prompt');
+      const promptRulesBlock = buildRulesBlock(promptRules);
+      const categoryRules = getRulesForScope(allRules, articleTag, 'categories');
+      const categoryRulesBlock = buildRulesBlock(categoryRules);
+      if (promptRules.length > 0) {
+        console.log(`[Rules] Main Prompt mode: ${promptRules.length} rule(s) for "prompt" segment`);
+      }
+      if (categoryRules.length > 0) {
+        console.log(`[Rules] Main Prompt mode: ${categoryRules.length} rule(s) for "categories" segment`);
+      }
 
       console.log(`[Main Prompt Mode] Avatar: ${targetAvatar.name} | Hero side: ${heroImageSide}`);
 
@@ -386,6 +437,13 @@ export async function processArticleWithImages(content, options = {}) {
         // Append persistent (all-tags) prompt portion
         if (mainPromptPersistent) {
           heroPrompt = `${heroPrompt}\n\n${mainPromptPersistent}`;
+        }
+        // Inject rules scoped to main prompt and categories
+        if (promptRulesBlock) {
+          heroPrompt = `${heroPrompt}\n\n${promptRulesBlock}`;
+        }
+        if (categoryRulesBlock) {
+          heroPrompt = `${heroPrompt}\n\n${categoryRulesBlock}`;
         }
         allReplacements.push({ position: 'hero', replacements, prompt: heroPrompt });
 
@@ -447,6 +505,13 @@ export async function processArticleWithImages(content, options = {}) {
           if (mainPromptPersistent) {
             imagePrompt = `${imagePrompt}\n\n${mainPromptPersistent}`;
           }
+          // Inject rules scoped to main prompt and categories
+          if (promptRulesBlock) {
+            imagePrompt = `${imagePrompt}\n\n${promptRulesBlock}`;
+          }
+          if (categoryRulesBlock) {
+            imagePrompt = `${imagePrompt}\n\n${categoryRulesBlock}`;
+          }
           allReplacements.push({ position: `inline-${i}`, heading: chunk.heading, replacements, prompt: imagePrompt });
 
           chunk.imagePrompt = imagePrompt;
@@ -488,10 +553,31 @@ export async function processArticleWithImages(content, options = {}) {
 
       const baseGuardrails = guidedGuardrails || targetAvatar?.guardrails || {};
       // Merge persistent (all-tags) instructions into guardrails
-      const guardrails = guidedInstructionsPersistent ? {
+      let mergedInstructions = baseGuardrails.instructions || '';
+      if (guidedInstructionsPersistent) {
+        mergedInstructions = `${mergedInstructions}\n\n${guidedInstructionsPersistent}`.trim();
+      }
+
+      // Inject rules scoped to guardrails (appliesTo: '{tag}-guardrails' or 'All-guardrails')
+      const guardrailRules = getRulesForScope(allRules, articleTag, 'guardrails');
+      const guardrailRulesBlock = buildRulesBlock(guardrailRules);
+      if (guardrailRulesBlock) {
+        mergedInstructions = `${mergedInstructions}\n\n## RULES (from scope grid):\n${guardrailRulesBlock}`.trim();
+        console.log(`[Rules] Guided GPT mode: ${guardrailRules.length} rule(s) injected into guardrails`);
+      }
+
+      // Inject rules scoped to guided-rules (appliesTo: '{tag}-guided-rules' or 'All-guided-rules')
+      const guidedRulesScoped = getRulesForScope(allRules, articleTag, 'guided-rules');
+      const guidedRulesBlock = buildRulesBlock(guidedRulesScoped);
+      if (guidedRulesBlock) {
+        mergedInstructions = `${mergedInstructions}\n\n## ADDITIONAL RULES:\n${guidedRulesBlock}`.trim();
+        console.log(`[Rules] Guided GPT mode: ${guidedRulesScoped.length} rule(s) injected as guided-rules`);
+      }
+
+      const guardrails = {
         ...baseGuardrails,
-        instructions: `${baseGuardrails.instructions || ''}\n\n${guidedInstructionsPersistent}`.trim()
-      } : baseGuardrails;
+        instructions: mergedInstructions
+      };
       let imageCount = 0;
       let cumulativeWordPosition = 0;
       const inlineStartSide = heroImageSide === 'right' ? 'left' : 'right';
@@ -623,6 +709,25 @@ export async function processArticleWithImages(content, options = {}) {
         for (const chunk of chunks.chunks) {
           if (chunk.imagePrompt) {
             chunk.imagePrompt = `${chunk.imagePrompt}\n\n${smartPromptPersistent}`;
+          }
+        }
+      }
+
+      // Inject rules scoped to smart prompt segments
+      const smartRules = getRulesForScope(allRules, articleTag, 'smart');
+      const smartRulesBlock = buildRulesBlock(smartRules);
+      const smartRulesScoped = getRulesForScope(allRules, articleTag, 'smart-rules');
+      const smartRulesContextBlock = buildRulesBlock(smartRulesScoped);
+      const combinedSmartRules = [smartRulesBlock, smartRulesContextBlock].filter(Boolean).join('\n\n');
+
+      if (combinedSmartRules) {
+        console.log(`[Rules] Smart Prompt mode: ${smartRules.length} rule(s) for "smart", ${smartRulesScoped.length} for "smart-rules"`);
+        if (chunks.intro?.imagePrompt) {
+          chunks.intro.imagePrompt = `${chunks.intro.imagePrompt}\n\n${combinedSmartRules}`;
+        }
+        for (const chunk of chunks.chunks) {
+          if (chunk.imagePrompt) {
+            chunk.imagePrompt = `${chunk.imagePrompt}\n\n${combinedSmartRules}`;
           }
         }
       }
