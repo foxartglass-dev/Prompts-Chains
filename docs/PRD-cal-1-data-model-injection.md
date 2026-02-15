@@ -3,8 +3,8 @@
 **Track:** Calibration
 **Phase:** Cal-1 of 3
 **Source:** BlueprintPage.tsx → PRD 3 (Calibration System Full Spec)
-**Branch:** `claude/fix-prompt-button-S8BcZ`
-**Status:** Not Started
+**Branch:** Assigned per implementation session
+**Status:** Complete
 
 ---
 
@@ -36,7 +36,10 @@ interface CalibrationEntry {
   updatedAt: string;
   source_test_image_id?: string; // links back to the test image that triggered it
 }
+```
 
+Stored alongside entries on the settings table:
+```typescript
 calibration_version: number  // auto-increments when entries change (v1/v2/v3 tracking + rollback)
 ```
 
@@ -99,7 +102,7 @@ Given `active_tag`:
 4. Limit to **12-20 max** (avoid prompt bloat)
 5. Render as numbered bullet list using Template 3 format
 
-Inject into system prompt builder at `ImageCreationSection.tsx:~5386`.
+Inject into context builder (`buildScopeBasedContext` function) at `ImageCreationSection.tsx:~5869`. Also ensure the `guided-generate` endpoint context at `ImageCreationSection.tsx:~6540` includes calibration data when relevant.
 
 ## Conflict Resolution
 
@@ -115,8 +118,8 @@ Add `calibrationNote?: string` and `correctedPrompt?: string` fields to the `tes
 ## Affected Files
 
 - Database: new `calibration_entries` storage (could be JSON column on settings or new table)
-- `server/routes/prompt-assistant.js` — injection of calibration pack into context (~lines 355-504)
-- `src/components/ImageCreationSection.tsx` — system prompt builder (~line 5386)
+- `server/routes/prompt-assistant.js` — injection of calibration pack into context builder (~lines 397-507; inject after guardrails/guided instructions at ~line 460, before reference images)
+- `src/components/ImageCreationSection.tsx` — context builder `buildScopeBasedContext` (~line 5869); also `guided-generate` context (~line 6540)
 - `src/components/TestingSlotsSelector.tsx` — add calibrationNote/correctedPrompt fields
 
 ## Key Rules
