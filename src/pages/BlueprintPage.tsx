@@ -1259,9 +1259,17 @@ const DataSourcesDiagram: React.FC = () => (
             <code className="text-brand-gold">consultant_chat_files</code>
             <span className="text-gray-400">JSONB chat folders</span>
           </div>
-          <div className="flex justify-between items-center py-1">
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
             <code className="text-brand-gold">consultant_chat_conversations</code>
             <span className="text-gray-400">JSONB chat sessions</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-slate-700">
+            <code className="text-brand-gold">calibration_entries</code>
+            <span className="text-gray-400">JSONB CalibrationEntry[] (migration 035)</span>
+          </div>
+          <div className="flex justify-between items-center py-1">
+            <code className="text-brand-gold">calibration_version</code>
+            <span className="text-gray-400">INT auto-increments on writes</span>
           </div>
         </div>
         <div className="mt-4 p-3 bg-red-900/30 rounded-lg text-xs text-red-300">
@@ -1300,6 +1308,111 @@ const DataSourcesDiagram: React.FC = () => (
             <span className="text-gray-400">For matching</span>
           </div>
         </div>
+      </div>
+    </div>
+
+    {/* Calibration System Architecture (Cal-1) */}
+    <div className="bg-gradient-to-r from-green-900/20 to-teal-900/20 rounded-xl p-6 border border-green-500/30 mt-8">
+      <h3 className="text-xl font-bold text-green-400 mb-4">Calibration System (Cal-1 — Foundation Layer)</h3>
+      <p className="text-gray-400 text-sm mb-4">
+        Dynamic quality rules injected into image prompts. Each entry is a reusable instruction
+        that gets compiled into a "Calibration Pack" filtered by tag.
+        <strong className="text-white"> Cal-1 = backend only. Cal-2/Cal-3 will add UI.</strong>
+      </p>
+
+      {/* Data Flow Diagram */}
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-sm font-bold text-brand-cyan mb-3">Data Flow</h4>
+        <pre className="text-xs text-gray-300 overflow-x-auto">{`CalibrationEntry[] (JSONB on image_creation_settings)
+  │
+  ├─ CRUD Routes (/api/calibration/:workflowId)
+  │    GET /              → all entries + version
+  │    PUT /              → full replace (empty-array protected)
+  │    POST /entry        → add single entry
+  │    PATCH /entry/:id   → update single entry (ID locked)
+  │    DELETE /entry/:id  → remove single entry
+  │    GET /pack/:tag     → compiled pack for a tag
+  │
+  ├─ Settings Save/Load (image-creation.js)
+  │    tryUpdateCalibration() pattern (graceful if migration 035 not run)
+  │    Loaded in GET, saved in PUT alongside other settings
+  │
+  └─ Prompt Injection (two paths)
+       ├─ Frontend: ImageCreationSection.tsx buildContext()
+       │    Compiles pack client-side → sends as context.calibrationPack
+       │
+       └─ Backend: prompt-assistant.js context builder
+            Renders "## Calibration Pack (Dynamic Quality Rules):" section
+            Position: AFTER guardrails, BEFORE reference images`}</pre>
+      </div>
+
+      {/* Entry Schema */}
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-sm font-bold text-brand-gold mb-3">CalibrationEntry Schema (15 fields)</h4>
+        <pre className="text-xs text-gray-300 overflow-x-auto">{`{
+  id: "CAL-007"                    // unique, e.g. CAL-001, CAL-002
+  title: "Avoid model glam"        // short name
+  tags: ["H", "J"]                 // which avatar tags; "All" = global
+  priority: "hard"|"medium"|"soft" // injection sorting + conflict resolution
+  human_note: "..."                // FOR USER: what's off and what we want
+  model_instruction: "[CAL:Title | Priority] Do…; Avoid…; Prefer…"  // FOR AI: the injected line
+  trigger: "when to apply"
+  do_preferred: "preferred outcome"
+  avoid_antipattern: "what to avoid"
+  enforcement_tactics: ["tactic1", "tactic2"]
+  negative_constraints?: ["don't do X"]
+  evidence_bad_image_ids?: ["img-id"]  // near-miss references
+  evidence_good_image_ids?: ["img-id"] // target/good references
+  per_tag_test_status?: { "H": { pass: true, testedAt: "..." } }
+  source_test_image_id?: "test-img-id" // links to test image that triggered it
+  createdAt, updatedAt               // ISO timestamps
+}`}</pre>
+      </div>
+
+      {/* Pack Compilation */}
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-sm font-bold text-purple-400 mb-3">Pack Compilation (compileCalibrationPack)</h4>
+        <div className="text-xs text-gray-300 space-y-2">
+          <p><strong className="text-white">Input:</strong> all entries + active tag + max limit (12-20, default 16)</p>
+          <p><strong className="text-white">Step 1:</strong> Filter — include entries where active tag in tags[] OR tags includes "All"</p>
+          <p><strong className="text-white">Step 2:</strong> Sort — priority desc (hard{"→"}med{"→"}soft), then updatedAt desc (newest first)</p>
+          <p><strong className="text-white">Step 3:</strong> Limit — cap to maxEntries (clamped 12-20)</p>
+          <p><strong className="text-white">Step 4:</strong> Render Template 3 — numbered list with priority labels</p>
+          <p><strong className="text-white">Output example:</strong></p>
+          <pre className="bg-slate-800 p-2 rounded mt-1">{`Calibration Pack — Tag H (sorted by priority):
+1. (Hard) [CAL:Safety gear | Hard] Include visible safety equipment...
+2. (Hard) [CAL:Everyday look | Hard] Depict realistic worker...
+3. (Medium) [CAL:Worn tools | Medium] Show tools with slight wear...
+
+If a calibration item conflicts with guardrails, guardrails win.
+If two calibration items conflict, higher priority wins; same priority, most recent wins.`}</pre>
+        </div>
+      </div>
+
+      {/* Injection Stack */}
+      <div className="bg-slate-900 rounded-lg p-4 mb-4">
+        <h4 className="text-sm font-bold text-red-400 mb-3">Prompt Injection Stack (CRITICAL ORDER)</h4>
+        <div className="text-xs space-y-1">
+          <div className="flex items-center gap-2"><span className="text-gray-500">1.</span><span className="text-gray-400">System / Role</span></div>
+          <div className="flex items-center gap-2"><span className="text-gray-500">2.</span><span className="text-gray-400">Global Guardrails (persistent instructions)</span></div>
+          <div className="flex items-center gap-2"><span className="text-gray-500">3.</span><span className="text-gray-400">Tag Guardrails (active tag only)</span></div>
+          <div className="flex items-center gap-2"><span className="text-green-400 font-bold">4.</span><span className="text-green-400 font-bold">Calibration Pack (DYNAMIC) — filtered by tag, sorted, limited</span></div>
+          <div className="flex items-center gap-2"><span className="text-gray-500">5.</span><span className="text-gray-400">Page context (~75 words around image)</span></div>
+          <div className="flex items-center gap-2"><span className="text-gray-500">6.</span><span className="text-gray-400">Output contract ("Output ONLY the final prompt...")</span></div>
+        </div>
+        <p className="text-xs text-yellow-400 mt-3"><strong>WHY this order:</strong> Calibration refines output without overriding fundamentals. After guardrails prevents accidentally relaxing hard rules.</p>
+      </div>
+
+      {/* For Rebuild */}
+      <div className="bg-yellow-900/20 rounded-lg p-4 border border-yellow-500/30">
+        <h4 className="text-sm font-bold text-yellow-400 mb-2">Notes for Rebuild</h4>
+        <ul className="text-xs text-gray-300 space-y-2">
+          <li><strong className="text-white">Keep:</strong> compileCalibrationPack() is clean, tested (35 tests), and does one thing. Port it directly.</li>
+          <li><strong className="text-white">Consider changing:</strong> JSONB array on settings works but a dedicated <code className="bg-slate-800 px-1 rounded">calibration_entries</code> table with foreign key to settings would be cleaner. Enables SQL-level filtering/sorting instead of loading all entries into memory.</li>
+          <li><strong className="text-white">Dual compilation:</strong> Currently compiled on BOTH frontend (for chat context) and backend (for /pack/:tag API). In rebuild, consider server-only compilation to keep single source of truth.</li>
+          <li><strong className="text-white">Race condition:</strong> CRUD routes do read-then-write on JSONB array. Two simultaneous writes can conflict. Same limitation as testing_slots. A dedicated table with row-level operations would fix this.</li>
+          <li><strong className="text-white">Version tracking:</strong> calibration_version auto-increments on every CRUD write. Could be enhanced with actual version history (store previous states for rollback) in rebuild.</li>
+        </ul>
       </div>
     </div>
   </div>
@@ -4684,6 +4797,86 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">February 2026</h3>
 
       <div className="space-y-4">
+        {/* Feb 15 - Cal-1 Data Model + Backend Injection Layer IMPLEMENTED */}
+        <div className="border-l-4 border-green-500 pl-4">
+          <div className="text-sm text-green-400 font-semibold">Feb 15, 2026 - Cal-1: Data Model + Backend Injection Layer (IMPLEMENTED)</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">Built the foundation layer for the calibration system from PRD-cal-1. Storage, CRUD API, pack compilation, and prompt injection pipeline. No UI yet — backend only.</p>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">DB</span>
+              <div>
+                <strong>Migration 035: calibration_entries (JSONB) + calibration_version (INT) on image_creation_settings</strong>
+                <div className="text-xs text-gray-500">
+                  Follows existing JSONB-column pattern (same as testing_slots, prompt_problem_areas, etc.). NOT a separate table.
+                  Uses tryUpdateCalibration pattern for graceful degradation if migration hasn't run yet.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">API</span>
+              <div>
+                <strong>Full CRUD at /api/calibration/:workflowId — 6 endpoints</strong>
+                <div className="text-xs text-gray-500">
+                  GET (all entries), PUT (full replace with empty-array protection), POST /entry (add one),
+                  PATCH /entry/:id (update one, ID change prevented), DELETE /entry/:id (remove one),
+                  GET /pack/:tag (compile pack for a tag). All follow Golden Rule 8 (website_id first, workflow_id fallback).
+                  Version auto-increments on every write.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">CORE</span>
+              <div>
+                <strong>Pack compiler: compileCalibrationPack() — exported, tested with 35 unit tests</strong>
+                <div className="text-xs text-gray-500">
+                  Filter by tag + "All" globals {"→"} sort priority desc (hard{"→"}med{"→"}soft) then recency desc {"→"} limit 12-20 {"→"} render Template 3.
+                  Output: numbered list with meta-instruction about conflict resolution.
+                  Same logic runs on both server (calibration.js) and client (ImageCreationSection.tsx buildContext).
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">INJECT</span>
+              <div>
+                <strong>Calibration pack injected into prompt-assistant.js context (after guardrails, before reference images)</strong>
+                <div className="text-xs text-gray-500">
+                  PRD injection stack: System {"→"} Guardrails {"→"} Tag Guardrails {"→"} Calibration Pack (DYNAMIC) {"→"} Page context {"→"} Output contract.
+                  Frontend compiles pack in buildContext and sends as context.calibrationPack. Server renders it as "## Calibration Pack (Dynamic Quality Rules):" section.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">TYPE</span>
+              <div>
+                <strong>CalibrationEntry interface + testImages extended with calibrationNote/correctedPrompt</strong>
+                <div className="text-xs text-gray-500">
+                  15-field CalibrationEntry interface in ImageCreationSection.tsx.
+                  TestingSlotsSelector testImages array items now have calibrationNote and correctedPrompt optional fields
+                  (a "near-miss" = test image + annotation, ready for Cal-2 "Promote to Calibration" UI).
+                </div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Key Files:</span>
+            <span className="text-gray-400 ml-2">
+              server/routes/calibration.js (new), server/db/migrations/035_add_calibration_system.sql (new),
+              server/routes/prompt-assistant.js (injection), server/routes/image-creation.js (save/load),
+              src/components/ImageCreationSection.tsx (interface + context), src/components/TestingSlotsSelector.tsx (testImages fields),
+              tests/calibration.test.js (35 unit tests)
+            </span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">For rebuild:</span>
+            <span className="text-gray-400 ml-2">
+              The core logic worth keeping is compileCalibrationPack() — it's clean, tested, and does exactly one thing.
+              The CRUD routes follow standard patterns. The JSONB storage approach works but a dedicated table might be cleaner
+              in a rebuild since entries have a defined schema. The injection point in prompt-assistant.js is the critical integration
+              — calibration MUST go after guardrails and before page context in the prompt stack.
+            </span>
+          </div>
+        </div>
+
         {/* Feb 15 (late) - Calibration System PRD Expansion */}
         <div className="border-l-4 border-purple-500 pl-4">
           <div className="text-sm text-purple-400 font-semibold">Feb 15, 2026 (late session) - PRD 3 Calibration System Full Spec</div>

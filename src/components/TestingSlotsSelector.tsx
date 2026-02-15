@@ -120,6 +120,9 @@ export interface TestingSlotContent {
     createdBy?: string;
     prompt?: string;
     model?: string;
+    // Calibration fields — a near-miss is a test image + annotation
+    calibrationNote?: string;    // What's off about this image (user annotation)
+    correctedPrompt?: string;    // The corrected prompt that should fix the issue
   }>;
 }
 
