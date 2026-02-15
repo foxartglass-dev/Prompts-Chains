@@ -257,6 +257,11 @@ export async function processArticleWithImages(content, options = {}) {
     guidedGuardrails = null, // { instructions, uniformDescription, stylePreferences, avoidList, defaultSubject }
     guidedModel = 'gpt-4o', // GPT model for guided mode: gpt-4o, gpt-4o-mini, gpt-4-turbo
 
+    // Persistent prompt portions (shared across ALL tags, appended to per-tag prompts)
+    mainPromptPersistent = '',
+    guidedInstructionsPersistent = '',
+    smartPromptPersistent = '',
+
     // Callbacks
     onProgress = null
   } = options;
@@ -377,7 +382,11 @@ export async function processArticleWithImages(content, options = {}) {
         // Mark primaries as used for next images
         matchedPrimaries.forEach(kw => usedPrimaries.add(kw));
 
-        const heroPrompt = buildPromptWithReplacements(targetAvatar.mainPrompt, replacements);
+        let heroPrompt = buildPromptWithReplacements(targetAvatar.mainPrompt, replacements);
+        // Append persistent (all-tags) prompt portion
+        if (mainPromptPersistent) {
+          heroPrompt = `${heroPrompt}\n\n${mainPromptPersistent}`;
+        }
         allReplacements.push({ position: 'hero', replacements, prompt: heroPrompt });
 
         chunks.intro.imagePrompt = heroPrompt;
@@ -433,7 +442,11 @@ export async function processArticleWithImages(content, options = {}) {
           // Mark primaries as used for next images
           matchedPrimaries.forEach(kw => usedPrimaries.add(kw));
 
-          const imagePrompt = buildPromptWithReplacements(targetAvatar.mainPrompt, replacements);
+          let imagePrompt = buildPromptWithReplacements(targetAvatar.mainPrompt, replacements);
+          // Append persistent (all-tags) prompt portion
+          if (mainPromptPersistent) {
+            imagePrompt = `${imagePrompt}\n\n${mainPromptPersistent}`;
+          }
           allReplacements.push({ position: `inline-${i}`, heading: chunk.heading, replacements, prompt: imagePrompt });
 
           chunk.imagePrompt = imagePrompt;
@@ -473,7 +486,12 @@ export async function processArticleWithImages(content, options = {}) {
 
       console.log(`[Guided GPT Mode] Model: ${guidedModel} | Avatar: ${targetAvatar?.name || 'Default'}`);
 
-      const guardrails = guidedGuardrails || targetAvatar?.guardrails || {};
+      const baseGuardrails = guidedGuardrails || targetAvatar?.guardrails || {};
+      // Merge persistent (all-tags) instructions into guardrails
+      const guardrails = guidedInstructionsPersistent ? {
+        ...baseGuardrails,
+        instructions: `${baseGuardrails.instructions || ''}\n\n${guidedInstructionsPersistent}`.trim()
+      } : baseGuardrails;
       let imageCount = 0;
       let cumulativeWordPosition = 0;
       const inlineStartSide = heroImageSide === 'right' ? 'left' : 'right';
@@ -596,6 +614,18 @@ export async function processArticleWithImages(content, options = {}) {
         keyword,
         maxImages
       }, openaiApiKey);
+
+      // Append persistent (all-tags) guidance to each generated prompt
+      if (smartPromptPersistent) {
+        if (chunks.intro?.imagePrompt) {
+          chunks.intro.imagePrompt = `${chunks.intro.imagePrompt}\n\n${smartPromptPersistent}`;
+        }
+        for (const chunk of chunks.chunks) {
+          if (chunk.imagePrompt) {
+            chunk.imagePrompt = `${chunk.imagePrompt}\n\n${smartPromptPersistent}`;
+          }
+        }
+      }
 
       const promptCount = countPromptsInChunks(chunks);
       progress('prompts_generated', {
