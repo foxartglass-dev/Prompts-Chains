@@ -94,6 +94,11 @@ function buildPipelineOptions(config, article) {
   const smartMatchingConfig = config.smart_matching_config || { wordRange: 75, primaryWeight: 10, secondaryWeight: 1 };
   const matchPlurals = config.match_plurals !== false;
 
+  // Combine all tag-based rules for pipeline injection
+  const guidedRules = (config.guided_gpt_rules || []).map(r => ({ ...r, _source: 'guided' }));
+  const legacyRules = (config.legacy_prompt_rules || []).map(r => ({ ...r, _source: 'legacy' }));
+  const allRules = [...guidedRules, ...legacyRules];
+
   return {
     title: keyword.replace(/\s*\([A-Za-z]\)\s*$/, '').trim(),
     keyword,
@@ -116,7 +121,10 @@ function buildPipelineOptions(config, article) {
     // Persistent prompt portions (shared across ALL tags)
     mainPromptPersistent: config.main_prompt_persistent || '',
     guidedInstructionsPersistent: config.guided_instructions_persistent || '',
-    smartPromptPersistent: config.smart_prompt_persistent || ''
+    smartPromptPersistent: config.smart_prompt_persistent || '',
+    // Rules with appliesTo scope grid (Phase 3: pipeline integration)
+    allRules,
+    articleTag
   };
 }
 

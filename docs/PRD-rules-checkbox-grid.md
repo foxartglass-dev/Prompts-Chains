@@ -3,7 +3,8 @@
 **Track:** Non-Calibration
 **Phase:** 3 of 3
 **Source:** HANDOFF-PRD.md → Phase 3
-**Status:** Partially Implemented (UI only)
+**Status:** Complete (UI + Pipeline Integration)
+**Branch:** Implemented on `claude/review-prd-testing-6QhNo`
 
 ---
 
@@ -78,6 +79,24 @@ function getRulesForScope(allRules, tag, segment) {
 - `server/routes/articles.js` — pass rules to pipeline via `buildPipelineOptions()`
 - `server/services/image-pipeline.js` — read and inject rules at each pipeline stage
 - `src/components/ImageCreationSection.tsx` — UI already done (Guided GPT Rules ~line 10260, Smart Matching Rules ~line 13820, Grid popup ~line 19630)
+
+## Implementation Notes (Post-Completion Review)
+
+**What was done:**
+- Added `getRulesForScope(allRules, tag, segment)` and `buildRulesBlock(rules)` to `server/services/image-pipeline.js` (lines 19-47)
+- Updated `buildPipelineOptions()` in `server/routes/articles.js` to combine `guided_gpt_rules` + `legacy_prompt_rules` into `allRules` array, plus extract `articleTag`
+- Updated 3 callsites in `server/routes/elementor.js` to pass rules and tag to the pipeline
+- Injected rules into all 3 prompt modes:
+  - **Main Prompt**: `prompt` and `categories` rules appended after persistent text
+  - **Guided GPT**: `guardrails` and `guided-rules` rules merged into `guardrails.instructions`
+  - **Smart Prompt**: `smart` and `smart-rules` rules appended to each generated prompt
+- 43 unit tests in `tests/rules-scope.test.js`
+
+**Design decisions:**
+- Rules with empty `appliesTo` are NOT injected (backward-compatible — they were never injected before)
+- `All-*` segments match any tag, including unknown tags
+- Rules from both `guided_gpt_rules` and `legacy_prompt_rules` are combined into a single array, enabling cross-system injection via the scope grid
+- Injection order: base content → persistent text → rules (preserves existing injection stack)
 
 ## Key Rules
 

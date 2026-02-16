@@ -1667,6 +1667,13 @@ router.post('/publish', async (req, res) => {
       console.log(`[Elementor Publish] Generating ${imagesToGenerate} live images with model: ${imageGenModel}`);
       console.log(`[Elementor Publish] Prompt mode: ${livePromptMode}`);
 
+      // Combine all tag-based rules for pipeline injection
+      const tagMatch = keyword?.match(/\(([A-Z])\)/i);
+      const pipelineArticleTag = tagMatch ? tagMatch[1].toUpperCase() : null;
+      const guidedRulesFromConfig = (config?.guided_gpt_rules || []).map(r => ({ ...r, _source: 'guided' }));
+      const legacyRulesFromConfig = (config?.legacy_prompt_rules || []).map(r => ({ ...r, _source: 'legacy' }));
+      const allRulesForPipeline = [...guidedRulesFromConfig, ...legacyRulesFromConfig];
+
       // Use the image pipeline for remaining images
       const pipelineResult = await processArticleWithImages(cleanedContent, {
         title,
@@ -1692,7 +1699,10 @@ router.post('/publish', async (req, res) => {
         smartMatchingConfig,
         // Guided GPT mode options
         guidedGuardrails,
-        guidedModel
+        guidedModel,
+        // Rules with appliesTo scope grid
+        allRules: allRulesForPipeline,
+        articleTag: pipelineArticleTag
       });
 
       // Pipeline result summary
@@ -3062,7 +3072,15 @@ router.post('/bulk-rebuild-pages', async (req, res) => {
               pipelineOptions.targetAvatar = matchingAvatars.length > 0
                 ? matchingAvatars[Math.floor(Math.random() * matchingAvatars.length)]
                 : avatars[0];
+
+              // Pass rules with appliesTo scope grid
+              pipelineOptions.articleTag = articleTag;
             }
+
+            // Combine tag-based rules for pipeline injection
+            const guidedRulesBatch = (imageSettings?.guided_gpt_rules || []).map(r => ({ ...r, _source: 'guided' }));
+            const legacyRulesBatch = (imageSettings?.legacy_prompt_rules || []).map(r => ({ ...r, _source: 'legacy' }));
+            pipelineOptions.allRules = [...guidedRulesBatch, ...legacyRulesBatch];
 
             const pipelineResult = await processArticleWithImages(article.final_content, pipelineOptions);
 
@@ -3685,6 +3703,11 @@ router.post('/generate-images-for-page', async (req, res) => {
               pipelineOptions.targetAvatar = avatars[0];
             }
           }
+
+          // Pass rules with appliesTo scope grid
+          const guidedRulesPage = (config.guided_gpt_rules || []).map(r => ({ ...r, _source: 'guided' }));
+          const legacyRulesPage = (config.legacy_prompt_rules || []).map(r => ({ ...r, _source: 'legacy' }));
+          pipelineOptions.allRules = [...guidedRulesPage, ...legacyRulesPage];
         }
       } catch (dbErr) {
         console.warn(`[GenImagesForPage] Could not fetch image settings: ${dbErr.message}`);

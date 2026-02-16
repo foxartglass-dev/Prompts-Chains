@@ -4917,6 +4917,74 @@ const ChangelogDiagram: React.FC = () => (
           </div>
         </div>
 
+        {/* Feb 15 - Rules Checkbox Grid Phase 3: Pipeline Integration */}
+        <div className="border-l-4 border-green-500 pl-4">
+          <div className="text-sm text-green-400 font-semibold">Feb 15, 2026 - Rules Checkbox Grid: Pipeline Integration (Phase 3 of 3)</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">Connected the existing rules scope grid (appliesTo checkboxes) to the actual image generation pipeline. Rules were previously organizational metadata only — now they are read and injected during image generation based on their configured scope.</p>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">CORE</span>
+              <div>
+                <strong>getRulesForScope() + buildRulesBlock() utility functions</strong>
+                <div className="text-xs text-gray-500">
+                  Added to <code className="bg-slate-900 px-1 rounded">server/services/image-pipeline.js</code> (lines 19-47).
+                  Filters rules by <code className="bg-slate-900 px-1 rounded">{'{tag}-{segment}'}</code> or <code className="bg-slate-900 px-1 rounded">{'All-{segment}'}</code> matching against each rule's <code className="bg-slate-900 px-1 rounded">appliesTo[]</code> array.
+                  Rules with empty appliesTo are not injected (backward-compatible — they were never injected before).
+                  6 segments supported: prompt, categories, guardrails, guided-rules, smart, smart-rules.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">PIPE</span>
+              <div>
+                <strong>buildPipelineOptions() now passes allRules + articleTag to pipeline</strong>
+                <div className="text-xs text-gray-500">
+                  In <code className="bg-slate-900 px-1 rounded">server/routes/articles.js</code> (line 97-100): combines guided_gpt_rules + legacy_prompt_rules into single array.
+                  In <code className="bg-slate-900 px-1 rounded">server/routes/elementor.js</code>: three callsites updated (single publish ~line 1671, batch ~line 3067, page regeneration ~line 3700).
+                  Each callsite extracts rules from image_creation_settings and passes to processArticleWithImages().
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">INJ</span>
+              <div>
+                <strong>Rules injected into all 3 prompt systems at correct pipeline stages</strong>
+                <div className="text-xs text-gray-500">
+                  <strong>Main Prompt mode:</strong> prompt + categories rules appended after mainPromptPersistent on hero and inline images.<br/>
+                  <strong>Guided GPT mode:</strong> guardrails + guided-rules rules merged into guardrails.instructions (after persistent, before LLM call).<br/>
+                  <strong>Smart Prompt mode:</strong> smart + smart-rules rules appended to each generated prompt (after smartPromptPersistent).<br/>
+                  Injection order preserved: base guardrails {"→"} persistent {"→"} rules (matches calibration injection stack).
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">TEST</span>
+              <div>
+                <strong>43 unit tests in tests/rules-scope.test.js</strong>
+                <div className="text-xs text-gray-500">
+                  Tests getRulesForScope filtering (tag-specific, All-*, null tag, empty appliesTo, ordering),
+                  buildRulesBlock (joining, null handling, empty text filtering),
+                  and integration scenarios for all 3 prompt modes.
+                </div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/80 rounded p-3 text-xs">
+            <div className="text-yellow-400 font-bold mb-1">Segment → Pipeline Stage Mapping:</div>
+            <div className="text-gray-400 space-y-0.5">
+              <div><code className="text-brand-cyan">*-prompt</code> → Main Prompt: appended to each image prompt after smart matching</div>
+              <div><code className="text-brand-cyan">*-categories</code> → Main Prompt: appended as category matching modifier</div>
+              <div><code className="text-brand-cyan">*-guardrails</code> → Guided GPT: merged into guardrails.instructions</div>
+              <div><code className="text-brand-cyan">*-guided-rules</code> → Guided GPT: added as ADDITIONAL RULES section in guardrails</div>
+              <div><code className="text-brand-cyan">*-smart</code> → Smart Prompt: appended to each generated prompt</div>
+              <div><code className="text-brand-cyan">*-smart-rules</code> → Smart Prompt: appended to each generated prompt</div>
+            </div>
+          </div>
+          <div className="mt-2 text-xs text-gray-500">
+            <strong>Key files:</strong> server/services/image-pipeline.js (getRulesForScope, injection at 3 mode blocks), server/routes/articles.js (buildPipelineOptions), server/routes/elementor.js (3 callsites), tests/rules-scope.test.js
+          </div>
+        </div>
+
         {/* Feb 15 - Cal-1 Data Model + Backend Injection Layer IMPLEMENTED */}
         <div className="border-l-4 border-green-500 pl-4">
           <div className="text-sm text-green-400 font-semibold">Feb 15, 2026 - Cal-1: Data Model + Backend Injection Layer (IMPLEMENTED)</div>
