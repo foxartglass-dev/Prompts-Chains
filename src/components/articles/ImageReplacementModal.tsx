@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { processImageFile, isHeicFile, IMAGE_ACCEPT } from '../../services/image-upload-utils';
 
 interface ImageReplacementModalProps {
   widgetId: string;
@@ -35,12 +36,28 @@ const ImageReplacementModal: React.FC<ImageReplacementModalProps> = ({
   // URL state
   const [imageUrl, setImageUrl] = useState('');
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
       setError(null);
+      // If HEIC, convert to JPEG first for preview and upload
+      if (isHeicFile(file)) {
+        try {
+          const processed = await processImageFile(file);
+          // Create a Blob from the data URL for upload
+          const resp = await fetch(processed.dataUrl);
+          const blob = await resp.blob();
+          const jpegFile = new File([blob], processed.filename, { type: 'image/jpeg' });
+          setSelectedFile(jpegFile);
+          setPreviewUrl(processed.dataUrl);
+        } catch (err) {
+          setError('Failed to convert HEIC image');
+          return;
+        }
+      } else {
+        setSelectedFile(file);
+        setPreviewUrl(URL.createObjectURL(file));
+      }
     }
   };
 
@@ -212,7 +229,7 @@ const ImageReplacementModal: React.FC<ImageReplacementModalProps> = ({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
                     <p className="text-gray-400">Click to select an image</p>
-                    <p className="text-gray-600 text-sm mt-1">PNG, JPG, WebP up to 10MB</p>
+                    <p className="text-gray-600 text-sm mt-1">PNG, JPG, WebP, HEIC up to 10MB</p>
                   </>
                 )}
               </div>
@@ -220,7 +237,7 @@ const ImageReplacementModal: React.FC<ImageReplacementModalProps> = ({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept={IMAGE_ACCEPT}
                 onChange={handleFileSelect}
                 className="hidden"
               />

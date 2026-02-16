@@ -12,6 +12,7 @@ import { sql, isDatabaseEnabled } from '../db/index.js';
 import { extractStyleDNA, extractAction, buildFluxPrompt, analyzeImageStyle } from '../services/image-prompt-generator.js';
 import { generateImage, generateBatchImages, estimateCost } from '../services/image-generator.js';
 import { processArticleWithImages, previewPrompts } from '../services/image-pipeline.js';
+import { processUploadedImage, needsConversion } from '../services/image-converter.js';
 
 const router = express.Router();
 
@@ -49,13 +50,34 @@ const upload = multer({
     files: 30 // Max 30 files at once
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const allowedTypes = /jpeg|jpg|png|gif|webp|heic|heif/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    if (extname && mimetype) {
+    const mimetype = allowedTypes.test(file.mimetype) || /heic|heif/.test(file.mimetype);
+    // Also accept octet-stream for HEIC files (some OS report HEIC this way)
+    const isHeicOctetStream = file.mimetype === 'application/octet-stream' && /\.(heic|heif)$/i.test(file.originalname);
+    if (extname || mimetype || isHeicOctetStream) {
       return cb(null, true);
     }
-    cb(new Error('Only image files are allowed'));
+    cb(new Error('Only image files are allowed (jpg, png, gif, webp, heic, heif)'));
+  }
+});
+
+// Multer config for conversion endpoint - memory storage, accepts all image types
+const convertUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit for HEIC (can be large)
+    files: 20
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp|heic|heif/;
+    const ext = path.extname(file.originalname).toLowerCase();
+    const extOk = allowedTypes.test(ext);
+    const mimeOk = /^image\//.test(file.mimetype) || file.mimetype === 'application/octet-stream';
+    if (extOk || mimeOk) {
+      return cb(null, true);
+    }
+    cb(new Error('Unsupported file type'));
   }
 });
 
@@ -66,6 +88,56 @@ const requireDb = (req, res, next) => {
   }
   next();
 };
+
+/**
+ * POST /api/images/convert
+ * Convert uploaded images to JPEG (handles HEIC/HEIF, large PNGs, etc.)
+ * Accepts multiple files, returns array of { dataUrl, thumb, filename, width, height }
+ * Used by frontend upload handlers to ensure all images are browser-displayable.
+ */
+router.post('/convert', convertUpload.array('images', 20), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files provided' });
+    }
+
+    const results = [];
+    const errors = [];
+
+    for (const file of req.files) {
+      try {
+        const result = await processUploadedImage(
+          file.buffer,
+          file.originalname,
+          file.mimetype
+        );
+        results.push({
+          dataUrl: result.display,
+          thumb: result.thumb,
+          filename: result.newFilename,
+          originalFilename: file.originalname,
+          width: result.width,
+          height: result.height,
+          converted: result.converted
+        });
+      } catch (fileError) {
+        console.error(`[Image Convert] Failed to convert ${file.originalname}:`, fileError.message);
+        errors.push({ filename: file.originalname, error: fileError.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      images: results,
+      errors: errors.length > 0 ? errors : undefined,
+      converted: results.filter(r => r.converted).length,
+      total: results.length
+    });
+  } catch (error) {
+    console.error('[Image Convert] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 /**
  * POST /api/images/upload
@@ -115,7 +187,7 @@ router.get('/uploaded/:websiteId', (req, res) => {
 
     const files = fs.readdirSync(websiteDir);
     const images = files
-      .filter(file => /\.(jpg|jpeg|png|gif|webp)$/i.test(file))
+      .filter(file => /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(file))
       .map(file => ({
         url: `/uploads/reference-images/${websiteId}/${file}`,
         filename: file,
