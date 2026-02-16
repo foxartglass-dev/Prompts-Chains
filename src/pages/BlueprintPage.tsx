@@ -2142,6 +2142,43 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues</h3>
 
       <div className="space-y-4">
+        {/* Feb 16 - Recurring: Image Integration buttons unresponsive */}
+        <div className="bg-slate-800 rounded-lg p-4 border-2 border-yellow-500">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-yellow-400">!</span>
+            <span className="font-semibold text-white">Image Integration buttons unresponsive (RECURRING PATTERN)</span>
+            <span className="text-xs bg-yellow-500/30 text-yellow-300 px-2 py-0.5 rounded">RECURRING - Feb 16, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Pattern:</strong> After branch merges or code edits, the "Pull from Bank" / "Generate Live" radio buttons
+            and "Main Prompt" / "Guided GPT" / "Smart Prompt" prompt source buttons stop responding to clicks.
+            User reports this has happened "so many times." Previous agent added z-index fixes and [BUTTON DEBUG] console logging.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Possible causes investigated:</strong>
+            <ul className="list-disc ml-4 mt-1">
+              <li><strong>loaded=false gate:</strong> If workflowId is undefined or settings fail to load, updateSettings() silently returns. A red banner now shows when this happens.</li>
+              <li><strong>Hidden radio pattern:</strong> <code className="bg-slate-900 px-1 rounded">className="hidden"</code> on radio inputs may prevent label-click from triggering onChange in some browsers. Fixed by converting to direct onClick on div.</li>
+              <li><strong>Stale browser cache:</strong> After merges, old JavaScript may not match new component structure. Hard refresh (Ctrl+F5) needed.</li>
+              <li><strong>Overlay blocking:</strong> Fixed/absolute positioned modals could intercept clicks. All checked — they're conditional.</li>
+            </ul>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix applied:</strong> (1) Converted Image Source radio buttons from hidden-input+label to direct onClick div pattern for cross-browser reliability.
+            (2) Added console logging on click: <code className="bg-slate-900 px-1 rounded">[IMAGE SOURCE] Generate Live clicked, loaded: true/false</code>.
+            (3) Added visible red banner when <code className="bg-slate-900 px-1 rounded">loaded === false</code> so user knows buttons are inactive.
+          </div>
+          <div className="text-sm text-yellow-400 mt-2">
+            <strong>FOR REBUILD:</strong> The Image Integration section should use a simple state machine for mode selection
+            instead of radio inputs with hidden CSS. The root cause pattern (buttons breaking after merges) suggests fragile
+            CSS/event coupling that a clean rebuild would eliminate. Test: after ANY edit to ImageCreationSection.tsx, verify
+            that Generate Live and Prompt Source buttons respond to clicks.
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Key Files:</strong> src/components/ImageCreationSection.tsx (~line 8925: Image Source div buttons, ~line 8965: Prompt Source buttons)
+          </div>
+        </div>
+
         {/* Feb 6 - Batch retry logic & error logging */}
         <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
           <div className="flex items-center gap-2 mb-2">
@@ -4797,6 +4834,89 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">February 2026</h3>
 
       <div className="space-y-4">
+        {/* Feb 15 - Cal-2 Calibration Card UI + Promote Flow IMPLEMENTED */}
+        <div className="border-l-4 border-orange-500 pl-4">
+          <div className="text-sm text-orange-400 font-semibold">Feb 15, 2026 - Cal-2: Calibration Card UI + Promote Flow (IMPLEMENTED)</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">Built the Calibration Library UI from PRD-cal-2. Collapsible section in Guided GPT area with full CRUD card interface, tag filtering, and "Promote to Calibration" button on test image cards. Also fixed Cal-1 gap (buildScopeBasedContext missing calibration pack).</p>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Cal-1 Gap: Added calibration pack to buildScopeBasedContext()</strong>
+                <div className="text-xs text-gray-500">
+                  buildScopeBasedContext() (~line 5982) now compiles calibration pack inside the anyTagSelected("guardrails") block,
+                  matching the same logic in handleSendGuidedAssistant(). Scope-based chat sessions now see calibration data.
+                  Backend already handled context.calibrationPack (prompt-assistant.js:460) — no backend changes needed.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Calibration Library — collapsible section in Guided GPT area (orange theme)</strong>
+                <div className="text-xs text-gray-500">
+                  New collapsible "Calibration Library" section placed after Guided GPT Rules, before AI Prompt Assistant Chat.
+                  Orange color theme (border-orange-500). Shows entry count badge and version number.
+                  Tag filter tabs (All + each tag) with counts. "+ New Entry" button for creating entries.
+                  <br/>State: calibrationLibraryCollapsed, calibrationFilterTag, calibrationEditingId, calibrationCreateMode, calibrationDraftEntry.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Calibration Card CRUD — full 11-field entry form</strong>
+                <div className="text-xs text-gray-500">
+                  Create/Edit/Delete calibration entries with all PRD fields: Title, Tags (multi-select toggle buttons),
+                  Priority (Hard/Med/Soft dropdown), Human Note, Model Instruction (enforcement wording), Trigger,
+                  Do (preferred), Avoid (anti-pattern), Enforcement Tactics, Evidence thumbnails (bad/good).
+                  View mode shows compact card; click to expand into edit mode.
+                  <br/>Handlers: handleCreateCalibrationEntry, handleSaveCalibrationEntry, handleDeleteCalibrationEntry.
+                  <br/>Saves via updateSettings({"{"} calibration_entries, calibration_version {"}"}) — auto-increments version.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>"Promote to Calibration" button on test image cards</strong>
+                <div className="text-xs text-gray-500">
+                  Orange "Cal" button added to test image action row (Bank, Journal, Use, Copy, Cal).
+                  Pre-fills: human_note with prompt, source_test_image_id with image URL, evidence_bad_image_ids with image URL.
+                  Opens Calibration Library (un-collapses) and enters create mode with pre-filled draft.
+                  Handler: handlePromoteToCalibration(imageUrl, prompt, model).
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">LOGIC</span>
+              <div>
+                <strong>getCalibrationEntriesForTag — tag-aware filtering</strong>
+                <div className="text-xs text-gray-500">
+                  Helper that filters entries by tag: includes entries tagged with the specific tag name OR tagged "All" (global).
+                  Used by both the Calibration Library tag tabs and the calibration pack compilation.
+                </div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Key Files:</span>
+            <span className="text-gray-400 ml-2">
+              src/components/ImageCreationSection.tsx (state vars ~line 858, handlers ~line 3324, library UI ~line 10629, promote button ~line 12256,
+              buildScopeBasedContext fix ~line 5991)
+            </span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">For rebuild:</span>
+            <span className="text-gray-400 ml-2">
+              The Calibration Library should be extracted into its own component (CalibrationLibrary.tsx) in a rebuild.
+              Currently embedded in the massive ImageCreationSection.tsx. The CRUD handlers use the same updateSettings pattern
+              as everything else. Card form fields map 1:1 to CalibrationEntry interface fields. Tag filter logic is simple
+              includes-check. Consider a dedicated table with proper indexes in rebuild for SQL-level filtering.
+            </span>
+          </div>
+        </div>
+
         {/* Feb 15 - Rules Checkbox Grid Phase 3: Pipeline Integration */}
         <div className="border-l-4 border-green-500 pl-4">
           <div className="text-sm text-green-400 font-semibold">Feb 15, 2026 - Rules Checkbox Grid: Pipeline Integration (Phase 3 of 3)</div>
@@ -4868,7 +4988,7 @@ const ChangelogDiagram: React.FC = () => (
         {/* Feb 15 - Cal-1 Data Model + Backend Injection Layer IMPLEMENTED */}
         <div className="border-l-4 border-green-500 pl-4">
           <div className="text-sm text-green-400 font-semibold">Feb 15, 2026 - Cal-1: Data Model + Backend Injection Layer (IMPLEMENTED)</div>
-          <p className="text-xs text-gray-500 mt-1 mb-2">Built the foundation layer for the calibration system from PRD-cal-1. Storage, CRUD API, pack compilation, and prompt injection pipeline. No UI yet — backend only.</p>
+          <p className="text-xs text-gray-500 mt-1 mb-2">Built the foundation layer for the calibration system from PRD-cal-1. Storage, CRUD API, pack compilation, and prompt injection pipeline. No UI yet — backend only. <span className="text-green-400">(Gap fixed in Cal-2 session: buildScopeBasedContext now includes calibration pack.)</span></p>
           <ul className="mt-2 space-y-2 text-sm text-gray-300">
             <li className="flex items-start gap-2">
               <span className="text-green-400 font-bold">DB</span>
@@ -4941,6 +5061,67 @@ const ChangelogDiagram: React.FC = () => (
               The CRUD routes follow standard patterns. The JSONB storage approach works but a dedicated table might be cleaner
               in a rebuild since entries have a defined schema. The injection point in prompt-assistant.js is the critical integration
               — calibration MUST go after guardrails and before page context in the prompt stack.
+            </span>
+          </div>
+        </div>
+
+        {/* Feb 15 - Cal-3 Debug Modes (Show Injection + A/B Toggle) IMPLEMENTED */}
+        <div className="border-l-4 border-green-500 pl-4">
+          <div className="text-sm text-green-400 font-semibold">Feb 15, 2026 - Cal-3: Debug Modes — Show Injection + A/B Toggle (IMPLEMENTED)</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">Two diagnostic tools for the calibration system: transparency panel to see exact injected context, and A/B toggle to prove calibration entries matter. Also fixed Cal-1 gap (buildScopeBasedContext missing calibration).</p>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">MODE A</span>
+              <div>
+                <strong>Show Injection — Transparency Panel</strong>
+                <div className="text-xs text-gray-500">
+                  Collapsible panel in Testing Mode that displays the EXACT compiled context sent to the AI.
+                  Shows each injection stack section with labels: Active Avatar, Main Prompt, Guardrails, Guided Instructions,
+                  Calibration Pack (highlighted in yellow), Smart Prompt. Calibration entries shown as numbered list with priority labels.
+                  Includes Copy button for clipboard export. Updates after every AI Assistant chat message.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">MODE B</span>
+              <div>
+                <strong>Disable Calibration — A/B Toggle</strong>
+                <div className="text-xs text-gray-500">
+                  Runtime-only toggle (not saved to settings) that strips calibration pack from injection stack.
+                  When ON: yellow warning bar shows "A/B MODE — Calibration disabled" in Testing Mode.
+                  Backend also respects disableCalibration flag in prompt-assistant.js context builder.
+                  Allows proving whether a specific calibration entry actually matters by comparing results with/without.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-yellow-400 font-bold">FIX</span>
+              <div>
+                <strong>Cal-1 gap: buildScopeBasedContext() now includes calibration pack</strong>
+                <div className="text-xs text-gray-500">
+                  The unified chat system (Set Scope grid) was missing calibration pack compilation.
+                  When "guardrails" scope is selected, calibration pack is now compiled and included in context
+                  (after guidedInstructionsPersistent, before guided rules). Mirrors handleSendGuidedAssistant logic.
+                  Both paths respect the disableCalibration A/B toggle.
+                </div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Key Files:</span>
+            <span className="text-gray-400 ml-2">
+              src/components/ImageCreationSection.tsx (state vars ~line 1230, handleSendGuidedAssistant context capture ~line 5315,
+              buildScopeBasedContext calibration ~line 6029, debug toolbar + show injection panel UI ~line 11975),
+              server/routes/prompt-assistant.js (disableCalibration flag ~line 463)
+            </span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">For rebuild:</span>
+            <span className="text-gray-400 ml-2">
+              The debug modes are lightweight diagnostic tools. Show Injection captures context at send-time and renders with
+              section highlighting. The A/B toggle is a single boolean that suppresses calibration pack at both client (context build)
+              and server (injection step) levels. In a rebuild, consider extracting the calibration pack compiler into a shared utility
+              instead of duplicating it across handleSendGuidedAssistant and buildScopeBasedContext.
             </span>
           </div>
         </div>

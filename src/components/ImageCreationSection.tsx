@@ -30,6 +30,7 @@ import {
   CODE_BLOCK_LABELS,
   isAdditiveBlock,
 } from '../utils/parseCodeBlocks';
+import { processImageFiles, IMAGE_ACCEPT, isHeicFile } from '../services/image-upload-utils';
 
 // Types for Feedback System
 interface GeneratedImage {
@@ -855,6 +856,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [rulesGridType, setRulesGridType] = useState<'guided' | 'legacy'>('guided');
   const rulesGridButtonRef = useRef<HTMLButtonElement | null>(null);
 
+  // ========== CALIBRATION LIBRARY (Cal-2) ==========
+  const [calibrationLibraryCollapsed, setCalibrationLibraryCollapsed] = useState(true);
+  const [calibrationFilterTag, setCalibrationFilterTag] = useState<string>('All');
+  const [calibrationEditingId, setCalibrationEditingId] = useState<string | null>(null);
+  const [calibrationCreateMode, setCalibrationCreateMode] = useState(false);
+  const [calibrationDraftEntry, setCalibrationDraftEntry] = useState<Partial<CalibrationEntry>>({});
+
   // ========== PHASE 3: TAG-BASED MULTI-PROMPT SYSTEM ==========
   // Guided GPT Prompts - per-tag multi-prompt system
   const [guidedPromptsActiveTag, setGuidedPromptsActiveTag] = useState<string>('Global');
@@ -1225,6 +1233,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   ]);
   const [activeTestingTabId, setActiveTestingTabId] = useState('tab-1');
   const [editingTabName, setEditingTabName] = useState<string | null>(null);
+
+  // ========== CALIBRATION DEBUG MODES (Cal-3) ==========
+  // Mode A: Show Injection — displays the exact compiled context sent to AI
+  const [showInjectionPanel, setShowInjectionPanel] = useState(false);
+  const [lastCompiledContext, setLastCompiledContext] = useState<string | null>(null);
+  const [lastCalibrationPack, setLastCalibrationPack] = useState<string | null>(null);
+  // Mode B: Disable Calibration — runtime-only toggle for A/B testing
+  const [disableCalibration, setDisableCalibration] = useState(false);
 
   // Helper to get active tab
   const activeTestingTab = testingTabs.find(t => t.id === activeTestingTabId) || testingTabs[0];
@@ -2867,19 +2883,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Reference Images Handlers
   const handleUploadReference = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const newImages: ReferenceImage[] = [];
-    for (const file of Array.from(files)) {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
+    try {
+      const processed = await processImageFiles(files);
+      const newImages: ReferenceImage[] = processed.map(img => ({
+        url: img.dataUrl,
+        filename: img.filename
+      }));
+      updateSettings({
+        reference_images: [...settings.reference_images, ...newImages]
       });
-      newImages.push({ url: dataUrl, filename: file.name });
+      const convertedCount = processed.filter(p => p.converted).length;
+      const msg = convertedCount > 0
+        ? `Added ${newImages.length} reference image(s) (${convertedCount} converted from HEIC)`
+        : `Added ${newImages.length} reference image(s)`;
+      showNotification(msg, 'success');
+    } catch (error) {
+      console.error('Reference image upload error:', error);
+      showNotification('Failed to process some images', 'error');
     }
-    updateSettings({
-      reference_images: [...settings.reference_images, ...newImages]
-    });
-    showNotification(`Added ${newImages.length} reference image(s)`, 'success');
   };
 
   const handleAddReferenceUrl = (url: string) => {
@@ -2897,19 +2918,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Logo Image Handlers
   const handleUploadLogo = async (files: FileList | null, type: 'logo' | 'action') => {
     if (!files || files.length === 0) return;
-    const newImages: LogoImage[] = [];
-    for (const file of Array.from(files)) {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
+    try {
+      const processed = await processImageFiles(files);
+      const newImages: LogoImage[] = processed.map(img => ({
+        url: img.dataUrl,
+        filename: img.filename,
+        type
+      }));
+      updateSettings({
+        logo_images: [...settings.logo_images, ...newImages]
       });
-      newImages.push({ url: dataUrl, filename: file.name, type });
+      showNotification(`Added ${newImages.length} ${type === 'logo' ? 'logo' : 'action shot'}(s)`, 'success');
+    } catch (error) {
+      console.error('Logo/action upload error:', error);
+      showNotification('Failed to process some images', 'error');
     }
-    updateSettings({
-      logo_images: [...settings.logo_images, ...newImages]
-    });
-    showNotification(`Added ${newImages.length} ${type === 'logo' ? 'logo' : 'action shot'}(s)`, 'success');
   };
 
   const handleRemoveLogo = (index: number) => {
@@ -3320,6 +3343,82 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       setGuidedRulesEditingId(null);
     }
   };
+
+  // ========== CALIBRATION LIBRARY HANDLERS (Cal-2) ==========
+
+  const handleCreateCalibrationEntry = useCallback((prefill?: Partial<CalibrationEntry>) => {
+    const existingIds = (settings.calibration_entries || []).map((e: CalibrationEntry) => {
+      const match = e.id.match(/CAL-(\d+)/);
+      return match ? parseInt(match[1], 10) : 0;
+    });
+    const nextNum = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+    const newEntry: CalibrationEntry = {
+      id: `CAL-${String(nextNum).padStart(3, '0')}`,
+      title: prefill?.title || '',
+      tags: prefill?.tags || (activeAvatar?.tag ? [activeAvatar.tag] : []),
+      priority: prefill?.priority || 'medium',
+      human_note: prefill?.human_note || '',
+      model_instruction: prefill?.model_instruction || '',
+      trigger: prefill?.trigger || '',
+      do_preferred: prefill?.do_preferred || '',
+      avoid_antipattern: prefill?.avoid_antipattern || '',
+      enforcement_tactics: prefill?.enforcement_tactics || [],
+      evidence_bad_image_ids: prefill?.evidence_bad_image_ids || [],
+      evidence_good_image_ids: prefill?.evidence_good_image_ids || [],
+      source_test_image_id: prefill?.source_test_image_id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setCalibrationDraftEntry(newEntry);
+    setCalibrationCreateMode(true);
+    setCalibrationLibraryCollapsed(false);
+  }, [settings.calibration_entries, activeAvatar]);
+
+  const handleSaveCalibrationEntry = useCallback((entry: CalibrationEntry) => {
+    const existing = settings.calibration_entries || [];
+    const idx = existing.findIndex((e: CalibrationEntry) => e.id === entry.id);
+    const updated = idx >= 0
+      ? existing.map((e: CalibrationEntry) => e.id === entry.id ? { ...entry, updatedAt: new Date().toISOString() } : e)
+      : [...existing, entry];
+    updateSettings({
+      calibration_entries: updated,
+      calibration_version: (settings.calibration_version || 0) + 1
+    });
+    setCalibrationEditingId(null);
+    setCalibrationCreateMode(false);
+    setCalibrationDraftEntry({});
+    showNotification(`Calibration entry "${entry.title}" saved (v${(settings.calibration_version || 0) + 1})`, 'success');
+  }, [settings.calibration_entries, settings.calibration_version, updateSettings, showNotification]);
+
+  const handleDeleteCalibrationEntry = useCallback((entryId: string) => {
+    const existing = settings.calibration_entries || [];
+    const entry = existing.find((e: CalibrationEntry) => e.id === entryId);
+    const updated = existing.filter((e: CalibrationEntry) => e.id !== entryId);
+    updateSettings({
+      calibration_entries: updated,
+      calibration_version: (settings.calibration_version || 0) + 1
+    });
+    if (calibrationEditingId === entryId) {
+      setCalibrationEditingId(null);
+    }
+    showNotification(`Calibration entry "${entry?.title || entryId}" deleted`, 'info');
+  }, [settings.calibration_entries, settings.calibration_version, calibrationEditingId, updateSettings, showNotification]);
+
+  const handlePromoteToCalibration = useCallback((imageUrl: string, prompt?: string, model?: string) => {
+    handleCreateCalibrationEntry({
+      human_note: prompt ? `Near-miss from test image. Original prompt: ${prompt}` : 'Near-miss from test image',
+      source_test_image_id: imageUrl,
+      evidence_bad_image_ids: [imageUrl],
+    });
+  }, [handleCreateCalibrationEntry]);
+
+  const getCalibrationEntriesForTag = useCallback((tag: string) => {
+    const entries = settings.calibration_entries || [];
+    if (tag === 'All') return entries;
+    return entries.filter((e: CalibrationEntry) =>
+      (e.tags || []).includes('All') || (e.tags || []).includes(tag)
+    );
+  }, [settings.calibration_entries]);
 
   // Add a new Legacy Prompt rule
   const handleAddLegacyRule = (tag: string) => {
@@ -4167,8 +4266,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setChatLoading(true);
 
     try {
+      // Build context images from reference images, logos, and action shots
+      // so the AI can actually SEE the uploaded reference material
+      const contextImagesForChat: string[] = [];
+      settings.reference_images.slice(0, 4).forEach((img: any) => {
+        if (img.url) contextImagesForChat.push(img.url);
+      });
+      const logos = settings.logo_images.filter((i: any) => i.type === 'logo');
+      logos.slice(0, 2).forEach((img: any) => {
+        if (img.url) contextImagesForChat.push(img.url);
+      });
+      const actions = settings.logo_images.filter((i: any) => i.type === 'action');
+      actions.slice(0, 2).forEach((img: any) => {
+        if (img.url) contextImagesForChat.push(img.url);
+      });
+
       // Send last 8 messages + current for AI memory without token bloat
       const recentMessages = [...settings.chat_history.slice(-8), newMessage];
+      const isFirstMsg = settings.chat_history.length === 0;
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -4178,7 +4293,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             content: m.content,
             images: m.images
           })),
-          model: settings.prompt_assistant_model
+          model: settings.prompt_assistant_model,
+          contextImages: isFirstMsg && contextImagesForChat.length > 0 ? contextImagesForChat : undefined
         })
       });
 
@@ -4203,16 +4319,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   const handleChatImageUpload = async (files: FileList | null) => {
     if (!files) return;
-    const newImages: string[] = [];
-    for (const file of Array.from(files).slice(0, 4)) {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      newImages.push(dataUrl);
+    const filesToProcess = Array.from(files).slice(0, 4);
+    try {
+      const processed = await processImageFiles(filesToProcess);
+      const newImages = processed.map(img => img.dataUrl);
+      setChatImages([...chatImages, ...newImages].slice(0, 4));
+    } catch (error) {
+      console.error('Chat image upload error:', error);
     }
-    setChatImages([...chatImages, ...newImages].slice(0, 4));
   };
 
   // ========== DUAL CHAT SYSTEM ==========
@@ -5308,6 +5422,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         }
       }
 
+      // Cal-3 Mode A: Always store the compiled calibration pack for Show Injection panel
+      setLastCalibrationPack(calibrationPack || null);
+
       const context = {
         // Guardrails / instructions
         guardrails: settings.guided_guardrails,
@@ -5315,7 +5432,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         guidedInstructionsPersistent: settings.guided_instructions_persistent || '',
 
         // CALIBRATION PACK (DYNAMIC) — compiled from calibration entries for active tag
-        calibrationPack: calibrationPack || undefined,
+        // Cal-3 Mode B: disableCalibration strips calibration from context (A/B testing)
+        calibrationPack: disableCalibration ? undefined : (calibrationPack || undefined),
+        // Cal-3: Pass disableCalibration flag to backend for context builder awareness
+        disableCalibration: disableCalibration || undefined,
 
         // Main prompt template from active avatar (unique portion)
         mainPrompt: activeAvatar?.mainPrompt || '',
@@ -5516,6 +5636,30 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           ctx.actionShots = undefined;
           ctx.imageBankExamples = undefined;
         }
+      }
+
+      // Cal-3 Mode A: Capture the compiled context for Show Injection panel
+      // This is the EXACT context being sent — no summarization
+      {
+        const ctxCopy = context as Record<string, any>;
+        const sections: string[] = [];
+        if (ctxCopy.activeAvatar) sections.push(`[Active Avatar] ${ctxCopy.activeAvatar.name} (Tag: ${ctxCopy.activeAvatar.tag || 'none'})`);
+        if (ctxCopy.mainPrompt) sections.push(`[Main Prompt Template]\n${ctxCopy.mainPrompt}`);
+        if (ctxCopy.mainPromptPersistent) sections.push(`[Main Prompt Persistent]\n${ctxCopy.mainPromptPersistent}`);
+        if (ctxCopy.guardrails) {
+          const g = ctxCopy.guardrails;
+          const gParts: string[] = ['[Guardrails]'];
+          if (g.instructions) gParts.push(`  Instructions: ${g.instructions}`);
+          if (g.uniformDescription) gParts.push(`  Uniform/Appearance: ${g.uniformDescription}`);
+          if (g.defaultSubject) gParts.push(`  Default Subject: ${g.defaultSubject}`);
+          if (g.avoidList) gParts.push(`  Avoid: ${g.avoidList}`);
+          sections.push(gParts.join('\n'));
+        }
+        if (ctxCopy.guidedInstructionsPersistent) sections.push(`[Guided Instructions Persistent]\n${ctxCopy.guidedInstructionsPersistent}`);
+        if (ctxCopy.calibrationPack) sections.push(`[CALIBRATION PACK]\n${ctxCopy.calibrationPack}`);
+        else if (disableCalibration && lastCalibrationPack) sections.push(`[CALIBRATION PACK — DISABLED BY A/B TOGGLE]\n(Would have been: ${lastCalibrationPack})`);
+        if (ctxCopy.smartPromptGuidance) sections.push(`[Smart Prompt Guidance]\n${ctxCopy.smartPromptGuidance}`);
+        setLastCompiledContext(sections.join('\n\n---\n\n'));
       }
 
       // Send last 8 messages + current for AI memory without token bloat
@@ -5987,6 +6131,43 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         tag: p.tag, name: p.name, guidance: p.guidance,
         guardrails: p.guardrails,
       }));
+
+      // Calibration Pack — compile for active tag (mirrors handleSendGuidedAssistant logic)
+      // Per PRD injection stack: after guardrails, before page context
+      const calActiveTag = activeAvatar?.tag || '';
+      if (calActiveTag && settings.calibration_entries?.length > 0) {
+        const PRIORITY_ORDER: Record<string, number> = { hard: 0, medium: 1, soft: 2 };
+        const matched = settings.calibration_entries
+          .filter((e: CalibrationEntry) => (e.tags || []).includes('All') || (e.tags || []).includes(calActiveTag))
+          .sort((a: CalibrationEntry, b: CalibrationEntry) => {
+            const pa = PRIORITY_ORDER[a.priority] ?? 1;
+            const pb = PRIORITY_ORDER[b.priority] ?? 1;
+            if (pa !== pb) return pa - pb;
+            return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+          })
+          .slice(0, 16);
+
+        if (matched.length > 0) {
+          const lines = [`Calibration Pack — Tag ${calActiveTag} (sorted by priority):`];
+          matched.forEach((entry: CalibrationEntry, idx: number) => {
+            const label = (entry.priority || 'medium').charAt(0).toUpperCase() + (entry.priority || 'medium').slice(1);
+            lines.push(`${idx + 1}. (${label}) ${entry.model_instruction}`);
+          });
+          lines.push('');
+          lines.push('If a calibration item conflicts with guardrails, guardrails win. If two calibration items conflict, higher priority wins; if same priority, most recent wins.');
+          const compiledPack = lines.join('\n');
+          // Cal-3 Mode A: Store calibration pack for Show Injection panel
+          setLastCalibrationPack(compiledPack);
+          // Cal-3 Mode B: Only inject if calibration is not disabled
+          if (!disableCalibration) {
+            context.calibrationPack = compiledPack;
+          }
+          // Cal-3: Pass disableCalibration flag to backend
+          if (disableCalibration) {
+            context.disableCalibration = true;
+          }
+        }
+      }
     }
 
     // Guided Rules: uniform, subject, avoid
@@ -6073,7 +6254,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         }));
       context.referenceImages = settings.reference_images.map((img: any, idx: number) => ({
         index: idx + 1, filename: img.filename || `Reference ${idx + 1}`,
-        tags: img.tags || [], hasUrl: !!img.url,
+        tags: img.tags || [], hasUrl: !!img.url, url: img.url,
+      }));
+      // Include logo and action shot details so AI can reference them
+      context.logoImages = settings.logo_images.filter((i: any) => i.type === 'logo').map((img: any) => ({
+        filename: img.filename, url: img.url,
+      }));
+      context.actionShots = settings.logo_images.filter((i: any) => i.type === 'action').map((img: any) => ({
+        filename: img.filename, url: img.url,
       }));
     }
 
@@ -6263,18 +6451,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   /**
    * Handle image upload for Guided Assistant Chat
    */
-  const handleGuidedAssistantImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleGuidedAssistantImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files) return;
+    if (!files || files.length === 0) return;
 
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        setGuidedAssistantImages(prev => [...prev, base64]);
-      };
-      reader.readAsDataURL(file);
-    });
+    try {
+      const processed = await processImageFiles(files);
+      setGuidedAssistantImages(prev => [...prev, ...processed.map(p => p.dataUrl)]);
+    } catch (err) {
+      console.error('Guided assistant image upload error:', err);
+    }
 
     // Reset input
     if (e.target) e.target.value = '';
@@ -7459,20 +7645,18 @@ Start by introducing yourself and asking about their business in a friendly way.
    */
   const handleDualChatImageUpload = async (files: FileList | null, chatType: ChatType) => {
     if (!files) return;
-    const newImages: string[] = [];
-    for (const file of Array.from(files).slice(0, 4)) {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      newImages.push(dataUrl);
-    }
+    const filesToProcess = Array.from(files).slice(0, 4);
+    try {
+      const processed = await processImageFiles(filesToProcess);
+      const newImages = processed.map(img => img.dataUrl);
 
-    if (chatType === 'consultant') {
-      setConsultantImages([...consultantImages, ...newImages].slice(0, 4));
-    } else {
-      setWorkerImages([...workerImages, ...newImages].slice(0, 4));
+      if (chatType === 'consultant') {
+        setConsultantImages([...consultantImages, ...newImages].slice(0, 4));
+      } else {
+        setWorkerImages([...workerImages, ...newImages].slice(0, 4));
+      }
+    } catch (error) {
+      console.error('Dual chat image upload error:', error);
     }
   };
 
@@ -8084,37 +8268,33 @@ Start by introducing yourself and asking about their business in a friendly way.
     setUploadingToBank(true);
     const newImages: BankImage[] = [];
 
-    for (const file of Array.from(files)) {
-      try {
-        // Convert file to base64 data URL
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
+    try {
+      // Process all files (auto-converts HEIC→JPEG via server)
+      const processed = await processImageFiles(files);
 
+      for (const img of processed) {
         // Get filename without extension for default title
-        const defaultTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        const defaultTitle = img.filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
 
         const newImage: BankImage = {
           id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          url: dataUrl,
+          url: img.dataUrl,
           title: defaultTitle,
           category: 'Other', // Default category, will be auto-tagged if enabled
           variation: 'Uploaded',
           variationId: 'uploaded',
           avatarTag: activeAvatar?.tag,
-          orientation: 'landscape', // Could detect from image dimensions
+          orientation: img.width && img.height ? (img.width >= img.height ? 'landscape' : 'portrait') : 'landscape',
           prompt: 'Manually uploaded',
           createdAt: new Date().toISOString(),
           used: false
         };
 
         newImages.push(newImage);
-      } catch (error) {
-        console.error(`Failed to process file ${file.name}:`, error);
       }
+    } catch (error) {
+      console.error('Failed to process uploaded files:', error);
+      showNotification('Some files failed to process', 'error');
     }
 
     // Add to bank
@@ -8630,6 +8810,22 @@ Start by introducing yourself and asking about their business in a friendly way.
     );
   }
 
+  // Guard: No workflow selected — show prompt instead of dead UI
+  if (!workflowId) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center">
+        <svg className="w-16 h-16 text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <h3 className="text-lg font-semibold text-slate-400 mb-2">No Workflow Selected</h3>
+        <p className="text-sm text-slate-500 max-w-md">
+          Select a workflow from the navigation menu to load Image Creation settings.
+          All buttons and controls require an active workflow to function.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Prompt Guide Modal - Shows both GPT-Image and Flux guides */}
@@ -8840,11 +9036,20 @@ Start by introducing yourself and asking about their business in a friendly way.
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'bank' ? 'bg-brand-gold/20 border-2 border-brand-gold' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
-                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'bank'} onChange={() => updateSettings({
-                      integration_mode: 'bank',
-                      smart_matching_mode: (settings.smart_matching_mode === 'generate_first' || settings.smart_matching_mode === 'generate_only') ? 'bank_first' : settings.smart_matching_mode
-                    })} className="hidden" />
+                  {/* Pull from Bank — uses onClick on div instead of label+hidden-radio for reliability */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      console.log('[IMAGE SOURCE] Pull from Bank clicked, loaded:', loaded, 'current:', settings.integration_mode);
+                      updateSettings({
+                        integration_mode: 'bank',
+                        smart_matching_mode: (settings.smart_matching_mode === 'generate_first' || settings.smart_matching_mode === 'generate_only') ? 'bank_first' : settings.smart_matching_mode
+                      });
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click(); }}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'bank' ? 'bg-brand-gold/20 border-2 border-brand-gold' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}
+                  >
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'bank' ? 'bg-brand-gold text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>
                     </div>
@@ -8852,13 +9057,22 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <span className={`font-medium ${settings.integration_mode === 'bank' ? 'text-brand-gold' : 'text-white'}`}>Pull from Bank</span>
                       <p className="text-[10px] text-slate-400">Use pre-generated images</p>
                     </div>
-                  </label>
+                  </div>
 
-                  <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'live' ? 'bg-brand-cyan/20 border-2 border-brand-cyan' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}>
-                    <input type="radio" name="integration_mode" checked={settings.integration_mode === 'live'} onChange={() => updateSettings({
-                      integration_mode: 'live',
-                      smart_matching_mode: 'generate_only'
-                    })} className="hidden" />
+                  {/* Generate Live — uses onClick on div instead of label+hidden-radio for reliability */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      console.log('[IMAGE SOURCE] Generate Live clicked, loaded:', loaded, 'current:', settings.integration_mode);
+                      updateSettings({
+                        integration_mode: 'live',
+                        smart_matching_mode: 'generate_only'
+                      });
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click(); }}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${settings.integration_mode === 'live' ? 'bg-brand-cyan/20 border-2 border-brand-cyan' : 'bg-slate-900 border border-slate-600 hover:border-slate-500'}`}
+                  >
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${settings.integration_mode === 'live' ? 'bg-brand-cyan text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                     </div>
@@ -8866,7 +9080,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <span className={`font-medium ${settings.integration_mode === 'live' ? 'text-brand-cyan' : 'text-white'}`}>Generate Live</span>
                       <p className="text-[10px] text-slate-400">Create fresh images on-the-fly</p>
                     </div>
-                  </label>
+                  </div>
                 </div>
 
                 {/* Generate Live Prompt Mode Toggle - only show when Live mode is selected */}
@@ -9706,19 +9920,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 <input
                                   ref={mainPromptAssistantFileInputRef}
                                   type="file"
-                                  accept="image/*"
+                                  accept={IMAGE_ACCEPT}
                                   multiple
-                                  onChange={(e) => {
-                                    const files = Array.from(e.target.files || []);
-                                    files.forEach(file => {
-                                      const reader = new FileReader();
-                                      reader.onload = (ev) => {
-                                        if (ev.target?.result) {
-                                          setMainPromptAssistantImages(prev => [...prev, ev.target!.result as string]);
-                                        }
-                                      };
-                                      reader.readAsDataURL(file);
-                                    });
+                                  onChange={async (e) => {
+                                    const files = e.target.files;
+                                    if (!files || files.length === 0) return;
+                                    try {
+                                      const processed = await processImageFiles(files);
+                                      setMainPromptAssistantImages(prev => [...prev, ...processed.map(p => p.dataUrl)]);
+                                    } catch (err) {
+                                      console.error('Main prompt assistant image upload error:', err);
+                                    }
                                     e.target.value = '';
                                   }}
                                   className="hidden"
@@ -10514,6 +10726,543 @@ Start by introducing yourself and asking about their business in a friendly way.
                                   ))
                                 )}
                               </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ========== CALIBRATION LIBRARY (Cal-2) ========== */}
+                        <div className="mt-4 border-t border-orange-500/30 pt-4">
+                          {/* Collapsible Header */}
+                          <button
+                            type="button"
+                            onClick={() => setCalibrationLibraryCollapsed(!calibrationLibraryCollapsed)}
+                            className="w-full flex items-center justify-between p-2 bg-orange-500/10 hover:bg-orange-500/20 rounded-lg transition border border-orange-500/30"
+                          >
+                            <span className="flex items-center gap-2 text-orange-400 font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                              </svg>
+                              Calibration Library
+                              {(settings.calibration_entries?.length || 0) > 0 && (
+                                <span className="px-1.5 py-0.5 bg-orange-500 text-slate-900 text-[10px] rounded-full font-bold">
+                                  {settings.calibration_entries.length}
+                                </span>
+                              )}
+                              {settings.calibration_version > 0 && (
+                                <span className="text-[9px] text-orange-400/50 font-normal">v{settings.calibration_version}</span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-orange-400 transition-transform ${calibrationLibraryCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {!calibrationLibraryCollapsed && (
+                            <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-orange-500/20">
+                              <p className="text-[10px] text-orange-400/60">
+                                Atomic quality rules injected into prompts. Each entry has a human note (for you) and model instruction (for AI). Guardrails always beat calibration.
+                              </p>
+
+                              {/* Tag Filter Tabs */}
+                              <div className="flex flex-wrap items-center gap-1 border-b border-slate-700 pb-2">
+                                <button
+                                  onClick={() => setCalibrationFilterTag('All')}
+                                  className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                    calibrationFilterTag === 'All'
+                                      ? 'bg-orange-600 text-white border-b-2 border-orange-500'
+                                      : 'bg-slate-800 text-orange-400/70 hover:bg-slate-700 hover:text-orange-400'
+                                  }`}
+                                >
+                                  All ({(settings.calibration_entries || []).length})
+                                </button>
+                                {tags.map((tag) => {
+                                  const count = getCalibrationEntriesForTag(tag.name).length;
+                                  return (
+                                    <button
+                                      key={tag.name}
+                                      onClick={() => setCalibrationFilterTag(tag.name)}
+                                      className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                        calibrationFilterTag === tag.name
+                                          ? 'bg-orange-600 text-white border-b-2 border-orange-500'
+                                          : 'bg-slate-800 text-orange-400/70 hover:bg-slate-700 hover:text-orange-400'
+                                      }`}
+                                    >
+                                      {tag.name} ({count})
+                                    </button>
+                                  );
+                                })}
+                                <div className="flex-1" />
+                                <button
+                                  onClick={() => handleCreateCalibrationEntry()}
+                                  className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white text-xs rounded transition font-medium"
+                                >
+                                  + New Entry
+                                </button>
+                              </div>
+
+                              {/* Create Mode - New Entry Form */}
+                              {calibrationCreateMode && calibrationDraftEntry && (
+                                <div className="bg-slate-800/70 rounded-lg p-4 border border-orange-500/40 space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-orange-400 font-medium text-sm">New Calibration Entry</span>
+                                    <button
+                                      onClick={() => { setCalibrationCreateMode(false); setCalibrationDraftEntry({}); }}
+                                      className="text-slate-400 hover:text-white text-xs"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+
+                                  {/* ID + Title */}
+                                  <div className="flex gap-2">
+                                    <span className="text-[10px] text-orange-400/60 font-mono mt-2 flex-shrink-0">{calibrationDraftEntry.id}</span>
+                                    <input
+                                      type="text"
+                                      value={calibrationDraftEntry.title || ''}
+                                      onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, title: e.target.value }))}
+                                      placeholder="Entry title (e.g. 'Avoid model glam')"
+                                      className="flex-1 p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500"
+                                    />
+                                  </div>
+
+                                  {/* Tags + Priority */}
+                                  <div className="flex gap-2 items-start">
+                                    <div className="flex-1">
+                                      <label className="text-[9px] text-slate-500 mb-1 block">Tags (click to toggle)</label>
+                                      <div className="flex flex-wrap gap-1">
+                                        <button
+                                          onClick={() => {
+                                            const current = calibrationDraftEntry.tags || [];
+                                            setCalibrationDraftEntry(prev => ({
+                                              ...prev,
+                                              tags: current.includes('All') ? current.filter(t => t !== 'All') : [...current.filter(t => t !== 'All'), 'All']
+                                            }));
+                                          }}
+                                          className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                            (calibrationDraftEntry.tags || []).includes('All')
+                                              ? 'bg-orange-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                          }`}
+                                        >
+                                          All
+                                        </button>
+                                        {tags.map(tag => (
+                                          <button
+                                            key={tag.name}
+                                            onClick={() => {
+                                              const current = calibrationDraftEntry.tags || [];
+                                              setCalibrationDraftEntry(prev => ({
+                                                ...prev,
+                                                tags: current.includes(tag.name) ? current.filter(t => t !== tag.name) : [...current, tag.name]
+                                              }));
+                                            }}
+                                            className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                              (calibrationDraftEntry.tags || []).includes(tag.name)
+                                                ? 'bg-orange-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                            }`}
+                                          >
+                                            {tag.name}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] text-slate-500 mb-1 block">Priority</label>
+                                      <select
+                                        value={calibrationDraftEntry.priority || 'medium'}
+                                        onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, priority: e.target.value as 'hard' | 'medium' | 'soft' }))}
+                                        className="p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white"
+                                      >
+                                        <option value="hard">Hard</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="soft">Soft</option>
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  {/* Human Note (for user) */}
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 mb-1 block">Human Note (for you — what's off and what we want)</label>
+                                    <textarea
+                                      value={calibrationDraftEntry.human_note || ''}
+                                      onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, human_note: e.target.value }))}
+                                      placeholder="Readable description of the issue..."
+                                      className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                      rows={2}
+                                    />
+                                  </div>
+
+                                  {/* Model Instruction (for AI) */}
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 mb-1 block">Enforcement Wording (for AI — the drop-in line injected into prompts)</label>
+                                    <textarea
+                                      value={calibrationDraftEntry.model_instruction || ''}
+                                      onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, model_instruction: e.target.value }))}
+                                      placeholder="[CAL:Title | Strength] Do …; Avoid …; Prefer …"
+                                      className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                      rows={2}
+                                    />
+                                  </div>
+
+                                  {/* Trigger */}
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 mb-1 block">Trigger (when to apply)</label>
+                                    <input
+                                      type="text"
+                                      value={calibrationDraftEntry.trigger || ''}
+                                      onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, trigger: e.target.value }))}
+                                      placeholder="e.g. 'any portrait with visible chest area'"
+                                      className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500"
+                                    />
+                                  </div>
+
+                                  {/* Do / Avoid */}
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="text-[9px] text-slate-500 mb-1 block">Do (preferred outcome)</label>
+                                      <textarea
+                                        value={calibrationDraftEntry.do_preferred || ''}
+                                        onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, do_preferred: e.target.value }))}
+                                        placeholder="What the preferred outcome looks like"
+                                        className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                        rows={2}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] text-slate-500 mb-1 block">Avoid (anti-pattern)</label>
+                                      <textarea
+                                        value={calibrationDraftEntry.avoid_antipattern || ''}
+                                        onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, avoid_antipattern: e.target.value }))}
+                                        placeholder="What to avoid"
+                                        className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                        rows={2}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Enforcement Tactics */}
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 mb-1 block">Enforcement Tactics (comma-separated)</label>
+                                    <input
+                                      type="text"
+                                      value={(calibrationDraftEntry.enforcement_tactics || []).join(', ')}
+                                      onChange={(e) => setCalibrationDraftEntry(prev => ({
+                                        ...prev,
+                                        enforcement_tactics: e.target.value.split(',').map(t => t.trim()).filter(Boolean)
+                                      }))}
+                                      placeholder="e.g. camera angle, occlusion, crop below shoulders"
+                                      className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500"
+                                    />
+                                  </div>
+
+                                  {/* Evidence Images */}
+                                  {(calibrationDraftEntry.evidence_bad_image_ids || []).length > 0 && (
+                                    <div>
+                                      <label className="text-[9px] text-slate-500 mb-1 block">Evidence (bad images)</label>
+                                      <div className="flex gap-2 flex-wrap">
+                                        {(calibrationDraftEntry.evidence_bad_image_ids || []).map((imgId, i) => (
+                                          <img key={i} src={imgId} alt="evidence" className="w-16 h-16 object-cover rounded border border-red-500/30" />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Save / Cancel */}
+                                  <div className="flex gap-2 pt-2">
+                                    <button
+                                      onClick={() => {
+                                        if (!calibrationDraftEntry.title?.trim()) {
+                                          showNotification('Title is required', 'error');
+                                          return;
+                                        }
+                                        if (!calibrationDraftEntry.model_instruction?.trim()) {
+                                          showNotification('Enforcement wording (model instruction) is required', 'error');
+                                          return;
+                                        }
+                                        handleSaveCalibrationEntry(calibrationDraftEntry as CalibrationEntry);
+                                      }}
+                                      className="px-4 py-1.5 bg-orange-600 hover:bg-orange-500 text-white text-xs rounded transition font-medium"
+                                    >
+                                      Save Entry
+                                    </button>
+                                    <button
+                                      onClick={() => { setCalibrationCreateMode(false); setCalibrationDraftEntry({}); }}
+                                      className="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Calibration Entry Cards */}
+                              {getCalibrationEntriesForTag(calibrationFilterTag).length > 0 ? (
+                                <div className="space-y-2">
+                                  {getCalibrationEntriesForTag(calibrationFilterTag).map((entry: CalibrationEntry) => (
+                                    <div key={entry.id} className="bg-slate-800/50 rounded-lg p-3 border border-orange-500/20">
+                                      {calibrationEditingId === entry.id ? (
+                                        /* ---- EDIT MODE ---- */
+                                        <div className="space-y-3">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[10px] text-orange-400/60 font-mono">{entry.id}</span>
+                                            <button
+                                              onClick={() => setCalibrationEditingId(null)}
+                                              className="text-slate-400 hover:text-white text-xs"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+
+                                          <input
+                                            type="text"
+                                            value={entry.title}
+                                            onChange={(e) => {
+                                              const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                en.id === entry.id ? { ...en, title: e.target.value } : en
+                                              );
+                                              setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                            }}
+                                            className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white"
+                                          />
+
+                                          {/* Tags */}
+                                          <div className="flex flex-wrap gap-1">
+                                            <button
+                                              onClick={() => {
+                                                const current = entry.tags || [];
+                                                const newTags = current.includes('All') ? current.filter(t => t !== 'All') : [...current.filter(t => t !== 'All'), 'All'];
+                                                const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                  en.id === entry.id ? { ...en, tags: newTags } : en
+                                                );
+                                                setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                              }}
+                                              className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                                (entry.tags || []).includes('All') ? 'bg-orange-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                              }`}
+                                            >
+                                              All
+                                            </button>
+                                            {tags.map(tag => (
+                                              <button
+                                                key={tag.name}
+                                                onClick={() => {
+                                                  const current = entry.tags || [];
+                                                  const newTags = current.includes(tag.name) ? current.filter(t => t !== tag.name) : [...current, tag.name];
+                                                  const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                    en.id === entry.id ? { ...en, tags: newTags } : en
+                                                  );
+                                                  setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                                }}
+                                                className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                                  (entry.tags || []).includes(tag.name) ? 'bg-orange-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                                }`}
+                                              >
+                                                {tag.name}
+                                              </button>
+                                            ))}
+                                            <select
+                                              value={entry.priority}
+                                              onChange={(e) => {
+                                                const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                  en.id === entry.id ? { ...en, priority: e.target.value as 'hard' | 'medium' | 'soft' } : en
+                                                );
+                                                setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                              }}
+                                              className="ml-auto p-1 text-[10px] bg-slate-900 border border-orange-500/20 rounded text-white"
+                                            >
+                                              <option value="hard">Hard</option>
+                                              <option value="medium">Medium</option>
+                                              <option value="soft">Soft</option>
+                                            </select>
+                                          </div>
+
+                                          <textarea
+                                            value={entry.human_note}
+                                            onChange={(e) => {
+                                              const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                en.id === entry.id ? { ...en, human_note: e.target.value } : en
+                                              );
+                                              setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                            }}
+                                            placeholder="Human note..."
+                                            className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                            rows={2}
+                                          />
+
+                                          <textarea
+                                            value={entry.model_instruction}
+                                            onChange={(e) => {
+                                              const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                en.id === entry.id ? { ...en, model_instruction: e.target.value } : en
+                                              );
+                                              setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                            }}
+                                            placeholder="Model instruction (enforcement wording)..."
+                                            className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                            rows={2}
+                                          />
+
+                                          <input
+                                            type="text"
+                                            value={entry.trigger}
+                                            onChange={(e) => {
+                                              const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                en.id === entry.id ? { ...en, trigger: e.target.value } : en
+                                              );
+                                              setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                            }}
+                                            placeholder="Trigger..."
+                                            className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500"
+                                          />
+
+                                          <div className="grid grid-cols-2 gap-2">
+                                            <textarea
+                                              value={entry.do_preferred}
+                                              onChange={(e) => {
+                                                const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                  en.id === entry.id ? { ...en, do_preferred: e.target.value } : en
+                                                );
+                                                setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                              }}
+                                              placeholder="Do (preferred)..."
+                                              className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                              rows={2}
+                                            />
+                                            <textarea
+                                              value={entry.avoid_antipattern}
+                                              onChange={(e) => {
+                                                const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                  en.id === entry.id ? { ...en, avoid_antipattern: e.target.value } : en
+                                                );
+                                                setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                              }}
+                                              placeholder="Avoid (anti-pattern)..."
+                                              className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                              rows={2}
+                                            />
+                                          </div>
+
+                                          <input
+                                            type="text"
+                                            value={(entry.enforcement_tactics || []).join(', ')}
+                                            onChange={(e) => {
+                                              const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                en.id === entry.id ? { ...en, enforcement_tactics: e.target.value.split(',').map(t => t.trim()).filter(Boolean) } : en
+                                              );
+                                              setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                            }}
+                                            placeholder="Enforcement tactics (comma-separated)..."
+                                            className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500"
+                                          />
+
+                                          {/* Evidence thumbnails */}
+                                          {((entry.evidence_bad_image_ids || []).length > 0 || (entry.evidence_good_image_ids || []).length > 0) && (
+                                            <div className="flex gap-4">
+                                              {(entry.evidence_bad_image_ids || []).length > 0 && (
+                                                <div>
+                                                  <label className="text-[9px] text-red-400/70 block mb-1">Bad</label>
+                                                  <div className="flex gap-1">
+                                                    {(entry.evidence_bad_image_ids || []).map((imgId, i) => (
+                                                      <img key={i} src={imgId} alt="" className="w-12 h-12 object-cover rounded border border-red-500/30" />
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              )}
+                                              {(entry.evidence_good_image_ids || []).length > 0 && (
+                                                <div>
+                                                  <label className="text-[9px] text-green-400/70 block mb-1">Good</label>
+                                                  <div className="flex gap-1">
+                                                    {(entry.evidence_good_image_ids || []).map((imgId, i) => (
+                                                      <img key={i} src={imgId} alt="" className="w-12 h-12 object-cover rounded border border-green-500/30" />
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          <div className="flex gap-2 pt-1">
+                                            <button
+                                              onClick={() => handleSaveCalibrationEntry(entry)}
+                                              className="px-3 py-1 bg-orange-600 hover:bg-orange-500 text-white text-xs rounded transition font-medium"
+                                            >
+                                              Save
+                                            </button>
+                                            <button
+                                              onClick={() => setCalibrationEditingId(null)}
+                                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition"
+                                            >
+                                              Cancel
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                if (confirm(`Delete "${entry.title}"?`)) handleDeleteCalibrationEntry(entry.id);
+                                              }}
+                                              className="px-3 py-1 bg-red-700 hover:bg-red-600 text-white text-xs rounded transition ml-auto"
+                                            >
+                                              Delete
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        /* ---- VIEW MODE (Card) ---- */
+                                        <div
+                                          className="cursor-pointer hover:bg-slate-700/30 transition rounded -m-1 p-1"
+                                          onClick={() => setCalibrationEditingId(entry.id)}
+                                        >
+                                          <div className="flex items-center justify-between mb-1">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-[10px] text-orange-400/60 font-mono">{entry.id}</span>
+                                              <span className="text-sm text-white font-medium">{entry.title || '(untitled)'}</span>
+                                              <span className={`px-1.5 py-0.5 text-[9px] rounded font-bold ${
+                                                entry.priority === 'hard' ? 'bg-red-500/20 text-red-400' :
+                                                entry.priority === 'soft' ? 'bg-blue-500/20 text-blue-400' :
+                                                'bg-yellow-500/20 text-yellow-400'
+                                              }`}>
+                                                {entry.priority.charAt(0).toUpperCase() + entry.priority.slice(1)}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              {(entry.tags || []).map(tag => (
+                                                <span key={tag} className="px-1.5 py-0.5 text-[9px] bg-slate-700 text-slate-300 rounded">
+                                                  {tag}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+
+                                          {entry.human_note && (
+                                            <p className="text-[10px] text-slate-400 mb-1 line-clamp-2">{entry.human_note}</p>
+                                          )}
+
+                                          <p className="text-[10px] text-orange-300/80 font-mono line-clamp-2">{entry.model_instruction}</p>
+
+                                          {entry.trigger && (
+                                            <p className="text-[9px] text-slate-500 mt-1">Trigger: {entry.trigger}</p>
+                                          )}
+
+                                          {/* Per-tag test status */}
+                                          {entry.per_tag_test_status && Object.keys(entry.per_tag_test_status).length > 0 && (
+                                            <div className="flex gap-1 mt-1">
+                                              {Object.entries(entry.per_tag_test_status).map(([tag, status]) => (
+                                                <span key={tag} className={`text-[8px] px-1 py-0.5 rounded ${
+                                                  status.pass ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                                }`}>
+                                                  {tag}: {status.pass ? 'Pass' : 'Fail'}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : !calibrationCreateMode && (
+                                <div className="text-center py-6 text-slate-500 text-xs">
+                                  <p>No calibration entries{calibrationFilterTag !== 'All' ? ` for tag "${calibrationFilterTag}"` : ''}.</p>
+                                  <p className="text-[10px] mt-1">Click "+ New Entry" or use the "Cal" button on test images to create one.</p>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -11555,7 +12304,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 <input
                                   ref={guidedAssistantFileInputRef}
                                   type="file"
-                                  accept="image/*"
+                                  accept={IMAGE_ACCEPT}
                                   multiple
                                   onChange={handleGuidedAssistantImageUpload}
                                   className="hidden"
@@ -11899,6 +12648,58 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                                     {/* Active Tab Content */}
                                     <div className="p-3 space-y-3">
+                                      {/* ═══ Cal-3: Debug Toolbar ═══ */}
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        {/* Mode B: Disable Calibration A/B Toggle */}
+                                        <button
+                                          type="button"
+                                          onClick={() => setDisableCalibration(!disableCalibration)}
+                                          className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-medium transition ${
+                                            disableCalibration
+                                              ? 'bg-yellow-600/30 border border-yellow-500/50 text-yellow-300'
+                                              : 'bg-slate-800 border border-slate-600/30 text-slate-400 hover:text-slate-300'
+                                          }`}
+                                          title={disableCalibration ? 'Calibration is DISABLED — click to re-enable' : 'Click to disable calibration for A/B comparison'}
+                                        >
+                                          <span className={`w-2 h-2 rounded-full ${disableCalibration ? 'bg-yellow-400' : 'bg-green-400'}`}></span>
+                                          {disableCalibration ? 'Cal OFF' : 'Cal ON'}
+                                        </button>
+
+                                        {/* Mode A: Show Injection Toggle */}
+                                        <button
+                                          type="button"
+                                          onClick={() => setShowInjectionPanel(!showInjectionPanel)}
+                                          className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-medium transition ${
+                                            showInjectionPanel
+                                              ? 'bg-cyan-600/30 border border-cyan-500/50 text-cyan-300'
+                                              : 'bg-slate-800 border border-slate-600/30 text-slate-400 hover:text-slate-300'
+                                          }`}
+                                          title="Show the exact compiled context sent to the AI"
+                                        >
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                          </svg>
+                                          Show Injection
+                                        </button>
+
+                                        {/* Calibration entry count indicator */}
+                                        {settings.calibration_entries?.length > 0 && (
+                                          <span className="text-[9px] text-slate-500">
+                                            {settings.calibration_entries.length} cal entries
+                                            {activeAvatar?.tag ? ` (tag: ${activeAvatar.tag})` : ''}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Mode B: Warning bar when calibration is disabled */}
+                                      {disableCalibration && (
+                                        <div className="flex items-center gap-2 px-2 py-1.5 bg-yellow-900/30 border border-yellow-500/30 rounded-lg">
+                                          <span className="text-yellow-400 text-[10px] font-semibold">A/B MODE</span>
+                                          <span className="text-yellow-300/70 text-[10px]">Calibration disabled — results generated WITHOUT calibration pack for comparison</span>
+                                        </div>
+                                      )}
+
                                       {/* Prompt input */}
                                       <div className="flex gap-2">
                                         <textarea
@@ -11923,6 +12724,79 @@ Start by introducing yourself and asking about their business in a friendly way.
                                           )}
                                         </button>
                                       </div>
+
+                                      {/* ═══ Cal-3 Mode A: Show Injection Panel ═══ */}
+                                      {showInjectionPanel && (
+                                        <div className="bg-slate-950/80 rounded-lg border border-cyan-500/30 overflow-hidden">
+                                          <div className="flex items-center justify-between px-3 py-1.5 bg-cyan-900/30 border-b border-cyan-500/20">
+                                            <span className="text-cyan-400 text-[10px] font-semibold">Compiled Context (Exact Injection Stack)</span>
+                                            <div className="flex items-center gap-2">
+                                              {lastCompiledContext && (
+                                                <button
+                                                  onClick={() => {
+                                                    navigator.clipboard.writeText(lastCompiledContext);
+                                                    showNotification('Context copied to clipboard', 'success');
+                                                  }}
+                                                  className="text-[9px] text-cyan-400 hover:text-cyan-300 transition"
+                                                >
+                                                  Copy
+                                                </button>
+                                              )}
+                                              <button
+                                                onClick={() => setShowInjectionPanel(false)}
+                                                className="text-slate-400 hover:text-white transition text-xs"
+                                              >
+                                                &times;
+                                              </button>
+                                            </div>
+                                          </div>
+                                          <div className="p-3 max-h-[300px] overflow-y-auto">
+                                            {lastCompiledContext ? (
+                                              <pre className="text-[10px] text-slate-300 whitespace-pre-wrap font-mono leading-relaxed">
+                                                {lastCompiledContext.split('\n').map((line, i) => {
+                                                  // Highlight section headers
+                                                  if (line.startsWith('[') && line.endsWith(']')) {
+                                                    const isCalibration = line.includes('CALIBRATION PACK');
+                                                    return (
+                                                      <div key={i} className={`font-bold mt-2 ${isCalibration ? 'text-yellow-400 bg-yellow-900/20 px-1 -mx-1 rounded' : 'text-cyan-400'}`}>
+                                                        {line}
+                                                      </div>
+                                                    );
+                                                  }
+                                                  // Highlight calibration entries
+                                                  if (line.match(/^\d+\.\s*\(/)) {
+                                                    return <div key={i} className="text-yellow-200/80 pl-2">{line}</div>;
+                                                  }
+                                                  // Separator
+                                                  if (line === '---') {
+                                                    return <hr key={i} className="border-slate-700 my-1" />;
+                                                  }
+                                                  return <div key={i}>{line || '\u00A0'}</div>;
+                                                })}
+                                              </pre>
+                                            ) : (
+                                              <div className="text-[10px] text-slate-500 text-center py-4">
+                                                <p>No context captured yet.</p>
+                                                <p className="mt-1">Send a message in the AI Assistant chat to see the compiled injection stack here.</p>
+                                              </div>
+                                            )}
+                                          </div>
+                                          {/* Calibration Pack highlight section */}
+                                          {lastCalibrationPack && (
+                                            <div className={`px-3 py-2 border-t ${disableCalibration ? 'border-yellow-500/20 bg-yellow-900/10' : 'border-cyan-500/20 bg-cyan-900/10'}`}>
+                                              <div className="flex items-center gap-2 mb-1">
+                                                <span className={`text-[10px] font-semibold ${disableCalibration ? 'text-yellow-400' : 'text-cyan-400'}`}>
+                                                  Calibration Pack {disableCalibration ? '(DISABLED)' : '(Active)'}
+                                                </span>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${disableCalibration ? 'bg-yellow-400' : 'bg-green-400'}`}></span>
+                                              </div>
+                                              <pre className="text-[9px] text-slate-400 whitespace-pre-wrap font-mono max-h-[100px] overflow-y-auto">
+                                                {lastCalibrationPack}
+                                              </pre>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
 
                                       {/* ═══════════════════════════════════════════ */}
                                       {/* AUTO-REFINE Section */}
@@ -12144,6 +13018,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                                                       className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-[9px] transition"
                                                     >
                                                       Copy
+                                                    </button>
+                                                    <button
+                                                      onClick={() => handlePromoteToCalibration(item.url, item.prompt, item.model)}
+                                                      className="px-2 py-0.5 bg-orange-600 hover:bg-orange-500 rounded text-white text-[9px] transition"
+                                                      title="Create Calibration from This Result"
+                                                    >
+                                                      Cal
                                                     </button>
                                                   </div>
                                                 </div>
@@ -14641,7 +15522,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept="image/*"
+                accept={IMAGE_ACCEPT}
                 onChange={(e) => handleUploadReference(e.target.files)}
                 className="hidden"
               />
@@ -14695,7 +15576,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                     <input
                       ref={logoFileInputRef}
                       type="file"
-                      accept="image/*"
+                      multiple
+                      accept={IMAGE_ACCEPT}
                       onChange={(e) => handleUploadLogo(e.target.files, 'logo')}
                       className="hidden"
                     />
@@ -14738,7 +15620,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       ref={actionShotsInputRef}
                       type="file"
                       multiple
-                      accept="image/*"
+                      accept={IMAGE_ACCEPT}
                       onChange={(e) => handleUploadLogo(e.target.files, 'action')}
                       className="hidden"
                     />
@@ -15773,7 +16655,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <button onClick={() => chatFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-brand-gold transition" title="Attach Image">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                       </button>
-                      <input ref={chatFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
+                      <input ref={chatFileInputRef} type="file" multiple accept={IMAGE_ACCEPT} onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
                       <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()} placeholder="Ask about image prompts..." className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm" />
                       <button onClick={handleSendChat} disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 font-medium text-sm transition">Send</button>
                     </div>
@@ -15961,7 +16843,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <button onClick={() => consultantFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-indigo-400 transition" title="Attach Image">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   </button>
-                  <input ref={consultantFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'consultant')} className="hidden" />
+                  <input ref={consultantFileInputRef} type="file" multiple accept={IMAGE_ACCEPT} onChange={(e) => handleDualChatImageUpload(e.target.files, 'consultant')} className="hidden" />
                   <textarea
                     value={consultantInput}
                     onChange={(e) => {
@@ -16077,7 +16959,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <button onClick={() => workerFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-emerald-400 transition" title="Attach Image">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   </button>
-                  <input ref={workerFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'worker')} className="hidden" />
+                  <input ref={workerFileInputRef} type="file" multiple accept={IMAGE_ACCEPT} onChange={(e) => handleDualChatImageUpload(e.target.files, 'worker')} className="hidden" />
                   <input
                     type="text"
                     value={workerInput}
@@ -16357,7 +17239,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       ref={bankUploadInputRef}
                       type="file"
                       multiple
-                      accept="image/*"
+                      accept={IMAGE_ACCEPT}
                       onChange={(e) => handleBankUpload(e.target.files)}
                       className="hidden"
                     />
