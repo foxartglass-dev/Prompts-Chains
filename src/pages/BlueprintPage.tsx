@@ -2142,6 +2142,43 @@ const KnownIssuesDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-green-400 mb-4">Recently Resolved Issues</h3>
 
       <div className="space-y-4">
+        {/* Feb 16 - Recurring: Image Integration buttons unresponsive */}
+        <div className="bg-slate-800 rounded-lg p-4 border-2 border-yellow-500">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-yellow-400">!</span>
+            <span className="font-semibold text-white">Image Integration buttons unresponsive (RECURRING PATTERN)</span>
+            <span className="text-xs bg-yellow-500/30 text-yellow-300 px-2 py-0.5 rounded">RECURRING - Feb 16, 2026</span>
+          </div>
+          <div className="text-sm text-gray-400">
+            <strong>Pattern:</strong> After branch merges or code edits, the "Pull from Bank" / "Generate Live" radio buttons
+            and "Main Prompt" / "Guided GPT" / "Smart Prompt" prompt source buttons stop responding to clicks.
+            User reports this has happened "so many times." Previous agent added z-index fixes and [BUTTON DEBUG] console logging.
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Possible causes investigated:</strong>
+            <ul className="list-disc ml-4 mt-1">
+              <li><strong>loaded=false gate:</strong> If workflowId is undefined or settings fail to load, updateSettings() silently returns. A red banner now shows when this happens.</li>
+              <li><strong>Hidden radio pattern:</strong> <code className="bg-slate-900 px-1 rounded">className="hidden"</code> on radio inputs may prevent label-click from triggering onChange in some browsers. Fixed by converting to direct onClick on div.</li>
+              <li><strong>Stale browser cache:</strong> After merges, old JavaScript may not match new component structure. Hard refresh (Ctrl+F5) needed.</li>
+              <li><strong>Overlay blocking:</strong> Fixed/absolute positioned modals could intercept clicks. All checked — they're conditional.</li>
+            </ul>
+          </div>
+          <div className="text-sm text-gray-400 mt-2">
+            <strong>Fix applied:</strong> (1) Converted Image Source radio buttons from hidden-input+label to direct onClick div pattern for cross-browser reliability.
+            (2) Added console logging on click: <code className="bg-slate-900 px-1 rounded">[IMAGE SOURCE] Generate Live clicked, loaded: true/false</code>.
+            (3) Added visible red banner when <code className="bg-slate-900 px-1 rounded">loaded === false</code> so user knows buttons are inactive.
+          </div>
+          <div className="text-sm text-yellow-400 mt-2">
+            <strong>FOR REBUILD:</strong> The Image Integration section should use a simple state machine for mode selection
+            instead of radio inputs with hidden CSS. The root cause pattern (buttons breaking after merges) suggests fragile
+            CSS/event coupling that a clean rebuild would eliminate. Test: after ANY edit to ImageCreationSection.tsx, verify
+            that Generate Live and Prompt Source buttons respond to clicks.
+          </div>
+          <div className="text-sm text-green-400 mt-2">
+            <strong>Key Files:</strong> src/components/ImageCreationSection.tsx (~line 8925: Image Source div buttons, ~line 8965: Prompt Source buttons)
+          </div>
+        </div>
+
         {/* Feb 6 - Batch retry logic & error logging */}
         <div className="bg-slate-800 rounded-lg p-4 border-2 border-green-500">
           <div className="flex items-center gap-2 mb-2">
