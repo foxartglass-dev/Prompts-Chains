@@ -4797,10 +4797,93 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">February 2026</h3>
 
       <div className="space-y-4">
+        {/* Feb 15 - Cal-2 Calibration Card UI + Promote Flow IMPLEMENTED */}
+        <div className="border-l-4 border-orange-500 pl-4">
+          <div className="text-sm text-orange-400 font-semibold">Feb 15, 2026 - Cal-2: Calibration Card UI + Promote Flow (IMPLEMENTED)</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">Built the Calibration Library UI from PRD-cal-2. Collapsible section in Guided GPT area with full CRUD card interface, tag filtering, and "Promote to Calibration" button on test image cards. Also fixed Cal-1 gap (buildScopeBasedContext missing calibration pack).</p>
+          <ul className="mt-2 space-y-2 text-sm text-gray-300">
+            <li className="flex items-start gap-2">
+              <span className="text-green-400 font-bold">FIX</span>
+              <div>
+                <strong>Cal-1 Gap: Added calibration pack to buildScopeBasedContext()</strong>
+                <div className="text-xs text-gray-500">
+                  buildScopeBasedContext() (~line 5982) now compiles calibration pack inside the anyTagSelected("guardrails") block,
+                  matching the same logic in handleSendGuidedAssistant(). Scope-based chat sessions now see calibration data.
+                  Backend already handled context.calibrationPack (prompt-assistant.js:460) — no backend changes needed.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Calibration Library — collapsible section in Guided GPT area (orange theme)</strong>
+                <div className="text-xs text-gray-500">
+                  New collapsible "Calibration Library" section placed after Guided GPT Rules, before AI Prompt Assistant Chat.
+                  Orange color theme (border-orange-500). Shows entry count badge and version number.
+                  Tag filter tabs (All + each tag) with counts. "+ New Entry" button for creating entries.
+                  <br/>State: calibrationLibraryCollapsed, calibrationFilterTag, calibrationEditingId, calibrationCreateMode, calibrationDraftEntry.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>Calibration Card CRUD — full 11-field entry form</strong>
+                <div className="text-xs text-gray-500">
+                  Create/Edit/Delete calibration entries with all PRD fields: Title, Tags (multi-select toggle buttons),
+                  Priority (Hard/Med/Soft dropdown), Human Note, Model Instruction (enforcement wording), Trigger,
+                  Do (preferred), Avoid (anti-pattern), Enforcement Tactics, Evidence thumbnails (bad/good).
+                  View mode shows compact card; click to expand into edit mode.
+                  <br/>Handlers: handleCreateCalibrationEntry, handleSaveCalibrationEntry, handleDeleteCalibrationEntry.
+                  <br/>Saves via updateSettings({"{"} calibration_entries, calibration_version {"}"}) — auto-increments version.
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-400 font-bold">FEAT</span>
+              <div>
+                <strong>"Promote to Calibration" button on test image cards</strong>
+                <div className="text-xs text-gray-500">
+                  Orange "Cal" button added to test image action row (Bank, Journal, Use, Copy, Cal).
+                  Pre-fills: human_note with prompt, source_test_image_id with image URL, evidence_bad_image_ids with image URL.
+                  Opens Calibration Library (un-collapses) and enters create mode with pre-filled draft.
+                  Handler: handlePromoteToCalibration(imageUrl, prompt, model).
+                </div>
+              </div>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-purple-400 font-bold">LOGIC</span>
+              <div>
+                <strong>getCalibrationEntriesForTag — tag-aware filtering</strong>
+                <div className="text-xs text-gray-500">
+                  Helper that filters entries by tag: includes entries tagged with the specific tag name OR tagged "All" (global).
+                  Used by both the Calibration Library tag tabs and the calibration pack compilation.
+                </div>
+              </div>
+            </li>
+          </ul>
+          <div className="mt-3 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">Key Files:</span>
+            <span className="text-gray-400 ml-2">
+              src/components/ImageCreationSection.tsx (state vars ~line 858, handlers ~line 3324, library UI ~line 10629, promote button ~line 12256,
+              buildScopeBasedContext fix ~line 5991)
+            </span>
+          </div>
+          <div className="mt-2 bg-slate-900/50 rounded p-2 text-xs">
+            <span className="text-teal-400 font-semibold">For rebuild:</span>
+            <span className="text-gray-400 ml-2">
+              The Calibration Library should be extracted into its own component (CalibrationLibrary.tsx) in a rebuild.
+              Currently embedded in the massive ImageCreationSection.tsx. The CRUD handlers use the same updateSettings pattern
+              as everything else. Card form fields map 1:1 to CalibrationEntry interface fields. Tag filter logic is simple
+              includes-check. Consider a dedicated table with proper indexes in rebuild for SQL-level filtering.
+            </span>
+          </div>
+        </div>
+
         {/* Feb 15 - Cal-1 Data Model + Backend Injection Layer IMPLEMENTED */}
         <div className="border-l-4 border-green-500 pl-4">
           <div className="text-sm text-green-400 font-semibold">Feb 15, 2026 - Cal-1: Data Model + Backend Injection Layer (IMPLEMENTED)</div>
-          <p className="text-xs text-gray-500 mt-1 mb-2">Built the foundation layer for the calibration system from PRD-cal-1. Storage, CRUD API, pack compilation, and prompt injection pipeline. No UI yet — backend only.</p>
+          <p className="text-xs text-gray-500 mt-1 mb-2">Built the foundation layer for the calibration system from PRD-cal-1. Storage, CRUD API, pack compilation, and prompt injection pipeline. No UI yet — backend only. <span className="text-green-400">(Gap fixed in Cal-2 session: buildScopeBasedContext now includes calibration pack.)</span></p>
           <ul className="mt-2 space-y-2 text-sm text-gray-300">
             <li className="flex items-start gap-2">
               <span className="text-green-400 font-bold">DB</span>

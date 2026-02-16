@@ -137,8 +137,8 @@ Add `calibrationNote?: string` and `correctedPrompt?: string` fields to the `tes
 - `tryUpdateCalibration` — graceful migration handling, follows `tryUpdateXxx` pattern
 - TestingSlotsSelector fields — correctly placed in testImages array
 
-**Gap to fix before Cal-2:**
-- `buildScopeBasedContext()` (~line 5928) does NOT include calibration pack. This is the scope-based context builder used by the unified chat system. Since it already includes guardrails under `anyTagSelected('guardrails')`, calibration should be compiled and added there too (after `guidedInstructionsPersistent`, before the next section). Without this, scope-based chat sessions won't see calibration data.
+**Gap FIXED in Cal-2 session:**
+- `buildScopeBasedContext()` (~line 5982) now includes calibration pack compilation inside the `anyTagSelected('guardrails')` block, matching the same pattern used in `handleSendGuidedAssistant()`. Scope-based chat sessions now see calibration data.
 
 ## Key Rules
 

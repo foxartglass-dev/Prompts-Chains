@@ -855,6 +855,13 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [rulesGridType, setRulesGridType] = useState<'guided' | 'legacy'>('guided');
   const rulesGridButtonRef = useRef<HTMLButtonElement | null>(null);
 
+  // ========== CALIBRATION LIBRARY (Cal-2) ==========
+  const [calibrationLibraryCollapsed, setCalibrationLibraryCollapsed] = useState(true);
+  const [calibrationFilterTag, setCalibrationFilterTag] = useState<string>('All');
+  const [calibrationEditingId, setCalibrationEditingId] = useState<string | null>(null);
+  const [calibrationCreateMode, setCalibrationCreateMode] = useState(false);
+  const [calibrationDraftEntry, setCalibrationDraftEntry] = useState<Partial<CalibrationEntry>>({});
+
   // ========== PHASE 3: TAG-BASED MULTI-PROMPT SYSTEM ==========
   // Guided GPT Prompts - per-tag multi-prompt system
   const [guidedPromptsActiveTag, setGuidedPromptsActiveTag] = useState<string>('Global');
@@ -3328,6 +3335,82 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
       setGuidedRulesEditingId(null);
     }
   };
+
+  // ========== CALIBRATION LIBRARY HANDLERS (Cal-2) ==========
+
+  const handleCreateCalibrationEntry = useCallback((prefill?: Partial<CalibrationEntry>) => {
+    const existingIds = (settings.calibration_entries || []).map((e: CalibrationEntry) => {
+      const match = e.id.match(/CAL-(\d+)/);
+      return match ? parseInt(match[1], 10) : 0;
+    });
+    const nextNum = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+    const newEntry: CalibrationEntry = {
+      id: `CAL-${String(nextNum).padStart(3, '0')}`,
+      title: prefill?.title || '',
+      tags: prefill?.tags || (activeAvatar?.tag ? [activeAvatar.tag] : []),
+      priority: prefill?.priority || 'medium',
+      human_note: prefill?.human_note || '',
+      model_instruction: prefill?.model_instruction || '',
+      trigger: prefill?.trigger || '',
+      do_preferred: prefill?.do_preferred || '',
+      avoid_antipattern: prefill?.avoid_antipattern || '',
+      enforcement_tactics: prefill?.enforcement_tactics || [],
+      evidence_bad_image_ids: prefill?.evidence_bad_image_ids || [],
+      evidence_good_image_ids: prefill?.evidence_good_image_ids || [],
+      source_test_image_id: prefill?.source_test_image_id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setCalibrationDraftEntry(newEntry);
+    setCalibrationCreateMode(true);
+    setCalibrationLibraryCollapsed(false);
+  }, [settings.calibration_entries, activeAvatar]);
+
+  const handleSaveCalibrationEntry = useCallback((entry: CalibrationEntry) => {
+    const existing = settings.calibration_entries || [];
+    const idx = existing.findIndex((e: CalibrationEntry) => e.id === entry.id);
+    const updated = idx >= 0
+      ? existing.map((e: CalibrationEntry) => e.id === entry.id ? { ...entry, updatedAt: new Date().toISOString() } : e)
+      : [...existing, entry];
+    updateSettings({
+      calibration_entries: updated,
+      calibration_version: (settings.calibration_version || 0) + 1
+    });
+    setCalibrationEditingId(null);
+    setCalibrationCreateMode(false);
+    setCalibrationDraftEntry({});
+    showNotification(`Calibration entry "${entry.title}" saved (v${(settings.calibration_version || 0) + 1})`, 'success');
+  }, [settings.calibration_entries, settings.calibration_version, updateSettings, showNotification]);
+
+  const handleDeleteCalibrationEntry = useCallback((entryId: string) => {
+    const existing = settings.calibration_entries || [];
+    const entry = existing.find((e: CalibrationEntry) => e.id === entryId);
+    const updated = existing.filter((e: CalibrationEntry) => e.id !== entryId);
+    updateSettings({
+      calibration_entries: updated,
+      calibration_version: (settings.calibration_version || 0) + 1
+    });
+    if (calibrationEditingId === entryId) {
+      setCalibrationEditingId(null);
+    }
+    showNotification(`Calibration entry "${entry?.title || entryId}" deleted`, 'info');
+  }, [settings.calibration_entries, settings.calibration_version, calibrationEditingId, updateSettings, showNotification]);
+
+  const handlePromoteToCalibration = useCallback((imageUrl: string, prompt?: string, model?: string) => {
+    handleCreateCalibrationEntry({
+      human_note: prompt ? `Near-miss from test image. Original prompt: ${prompt}` : 'Near-miss from test image',
+      source_test_image_id: imageUrl,
+      evidence_bad_image_ids: [imageUrl],
+    });
+  }, [handleCreateCalibrationEntry]);
+
+  const getCalibrationEntriesForTag = useCallback((tag: string) => {
+    const entries = settings.calibration_entries || [];
+    if (tag === 'All') return entries;
+    return entries.filter((e: CalibrationEntry) =>
+      (e.tags || []).includes('All') || (e.tags || []).includes(tag)
+    );
+  }, [settings.calibration_entries]);
 
   // Add a new Legacy Prompt rule
   const handleAddLegacyRule = (tag: string) => {
@@ -10593,6 +10676,543 @@ Start by introducing yourself and asking about their business in a friendly way.
                           )}
                         </div>
 
+                        {/* ========== CALIBRATION LIBRARY (Cal-2) ========== */}
+                        <div className="mt-4 border-t border-orange-500/30 pt-4">
+                          {/* Collapsible Header */}
+                          <button
+                            type="button"
+                            onClick={() => setCalibrationLibraryCollapsed(!calibrationLibraryCollapsed)}
+                            className="w-full flex items-center justify-between p-2 bg-orange-500/10 hover:bg-orange-500/20 rounded-lg transition border border-orange-500/30"
+                          >
+                            <span className="flex items-center gap-2 text-orange-400 font-medium text-sm">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                              </svg>
+                              Calibration Library
+                              {(settings.calibration_entries?.length || 0) > 0 && (
+                                <span className="px-1.5 py-0.5 bg-orange-500 text-slate-900 text-[10px] rounded-full font-bold">
+                                  {settings.calibration_entries.length}
+                                </span>
+                              )}
+                              {settings.calibration_version > 0 && (
+                                <span className="text-[9px] text-orange-400/50 font-normal">v{settings.calibration_version}</span>
+                              )}
+                            </span>
+                            <svg className={`w-4 h-4 text-orange-400 transition-transform ${calibrationLibraryCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {!calibrationLibraryCollapsed && (
+                            <div className="mt-3 space-y-3 bg-slate-900/50 rounded-lg p-3 border border-orange-500/20">
+                              <p className="text-[10px] text-orange-400/60">
+                                Atomic quality rules injected into prompts. Each entry has a human note (for you) and model instruction (for AI). Guardrails always beat calibration.
+                              </p>
+
+                              {/* Tag Filter Tabs */}
+                              <div className="flex flex-wrap items-center gap-1 border-b border-slate-700 pb-2">
+                                <button
+                                  onClick={() => setCalibrationFilterTag('All')}
+                                  className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                    calibrationFilterTag === 'All'
+                                      ? 'bg-orange-600 text-white border-b-2 border-orange-500'
+                                      : 'bg-slate-800 text-orange-400/70 hover:bg-slate-700 hover:text-orange-400'
+                                  }`}
+                                >
+                                  All ({(settings.calibration_entries || []).length})
+                                </button>
+                                {tags.map((tag) => {
+                                  const count = getCalibrationEntriesForTag(tag.name).length;
+                                  return (
+                                    <button
+                                      key={tag.name}
+                                      onClick={() => setCalibrationFilterTag(tag.name)}
+                                      className={`px-3 py-1.5 rounded-t-lg text-xs font-medium transition ${
+                                        calibrationFilterTag === tag.name
+                                          ? 'bg-orange-600 text-white border-b-2 border-orange-500'
+                                          : 'bg-slate-800 text-orange-400/70 hover:bg-slate-700 hover:text-orange-400'
+                                      }`}
+                                    >
+                                      {tag.name} ({count})
+                                    </button>
+                                  );
+                                })}
+                                <div className="flex-1" />
+                                <button
+                                  onClick={() => handleCreateCalibrationEntry()}
+                                  className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white text-xs rounded transition font-medium"
+                                >
+                                  + New Entry
+                                </button>
+                              </div>
+
+                              {/* Create Mode - New Entry Form */}
+                              {calibrationCreateMode && calibrationDraftEntry && (
+                                <div className="bg-slate-800/70 rounded-lg p-4 border border-orange-500/40 space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-orange-400 font-medium text-sm">New Calibration Entry</span>
+                                    <button
+                                      onClick={() => { setCalibrationCreateMode(false); setCalibrationDraftEntry({}); }}
+                                      className="text-slate-400 hover:text-white text-xs"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+
+                                  {/* ID + Title */}
+                                  <div className="flex gap-2">
+                                    <span className="text-[10px] text-orange-400/60 font-mono mt-2 flex-shrink-0">{calibrationDraftEntry.id}</span>
+                                    <input
+                                      type="text"
+                                      value={calibrationDraftEntry.title || ''}
+                                      onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, title: e.target.value }))}
+                                      placeholder="Entry title (e.g. 'Avoid model glam')"
+                                      className="flex-1 p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500"
+                                    />
+                                  </div>
+
+                                  {/* Tags + Priority */}
+                                  <div className="flex gap-2 items-start">
+                                    <div className="flex-1">
+                                      <label className="text-[9px] text-slate-500 mb-1 block">Tags (click to toggle)</label>
+                                      <div className="flex flex-wrap gap-1">
+                                        <button
+                                          onClick={() => {
+                                            const current = calibrationDraftEntry.tags || [];
+                                            setCalibrationDraftEntry(prev => ({
+                                              ...prev,
+                                              tags: current.includes('All') ? current.filter(t => t !== 'All') : [...current.filter(t => t !== 'All'), 'All']
+                                            }));
+                                          }}
+                                          className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                            (calibrationDraftEntry.tags || []).includes('All')
+                                              ? 'bg-orange-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                          }`}
+                                        >
+                                          All
+                                        </button>
+                                        {tags.map(tag => (
+                                          <button
+                                            key={tag.name}
+                                            onClick={() => {
+                                              const current = calibrationDraftEntry.tags || [];
+                                              setCalibrationDraftEntry(prev => ({
+                                                ...prev,
+                                                tags: current.includes(tag.name) ? current.filter(t => t !== tag.name) : [...current, tag.name]
+                                              }));
+                                            }}
+                                            className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                              (calibrationDraftEntry.tags || []).includes(tag.name)
+                                                ? 'bg-orange-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                            }`}
+                                          >
+                                            {tag.name}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] text-slate-500 mb-1 block">Priority</label>
+                                      <select
+                                        value={calibrationDraftEntry.priority || 'medium'}
+                                        onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, priority: e.target.value as 'hard' | 'medium' | 'soft' }))}
+                                        className="p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white"
+                                      >
+                                        <option value="hard">Hard</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="soft">Soft</option>
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  {/* Human Note (for user) */}
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 mb-1 block">Human Note (for you — what's off and what we want)</label>
+                                    <textarea
+                                      value={calibrationDraftEntry.human_note || ''}
+                                      onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, human_note: e.target.value }))}
+                                      placeholder="Readable description of the issue..."
+                                      className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                      rows={2}
+                                    />
+                                  </div>
+
+                                  {/* Model Instruction (for AI) */}
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 mb-1 block">Enforcement Wording (for AI — the drop-in line injected into prompts)</label>
+                                    <textarea
+                                      value={calibrationDraftEntry.model_instruction || ''}
+                                      onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, model_instruction: e.target.value }))}
+                                      placeholder="[CAL:Title | Strength] Do …; Avoid …; Prefer …"
+                                      className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                      rows={2}
+                                    />
+                                  </div>
+
+                                  {/* Trigger */}
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 mb-1 block">Trigger (when to apply)</label>
+                                    <input
+                                      type="text"
+                                      value={calibrationDraftEntry.trigger || ''}
+                                      onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, trigger: e.target.value }))}
+                                      placeholder="e.g. 'any portrait with visible chest area'"
+                                      className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500"
+                                    />
+                                  </div>
+
+                                  {/* Do / Avoid */}
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="text-[9px] text-slate-500 mb-1 block">Do (preferred outcome)</label>
+                                      <textarea
+                                        value={calibrationDraftEntry.do_preferred || ''}
+                                        onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, do_preferred: e.target.value }))}
+                                        placeholder="What the preferred outcome looks like"
+                                        className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                        rows={2}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[9px] text-slate-500 mb-1 block">Avoid (anti-pattern)</label>
+                                      <textarea
+                                        value={calibrationDraftEntry.avoid_antipattern || ''}
+                                        onChange={(e) => setCalibrationDraftEntry(prev => ({ ...prev, avoid_antipattern: e.target.value }))}
+                                        placeholder="What to avoid"
+                                        className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                        rows={2}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Enforcement Tactics */}
+                                  <div>
+                                    <label className="text-[9px] text-slate-500 mb-1 block">Enforcement Tactics (comma-separated)</label>
+                                    <input
+                                      type="text"
+                                      value={(calibrationDraftEntry.enforcement_tactics || []).join(', ')}
+                                      onChange={(e) => setCalibrationDraftEntry(prev => ({
+                                        ...prev,
+                                        enforcement_tactics: e.target.value.split(',').map(t => t.trim()).filter(Boolean)
+                                      }))}
+                                      placeholder="e.g. camera angle, occlusion, crop below shoulders"
+                                      className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500"
+                                    />
+                                  </div>
+
+                                  {/* Evidence Images */}
+                                  {(calibrationDraftEntry.evidence_bad_image_ids || []).length > 0 && (
+                                    <div>
+                                      <label className="text-[9px] text-slate-500 mb-1 block">Evidence (bad images)</label>
+                                      <div className="flex gap-2 flex-wrap">
+                                        {(calibrationDraftEntry.evidence_bad_image_ids || []).map((imgId, i) => (
+                                          <img key={i} src={imgId} alt="evidence" className="w-16 h-16 object-cover rounded border border-red-500/30" />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Save / Cancel */}
+                                  <div className="flex gap-2 pt-2">
+                                    <button
+                                      onClick={() => {
+                                        if (!calibrationDraftEntry.title?.trim()) {
+                                          showNotification('Title is required', 'error');
+                                          return;
+                                        }
+                                        if (!calibrationDraftEntry.model_instruction?.trim()) {
+                                          showNotification('Enforcement wording (model instruction) is required', 'error');
+                                          return;
+                                        }
+                                        handleSaveCalibrationEntry(calibrationDraftEntry as CalibrationEntry);
+                                      }}
+                                      className="px-4 py-1.5 bg-orange-600 hover:bg-orange-500 text-white text-xs rounded transition font-medium"
+                                    >
+                                      Save Entry
+                                    </button>
+                                    <button
+                                      onClick={() => { setCalibrationCreateMode(false); setCalibrationDraftEntry({}); }}
+                                      className="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Calibration Entry Cards */}
+                              {getCalibrationEntriesForTag(calibrationFilterTag).length > 0 ? (
+                                <div className="space-y-2">
+                                  {getCalibrationEntriesForTag(calibrationFilterTag).map((entry: CalibrationEntry) => (
+                                    <div key={entry.id} className="bg-slate-800/50 rounded-lg p-3 border border-orange-500/20">
+                                      {calibrationEditingId === entry.id ? (
+                                        /* ---- EDIT MODE ---- */
+                                        <div className="space-y-3">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[10px] text-orange-400/60 font-mono">{entry.id}</span>
+                                            <button
+                                              onClick={() => setCalibrationEditingId(null)}
+                                              className="text-slate-400 hover:text-white text-xs"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+
+                                          <input
+                                            type="text"
+                                            value={entry.title}
+                                            onChange={(e) => {
+                                              const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                en.id === entry.id ? { ...en, title: e.target.value } : en
+                                              );
+                                              setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                            }}
+                                            className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white"
+                                          />
+
+                                          {/* Tags */}
+                                          <div className="flex flex-wrap gap-1">
+                                            <button
+                                              onClick={() => {
+                                                const current = entry.tags || [];
+                                                const newTags = current.includes('All') ? current.filter(t => t !== 'All') : [...current.filter(t => t !== 'All'), 'All'];
+                                                const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                  en.id === entry.id ? { ...en, tags: newTags } : en
+                                                );
+                                                setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                              }}
+                                              className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                                (entry.tags || []).includes('All') ? 'bg-orange-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                              }`}
+                                            >
+                                              All
+                                            </button>
+                                            {tags.map(tag => (
+                                              <button
+                                                key={tag.name}
+                                                onClick={() => {
+                                                  const current = entry.tags || [];
+                                                  const newTags = current.includes(tag.name) ? current.filter(t => t !== tag.name) : [...current, tag.name];
+                                                  const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                    en.id === entry.id ? { ...en, tags: newTags } : en
+                                                  );
+                                                  setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                                }}
+                                                className={`px-2 py-0.5 text-[10px] rounded transition ${
+                                                  (entry.tags || []).includes(tag.name) ? 'bg-orange-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                                }`}
+                                              >
+                                                {tag.name}
+                                              </button>
+                                            ))}
+                                            <select
+                                              value={entry.priority}
+                                              onChange={(e) => {
+                                                const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                  en.id === entry.id ? { ...en, priority: e.target.value as 'hard' | 'medium' | 'soft' } : en
+                                                );
+                                                setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                              }}
+                                              className="ml-auto p-1 text-[10px] bg-slate-900 border border-orange-500/20 rounded text-white"
+                                            >
+                                              <option value="hard">Hard</option>
+                                              <option value="medium">Medium</option>
+                                              <option value="soft">Soft</option>
+                                            </select>
+                                          </div>
+
+                                          <textarea
+                                            value={entry.human_note}
+                                            onChange={(e) => {
+                                              const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                en.id === entry.id ? { ...en, human_note: e.target.value } : en
+                                              );
+                                              setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                            }}
+                                            placeholder="Human note..."
+                                            className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                            rows={2}
+                                          />
+
+                                          <textarea
+                                            value={entry.model_instruction}
+                                            onChange={(e) => {
+                                              const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                en.id === entry.id ? { ...en, model_instruction: e.target.value } : en
+                                              );
+                                              setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                            }}
+                                            placeholder="Model instruction (enforcement wording)..."
+                                            className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                            rows={2}
+                                          />
+
+                                          <input
+                                            type="text"
+                                            value={entry.trigger}
+                                            onChange={(e) => {
+                                              const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                en.id === entry.id ? { ...en, trigger: e.target.value } : en
+                                              );
+                                              setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                            }}
+                                            placeholder="Trigger..."
+                                            className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500"
+                                          />
+
+                                          <div className="grid grid-cols-2 gap-2">
+                                            <textarea
+                                              value={entry.do_preferred}
+                                              onChange={(e) => {
+                                                const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                  en.id === entry.id ? { ...en, do_preferred: e.target.value } : en
+                                                );
+                                                setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                              }}
+                                              placeholder="Do (preferred)..."
+                                              className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                              rows={2}
+                                            />
+                                            <textarea
+                                              value={entry.avoid_antipattern}
+                                              onChange={(e) => {
+                                                const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                  en.id === entry.id ? { ...en, avoid_antipattern: e.target.value } : en
+                                                );
+                                                setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                              }}
+                                              placeholder="Avoid (anti-pattern)..."
+                                              className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500 resize-y min-h-[40px]"
+                                              rows={2}
+                                            />
+                                          </div>
+
+                                          <input
+                                            type="text"
+                                            value={(entry.enforcement_tactics || []).join(', ')}
+                                            onChange={(e) => {
+                                              const updated = (settings.calibration_entries || []).map((en: CalibrationEntry) =>
+                                                en.id === entry.id ? { ...en, enforcement_tactics: e.target.value.split(',').map(t => t.trim()).filter(Boolean) } : en
+                                              );
+                                              setSettings(prev => ({ ...prev, calibration_entries: updated }));
+                                            }}
+                                            placeholder="Enforcement tactics (comma-separated)..."
+                                            className="w-full p-1.5 text-xs bg-slate-900 border border-orange-500/20 rounded text-white placeholder-slate-500"
+                                          />
+
+                                          {/* Evidence thumbnails */}
+                                          {((entry.evidence_bad_image_ids || []).length > 0 || (entry.evidence_good_image_ids || []).length > 0) && (
+                                            <div className="flex gap-4">
+                                              {(entry.evidence_bad_image_ids || []).length > 0 && (
+                                                <div>
+                                                  <label className="text-[9px] text-red-400/70 block mb-1">Bad</label>
+                                                  <div className="flex gap-1">
+                                                    {(entry.evidence_bad_image_ids || []).map((imgId, i) => (
+                                                      <img key={i} src={imgId} alt="" className="w-12 h-12 object-cover rounded border border-red-500/30" />
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              )}
+                                              {(entry.evidence_good_image_ids || []).length > 0 && (
+                                                <div>
+                                                  <label className="text-[9px] text-green-400/70 block mb-1">Good</label>
+                                                  <div className="flex gap-1">
+                                                    {(entry.evidence_good_image_ids || []).map((imgId, i) => (
+                                                      <img key={i} src={imgId} alt="" className="w-12 h-12 object-cover rounded border border-green-500/30" />
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          <div className="flex gap-2 pt-1">
+                                            <button
+                                              onClick={() => handleSaveCalibrationEntry(entry)}
+                                              className="px-3 py-1 bg-orange-600 hover:bg-orange-500 text-white text-xs rounded transition font-medium"
+                                            >
+                                              Save
+                                            </button>
+                                            <button
+                                              onClick={() => setCalibrationEditingId(null)}
+                                              className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition"
+                                            >
+                                              Cancel
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                if (confirm(`Delete "${entry.title}"?`)) handleDeleteCalibrationEntry(entry.id);
+                                              }}
+                                              className="px-3 py-1 bg-red-700 hover:bg-red-600 text-white text-xs rounded transition ml-auto"
+                                            >
+                                              Delete
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        /* ---- VIEW MODE (Card) ---- */
+                                        <div
+                                          className="cursor-pointer hover:bg-slate-700/30 transition rounded -m-1 p-1"
+                                          onClick={() => setCalibrationEditingId(entry.id)}
+                                        >
+                                          <div className="flex items-center justify-between mb-1">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-[10px] text-orange-400/60 font-mono">{entry.id}</span>
+                                              <span className="text-sm text-white font-medium">{entry.title || '(untitled)'}</span>
+                                              <span className={`px-1.5 py-0.5 text-[9px] rounded font-bold ${
+                                                entry.priority === 'hard' ? 'bg-red-500/20 text-red-400' :
+                                                entry.priority === 'soft' ? 'bg-blue-500/20 text-blue-400' :
+                                                'bg-yellow-500/20 text-yellow-400'
+                                              }`}>
+                                                {entry.priority.charAt(0).toUpperCase() + entry.priority.slice(1)}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              {(entry.tags || []).map(tag => (
+                                                <span key={tag} className="px-1.5 py-0.5 text-[9px] bg-slate-700 text-slate-300 rounded">
+                                                  {tag}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+
+                                          {entry.human_note && (
+                                            <p className="text-[10px] text-slate-400 mb-1 line-clamp-2">{entry.human_note}</p>
+                                          )}
+
+                                          <p className="text-[10px] text-orange-300/80 font-mono line-clamp-2">{entry.model_instruction}</p>
+
+                                          {entry.trigger && (
+                                            <p className="text-[9px] text-slate-500 mt-1">Trigger: {entry.trigger}</p>
+                                          )}
+
+                                          {/* Per-tag test status */}
+                                          {entry.per_tag_test_status && Object.keys(entry.per_tag_test_status).length > 0 && (
+                                            <div className="flex gap-1 mt-1">
+                                              {Object.entries(entry.per_tag_test_status).map(([tag, status]) => (
+                                                <span key={tag} className={`text-[8px] px-1 py-0.5 rounded ${
+                                                  status.pass ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                                }`}>
+                                                  {tag}: {status.pass ? 'Pass' : 'Fail'}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : !calibrationCreateMode && (
+                                <div className="text-center py-6 text-slate-500 text-xs">
+                                  <p>No calibration entries{calibrationFilterTag !== 'All' ? ` for tag "${calibrationFilterTag}"` : ''}.</p>
+                                  <p className="text-[10px] mt-1">Click "+ New Entry" or use the "Cal" button on test images to create one.</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
                         {/* AI Prompt Assistant Chat */}
                         <div className="mt-4 border-t border-emerald-500/30 pt-4">
                           <button
@@ -12344,6 +12964,13 @@ Start by introducing yourself and asking about their business in a friendly way.
                                                       className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-white text-[9px] transition"
                                                     >
                                                       Copy
+                                                    </button>
+                                                    <button
+                                                      onClick={() => handlePromoteToCalibration(item.url, item.prompt, item.model)}
+                                                      className="px-2 py-0.5 bg-orange-600 hover:bg-orange-500 rounded text-white text-[9px] transition"
+                                                      title="Create Calibration from This Result"
+                                                    >
+                                                      Cal
                                                     </button>
                                                   </div>
                                                 </div>
