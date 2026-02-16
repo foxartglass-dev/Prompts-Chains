@@ -1233,6 +1233,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   const [activeTestingTabId, setActiveTestingTabId] = useState('tab-1');
   const [editingTabName, setEditingTabName] = useState<string | null>(null);
 
+  // ========== CALIBRATION DEBUG MODES (Cal-3) ==========
+  // Mode A: Show Injection — displays the exact compiled context sent to AI
+  const [showInjectionPanel, setShowInjectionPanel] = useState(false);
+  const [lastCompiledContext, setLastCompiledContext] = useState<string | null>(null);
+  const [lastCalibrationPack, setLastCalibrationPack] = useState<string | null>(null);
+  // Mode B: Disable Calibration — runtime-only toggle for A/B testing
+  const [disableCalibration, setDisableCalibration] = useState(false);
+
   // Helper to get active tab
   const activeTestingTab = testingTabs.find(t => t.id === activeTestingTabId) || testingTabs[0];
 
@@ -5391,6 +5399,9 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         }
       }
 
+      // Cal-3 Mode A: Always store the compiled calibration pack for Show Injection panel
+      setLastCalibrationPack(calibrationPack || null);
+
       const context = {
         // Guardrails / instructions
         guardrails: settings.guided_guardrails,
@@ -5398,7 +5409,10 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         guidedInstructionsPersistent: settings.guided_instructions_persistent || '',
 
         // CALIBRATION PACK (DYNAMIC) — compiled from calibration entries for active tag
-        calibrationPack: calibrationPack || undefined,
+        // Cal-3 Mode B: disableCalibration strips calibration from context (A/B testing)
+        calibrationPack: disableCalibration ? undefined : (calibrationPack || undefined),
+        // Cal-3: Pass disableCalibration flag to backend for context builder awareness
+        disableCalibration: disableCalibration || undefined,
 
         // Main prompt template from active avatar (unique portion)
         mainPrompt: activeAvatar?.mainPrompt || '',
@@ -5599,6 +5613,30 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
           ctx.actionShots = undefined;
           ctx.imageBankExamples = undefined;
         }
+      }
+
+      // Cal-3 Mode A: Capture the compiled context for Show Injection panel
+      // This is the EXACT context being sent — no summarization
+      {
+        const ctxCopy = context as Record<string, any>;
+        const sections: string[] = [];
+        if (ctxCopy.activeAvatar) sections.push(`[Active Avatar] ${ctxCopy.activeAvatar.name} (Tag: ${ctxCopy.activeAvatar.tag || 'none'})`);
+        if (ctxCopy.mainPrompt) sections.push(`[Main Prompt Template]\n${ctxCopy.mainPrompt}`);
+        if (ctxCopy.mainPromptPersistent) sections.push(`[Main Prompt Persistent]\n${ctxCopy.mainPromptPersistent}`);
+        if (ctxCopy.guardrails) {
+          const g = ctxCopy.guardrails;
+          const gParts: string[] = ['[Guardrails]'];
+          if (g.instructions) gParts.push(`  Instructions: ${g.instructions}`);
+          if (g.uniformDescription) gParts.push(`  Uniform/Appearance: ${g.uniformDescription}`);
+          if (g.defaultSubject) gParts.push(`  Default Subject: ${g.defaultSubject}`);
+          if (g.avoidList) gParts.push(`  Avoid: ${g.avoidList}`);
+          sections.push(gParts.join('\n'));
+        }
+        if (ctxCopy.guidedInstructionsPersistent) sections.push(`[Guided Instructions Persistent]\n${ctxCopy.guidedInstructionsPersistent}`);
+        if (ctxCopy.calibrationPack) sections.push(`[CALIBRATION PACK]\n${ctxCopy.calibrationPack}`);
+        else if (disableCalibration && lastCalibrationPack) sections.push(`[CALIBRATION PACK — DISABLED BY A/B TOGGLE]\n(Would have been: ${lastCalibrationPack})`);
+        if (ctxCopy.smartPromptGuidance) sections.push(`[Smart Prompt Guidance]\n${ctxCopy.smartPromptGuidance}`);
+        setLastCompiledContext(sections.join('\n\n---\n\n'));
       }
 
       // Send last 8 messages + current for AI memory without token bloat
@@ -6071,28 +6109,40 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         guardrails: p.guardrails,
       }));
 
-      // Calibration Pack (DYNAMIC) — inject after guardrails per injection stack order
-      const activeTag = activeAvatar?.tag || '';
-      if (activeTag && settings.calibration_entries?.length > 0) {
+      // Calibration Pack — compile for active tag (mirrors handleSendGuidedAssistant logic)
+      // Per PRD injection stack: after guardrails, before page context
+      const calActiveTag = activeAvatar?.tag || '';
+      if (calActiveTag && settings.calibration_entries?.length > 0) {
         const PRIORITY_ORDER: Record<string, number> = { hard: 0, medium: 1, soft: 2 };
         const matched = settings.calibration_entries
-          .filter((e: any) => (e.tags || []).includes('All') || (e.tags || []).includes(activeTag))
-          .sort((a: any, b: any) => {
+          .filter((e: CalibrationEntry) => (e.tags || []).includes('All') || (e.tags || []).includes(calActiveTag))
+          .sort((a: CalibrationEntry, b: CalibrationEntry) => {
             const pa = PRIORITY_ORDER[a.priority] ?? 1;
             const pb = PRIORITY_ORDER[b.priority] ?? 1;
             if (pa !== pb) return pa - pb;
             return (b.updatedAt || '').localeCompare(a.updatedAt || '');
           })
           .slice(0, 16);
+
         if (matched.length > 0) {
-          const lines = [`Calibration Pack — Tag ${activeTag} (sorted by priority):`];
-          matched.forEach((entry: any, idx: number) => {
+          const lines = [`Calibration Pack — Tag ${calActiveTag} (sorted by priority):`];
+          matched.forEach((entry: CalibrationEntry, idx: number) => {
             const label = (entry.priority || 'medium').charAt(0).toUpperCase() + (entry.priority || 'medium').slice(1);
             lines.push(`${idx + 1}. (${label}) ${entry.model_instruction}`);
           });
           lines.push('');
           lines.push('If a calibration item conflicts with guardrails, guardrails win. If two calibration items conflict, higher priority wins; if same priority, most recent wins.');
-          context.calibrationPack = lines.join('\n');
+          const compiledPack = lines.join('\n');
+          // Cal-3 Mode A: Store calibration pack for Show Injection panel
+          setLastCalibrationPack(compiledPack);
+          // Cal-3 Mode B: Only inject if calibration is not disabled
+          if (!disableCalibration) {
+            context.calibrationPack = compiledPack;
+          }
+          // Cal-3: Pass disableCalibration flag to backend
+          if (disableCalibration) {
+            context.disableCalibration = true;
+          }
         }
       }
     }
@@ -12544,6 +12594,58 @@ Start by introducing yourself and asking about their business in a friendly way.
 
                                     {/* Active Tab Content */}
                                     <div className="p-3 space-y-3">
+                                      {/* ═══ Cal-3: Debug Toolbar ═══ */}
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        {/* Mode B: Disable Calibration A/B Toggle */}
+                                        <button
+                                          type="button"
+                                          onClick={() => setDisableCalibration(!disableCalibration)}
+                                          className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-medium transition ${
+                                            disableCalibration
+                                              ? 'bg-yellow-600/30 border border-yellow-500/50 text-yellow-300'
+                                              : 'bg-slate-800 border border-slate-600/30 text-slate-400 hover:text-slate-300'
+                                          }`}
+                                          title={disableCalibration ? 'Calibration is DISABLED — click to re-enable' : 'Click to disable calibration for A/B comparison'}
+                                        >
+                                          <span className={`w-2 h-2 rounded-full ${disableCalibration ? 'bg-yellow-400' : 'bg-green-400'}`}></span>
+                                          {disableCalibration ? 'Cal OFF' : 'Cal ON'}
+                                        </button>
+
+                                        {/* Mode A: Show Injection Toggle */}
+                                        <button
+                                          type="button"
+                                          onClick={() => setShowInjectionPanel(!showInjectionPanel)}
+                                          className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-medium transition ${
+                                            showInjectionPanel
+                                              ? 'bg-cyan-600/30 border border-cyan-500/50 text-cyan-300'
+                                              : 'bg-slate-800 border border-slate-600/30 text-slate-400 hover:text-slate-300'
+                                          }`}
+                                          title="Show the exact compiled context sent to the AI"
+                                        >
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                          </svg>
+                                          Show Injection
+                                        </button>
+
+                                        {/* Calibration entry count indicator */}
+                                        {settings.calibration_entries?.length > 0 && (
+                                          <span className="text-[9px] text-slate-500">
+                                            {settings.calibration_entries.length} cal entries
+                                            {activeAvatar?.tag ? ` (tag: ${activeAvatar.tag})` : ''}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Mode B: Warning bar when calibration is disabled */}
+                                      {disableCalibration && (
+                                        <div className="flex items-center gap-2 px-2 py-1.5 bg-yellow-900/30 border border-yellow-500/30 rounded-lg">
+                                          <span className="text-yellow-400 text-[10px] font-semibold">A/B MODE</span>
+                                          <span className="text-yellow-300/70 text-[10px]">Calibration disabled — results generated WITHOUT calibration pack for comparison</span>
+                                        </div>
+                                      )}
+
                                       {/* Prompt input */}
                                       <div className="flex gap-2">
                                         <textarea
@@ -12568,6 +12670,79 @@ Start by introducing yourself and asking about their business in a friendly way.
                                           )}
                                         </button>
                                       </div>
+
+                                      {/* ═══ Cal-3 Mode A: Show Injection Panel ═══ */}
+                                      {showInjectionPanel && (
+                                        <div className="bg-slate-950/80 rounded-lg border border-cyan-500/30 overflow-hidden">
+                                          <div className="flex items-center justify-between px-3 py-1.5 bg-cyan-900/30 border-b border-cyan-500/20">
+                                            <span className="text-cyan-400 text-[10px] font-semibold">Compiled Context (Exact Injection Stack)</span>
+                                            <div className="flex items-center gap-2">
+                                              {lastCompiledContext && (
+                                                <button
+                                                  onClick={() => {
+                                                    navigator.clipboard.writeText(lastCompiledContext);
+                                                    showNotification('Context copied to clipboard', 'success');
+                                                  }}
+                                                  className="text-[9px] text-cyan-400 hover:text-cyan-300 transition"
+                                                >
+                                                  Copy
+                                                </button>
+                                              )}
+                                              <button
+                                                onClick={() => setShowInjectionPanel(false)}
+                                                className="text-slate-400 hover:text-white transition text-xs"
+                                              >
+                                                &times;
+                                              </button>
+                                            </div>
+                                          </div>
+                                          <div className="p-3 max-h-[300px] overflow-y-auto">
+                                            {lastCompiledContext ? (
+                                              <pre className="text-[10px] text-slate-300 whitespace-pre-wrap font-mono leading-relaxed">
+                                                {lastCompiledContext.split('\n').map((line, i) => {
+                                                  // Highlight section headers
+                                                  if (line.startsWith('[') && line.endsWith(']')) {
+                                                    const isCalibration = line.includes('CALIBRATION PACK');
+                                                    return (
+                                                      <div key={i} className={`font-bold mt-2 ${isCalibration ? 'text-yellow-400 bg-yellow-900/20 px-1 -mx-1 rounded' : 'text-cyan-400'}`}>
+                                                        {line}
+                                                      </div>
+                                                    );
+                                                  }
+                                                  // Highlight calibration entries
+                                                  if (line.match(/^\d+\.\s*\(/)) {
+                                                    return <div key={i} className="text-yellow-200/80 pl-2">{line}</div>;
+                                                  }
+                                                  // Separator
+                                                  if (line === '---') {
+                                                    return <hr key={i} className="border-slate-700 my-1" />;
+                                                  }
+                                                  return <div key={i}>{line || '\u00A0'}</div>;
+                                                })}
+                                              </pre>
+                                            ) : (
+                                              <div className="text-[10px] text-slate-500 text-center py-4">
+                                                <p>No context captured yet.</p>
+                                                <p className="mt-1">Send a message in the AI Assistant chat to see the compiled injection stack here.</p>
+                                              </div>
+                                            )}
+                                          </div>
+                                          {/* Calibration Pack highlight section */}
+                                          {lastCalibrationPack && (
+                                            <div className={`px-3 py-2 border-t ${disableCalibration ? 'border-yellow-500/20 bg-yellow-900/10' : 'border-cyan-500/20 bg-cyan-900/10'}`}>
+                                              <div className="flex items-center gap-2 mb-1">
+                                                <span className={`text-[10px] font-semibold ${disableCalibration ? 'text-yellow-400' : 'text-cyan-400'}`}>
+                                                  Calibration Pack {disableCalibration ? '(DISABLED)' : '(Active)'}
+                                                </span>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${disableCalibration ? 'bg-yellow-400' : 'bg-green-400'}`}></span>
+                                              </div>
+                                              <pre className="text-[9px] text-slate-400 whitespace-pre-wrap font-mono max-h-[100px] overflow-y-auto">
+                                                {lastCalibrationPack}
+                                              </pre>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
 
                                       {/* ═══════════════════════════════════════════ */}
                                       {/* AUTO-REFINE Section */}
