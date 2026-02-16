@@ -777,6 +777,35 @@ When creating prompts, be specific and technical. Include details about lighting
         return { role: msg.role === 'assistant' ? 'assistant' : 'user', content: msg.content };
       });
 
+      // Inject context images (reference images, logos, etc.) into first user message for Claude
+      if (contextImages.length > 0 && !hasCustomSystemMessage) {
+        const firstUserIdx = formattedMessages.findIndex(m => m.role === 'user');
+        if (firstUserIdx >= 0) {
+          const userMsg = formattedMessages[firstUserIdx];
+          const existingContent = typeof userMsg.content === 'string'
+            ? [{ type: 'text', text: userMsg.content }]
+            : Array.isArray(userMsg.content) ? userMsg.content : [{ type: 'text', text: String(userMsg.content) }];
+
+          const contextImageBlocks = contextImages
+            .filter(img => img.startsWith('data:'))
+            .map(img => {
+              const [header, base64Data] = img.split(',');
+              const mediaType = header.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+              return {
+                type: 'image',
+                source: { type: 'base64', media_type: mediaType, data: base64Data }
+              };
+            });
+
+          if (contextImageBlocks.length > 0) {
+            formattedMessages[firstUserIdx] = {
+              role: 'user',
+              content: [...existingContent, ...contextImageBlocks]
+            };
+          }
+        }
+      }
+
       const response = await anthropic.messages.create({
         model: model,
         max_tokens: 2000,
@@ -826,6 +855,27 @@ When creating prompts, be specific and technical. Include details about lighting
           parts
         };
       });
+
+      // Inject context images (reference images, logos, etc.) into first user message for Gemini
+      if (contextImages.length > 0 && !hasCustomSystemMessage) {
+        const firstUserIdx = contents.findIndex(m => m.role === 'user');
+        if (firstUserIdx >= 0) {
+          const contextParts = contextImages
+            .filter(img => img.startsWith('data:'))
+            .map(img => {
+              const [header, base64Data] = img.split(',');
+              const mimeType = header.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+              return { inline_data: { mime_type: mimeType, data: base64Data } };
+            });
+
+          if (contextParts.length > 0) {
+            contents[firstUserIdx] = {
+              ...contents[firstUserIdx],
+              parts: [...contents[firstUserIdx].parts, ...contextParts]
+            };
+          }
+        }
+      }
 
       const geminiResponse = await fetch(geminiEndpoint, {
         method: 'POST',

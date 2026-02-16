@@ -30,6 +30,7 @@ import {
   CODE_BLOCK_LABELS,
   isAdditiveBlock,
 } from '../utils/parseCodeBlocks';
+import { processImageFiles, IMAGE_ACCEPT, isHeicFile } from '../services/image-upload-utils';
 
 // Types for Feedback System
 interface GeneratedImage {
@@ -2882,19 +2883,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Reference Images Handlers
   const handleUploadReference = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const newImages: ReferenceImage[] = [];
-    for (const file of Array.from(files)) {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
+    try {
+      const processed = await processImageFiles(files);
+      const newImages: ReferenceImage[] = processed.map(img => ({
+        url: img.dataUrl,
+        filename: img.filename
+      }));
+      updateSettings({
+        reference_images: [...settings.reference_images, ...newImages]
       });
-      newImages.push({ url: dataUrl, filename: file.name });
+      const convertedCount = processed.filter(p => p.converted).length;
+      const msg = convertedCount > 0
+        ? `Added ${newImages.length} reference image(s) (${convertedCount} converted from HEIC)`
+        : `Added ${newImages.length} reference image(s)`;
+      showNotification(msg, 'success');
+    } catch (error) {
+      console.error('Reference image upload error:', error);
+      showNotification('Failed to process some images', 'error');
     }
-    updateSettings({
-      reference_images: [...settings.reference_images, ...newImages]
-    });
-    showNotification(`Added ${newImages.length} reference image(s)`, 'success');
   };
 
   const handleAddReferenceUrl = (url: string) => {
@@ -2912,19 +2918,21 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   // Logo Image Handlers
   const handleUploadLogo = async (files: FileList | null, type: 'logo' | 'action') => {
     if (!files || files.length === 0) return;
-    const newImages: LogoImage[] = [];
-    for (const file of Array.from(files)) {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
+    try {
+      const processed = await processImageFiles(files);
+      const newImages: LogoImage[] = processed.map(img => ({
+        url: img.dataUrl,
+        filename: img.filename,
+        type
+      }));
+      updateSettings({
+        logo_images: [...settings.logo_images, ...newImages]
       });
-      newImages.push({ url: dataUrl, filename: file.name, type });
+      showNotification(`Added ${newImages.length} ${type === 'logo' ? 'logo' : 'action shot'}(s)`, 'success');
+    } catch (error) {
+      console.error('Logo/action upload error:', error);
+      showNotification('Failed to process some images', 'error');
     }
-    updateSettings({
-      logo_images: [...settings.logo_images, ...newImages]
-    });
-    showNotification(`Added ${newImages.length} ${type === 'logo' ? 'logo' : 'action shot'}(s)`, 'success');
   };
 
   const handleRemoveLogo = (index: number) => {
@@ -4258,8 +4266,24 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
     setChatLoading(true);
 
     try {
+      // Build context images from reference images, logos, and action shots
+      // so the AI can actually SEE the uploaded reference material
+      const contextImagesForChat: string[] = [];
+      settings.reference_images.slice(0, 4).forEach((img: any) => {
+        if (img.url) contextImagesForChat.push(img.url);
+      });
+      const logos = settings.logo_images.filter((i: any) => i.type === 'logo');
+      logos.slice(0, 2).forEach((img: any) => {
+        if (img.url) contextImagesForChat.push(img.url);
+      });
+      const actions = settings.logo_images.filter((i: any) => i.type === 'action');
+      actions.slice(0, 2).forEach((img: any) => {
+        if (img.url) contextImagesForChat.push(img.url);
+      });
+
       // Send last 8 messages + current for AI memory without token bloat
       const recentMessages = [...settings.chat_history.slice(-8), newMessage];
+      const isFirstMsg = settings.chat_history.length === 0;
       const res = await fetch('/api/image-creation/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -4269,7 +4293,8 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
             content: m.content,
             images: m.images
           })),
-          model: settings.prompt_assistant_model
+          model: settings.prompt_assistant_model,
+          contextImages: isFirstMsg && contextImagesForChat.length > 0 ? contextImagesForChat : undefined
         })
       });
 
@@ -4294,16 +4319,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
 
   const handleChatImageUpload = async (files: FileList | null) => {
     if (!files) return;
-    const newImages: string[] = [];
-    for (const file of Array.from(files).slice(0, 4)) {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      newImages.push(dataUrl);
+    const filesToProcess = Array.from(files).slice(0, 4);
+    try {
+      const processed = await processImageFiles(filesToProcess);
+      const newImages = processed.map(img => img.dataUrl);
+      setChatImages([...chatImages, ...newImages].slice(0, 4));
+    } catch (error) {
+      console.error('Chat image upload error:', error);
     }
-    setChatImages([...chatImages, ...newImages].slice(0, 4));
   };
 
   // ========== DUAL CHAT SYSTEM ==========
@@ -6231,7 +6254,14 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
         }));
       context.referenceImages = settings.reference_images.map((img: any, idx: number) => ({
         index: idx + 1, filename: img.filename || `Reference ${idx + 1}`,
-        tags: img.tags || [], hasUrl: !!img.url,
+        tags: img.tags || [], hasUrl: !!img.url, url: img.url,
+      }));
+      // Include logo and action shot details so AI can reference them
+      context.logoImages = settings.logo_images.filter((i: any) => i.type === 'logo').map((img: any) => ({
+        filename: img.filename, url: img.url,
+      }));
+      context.actionShots = settings.logo_images.filter((i: any) => i.type === 'action').map((img: any) => ({
+        filename: img.filename, url: img.url,
       }));
     }
 
@@ -6421,18 +6451,16 @@ const ImageCreationSection: React.FC<Props> = ({ workflowId, tags = [], onSettin
   /**
    * Handle image upload for Guided Assistant Chat
    */
-  const handleGuidedAssistantImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleGuidedAssistantImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files) return;
+    if (!files || files.length === 0) return;
 
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        setGuidedAssistantImages(prev => [...prev, base64]);
-      };
-      reader.readAsDataURL(file);
-    });
+    try {
+      const processed = await processImageFiles(files);
+      setGuidedAssistantImages(prev => [...prev, ...processed.map(p => p.dataUrl)]);
+    } catch (err) {
+      console.error('Guided assistant image upload error:', err);
+    }
 
     // Reset input
     if (e.target) e.target.value = '';
@@ -7617,20 +7645,18 @@ Start by introducing yourself and asking about their business in a friendly way.
    */
   const handleDualChatImageUpload = async (files: FileList | null, chatType: ChatType) => {
     if (!files) return;
-    const newImages: string[] = [];
-    for (const file of Array.from(files).slice(0, 4)) {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      newImages.push(dataUrl);
-    }
+    const filesToProcess = Array.from(files).slice(0, 4);
+    try {
+      const processed = await processImageFiles(filesToProcess);
+      const newImages = processed.map(img => img.dataUrl);
 
-    if (chatType === 'consultant') {
-      setConsultantImages([...consultantImages, ...newImages].slice(0, 4));
-    } else {
-      setWorkerImages([...workerImages, ...newImages].slice(0, 4));
+      if (chatType === 'consultant') {
+        setConsultantImages([...consultantImages, ...newImages].slice(0, 4));
+      } else {
+        setWorkerImages([...workerImages, ...newImages].slice(0, 4));
+      }
+    } catch (error) {
+      console.error('Dual chat image upload error:', error);
     }
   };
 
@@ -8242,37 +8268,33 @@ Start by introducing yourself and asking about their business in a friendly way.
     setUploadingToBank(true);
     const newImages: BankImage[] = [];
 
-    for (const file of Array.from(files)) {
-      try {
-        // Convert file to base64 data URL
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
+    try {
+      // Process all files (auto-converts HEIC→JPEG via server)
+      const processed = await processImageFiles(files);
 
+      for (const img of processed) {
         // Get filename without extension for default title
-        const defaultTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        const defaultTitle = img.filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
 
         const newImage: BankImage = {
           id: `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          url: dataUrl,
+          url: img.dataUrl,
           title: defaultTitle,
           category: 'Other', // Default category, will be auto-tagged if enabled
           variation: 'Uploaded',
           variationId: 'uploaded',
           avatarTag: activeAvatar?.tag,
-          orientation: 'landscape', // Could detect from image dimensions
+          orientation: img.width && img.height ? (img.width >= img.height ? 'landscape' : 'portrait') : 'landscape',
           prompt: 'Manually uploaded',
           createdAt: new Date().toISOString(),
           used: false
         };
 
         newImages.push(newImage);
-      } catch (error) {
-        console.error(`Failed to process file ${file.name}:`, error);
       }
+    } catch (error) {
+      console.error('Failed to process uploaded files:', error);
+      showNotification('Some files failed to process', 'error');
     }
 
     // Add to bank
@@ -9898,19 +9920,17 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 <input
                                   ref={mainPromptAssistantFileInputRef}
                                   type="file"
-                                  accept="image/*"
+                                  accept={IMAGE_ACCEPT}
                                   multiple
-                                  onChange={(e) => {
-                                    const files = Array.from(e.target.files || []);
-                                    files.forEach(file => {
-                                      const reader = new FileReader();
-                                      reader.onload = (ev) => {
-                                        if (ev.target?.result) {
-                                          setMainPromptAssistantImages(prev => [...prev, ev.target!.result as string]);
-                                        }
-                                      };
-                                      reader.readAsDataURL(file);
-                                    });
+                                  onChange={async (e) => {
+                                    const files = e.target.files;
+                                    if (!files || files.length === 0) return;
+                                    try {
+                                      const processed = await processImageFiles(files);
+                                      setMainPromptAssistantImages(prev => [...prev, ...processed.map(p => p.dataUrl)]);
+                                    } catch (err) {
+                                      console.error('Main prompt assistant image upload error:', err);
+                                    }
                                     e.target.value = '';
                                   }}
                                   className="hidden"
@@ -12284,7 +12304,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                                 <input
                                   ref={guidedAssistantFileInputRef}
                                   type="file"
-                                  accept="image/*"
+                                  accept={IMAGE_ACCEPT}
                                   multiple
                                   onChange={handleGuidedAssistantImageUpload}
                                   className="hidden"
@@ -15502,7 +15522,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept="image/*"
+                accept={IMAGE_ACCEPT}
                 onChange={(e) => handleUploadReference(e.target.files)}
                 className="hidden"
               />
@@ -15556,7 +15576,8 @@ Start by introducing yourself and asking about their business in a friendly way.
                     <input
                       ref={logoFileInputRef}
                       type="file"
-                      accept="image/*"
+                      multiple
+                      accept={IMAGE_ACCEPT}
                       onChange={(e) => handleUploadLogo(e.target.files, 'logo')}
                       className="hidden"
                     />
@@ -15599,7 +15620,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       ref={actionShotsInputRef}
                       type="file"
                       multiple
-                      accept="image/*"
+                      accept={IMAGE_ACCEPT}
                       onChange={(e) => handleUploadLogo(e.target.files, 'action')}
                       className="hidden"
                     />
@@ -16634,7 +16655,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       <button onClick={() => chatFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-brand-gold transition" title="Attach Image">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                       </button>
-                      <input ref={chatFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
+                      <input ref={chatFileInputRef} type="file" multiple accept={IMAGE_ACCEPT} onChange={(e) => handleChatImageUpload(e.target.files)} className="hidden" />
                       <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendChat()} placeholder="Ask about image prompts..." className="flex-1 bg-slate-900 border border-brand-gold/50 rounded px-3 py-2 text-white text-sm" />
                       <button onClick={handleSendChat} disabled={chatLoading || (!chatInput.trim() && chatImages.length === 0)} className="px-4 py-2 bg-brand-cyan hover:bg-brand-cyan-dark disabled:bg-slate-600 rounded text-slate-900 font-medium text-sm transition">Send</button>
                     </div>
@@ -16822,7 +16843,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <button onClick={() => consultantFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-indigo-400 transition" title="Attach Image">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   </button>
-                  <input ref={consultantFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'consultant')} className="hidden" />
+                  <input ref={consultantFileInputRef} type="file" multiple accept={IMAGE_ACCEPT} onChange={(e) => handleDualChatImageUpload(e.target.files, 'consultant')} className="hidden" />
                   <textarea
                     value={consultantInput}
                     onChange={(e) => {
@@ -16938,7 +16959,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                   <button onClick={() => workerFileInputRef.current?.click()} className="p-2 bg-slate-800 hover:bg-slate-700 rounded text-emerald-400 transition" title="Attach Image">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                   </button>
-                  <input ref={workerFileInputRef} type="file" multiple accept="image/*" onChange={(e) => handleDualChatImageUpload(e.target.files, 'worker')} className="hidden" />
+                  <input ref={workerFileInputRef} type="file" multiple accept={IMAGE_ACCEPT} onChange={(e) => handleDualChatImageUpload(e.target.files, 'worker')} className="hidden" />
                   <input
                     type="text"
                     value={workerInput}
@@ -17218,7 +17239,7 @@ Start by introducing yourself and asking about their business in a friendly way.
                       ref={bankUploadInputRef}
                       type="file"
                       multiple
-                      accept="image/*"
+                      accept={IMAGE_ACCEPT}
                       onChange={(e) => handleBankUpload(e.target.files)}
                       className="hidden"
                     />
