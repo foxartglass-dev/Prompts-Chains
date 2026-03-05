@@ -1,0 +1,73 @@
+---
+interface Props {
+  variant?: 'primary' | 'secondary' | 'ghost';
+  size?: 'sm' | 'md' | 'lg';
+  href?: string;
+  class?: string;
+}
+
+const {
+  variant = 'primary',
+  size = 'md',
+  href,
+  class: className = ''
+} = Astro.props;
+
+const Tag = href ? 'a' : 'button';
+---
+
+<Tag
+  class:list={['ss-btn', `ss-btn--${variant}`, `ss-btn--${size}`, className]}
+  href={href}
+>
+  <slot />
+</Tag>
+
+<style>
+  .ss-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    font-weight: var(--font-bold);
+    font-family: var(--font-sans);
+    border-radius: var(--radius-sm);
+    transition: var(--transition-base);
+    cursor: pointer;
+    border: var(--border-base) solid transparent;
+    text-decoration: none;
+    line-height: 1;
+  }
+
+  .ss-btn--sm { padding: var(--space-xs) var(--space-sm); font-size: var(--text-small); }
+  .ss-btn--md { padding: var(--space-sm) var(--space-lg); font-size: var(--text-body); }
+  .ss-btn--lg { padding: var(--space-md) var(--space-xl); font-size: var(--text-h3); }
+
+  .ss-btn--primary {
+    background: var(--color-brand);
+    color: var(--color-surface-canvas);
+  }
+
+  .ss-btn--primary:hover {
+    background: var(--color-brand-dark);
+  }
+
+  .ss-btn--secondary {
+    background: var(--color-surface-muted);
+    color: var(--color-text-primary);
+    border-color: var(--color-border);
+  }
+
+  .ss-btn--secondary:hover {
+    background: var(--color-surface-base);
+  }
+
+  .ss-btn--ghost {
+    background: transparent;
+    color: var(--color-brand);
+  }
+
+  .ss-btn--ghost:hover {
+    background: var(--color-surface-muted);
+  }
+</style>

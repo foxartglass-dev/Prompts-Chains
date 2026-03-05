@@ -1,0 +1,289 @@
+---
+import '../styles/bridgevoice-reset.css';
+import '../styles/smarthome-theme.css';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <title>Smart Home Dashboard Theme</title>
+    <style>
+      /* Extra glassmorphism helpers for this dashboard */
+      .glass {
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+      }
+      .glow-amber {
+        box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+      }
+      .glow-cyan {
+        box-shadow: 0 0 15px rgba(103, 232, 249, 0.2);
+      }
+      .toggle {
+        width: 44px; height: 24px;
+        border-radius: 12px;
+        position: relative;
+        cursor: pointer;
+        transition: 0.2s ease;
+      }
+      .toggle.on { background: #22D3EE; }
+      .toggle.off { background: rgba(255,255,255,0.15); }
+      .toggle::after {
+        content: '';
+        width: 18px; height: 18px;
+        border-radius: 50%;
+        background: white;
+        position: absolute;
+        top: 3px;
+        transition: 0.2s ease;
+      }
+      .toggle.on::after { left: 23px; }
+      .toggle.off::after { left: 3px; }
+      .progress-dots {
+        display: flex; gap: 3px;
+      }
+      .progress-dots span {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+      }
+      .dot-filled { background: #F59E0B; }
+      .dot-empty { background: rgba(255,255,255,0.15); }
+      .sidebar-icon {
+        width: 40px; height: 40px;
+        border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px;
+        cursor: pointer;
+        transition: 0.2s ease;
+      }
+      .sidebar-icon:hover { background: rgba(255,255,255,0.1); }
+      .sidebar-icon.active { background: #22D3EE; }
+      .avatar {
+        width: 40px; height: 40px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 14px; font-weight: 600;
+        border: 2px solid;
+      }
+    </style>
+  </head>
+  <body>
+    <div style="display: grid; grid-template-columns: 60px 1fr 320px; min-height: 100vh; gap: 0;">
+
+      <!-- Sidebar -->
+      <aside class="glass" style="background: rgba(255,255,255,0.04); border-right: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; align-items: center; padding: var(--space-md) 0; gap: var(--space-sm);">
+        <div style="width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #F59E0B, #D97706); display: flex; align-items: center; justify-content: center; font-size: 16px; margin-bottom: var(--space-md);">🏠</div>
+        <div class="sidebar-icon">📊</div>
+        <div class="sidebar-icon">📝</div>
+        <div class="sidebar-icon active">💡</div>
+        <div class="sidebar-icon">🔒</div>
+        <div class="sidebar-icon">⚙️</div>
+      </aside>
+
+      <!-- Main Content -->
+      <main style="padding: var(--space-lg); overflow-y: auto;">
+
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+          <div>
+            <h2 style="font-size: var(--text-h2); margin-bottom: 2px;">Smart House</h2>
+            <span style="color: var(--color-text-tertiary); font-size: var(--text-micro);">12 Sep 2026</span>
+          </div>
+          <div class="card glass" style="display: flex; align-items: center; gap: var(--space-md); padding: var(--space-xs) var(--space-md); border-radius: 999px;">
+            <span style="font-size: var(--text-small);">☁️ 11°C</span>
+            <span style="color: var(--color-border);">|</span>
+            <span style="font-size: var(--text-small);">💧 67%</span>
+            <span style="color: var(--color-border);">|</span>
+            <span style="font-size: var(--text-small); color: var(--color-text-secondary);">20:31</span>
+          </div>
+        </div>
+
+        <!-- House Visualization Card -->
+        <div class="card glass" style="height: 320px; display: flex; align-items: center; justify-content: center; margin-bottom: var(--space-lg); position: relative; overflow: hidden; background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));">
+          <div style="text-align: center;">
+            <div style="font-size: 64px; margin-bottom: var(--space-md);">🏡</div>
+            <div style="display: flex; gap: var(--space-xl); justify-content: center;">
+              <div class="card glass" style="padding: var(--space-sm) var(--space-md);">
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Temperature</div>
+                <div style="display: flex; align-items: baseline; gap: var(--space-xs);">
+                  <div class="progress-dots">
+                    <span class="dot-filled"></span><span class="dot-filled"></span><span class="dot-filled"></span>
+                    <span class="dot-filled"></span><span class="dot-filled"></span><span class="dot-empty"></span>
+                    <span class="dot-empty"></span><span class="dot-empty"></span>
+                  </div>
+                  <span style="font-size: var(--text-h2); font-weight: var(--font-display); color: var(--color-text-primary);">22°C</span>
+                </div>
+              </div>
+              <div class="card glass" style="padding: var(--space-sm) var(--space-md);">
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Humidity</div>
+                <div style="display: flex; align-items: baseline; gap: var(--space-xs);">
+                  <div class="progress-dots">
+                    <span class="dot-filled" style="background: #22D3EE;"></span>
+                    <span class="dot-filled" style="background: #22D3EE;"></span>
+                    <span class="dot-filled" style="background: #22D3EE;"></span>
+                    <span class="dot-filled" style="background: #22D3EE;"></span>
+                    <span class="dot-empty"></span><span class="dot-empty"></span>
+                    <span class="dot-empty"></span><span class="dot-empty"></span>
+                  </div>
+                  <span style="font-size: var(--text-h2); font-weight: var(--font-display); color: var(--color-text-primary);">55%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Family Members -->
+        <div style="display: flex; gap: var(--space-md); margin-bottom: var(--space-lg);">
+          <div class="card glass" style="display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-radius: 999px;">
+            <div class="avatar" style="background: #DC2626; border-color: #DC2626; color: white;">RT</div>
+            <div>
+              <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Robert T.</div>
+              <div style="font-size: var(--text-micro); color: var(--color-brand);">At home</div>
+            </div>
+          </div>
+          <div class="card glass" style="display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-radius: 999px;">
+            <div class="avatar" style="background: #F59E0B; border-color: #F59E0B; color: white;">BS</div>
+            <div>
+              <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Bessie S.</div>
+              <div style="font-size: var(--text-micro); color: var(--color-brand);">At home</div>
+            </div>
+          </div>
+          <div class="card glass" style="display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-radius: 999px;">
+            <div class="avatar" style="background: #8B5CF6; border-color: #8B5CF6; color: white;">DO</div>
+            <div>
+              <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Devon O.</div>
+              <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Away</div>
+            </div>
+          </div>
+          <div class="card glass" style="display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-radius: 999px;">
+            <div class="avatar" style="background: #EC4899; border-color: #EC4899; color: white;">AI</div>
+            <div>
+              <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Annette I.</div>
+              <div style="font-size: var(--text-micro); color: var(--color-brand);">At home</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats Grid -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-md);">
+          <div class="card glass" style="text-align: center;">
+            <div style="font-size: 28px; margin-bottom: var(--space-xs);">💡</div>
+            <div style="font-size: var(--text-h1); font-weight: var(--font-display); color: var(--color-brand);">12</div>
+            <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Lights On</div>
+          </div>
+          <div class="card glass" style="text-align: center;">
+            <div style="font-size: 28px; margin-bottom: var(--space-xs);">🌡️</div>
+            <div style="font-size: var(--text-h1); font-weight: var(--font-display); color: #22D3EE;">22°C</div>
+            <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Avg Temp</div>
+          </div>
+          <div class="card glass" style="text-align: center;">
+            <div style="font-size: 28px; margin-bottom: var(--space-xs);">⚡</div>
+            <div style="font-size: var(--text-h1); font-weight: var(--font-display); color: var(--color-brand);">3.2</div>
+            <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">kWh Today</div>
+          </div>
+          <div class="card glass" style="text-align: center;">
+            <div style="font-size: 28px; margin-bottom: var(--space-xs);">🔒</div>
+            <div style="font-size: var(--text-h1); font-weight: var(--font-display); color: #22C55E;">All</div>
+            <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Locked</div>
+          </div>
+        </div>
+
+      </main>
+
+      <!-- Right Panel -->
+      <aside class="glass" style="background: rgba(255,255,255,0.04); border-left: 1px solid rgba(255,255,255,0.06); padding: var(--space-lg); overflow-y: auto;">
+
+        <!-- Room Card -->
+        <div class="card glass glow-amber" style="margin-bottom: var(--space-lg); padding: 0; overflow: hidden; border-radius: var(--radius-base);">
+          <div style="height: 120px; background: linear-gradient(135deg, rgba(245,158,11,0.3), rgba(217,119,6,0.1)); display: flex; align-items: center; justify-content: center;">
+            <span style="font-size: 48px;">🛋️</span>
+          </div>
+          <div style="padding: var(--space-md);">
+            <h3 style="margin-bottom: 2px;">Living Room</h3>
+            <span style="font-size: var(--text-micro); color: var(--color-text-tertiary);">4 devices</span>
+          </div>
+        </div>
+
+        <!-- Device List -->
+        <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+
+          <div class="card glass" style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-sm) var(--space-md);">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <span style="font-size: 20px;">📹</span>
+              <div>
+                <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Camera CCTV</div>
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">87%</div>
+              </div>
+            </div>
+            <div class="toggle on"></div>
+          </div>
+
+          <div class="card glass" style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-sm) var(--space-md);">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <span style="font-size: 20px;">💡</span>
+              <div>
+                <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Lightning</div>
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Chandelier, Dimmers</div>
+                <div class="progress-dots" style="margin-top: 4px;">
+                  <span class="dot-filled"></span><span class="dot-filled"></span><span class="dot-filled"></span>
+                  <span class="dot-filled"></span><span class="dot-filled"></span><span class="dot-filled"></span>
+                  <span class="dot-filled"></span><span class="dot-empty"></span><span class="dot-empty"></span>
+                </div>
+              </div>
+            </div>
+            <div style="font-size: var(--text-small); color: var(--color-text-secondary);">73%</div>
+          </div>
+
+          <div class="card glass" style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-sm) var(--space-md);">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <span style="font-size: 20px;">🧹</span>
+              <div>
+                <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Vacuum Cleaner</div>
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">58%</div>
+              </div>
+            </div>
+            <div class="toggle off"></div>
+          </div>
+
+          <div class="card glass" style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-sm) var(--space-md);">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <span style="font-size: 20px;">🎵</span>
+              <div>
+                <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Music System</div>
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Playing LP-038</div>
+                <div class="progress-dots" style="margin-top: 4px;">
+                  <span class="dot-filled" style="background: #22D3EE;"></span>
+                  <span class="dot-filled" style="background: #22D3EE;"></span>
+                  <span class="dot-filled" style="background: #22D3EE;"></span>
+                  <span class="dot-empty"></span><span class="dot-empty"></span>
+                </div>
+              </div>
+            </div>
+            <div class="toggle on"></div>
+          </div>
+
+        </div>
+
+        <!-- Now Playing -->
+        <div class="card glass" style="margin-top: var(--space-lg); display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md);">
+          <div style="width: 44px; height: 44px; border-radius: 8px; background: linear-gradient(135deg, #F59E0B, #EC4899); display: flex; align-items: center; justify-content: center;">🎶</div>
+          <div style="flex: 1;">
+            <div style="font-size: var(--text-small); font-weight: var(--font-bold);">I Took A Ride</div>
+            <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Caroline Rose · Superstar</div>
+          </div>
+          <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--color-text-primary); display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <span style="color: var(--color-surface-canvas); font-size: 12px;">▶</span>
+          </div>
+        </div>
+
+      </aside>
+
+    </div>
+
+    <footer style="text-align: center; padding: var(--space-md); color: var(--color-text-tertiary); font-size: var(--text-micro); border-top: 1px solid rgba(255,255,255,0.06);">
+      Generated by Style Set — Screenshot to Astro Theme in seconds.
+    </footer>
+  </body>
+</html>
