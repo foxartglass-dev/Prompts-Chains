@@ -1,0 +1,64 @@
+---
+interface Props {
+  type?: string;
+  placeholder?: string;
+  label?: string;
+  name?: string;
+  class?: string;
+}
+
+const {
+  type = 'text',
+  placeholder = '',
+  label,
+  name,
+  class: className = ''
+} = Astro.props;
+---
+
+<div class:list={['ss-field', className]}>
+  {label && <label class="ss-label" for={name}>{label}</label>}
+  <input
+    class="ss-input"
+    type={type}
+    placeholder={placeholder}
+    name={name}
+    id={name}
+  />
+</div>
+
+<style>
+  .ss-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+
+  .ss-label {
+    font-size: var(--text-small);
+    font-weight: var(--font-bold);
+    color: var(--color-text-secondary);
+  }
+
+  .ss-input {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    font-size: var(--text-body);
+    font-family: var(--font-sans);
+    background: var(--color-surface-muted);
+    border: var(--border-base) solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-primary);
+    transition: var(--transition-base);
+  }
+
+  .ss-input:focus {
+    outline: none;
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 20%, transparent);
+  }
+
+  .ss-input::placeholder {
+    color: var(--color-text-tertiary);
+  }
+</style>
