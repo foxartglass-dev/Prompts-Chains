@@ -1,0 +1,237 @@
+---
+import '../styles/bridgevoice-reset.css';
+import '../styles/mooncafe-theme.css';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+    <title>Moon Cafe</title>
+    <style>
+      .body-font { font-family: 'Inter', sans-serif; }
+      .nav-link {
+        color: var(--color-text-secondary);
+        text-decoration: none;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        font-family: 'Inter', sans-serif;
+        font-weight: 500;
+        transition: 0.2s;
+      }
+      .nav-link:hover, .nav-link.active { color: var(--color-brand); }
+      .outline-btn {
+        display: inline-flex;
+        padding: 14px 36px;
+        border: 1px solid var(--color-text-primary);
+        color: var(--color-text-primary);
+        font-family: 'Inter', sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 3px;
+        cursor: pointer;
+        background: transparent;
+        transition: 0.2s;
+        text-decoration: none;
+      }
+      .outline-btn:hover {
+        border-color: var(--color-brand);
+        color: var(--color-brand);
+      }
+      .menu-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: var(--space-md) 0;
+        border-bottom: 1px solid var(--color-border-subtle);
+      }
+      .menu-item:last-child { border-bottom: none; }
+      .dessert-card {
+        text-align: center;
+        padding: var(--space-md);
+      }
+      .circle-arrow {
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        border: 1px solid var(--color-border);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: 0.2s;
+        font-size: 18px;
+        color: var(--color-text-secondary);
+      }
+      .circle-arrow:hover, .circle-arrow.active {
+        border-color: var(--color-brand);
+        color: var(--color-brand);
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- Nav -->
+    <nav style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-md) var(--space-xl); border-bottom: 1px solid var(--color-border-subtle);">
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <span style="font-size: var(--text-h2); font-weight: 700;">M</span>
+        <span style="font-size: var(--text-h2); font-weight: 700; color: var(--color-brand);">☽</span>
+        <span style="font-size: var(--text-h2); font-weight: 700;">ON</span>
+        <span style="font-size: var(--text-small); color: var(--color-brand); font-style: italic; margin-left: -4px;">cafe</span>
+      </div>
+      <div style="display: flex; gap: var(--space-xl);">
+        <a href="#" class="nav-link active">About</a>
+        <a href="#" class="nav-link">Menu</a>
+        <a href="#" class="nav-link">Delivery</a>
+        <a href="#" class="nav-link">Booking</a>
+        <a href="#" class="nav-link">Gallery</a>
+        <a href="#" class="nav-link">Contacts</a>
+      </div>
+      <div style="display: flex; align-items: center; gap: var(--space-md);">
+        <span style="color: var(--color-text-tertiary); font-size: 18px;">🔍</span>
+        <span class="body-font" style="font-size: var(--text-small); color: var(--color-text-secondary);">EN ▾</span>
+        <span style="color: var(--color-text-tertiary); font-size: 18px;">👤</span>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <section style="display: grid; grid-template-columns: 1fr 1fr; min-height: 80vh; padding: var(--space-2xl) var(--space-xl);">
+      <div style="display: flex; flex-direction: column; justify-content: center;">
+        <h1 style="font-size: var(--text-display); line-height: 1.1; margin-bottom: var(--space-lg);">
+          Welcome to<br/>Moon <span style="color: var(--color-brand);">Cafe</span>
+        </h1>
+        <p class="body-font" style="color: var(--color-text-secondary); font-size: var(--text-body); margin-bottom: var(--space-xl); max-width: 460px; line-height: 1.7;">
+          At Moon's we celebrate the essence of city living — good friends, ethically
+          sourced coffee, old-fashioned cocktails, locally brewed craft beer, and bottomless
+          glasses of South African red wine paired with decadent cheese boards and
+          indulgent gourmet toasties.
+        </p>
+        <div>
+          <a href="#menu" class="outline-btn">Book Now</a>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; position: relative;">
+        <div style="width: 380px; height: 380px; border-radius: 50%; background: linear-gradient(135deg, rgba(234,179,8,0.15), rgba(253,224,71,0.05)); display: flex; align-items: center; justify-content: center;">
+          <span style="font-size: 120px;">🧁</span>
+        </div>
+        <div style="position: absolute; right: 20px; top: 50%; display: flex; gap: var(--space-xs);">
+          <span class="circle-arrow">←</span>
+          <span class="circle-arrow active">→</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Desserts Bar -->
+    <section style="border-top: 1px solid var(--color-border-subtle); padding: var(--space-lg) var(--space-xl);">
+      <div style="display: flex; justify-content: space-between; align-items: center; max-width: 1100px; margin: 0 auto;">
+        <div>
+          <div class="body-font" style="font-size: var(--text-h1); font-weight: 700; color: var(--color-text-primary);">01<span style="color: var(--color-text-tertiary);">/07</span></div>
+          <div class="body-font" style="font-size: var(--text-micro); color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 2px;">Moon's Chef's Desserts of This Week</div>
+        </div>
+        <div style="display: flex; gap: var(--space-xl);">
+          <div class="dessert-card">
+            <div style="font-size: 32px; margin-bottom: var(--space-xs);">🍑</div>
+            <div class="body-font" style="font-size: var(--text-small); color: var(--color-text-secondary);">Peach muffin with<br/>homemade ice cream</div>
+          </div>
+          <div class="dessert-card">
+            <div style="font-size: 32px; margin-bottom: var(--space-xs);">🥐</div>
+            <div class="body-font" style="font-size: var(--text-small); color: var(--color-text-secondary);">Traditional Almond<br/>Croissant</div>
+          </div>
+          <div class="dessert-card">
+            <div style="font-size: 32px; margin-bottom: var(--space-xs);">🍫</div>
+            <div class="body-font" style="font-size: var(--text-small); color: var(--color-text-secondary);">Chocolate Brownie<br/>with Sea Salt</div>
+          </div>
+          <div class="dessert-card">
+            <div style="font-size: 32px; margin-bottom: var(--space-xs);">🍨</div>
+            <div class="body-font" style="font-size: var(--text-small); color: var(--color-text-secondary);">Pistachio &<br/>Raspberry Macaron</div>
+          </div>
+          <div class="dessert-card">
+            <div style="font-size: 32px; margin-bottom: var(--space-xs);">🍰</div>
+            <div class="body-font" style="font-size: var(--text-small); color: var(--color-text-secondary);">San Sebastian<br/>Cheesecake</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Menu Section -->
+    <section id="menu" style="padding: var(--space-2xl) var(--space-xl); background: var(--color-surface-base);">
+      <div style="max-width: 800px; margin: 0 auto;">
+        <h2 style="font-size: var(--text-h1); text-align: center; margin-bottom: var(--space-xs);">
+          Our <span style="color: var(--color-brand);">Menu</span>
+        </h2>
+        <p class="body-font" style="text-align: center; color: var(--color-text-tertiary); margin-bottom: var(--space-2xl); font-size: var(--text-small);">
+          Crafted with love, served with style
+        </p>
+
+        <!-- Category tabs -->
+        <div style="display: flex; gap: var(--space-lg); justify-content: center; margin-bottom: var(--space-xl);">
+          <span class="nav-link active" style="cursor: pointer;">Coffee</span>
+          <span class="nav-link" style="cursor: pointer;">Cocktails</span>
+          <span class="nav-link" style="cursor: pointer;">Food</span>
+          <span class="nav-link" style="cursor: pointer;">Desserts</span>
+        </div>
+
+        <div class="menu-item">
+          <div>
+            <h3 style="margin-bottom: 4px;">Espresso</h3>
+            <p class="body-font" style="color: var(--color-text-tertiary); font-size: var(--text-small);">Double shot, rich crema</p>
+          </div>
+          <span style="font-size: var(--text-h3); font-weight: 700; color: var(--color-brand);">$4.50</span>
+        </div>
+        <div class="menu-item">
+          <div>
+            <h3 style="margin-bottom: 4px;">Flat White</h3>
+            <p class="body-font" style="color: var(--color-text-tertiary); font-size: var(--text-small);">Velvety microfoam, ethically sourced beans</p>
+          </div>
+          <span style="font-size: var(--text-h3); font-weight: 700; color: var(--color-brand);">$5.80</span>
+        </div>
+        <div class="menu-item">
+          <div>
+            <h3 style="margin-bottom: 4px;">Caramel Latte</h3>
+            <p class="body-font" style="color: var(--color-text-tertiary); font-size: var(--text-small);">House-made caramel, oat milk option</p>
+          </div>
+          <span style="font-size: var(--text-h3); font-weight: 700; color: var(--color-brand);">$6.20</span>
+        </div>
+        <div class="menu-item">
+          <div>
+            <h3 style="margin-bottom: 4px;">Cold Brew</h3>
+            <p class="body-font" style="color: var(--color-text-tertiary); font-size: var(--text-small);">24-hour steeped, served over ice</p>
+          </div>
+          <span style="font-size: var(--text-h3); font-weight: 700; color: var(--color-brand);">$5.50</span>
+        </div>
+        <div class="menu-item">
+          <div>
+            <h3 style="margin-bottom: 4px;">Matcha Latte</h3>
+            <p class="body-font" style="color: var(--color-text-tertiary); font-size: var(--text-small);">Ceremonial grade, whisked to order</p>
+          </div>
+          <span style="font-size: var(--text-h3); font-weight: 700; color: var(--color-brand);">$6.50</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Reservation -->
+    <section style="padding: var(--space-2xl) var(--space-xl); text-align: center;">
+      <h2 style="font-size: var(--text-h1); margin-bottom: var(--space-md);">
+        Reserve Your <span style="color: var(--color-brand);">Table</span>
+      </h2>
+      <p class="body-font" style="color: var(--color-text-secondary); margin-bottom: var(--space-xl); max-width: 400px; margin-left: auto; margin-right: auto;">
+        Create moments of happiness and satisfaction that will surely linger long in your memory.
+      </p>
+      <a href="#" class="outline-btn">Book Now</a>
+    </section>
+
+    <!-- Footer -->
+    <footer style="border-top: 1px solid var(--color-border-subtle); padding: var(--space-lg) var(--space-xl); display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; gap: var(--space-md);">
+        <span style="color: var(--color-text-tertiary); font-size: 18px; cursor: pointer;">©</span>
+        <span style="color: var(--color-text-tertiary); font-size: 18px; cursor: pointer;">📘</span>
+        <span style="color: var(--color-text-tertiary); font-size: 18px; cursor: pointer;">🐦</span>
+      </div>
+      <span class="body-font" style="color: var(--color-text-tertiary); font-size: var(--text-micro);">
+        Generated by Style Set — Screenshot to Astro Theme in seconds.
+      </span>
+    </footer>
+  </body>
+</html>
