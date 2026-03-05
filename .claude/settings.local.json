@@ -22,7 +22,9 @@
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:cosmicthemes.com)",
       "WebFetch(domain:lexingtonthemes.com)",
-      "WebFetch(domain:themefisher.com)"
+      "WebFetch(domain:themefisher.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.google.com)"
     ],
     "deny": [],
     "ask": []
