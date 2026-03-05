@@ -22,6 +22,7 @@ import DefaultWorkflowSelector, { DefaultWorkflowConfig } from './src/components
 import WordPressSettings from './src/components/WordPressSettings';
 import ArticlesPage from './src/pages/ArticlesPage';
 import BlueprintPage from './src/pages/BlueprintPage';
+import ThemeGeneratorPage from './src/pages/ThemeGeneratorPage';
 import LinkPoolManager from './src/components/LinkPoolManager';
 import SchemaManager from './src/components/SchemaManager';
 import ImageCreationSection from './src/components/ImageCreationSection';
@@ -268,6 +269,7 @@ const App: React.FC = () => {
     const [isDefaultSelectorOpen, setIsDefaultSelectorOpen] = useState(false);
     const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
     const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
+    const [isThemeGeneratorOpen, setIsThemeGeneratorOpen] = useState(false);
     const [isLinkPoolOpen, setIsLinkPoolOpen] = useState(false);
     const [isSchemaManagerOpen, setIsSchemaManagerOpen] = useState(false);
     const [isTestRunnerOpen, setIsTestRunnerOpen] = useState(false);
@@ -2237,6 +2239,12 @@ const App: React.FC = () => {
               workflowId={currentWorkflowId}
             />
 
+            {/* Theme DNA Generator */}
+            <ThemeGeneratorPage
+              isOpen={isThemeGeneratorOpen}
+              onClose={() => setIsThemeGeneratorOpen(false)}
+            />
+
             {/* System Blueprint - Reference for AI agents */}
             <BlueprintPage
               isOpen={isBlueprintOpen}
@@ -2866,6 +2874,15 @@ const App: React.FC = () => {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                         </svg>
                                         <span className="text-sm font-medium">Schema Manager</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsMoreDropdownOpen(false); setIsThemeGeneratorOpen(true); }}
+                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-brand-gold hover:bg-slate-700 transition"
+                                    >
+                                        <svg className="h-4 w-4 text-brand-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                                        </svg>
+                                        <span className="text-sm font-medium">Theme DNA</span>
                                     </button>
                                     <button
                                         onClick={() => { setIsMoreDropdownOpen(false); setIsAgencyOpen(false); setIsArticlesOpen(false); setIsTemplatesOpen(false); setIsWorkflowNavOpen(false); setIsTrackerOpen(false); setIsClientsOpen(false); setIsWebsitesOpen(false); setIsAnalyticsOpen(false); setIsIdeasOpen(false); setIsBlueprintOpen(true); }}

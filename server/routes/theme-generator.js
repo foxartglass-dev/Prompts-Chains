@@ -11,6 +11,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
 import { generateElementorTheme, toElementorData } from '../services/elementor-theme-generator.js';
+import { scoreDNA } from '../services/dna-confidence-scorer.js';
 
 const router = express.Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -259,10 +260,13 @@ router.post('/from-url', async (req, res) => {
     console.log(`[theme-generator] Generating theme: ${themeName}`);
     const result = await generateTheme(designDNA, themeName, url);
 
+    const confidence = scoreDNA(designDNA);
+
     res.json({
       success: true,
       ...result,
-      screenshot: screenshotBase64
+      screenshot: screenshotBase64,
+      confidence
     });
   } catch (err) {
     console.error('[theme-generator] from-url error:', err);
@@ -291,9 +295,12 @@ router.post('/from-image', async (req, res) => {
     console.log(`[theme-generator] Generating theme: ${themeName}`);
     const result = await generateTheme(designDNA, themeName, 'uploaded image');
 
+    const confidence = scoreDNA(designDNA);
+
     res.json({
       success: true,
-      ...result
+      ...result,
+      confidence
     });
   } catch (err) {
     console.error('[theme-generator] from-image error:', err);
@@ -427,13 +434,16 @@ router.post('/elementor/from-url', async (req, res) => {
       };
     }
 
+    const confidence = scoreDNA(designDNA);
+
     res.json({
       success: true,
       siteName: resolvedSiteName,
       designDNA,
       screenshot: `data:image/png;base64,${base64Image}`,
       pages: elementorPages,
-      pageCount: Object.keys(elementorPages).length
+      pageCount: Object.keys(elementorPages).length,
+      confidence
     });
   } catch (err) {
     console.error('[theme-generator] elementor/from-url error:', err);
@@ -470,12 +480,15 @@ router.post('/elementor/from-image', async (req, res) => {
       };
     }
 
+    const confidence = scoreDNA(designDNA);
+
     res.json({
       success: true,
       siteName,
       designDNA,
       pages: elementorPages,
-      pageCount: Object.keys(elementorPages).length
+      pageCount: Object.keys(elementorPages).length,
+      confidence
     });
   } catch (err) {
     console.error('[theme-generator] elementor/from-image error:', err);
@@ -508,11 +521,14 @@ router.post('/elementor/from-dna', async (req, res) => {
       };
     }
 
+    const confidence = scoreDNA(designDNA);
+
     res.json({
       success: true,
       siteName,
       pages: elementorPages,
-      pageCount: Object.keys(elementorPages).length
+      pageCount: Object.keys(elementorPages).length,
+      confidence
     });
   } catch (err) {
     console.error('[theme-generator] elementor/from-dna error:', err);
