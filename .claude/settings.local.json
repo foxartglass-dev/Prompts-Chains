@@ -31,7 +31,8 @@
       "WebFetch(domain:star-history.com)",
       "WebFetch(domain:api.npmjs.org)",
       "WebFetch(domain:api.github.com)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(node server/services/astro-theme-generator/test-pipeline.js)"
     ],
     "deny": [],
     "ask": []
