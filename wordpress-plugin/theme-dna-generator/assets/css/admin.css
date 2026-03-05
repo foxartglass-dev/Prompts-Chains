@@ -1,0 +1,264 @@
+/* Theme DNA Generator - Admin Styles */
+
+.theme-dna-wrap {
+    max-width: 1100px;
+    margin: 20px auto;
+}
+
+.theme-dna-header {
+    text-align: center;
+    padding: 30px 0 10px;
+}
+
+.theme-dna-header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    color: #1e1e1e;
+    margin-bottom: 8px;
+}
+
+.theme-dna-tagline {
+    font-size: 16px;
+    color: #757575;
+}
+
+/* Cards */
+.theme-dna-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+/* License */
+.theme-dna-license-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.tier-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tier-free { background: #f0f0f0; color: #666; }
+.tier-pro { background: #dbeafe; color: #1d4ed8; }
+.tier-agency { background: #fef3c7; color: #92400e; }
+
+.tier-info {
+    color: #757575;
+    font-size: 13px;
+    margin-left: 8px;
+}
+
+.theme-dna-license-input {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.theme-dna-license-input input {
+    width: 280px;
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+
+/* URL Input */
+.theme-dna-url-input {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-top: 16px;
+}
+
+.theme-dna-url-input input {
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    transition: border-color 0.2s;
+}
+
+.theme-dna-url-input input:focus {
+    border-color: #2563eb;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.theme-dna-url-input .button-hero {
+    padding: 10px 32px !important;
+    font-size: 15px !important;
+    border-radius: 10px !important;
+    height: auto !important;
+    line-height: 1.5 !important;
+}
+
+/* Progress */
+.theme-dna-progress {
+    margin-top: 24px;
+    text-align: center;
+}
+
+.progress-bar-wrap {
+    width: 100%;
+    height: 8px;
+    background: #f0f0f0;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #2563eb, #7c3aed);
+    border-radius: 8px;
+    transition: width 0.5s ease;
+}
+
+.progress-status {
+    font-size: 15px;
+    color: #1e1e1e;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.progress-timer {
+    font-size: 24px;
+    font-weight: 700;
+    color: #2563eb;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Results */
+.theme-dna-results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.theme-dna-results-header h2 {
+    margin: 0;
+}
+
+/* Design DNA Preview */
+.theme-dna-preview {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+    padding: 20px;
+    background: #fafafa;
+    border-radius: 10px;
+}
+
+.dna-color-swatch {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    border: 2px solid rgba(0,0,0,0.08);
+    position: relative;
+    cursor: pointer;
+}
+
+.dna-color-swatch:hover::after {
+    content: attr(data-label);
+    position: absolute;
+    bottom: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    white-space: nowrap;
+    color: #666;
+}
+
+.dna-font-preview {
+    padding: 12px 20px;
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+.dna-font-name {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1e1e1e;
+}
+
+.dna-font-label {
+    font-size: 11px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Pages Grid */
+.theme-dna-pages-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.theme-dna-page-card {
+    background: #fafafa;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.theme-dna-page-card:hover {
+    border-color: #2563eb;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.1);
+}
+
+.theme-dna-page-card h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    color: #1e1e1e;
+}
+
+.theme-dna-page-card .page-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.theme-dna-page-card .button {
+    margin-top: 12px;
+}
+
+/* Generating animation */
+.theme-dna-generating .button-hero {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+/* Responsive */
+@media (max-width: 782px) {
+    .theme-dna-pages-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .theme-dna-license-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .theme-dna-license-input {
+        flex-wrap: wrap;
+    }
+}
