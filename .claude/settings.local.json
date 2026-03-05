@@ -30,7 +30,8 @@
       "WebFetch(domain:trends.google.com)",
       "WebFetch(domain:star-history.com)",
       "WebFetch(domain:api.npmjs.org)",
-      "WebFetch(domain:api.github.com)"
+      "WebFetch(domain:api.github.com)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
