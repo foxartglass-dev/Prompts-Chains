@@ -1,0 +1,230 @@
+---
+import '../styles/bridgevoice-reset.css';
+import '../styles/barbershop-theme.css';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+    <title>Lumberjack Barberhouse</title>
+    <style>
+      .hero {
+        min-height: 90vh;
+        display: flex;
+        align-items: flex-end;
+        background: linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(15,15,15,0.95)),
+                    linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%);
+        padding: var(--space-2xl);
+        position: relative;
+      }
+      .top-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: var(--color-brand);
+        color: white;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .nav-link {
+        color: var(--color-text-secondary);
+        text-decoration: none;
+        font-size: var(--text-small);
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        font-weight: 500;
+        transition: 0.2s;
+        font-family: 'Inter', sans-serif;
+      }
+      .nav-link:hover { color: var(--color-text-primary); }
+      .section-title {
+        text-transform: uppercase;
+        letter-spacing: 3px;
+      }
+      .service-card {
+        border-bottom: 1px solid var(--color-border);
+        padding: var(--space-lg) 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .cta-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-sm);
+        background: var(--color-brand);
+        color: white;
+        padding: var(--space-sm) var(--space-xl);
+        font-family: var(--font-sans);
+        font-weight: 700;
+        font-size: var(--text-body);
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        border: none;
+        cursor: pointer;
+        transition: 0.2s;
+      }
+      .cta-btn:hover { background: var(--color-brand-dark); }
+    </style>
+  </head>
+  <body>
+
+    <!-- Top Bar -->
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-sm) var(--space-xl); border-bottom: 1px solid var(--color-border-subtle); position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(15,15,15,0.9); backdrop-filter: blur(10px);">
+      <div style="display: flex; align-items: center; gap: var(--space-md);">
+        <span style="font-size: var(--text-h2); font-weight: 700; text-transform: uppercase; letter-spacing: 3px;">Lumberjack</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: var(--space-lg);">
+        <span style="color: var(--color-brand); font-size: var(--text-small); font-family: 'Inter', sans-serif;">📍 Choose Location</span>
+        <span style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">📞 +38 067 333 00 71</span>
+      </div>
+    </div>
+
+    <!-- Hero -->
+    <section class="hero">
+      <!-- Top badges -->
+      <div style="position: absolute; top: 80px; left: var(--space-xl); display: flex; flex-direction: column; gap: var(--space-xs);">
+        <div class="top-badge">🏆 TOP #1 — Barber 2024</div>
+        <div class="top-badge">🏆 TOP #1 — Best Service</div>
+        <div class="top-badge">🏆 TOP #1 — Atmosphere</div>
+      </div>
+
+      <div style="max-width: 700px;">
+        <div style="font-size: var(--text-small); color: var(--color-text-tertiary); margin-bottom: var(--space-sm); font-family: 'Inter', sans-serif;">
+          18 locations in Kyiv
+        </div>
+        <h1 style="font-size: var(--text-display); line-height: 1.05; margin-bottom: var(--space-md);">
+          Lumberjack <span style="color: var(--color-brand);">Barberhouse</span><br/>
+          — style starts here
+        </h1>
+        <p style="color: var(--color-text-secondary); font-size: var(--text-body); margin-bottom: var(--space-xl); max-width: 500px; font-family: 'Inter', sans-serif;">
+          Your favorite haircuts, premium beard care, legendary atmosphere. Men's territory.
+        </p>
+
+        <!-- Nav Links -->
+        <div style="display: flex; gap: var(--space-xl); margin-bottom: var(--space-xl);">
+          <a href="#" class="nav-link">About</a>
+          <a href="#" class="nav-link">Reviews</a>
+          <a href="#" class="nav-link">History</a>
+          <a href="#" class="nav-link" style="color: var(--color-brand);">Services</a>
+          <a href="#" class="nav-link">Partners</a>
+          <a href="#" class="nav-link">Contact</a>
+        </div>
+
+        <button class="cta-btn">
+          ▶ Book Now
+        </button>
+      </div>
+    </section>
+
+    <!-- Services Section -->
+    <section style="padding: var(--space-2xl) var(--space-xl); max-width: 1000px; margin: 0 auto;">
+      <h2 class="section-title" style="font-size: var(--text-h1); margin-bottom: var(--space-2xl); text-align: center;">
+        Our Services
+      </h2>
+
+      <div class="service-card">
+        <div>
+          <h3 style="margin-bottom: 4px;">Classic Haircut</h3>
+          <p style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">Precision cut with hot towel finish</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: var(--space-lg);">
+          <span style="font-size: var(--text-h2); font-weight: 700;">$35</span>
+          <span style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">45 min</span>
+        </div>
+      </div>
+
+      <div class="service-card">
+        <div>
+          <h3 style="margin-bottom: 4px;">Beard Trim & Shape</h3>
+          <p style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">Sculpted lines with straight razor finish</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: var(--space-lg);">
+          <span style="font-size: var(--text-h2); font-weight: 700;">$25</span>
+          <span style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">30 min</span>
+        </div>
+      </div>
+
+      <div class="service-card">
+        <div>
+          <h3 style="margin-bottom: 4px;">Full Service</h3>
+          <p style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">Haircut + beard + hot towel + styling</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: var(--space-lg);">
+          <span style="font-size: var(--text-h2); font-weight: 700;">$55</span>
+          <span style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">75 min</span>
+        </div>
+      </div>
+
+      <div class="service-card">
+        <div>
+          <h3 style="margin-bottom: 4px;">Royal Shave</h3>
+          <p style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">Straight razor shave with premium products</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: var(--space-lg);">
+          <span style="font-size: var(--text-h2); font-weight: 700;">$40</span>
+          <span style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">45 min</span>
+        </div>
+      </div>
+
+      <div class="service-card" style="border-bottom: none;">
+        <div>
+          <h3 style="margin-bottom: 4px;">Kid's Cut</h3>
+          <p style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">For young gentlemen under 12</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: var(--space-lg);">
+          <span style="font-size: var(--text-h2); font-weight: 700;">$20</span>
+          <span style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">30 min</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Locations Grid -->
+    <section style="padding: var(--space-2xl) var(--space-xl); background: var(--color-surface-base);">
+      <div style="max-width: 1000px; margin: 0 auto;">
+        <h2 class="section-title" style="font-size: var(--text-h1); margin-bottom: var(--space-2xl); text-align: center;">
+          Locations
+        </h2>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-md);">
+          <div class="card" style="padding: var(--space-lg);">
+            <div style="color: var(--color-brand); font-size: var(--text-micro); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: var(--space-xs); font-family: 'Inter', sans-serif;">Downtown</div>
+            <h3 style="margin-bottom: var(--space-xs);">Khreshchatyk 22</h3>
+            <p style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">Mon-Sun: 9:00 — 21:00</p>
+          </div>
+          <div class="card" style="padding: var(--space-lg);">
+            <div style="color: var(--color-brand); font-size: var(--text-micro); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: var(--space-xs); font-family: 'Inter', sans-serif;">Podil</div>
+            <h3 style="margin-bottom: var(--space-xs);">Sagaidachnoho 10</h3>
+            <p style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">Mon-Sun: 10:00 — 22:00</p>
+          </div>
+          <div class="card" style="padding: var(--space-lg);">
+            <div style="color: var(--color-brand); font-size: var(--text-micro); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: var(--space-xs); font-family: 'Inter', sans-serif;">Pechersk</div>
+            <h3 style="margin-bottom: var(--space-xs);">Baseina 5A</h3>
+            <p style="color: var(--color-text-tertiary); font-size: var(--text-small); font-family: 'Inter', sans-serif;">Mon-Sat: 9:00 — 20:00</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section style="padding: var(--space-2xl) var(--space-xl); text-align: center;">
+      <h2 class="section-title" style="font-size: var(--text-h1); margin-bottom: var(--space-md);">
+        Book Your <span style="color: var(--color-brand);">Appointment</span>
+      </h2>
+      <p style="color: var(--color-text-secondary); margin-bottom: var(--space-xl); font-family: 'Inter', sans-serif;">
+        Walk-ins welcome. Reservations recommended.
+      </p>
+      <button class="cta-btn" style="font-size: var(--text-h3);">
+        ▶ Book Now
+      </button>
+    </section>
+
+    <footer style="text-align: center; padding: var(--space-lg); color: var(--color-text-tertiary); font-size: var(--text-micro); border-top: 1px solid var(--color-border-subtle); font-family: 'Inter', sans-serif;">
+      Generated by Style Set — Screenshot to Astro Theme in seconds.
+    </footer>
+  </body>
+</html>
