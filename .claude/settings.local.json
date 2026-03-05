@@ -16,7 +16,8 @@
       "Bash(node run-schema.cjs:*)",
       "Bash(timeout:*)",
       "Bash(git add:*)",
-      "Bash(git push -u origin claude/explain-codebase-mm30emi7o66xbpke-F0QtL)"
+      "Bash(git push -u origin claude/explain-codebase-mm30emi7o66xbpke-F0QtL)",
+      "WebFetch(domain:docs.astro.build)"
     ],
     "deny": [],
     "ask": []
