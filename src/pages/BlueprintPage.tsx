@@ -4912,6 +4912,70 @@ const ChangelogDiagram: React.FC = () => (
           </div>
         </div>
 
+        {/* Mar 5 - SaaS Boilerplate Research & Meekin App Stack Decision */}
+        <div className="border-l-4 border-green-500 pl-4">
+          <div className="text-sm text-green-400 font-semibold">Mar 5, 2026 - SaaS Boilerplate Research & Meekin App Stack Decision (Research Session)</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">
+            Used GitHub Search API (unauthenticated, no key needed) to research open-source SaaS boilerplates by stars.
+            Evaluated 30+ repos across Firebase and Supabase ecosystems. Final stack decision made for the Meekin app-builder tool.
+            No code changes — pure research and decision-making.
+          </p>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-green-400 mb-2">FINAL STACK DECISION</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- <strong>Mobile boilerplate:</strong> ApparenceKit (digisurfsome/apparence-kit-firebase) — 233 Dart files, 7 modules (auth, onboarding, notifications, subscriptions, settings, feedbacks, home). Already has Supabase cursor rules built in.</li>
+              <li>- <strong>Web boilerplate:</strong> DevToDollars mvp-boilerplate Next.js portion (963 stars) — React 19, Next.js 16, Tailwind v4, Shadcn UI (20 components), Supabase SSR, Stripe checkout/portal, PostHog analytics, 11 landing page components</li>
+              <li>- <strong>Shared backend:</strong> Supabase (database + edge functions + auth). Stripe webhooks live in Supabase Edge Functions so both Flutter and Next.js get payment events from same source</li>
+              <li>- <strong>Standardization layer:</strong> Mentor's 1,500-line platform-agnostic build prompt (React + TypeScript + Tailwind + service layer pattern)</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-brand-cyan mb-2">KEY FINDINGS</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- <strong>Firebase SaaS boilerplates are sparse:</strong> Highest is 127 stars (venefish). Supabase ecosystem dominates open-source SaaS starters</li>
+              <li>- <strong>ApparenceKit vs DevToDollars Flutter:</strong> 233 files vs 16 files — not even close. ApparenceKit was built by a French dev agency for real client work</li>
+              <li>- <strong>ApparenceKit CLI:</strong> Now supports Supabase as main DB + Firebase just for iOS push notifications. Owner will regenerate via CLI with Supabase selected</li>
+              <li>- <strong>Shadcn UI is a must-have:</strong> Pre-built accessible components, modern interactions, installs via CLI on top of Tailwind</li>
+              <li>- <strong>Rust vs Node.js:</strong> Rust replaces Node.js (backend runtime), NOT Next.js (framework). 10-40x faster, smaller binaries. But Rust SaaS ecosystem not ready yet — future play</li>
+              <li>- <strong>Next.js runs ON Node.js:</strong> They are different layers, not alternatives. Next.js = framework, Node.js = runtime engine underneath</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-orange-400 mb-2">ARCHITECTURE: Standardized Boilerplate Strategy</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- <strong>Meekin tool offerings:</strong> Web-only (DevToDollars Next.js), Mobile-only (ApparenceKit Flutter), Combined (both sharing same Supabase)</li>
+              <li>- <strong>All three use identical Supabase backend</strong> — same edge functions, same auth, same Stripe webhook handling</li>
+              <li>- <strong>Specialist agent strategy:</strong> Million-token 4.6 models as specialists (e.g., Stripe-only agent). Same architecture across all apps = instant context for debugging</li>
+              <li>- <strong>GitHub API search tool idea:</strong> Build a reusable tool with criteria filters (stars, database, UI library, license) for future boilerplate research</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-purple-400 mb-2">REPOS BOOKMARKED</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- <strong>devtodollars/mvp-boilerplate</strong> (963 stars) — Flutter + Next.js + Supabase + Stripe monorepo. Has CLAUDE.md + specialized agents</li>
+              <li>- <strong>KolbySisk/next-supabase-stripe-starter</strong> (752 stars) — Better architecture (feature-based controllers), Shadcn, React Email + Resend</li>
+              <li>- <strong>antoineross/Hikari</strong> (375 stars) — Next.js + Supabase + Stripe + Shadcn + tRPC + Zod + testing + docs/blog MDX</li>
+              <li>- <strong>wasp-lang/open-saas</strong> (13.5k stars) — Most popular but uses Wasp framework (vendor lock-in, conflicts with mentor's prompt patterns)</li>
+              <li>- <strong>digisurfsome/apparence-kit-firebase</strong> — Owner's Flutter boilerplate. 233 Dart files, Riverpod + Freezed + GoRouter, 7 feature modules</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-yellow-400 mb-2">NEXT STEPS</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- Owner regenerates ApparenceKit via CLI with Supabase as main DB (Firebase for iOS notifications only)</li>
+              <li>- Clone DevToDollars Next.js portion as the web boilerplate</li>
+              <li>- Wire both to same Supabase project (shared types via supabase gen types)</li>
+              <li>- Layer mentor's build prompt on top for architecture standardization</li>
+              <li>- Future: Build GitHub API search tool with criteria filters for ongoing boilerplate research</li>
+            </ul>
+          </div>
+        </div>
+
         {/* Mar 5 - Strategic Architecture Review & Rebuild Planning */}
         <div className="border-l-4 border-purple-500 pl-4">
           <div className="text-sm text-purple-400 font-semibold">Mar 5, 2026 - Strategic Architecture Review & Rebuild Planning (Strategy Session)</div>
