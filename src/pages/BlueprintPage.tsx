@@ -4829,6 +4829,97 @@ const ChangelogDiagram: React.FC = () => (
       <p className="text-gray-400">Searchable history of features and fixes</p>
     </div>
 
+    {/* March 2026 */}
+    <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
+      <h3 className="text-lg font-bold text-brand-gold mb-4">March 2026</h3>
+
+      <div className="space-y-4">
+        {/* Mar 5 - Strategic Architecture Review & Rebuild Planning */}
+        <div className="border-l-4 border-purple-500 pl-4">
+          <div className="text-sm text-purple-400 font-semibold">Mar 5, 2026 - Strategic Architecture Review & Rebuild Planning (Strategy Session)</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">
+            Owner strategy session: Evaluated current PromptFlow state, compared against Caleb O'Dowd's SEO pipeline tooling,
+            and mapped out a comprehensive rebuild strategy. No code changes — pure planning and documentation.
+          </p>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-brand-cyan mb-2">KEY DECISION: Rebuild vs. Patch</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- Current app works but has accumulated technical debt and frustration</li>
+              <li>- Decision: Continue using current app for paying clients while studying superior patterns</li>
+              <li>- Rebuild will be informed by reverse-engineering best-in-class tools (Caleb's pipeline, others)</li>
+              <li>- Use browser-based agent to analyze competitor tools, extract patterns, then rebuild</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-orange-400 mb-2">COMPETITOR ANALYSIS: Caleb O'Dowd's SEO Pipeline</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- <strong>8-pass humanization pipeline</strong> — each pass targets a different AI detection vector (not just one "humanize" prompt)</li>
+              <li>- <strong>Perplexity-style deep research</strong> integrated into content generation</li>
+              <li>- <strong>WordPress automation</strong> with Elementor (similar to ours but more polished UX)</li>
+              <li>- <strong>Key insight:</strong> The humanization system alone is a standalone product. It's a universal text quality layer for any app</li>
+              <li>- <strong>Key insight:</strong> "Humanize AI text" conversation went quiet because people like Caleb actually solved it with engineering, not prompting tricks</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-green-400 mb-2">MODULAR EXTRACTION: Each Subsystem is a Standalone App</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>1. <strong>Image Generation Loop</strong> — prompt, generate, judge, refine prompts, regenerate. Self-improving image quality. Freestanding product.</li>
+              <li>2. <strong>Text Humanization Pipeline</strong> — multi-pass detection evasion. Universal content layer for any writing app.</li>
+              <li>3. <strong>WordPress Controller</strong> — programmatic page creation, Elementor integration, SEO plugin support. Reusable publishing engine.</li>
+              <li>4. <strong>Prompt Chaining Engine</strong> — sequential AI calls building on each other. The orchestration backbone.</li>
+              <li>5. <strong>SEO Content Factory</strong> — the full pipeline combining all above. Still works great for local SEO.</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-blue-400 mb-2">SELF-HEALING CODE LOOP (Observed Pattern)</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- Agent reads errors, fixes code, runs it, finds more errors, loops until clean</li>
+              <li>- Same pattern applies to image generation: prompt → generate → judge → refine prompt → loop</li>
+              <li>- This is the core automation pattern to build into every future app</li>
+              <li>- Confirmed: fully achievable with current agent capabilities</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-yellow-400 mb-2">FUTURE APPS PIPELINE</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>1. <strong>Social Media Poster</strong> — native auto-posting to all platforms (X, Facebook, Instagram, etc.)</li>
+              <li>2. <strong>Automatic Video Maker</strong> — generate commercials for social media campaigns</li>
+              <li>3. <strong>Personal Perplexity / Deep Research Tool</strong> — kick findings into public-facing apps and texts</li>
+              <li>4. <strong>Audience Builder</strong> — platform-specific content strategy (headers, bios, post styles, audience targeting) across all social platforms</li>
+              <li>5. <strong>PromptFlow v2</strong> — clean rebuild with modular architecture, informed by all learnings</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-red-400 mb-2">IMMEDIATE ACTION ITEMS</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>1. Sign up for Caleb's tool (1-week free trial) — use it NOW for waiting clients while studying the architecture</li>
+              <li>2. Use browser agent to reverse-engineer competitor tools — extract patterns, not just features</li>
+              <li>3. Keep current PromptFlow running for active clients — don't abandon working revenue</li>
+              <li>4. Study mentor's social media audience-building framework — one-page system covering all platforms</li>
+              <li>5. Local SEO still works — Google hasn't changed the system yet, capitalize while it lasts</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-teal-400 mb-2">STRATEGIC PHILOSOPHY</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- "Use it now, dissect it later" — get value from tools immediately, reverse-engineer for your own apps on a parallel track</li>
+              <li>- Every text-generating app should run through a humanization pattern</li>
+              <li>- None of the subsystems have to stay in their current arrangement — they're all independent tech</li>
+              <li>- The build system + browser reverse-engineering capability = unlimited app creation pipeline</li>
+              <li>- Affiliate revenue is an untapped channel — first $1K commission already proven</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
     {/* February 2026 */}
     <div className="bg-slate-800/50 rounded-xl p-6 border border-brand-cyan/30">
       <h3 className="text-lg font-bold text-brand-gold mb-4">February 2026</h3>
