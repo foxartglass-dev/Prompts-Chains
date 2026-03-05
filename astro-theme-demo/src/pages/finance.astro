@@ -1,0 +1,283 @@
+---
+import '../styles/bridgevoice-reset.css';
+import '../styles/finance-theme.css';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <title>Finance Dashboard Theme</title>
+    <style>
+      .ring {
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        position: relative;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .ring::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 3px solid rgba(255,255,255,0.1);
+      }
+      .ring::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 3px solid transparent;
+        border-top-color: var(--color-brand);
+        border-right-color: var(--color-brand);
+      }
+      .ring.half::after { transform: rotate(45deg); }
+      .ring.quarter::after { transform: rotate(-45deg); border-right-color: transparent; }
+      .ring.three-quarter::after { transform: rotate(135deg); border-bottom-color: var(--color-brand); }
+      .gradient-card {
+        background: linear-gradient(135deg, #EC4899, #8B5CF6, #6366F1);
+        border-radius: var(--radius-base);
+        padding: var(--space-lg);
+        color: white;
+      }
+      .chart-line {
+        width: 100%; height: 150px;
+        background: linear-gradient(to bottom, rgba(236,72,153,0.1), transparent);
+        border-radius: 8px;
+        position: relative;
+        overflow: hidden;
+      }
+      .chart-line::after {
+        content: '';
+        position: absolute;
+        bottom: 40%;
+        left: 0; right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, #EC4899, #8B5CF6, #EC4899, #6366F1);
+        border-radius: 2px;
+      }
+      .transaction {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: var(--space-sm) 0;
+        border-bottom: 1px solid var(--color-border-subtle);
+      }
+      .transaction:last-child { border-bottom: none; }
+      .tx-icon {
+        width: 36px; height: 36px;
+        border-radius: 50%;
+        background: var(--color-surface-muted);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div style="display: grid; grid-template-columns: 60px 1fr 300px; min-height: 100vh; gap: 0;">
+
+      <!-- Sidebar -->
+      <aside style="background: var(--color-surface-base); border-right: 1px solid var(--color-border-subtle); display: flex; flex-direction: column; align-items: center; padding: var(--space-md) 0; gap: var(--space-md);">
+        <div style="width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #EC4899, #8B5CF6); display: flex; align-items: center; justify-content: center; font-size: 14px; margin-bottom: var(--space-md);">💎</div>
+        <div style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; background: var(--color-brand); opacity: 0.9;">📊</div>
+        <div style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer;">💳</div>
+        <div style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer;">📈</div>
+        <div style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer;">⚙️</div>
+      </aside>
+
+      <!-- Main -->
+      <main style="padding: var(--space-lg); overflow-y: auto;">
+
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+          <h2 style="font-size: var(--text-h1);">Dashboard</h2>
+          <div style="display: flex; align-items: center; gap: var(--space-md);">
+            <div class="card" style="padding: var(--space-xs) var(--space-md); border-radius: 999px; display: flex; align-items: center; gap: var(--space-sm);">
+              <span style="color: var(--color-text-tertiary);">🔍</span>
+              <span style="color: var(--color-text-tertiary); font-size: var(--text-small);">Search</span>
+            </div>
+            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #F59E0B, #EF4444); display: flex; align-items: center; justify-content: center;">👤</div>
+          </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-md); margin-bottom: var(--space-lg);">
+          <div class="card" style="display: flex; align-items: center; gap: var(--space-md);">
+            <div class="ring three-quarter">
+              <span style="font-size: var(--text-micro); color: var(--color-text-secondary);">47%</span>
+            </div>
+            <div>
+              <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Total Income</div>
+              <div style="font-size: var(--text-h2); font-weight: var(--font-display);">$1,977</div>
+            </div>
+          </div>
+          <div class="card" style="display: flex; align-items: center; gap: var(--space-md);">
+            <div class="ring quarter">
+              <span style="font-size: var(--text-micro); color: var(--color-text-secondary);">26%</span>
+            </div>
+            <div>
+              <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Total Expense</div>
+              <div style="font-size: var(--text-h2); font-weight: var(--font-display);">$7,629</div>
+            </div>
+          </div>
+          <div class="card" style="display: flex; align-items: center; gap: var(--space-md);">
+            <div class="ring half">
+              <span style="font-size: var(--text-micro); color: var(--color-text-secondary);">47%</span>
+            </div>
+            <div>
+              <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Total Bonus</div>
+              <div style="font-size: var(--text-h2); font-weight: var(--font-display);">$5,885</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart Card -->
+        <div class="card" style="margin-bottom: var(--space-lg);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+            <div style="display: flex; gap: var(--space-md); align-items: center;">
+              <span style="font-size: var(--text-small); display: flex; align-items: center; gap: 4px;">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background: #EC4899;"></span> Income
+              </span>
+              <span style="font-size: var(--text-small); display: flex; align-items: center; gap: 4px;">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background: #6366F1;"></span> Expense
+              </span>
+            </div>
+            <span style="font-size: var(--text-small); color: var(--color-text-secondary);">Last week ▾</span>
+          </div>
+          <div class="chart-line"></div>
+          <div style="display: flex; justify-content: space-between; margin-top: var(--space-sm);">
+            <span style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Mon</span>
+            <span style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Tue</span>
+            <span style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Wed</span>
+            <span style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Thu</span>
+            <span style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Fri</span>
+            <span style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Sat</span>
+            <span style="font-size: var(--text-micro); color: var(--color-text-tertiary);">Sun</span>
+          </div>
+        </div>
+
+        <!-- Investment / Deposit -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md);">
+          <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary); margin-bottom: 4px;">Investment</div>
+                <div style="font-size: var(--text-h1); font-weight: var(--font-display);">$12,000</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <span style="font-size: var(--text-small); color: #22C55E;">↗</span>
+                <span style="font-size: var(--text-small); color: #22C55E;">+5%</span>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary); margin-bottom: 4px;">Deposit</div>
+                <div style="font-size: var(--text-h1); font-weight: var(--font-display);">$19,600</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <span style="font-size: var(--text-small); color: #22C55E;">↗</span>
+                <span style="font-size: var(--text-small); color: #22C55E;">+14%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </main>
+
+      <!-- Right Panel -->
+      <aside style="background: var(--color-surface-base); border-left: 1px solid var(--color-border-subtle); padding: var(--space-lg); overflow-y: auto;">
+
+        <!-- Credit Card -->
+        <div style="margin-bottom: var(--space-lg);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+            <h3>My Cards</h3>
+            <span style="color: var(--color-text-tertiary); cursor: pointer;">⋮</span>
+          </div>
+          <div class="gradient-card">
+            <div style="font-size: var(--text-micro); opacity: 0.7; margin-bottom: var(--space-xs);">Balance</div>
+            <div style="font-size: var(--text-h1); font-weight: var(--font-display); margin-bottom: var(--space-lg);">$13,564</div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: var(--text-small); letter-spacing: 2px;">•••• •••• •••• 2376</span>
+              <span style="font-size: 20px;">💳</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transactions -->
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+            <h3>Recent Transactions</h3>
+            <span style="color: var(--color-text-tertiary); cursor: pointer;">⋮</span>
+          </div>
+
+          <div style="font-size: var(--text-micro); color: var(--color-text-tertiary); margin-bottom: var(--space-xs);">Today</div>
+
+          <div class="transaction">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <div class="tx-icon">🎨</div>
+              <div>
+                <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Dribbble</div>
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">11:50 AM</div>
+              </div>
+            </div>
+            <span style="font-size: var(--text-small); font-weight: var(--font-bold);">$10.67</span>
+          </div>
+
+          <div class="transaction">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <div class="tx-icon">🔥</div>
+              <div>
+                <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Tinder</div>
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">10:31 AM</div>
+              </div>
+            </div>
+            <span style="font-size: var(--text-small); font-weight: var(--font-bold);">$12.01</span>
+          </div>
+
+          <div class="transaction">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <div class="tx-icon">🛒</div>
+              <div>
+                <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Ikea</div>
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">9:15 AM</div>
+              </div>
+            </div>
+            <span style="font-size: var(--text-small); font-weight: var(--font-bold);">$112.43</span>
+          </div>
+
+          <div style="font-size: var(--text-micro); color: var(--color-text-tertiary); margin-top: var(--space-md); margin-bottom: var(--space-xs);">Yesterday</div>
+
+          <div class="transaction">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <div class="tx-icon" style="font-size: 14px;">N</div>
+              <div>
+                <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Netflix</div>
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">7:00 PM</div>
+              </div>
+            </div>
+            <span style="font-size: var(--text-small); font-weight: var(--font-bold);">$13.63</span>
+          </div>
+
+          <div class="transaction">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <div class="tx-icon">🏠</div>
+              <div>
+                <div style="font-size: var(--text-small); font-weight: var(--font-bold);">Airbnb</div>
+                <div style="font-size: var(--text-micro); color: var(--color-text-tertiary);">3:30 PM</div>
+              </div>
+            </div>
+            <span style="font-size: var(--text-small); font-weight: var(--font-bold);">$200.12</span>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+
+    <footer style="text-align: center; padding: var(--space-sm); color: var(--color-text-tertiary); font-size: var(--text-micro); border-top: 1px solid var(--color-border-subtle);">
+      Generated by Style Set — Screenshot to Astro Theme in seconds.
+    </footer>
+  </body>
+</html>
