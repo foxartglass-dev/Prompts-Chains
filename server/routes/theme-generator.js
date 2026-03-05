@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
+import { generateElementorTheme, toElementorData } from '../services/elementor-theme-generator.js';
 
 const router = express.Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -383,6 +384,138 @@ router.get('/themes/:name', async (req, res) => {
     });
   } catch (err) {
     console.error('[theme-generator] theme detail error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================
+// ELEMENTOR THEME ROUTES
+// ============================================
+
+/**
+ * POST /api/theme-generator/elementor/from-url
+ * Full pipeline: URL → screenshot → design DNA → Elementor pages for entire site
+ * Returns Elementor JSON for Home, About, Services, Contact, Blog, Landing Page
+ */
+router.post('/elementor/from-url', async (req, res) => {
+  try {
+    const { url, siteName, tagline, ctaText, ctaUrl } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: 'url is required' });
+    }
+
+    const resolvedSiteName = siteName || new URL(url).hostname.replace(/^www\./, '').split('.')[0];
+
+    console.log(`[theme-generator] Elementor pipeline for: ${url}`);
+    const screenshotBuffer = await screenshotUrl(url);
+    const base64Image = screenshotBuffer.toString('base64');
+
+    console.log(`[theme-generator] Extracting design DNA...`);
+    const designDNA = await extractDesignDNA(base64Image, 'image/png');
+
+    console.log(`[theme-generator] Generating Elementor pages...`);
+    const pages = generateElementorTheme(designDNA, { siteName: resolvedSiteName, tagline, ctaText, ctaUrl });
+
+    // Convert each page to Elementor-importable format
+    const elementorPages = {};
+    for (const [name, page] of Object.entries(pages)) {
+      elementorPages[name] = {
+        title: page.title,
+        elementorData: toElementorData(page),
+        raw: page
+      };
+    }
+
+    res.json({
+      success: true,
+      siteName: resolvedSiteName,
+      designDNA,
+      screenshot: `data:image/png;base64,${base64Image}`,
+      pages: elementorPages,
+      pageCount: Object.keys(elementorPages).length
+    });
+  } catch (err) {
+    console.error('[theme-generator] elementor/from-url error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/theme-generator/elementor/from-image
+ * Same as above but from an uploaded image instead of URL
+ */
+router.post('/elementor/from-image', async (req, res) => {
+  try {
+    const { image, mediaType = 'image/png', siteName = 'Brand', tagline, ctaText, ctaUrl } = req.body;
+
+    if (!image) {
+      return res.status(400).json({ error: 'image (base64) is required' });
+    }
+
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+
+    console.log(`[theme-generator] Elementor pipeline from uploaded image...`);
+    const designDNA = await extractDesignDNA(base64Data, mediaType);
+
+    console.log(`[theme-generator] Generating Elementor pages...`);
+    const pages = generateElementorTheme(designDNA, { siteName, tagline, ctaText, ctaUrl });
+
+    const elementorPages = {};
+    for (const [name, page] of Object.entries(pages)) {
+      elementorPages[name] = {
+        title: page.title,
+        elementorData: toElementorData(page),
+        raw: page
+      };
+    }
+
+    res.json({
+      success: true,
+      siteName,
+      designDNA,
+      pages: elementorPages,
+      pageCount: Object.keys(elementorPages).length
+    });
+  } catch (err) {
+    console.error('[theme-generator] elementor/from-image error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/theme-generator/elementor/from-dna
+ * Generate Elementor pages from existing design DNA (skip screenshot step)
+ * Useful for regenerating with tweaked DNA or for the StyleSet customizer
+ */
+router.post('/elementor/from-dna', async (req, res) => {
+  try {
+    const { designDNA, siteName = 'Brand', tagline, ctaText, ctaUrl } = req.body;
+
+    if (!designDNA) {
+      return res.status(400).json({ error: 'designDNA is required' });
+    }
+
+    console.log(`[theme-generator] Generating Elementor pages from DNA...`);
+    const pages = generateElementorTheme(designDNA, { siteName, tagline, ctaText, ctaUrl });
+
+    const elementorPages = {};
+    for (const [name, page] of Object.entries(pages)) {
+      elementorPages[name] = {
+        title: page.title,
+        elementorData: toElementorData(page),
+        raw: page
+      };
+    }
+
+    res.json({
+      success: true,
+      siteName,
+      pages: elementorPages,
+      pageCount: Object.keys(elementorPages).length
+    });
+  } catch (err) {
+    console.error('[theme-generator] elementor/from-dna error:', err);
     res.status(500).json({ error: err.message });
   }
 });
