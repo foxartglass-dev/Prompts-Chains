@@ -105,4 +105,36 @@ Capture ideas here without getting distracted. Review weekly to prioritize.
 
 ---
 
+### 2026-03-05 - Astro SEO Suite (Full Yoast/RankMath Replacement)
+**Category:** New App / Astro Integration
+**Description:** Full-featured SEO integration for Astro — the first real Yoast/RankMath equivalent in the ecosystem. Current top SEO plugin (astro-seo, 254K weekly downloads) only inserts basic meta tags. This would include: AI-generated meta titles/descriptions, content analysis, readability scoring, keyword density, rich snippets, redirects, local SEO schema, internal linking suggestions, bulk SEO audit, auto-sitemap with smart priority scoring, Google Business Profile integration. Already have most of this logic built in PromptFlow's server/routes/seo.js.
+**Priority:** High
+**Notes:** Competitive landscape is wide open — ALL existing Astro SEO plugins just insert meta tags. Nothing does content analysis, local SEO, or AI generation. 254K weekly downloads on the free basic plugin proves massive demand. Even 0.2% conversion at $10/mo = significant recurring revenue. Freemium model: basic meta tags free, AI features and local SEO pack paid.
+
+---
+
+### 2026-03-05 - Astro AI Image Integration (Self-Refining Image Generator)
+**Category:** New App / Astro Integration
+**Description:** First AI image generation integration for Astro. Three-tier approach: (1) Template placeholders for all image slots, (2) AI generates prompts per image based on page content, (3) Self-refining loop where AI generates, judges, refines prompts, and loops until quality threshold met. Calibration layer on top where a separate agent fine-tunes the "perfect" standard to be more human/natural. Zero competition — nothing like this exists in Astro or WordPress plugin ecosystems.
+**Priority:** High
+**Notes:** Already have the image pipeline architecture from PromptFlow (server/services/image-pipeline.js, server/routes/image-creation.js). Calibration system already built (server/routes/calibration.js). The self-refining loop pattern is proven. Even Caleb's tool uses DALL-E (oldest gen) — modern image models would produce far better results.
+
+---
+
+### 2026-03-05 - Astro Competitive Analysis (Market Research)
+**Category:** Research
+**Description:** Astro ecosystem state as of March 2026. Theme marketplace has ~12 featured premium themes ($99-$137 bundles), maybe a few hundred total. WordPress has 10,000+. SEO plugins are ALL basic meta tag inserters — no content analysis, no local SEO, no AI. Integration architecture is simple (name + hooks object, lifecycle-based). Integrations compile at build time so unlimited plugins don't slow the site (unlike WordPress 10-plugin limit). No visual builder equivalent to Elementor exists yet. Shadcn component library is popular for UI building blocks. Market is WordPress-circa-2010 stage — proven framework, growing adoption by major companies, but ecosystem is wide open.
+**Priority:** N/A (Reference)
+**Notes:** Key URLs: astro.build/themes (theme marketplace), astro.build/integrations (plugin directory). astro-seo has 254K weekly downloads (top SEO plugin). Integration API: export default { name, hooks } — dead simple to build. Themes use Tailwind CSS predominantly.
+
+---
+
+### 2026-03-05 - Freemium Funnel Strategy (Astro to Apps Pipeline)
+**Category:** Business Model
+**Description:** Use free Astro templates and basic integrations as top-of-funnel to build a user base. Freemium tiers: Free (basic templates, basic SEO meta tags) -> Paid (style system themes, AI content engine, advanced SEO) -> Premium (social media automation, video maker, full marketing suite). The Astro user base becomes the audience for app launches. Weekly product launches (new integrations, templates, app features) create ongoing engagement. Marketing apps (social poster, video commercial maker) serve as the glue between website tools and app ecosystem.
+**Priority:** High
+**Notes:** Elementor was a slow roll. This strategy comes in as "Elementor squared" from day one with AI capabilities, style system, SEO engine, and marketing tools all available at launch. Website market is orders of magnitude larger than app market — build the base there, cross-sell apps.
+
+---
+
 <!-- Add new ideas above this line -->
