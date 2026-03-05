@@ -145,11 +145,11 @@ Capture ideas here without getting distracted. Review weekly to prioritize.
 
 ---
 
-### 2026-03-05 - Anti-Salesman Pricing Strategy
+### 2026-03-05 - Anti-Salesman Pricing Strategy (Revised)
 **Category:** Business Model
-**Description:** Price products to feel like a no-brainer rather than extracting maximum. Instead of $97 (industry standard), go lower -- around $47-48 range for entry packages. Maybe $97 for full package, $147 for everything. Use non-standard numbers ($48 instead of $47) to avoid looking like every other marketer. Goal: top-of-funnel lead gen, not maximum extraction per sale. Build trust and goodwill. The real money is in the ecosystem of tools behind it, not the front door. Avoid "sales breath" -- don't use standard sales tactics, countdown timers, "normally $X now $Y" framing. Just offer genuinely good value and let the product speak.
+**Description:** Irresistible offer pricing. Launch at $19/month to create massive adoption and social proof velocity. The theme-from-image tool alone will blow minds for people who've been buying pre-made themes for 10-20 years -- they'll post about it organically on social media ("I've been doing this 15 years and look what I can do now"). $19 launch price for 1-2 weeks to get volume, feedback, and testimonials fast. Then raise to $27-29 range (stay in the 20s -- crossing into 30s triggers different psychology). Avoid standard marketing numbers ($47, $97). Unlimited themes included. Product launch framing is fine -- new company, early adopter pricing to build community. The real revenue is the backend ecosystem.
 **Priority:** High
-**Notes:** This is the email list / lead gen play. Pay bills with front-end sales, make real money on backend tools and upsells. The Caleb comparison is perfect: he didn't raise prices when the tool got 50x better -- that builds massive goodwill and loyalty. Be the person who over-delivers rather than over-charges. Customers who feel they got a deal become evangelists.
+**Notes:** Key insight: $19 is so low people buy even if they don't need it yet ("I'm going to eventually, let me lock this in"). Gets action flowing immediately -- feedback, testimonials, social proof, word of mouth. The theme-from-screenshot feature is genuinely something nobody has ever been able to do, which makes it naturally shareable. Concern to solve later: prevent people from just churning through unlimited theme generation and reselling. The $19-29 range keeps it impulse-buy territory. Stay away from sales breath -- no countdown timers, no "normally $X now $Y for no reason," no sleazy tactics. Just genuinely great value.
 
 ---
 
