@@ -24,7 +24,13 @@
       "WebFetch(domain:lexingtonthemes.com)",
       "WebFetch(domain:themefisher.com)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:www.google.com)"
+      "WebFetch(domain:www.google.com)",
+      "WebFetch(domain:ahrefs.com)",
+      "WebFetch(domain:keywordtool.io)",
+      "WebFetch(domain:trends.google.com)",
+      "WebFetch(domain:star-history.com)",
+      "WebFetch(domain:api.npmjs.org)",
+      "WebFetch(domain:api.github.com)"
     ],
     "deny": [],
     "ask": []
