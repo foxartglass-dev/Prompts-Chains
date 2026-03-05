@@ -81,4 +81,28 @@ Capture ideas here without getting distracted. Review weekly to prioritize.
 
 ---
 
+### 2026-03-05 - Astro Ecosystem Play (The "Elementor of Astro" Model)
+**Category:** New App / Business Model
+**Description:** Become the Elementor equivalent for Astro. Astro is free (like WordPress), so you sell the add-on layers: theme/style packages from the UI style software, SEO content automation, social media tools, etc. Tiered pricing model — free templates get people in, paid packages for style system, content engine, and automation. The UI style software already generates themes, stylesheets, and 40+ branded content pieces (logos, icons, business cards, social headers, ads). Extend that to generate Astro-compatible themes/templates. Massive market — websites dwarf apps in volume.
+**Priority:** High
+**Notes:** Astro uses "templates" (their word for themes). Style system would generate Astro-compatible templates. Content pieces already cover logos, icons, business cards, social headers, ads, and page graphics. Add SEO content engine as upgrade package. Add social media automation as another package. WordPress still supported for clients who want it. Custom fork of Astro possible since it's open source — can bake in proprietary integrations. Website market is orders of magnitude larger than app market.
+
+---
+
+### 2026-03-05 - Astro Theme Generator (Style System Integration)
+**Category:** Feature
+**Description:** Connect the existing UI style/theme software to Astro's template system via API. Pick a style in the UI tool, it generates a complete Astro template with that theme applied. One-click website setup with branded theme. Investigate how Astro templates are structured and what needs to be generated (layouts, components, CSS variables, etc.).
+**Priority:** High
+**Notes:** Need to research Astro template structure. Open source means we can customize the framework itself if needed. Could pre-build 2-3 base Astro templates, then the style system just swaps colors/fonts/spacing. Landing pages for own apps would use this same system.
+
+---
+
+### 2026-03-05 - Multi-Source Astro Content Aggregator
+**Category:** Feature
+**Description:** Pull content from multiple WordPress instances (or other sources) into a single Astro site. Use case: client with multiple business lines (e.g., residential + commercial + construction) runs separate content generation setups, all feeding into one public Astro site organized by category. Astro fetch() can hit multiple REST APIs in a single build.
+**Priority:** Medium
+**Notes:** Solves the multi-audience problem without requiring Caleb (or any content tool) to rebuild their architecture. Three private WordPress buckets, one public Astro site. Each WP instance gets content for one audience type. Astro pulls and organizes.
+
+---
+
 <!-- Add new ideas above this line -->
