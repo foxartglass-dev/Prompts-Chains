@@ -1,0 +1,214 @@
+---
+import DarkLayout from '../layouts/DarkLayout.astro';
+---
+
+<DarkLayout>
+  <main style="max-width: 1200px; margin: 0 auto; padding: var(--space-xl);">
+
+    <!-- Nav -->
+    <nav style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-md) 0; margin-bottom: var(--space-2xl);">
+      <div style="display: flex; align-items: center; gap: var(--space-sm);">
+        <span style="font-size: var(--text-h3); font-weight: var(--font-display); color: var(--color-text-primary);">
+          ⚡ BridgeVoice
+        </span>
+      </div>
+      <div style="display: flex; gap: var(--space-lg); align-items: center;">
+        <a href="#" style="color: var(--color-text-secondary); text-decoration: none; font-size: var(--text-small);">Products</a>
+        <a href="#" style="color: var(--color-text-secondary); text-decoration: none; font-size: var(--text-small);">Docs</a>
+        <a href="#" style="color: var(--color-text-secondary); text-decoration: none; font-size: var(--text-small);">Pricing</a>
+        <button class="btn btn-primary" style="padding: var(--space-xs) var(--space-md); font-size: var(--text-small);">
+          Get Started
+        </button>
+      </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section style="text-align: center; padding: var(--space-2xl) 0;">
+      <span class="badge" style="margin-bottom: var(--space-md); display: inline-block; border: 1px solid var(--color-border); background: var(--color-surface-muted);">
+        Agentic Coding Platform
+      </span>
+      <h1 style="font-size: var(--text-display); margin-bottom: var(--space-md); line-height: 1.1;">
+        Ship Software at the<br/>
+        <span style="color: var(--color-brand);">Speed of Thought.</span>
+      </h1>
+      <p style="font-size: var(--text-h3); color: var(--color-text-secondary); max-width: 600px; margin: 0 auto var(--space-lg);">
+        An agentic coding platform on AI, REACT, native tools and
+        integrations for the enterprise. Simple. Powerful.
+      </p>
+      <div style="display: flex; gap: var(--space-md); justify-content: center;">
+        <button class="btn btn-primary" style="padding: var(--space-sm) var(--space-xl); font-size: var(--text-body);">
+          Get Started
+        </button>
+        <button class="btn btn-secondary" style="padding: var(--space-sm) var(--space-xl); font-size: var(--text-body);">
+          Watch Demo
+        </button>
+      </div>
+    </section>
+
+    <!-- Terminal Preview Card -->
+    <section style="margin-bottom: var(--space-2xl);">
+      <div class="card" style="background: #000; border: 1px solid var(--color-border); padding: var(--space-xl); text-align: center;">
+        <div style="font-size: var(--text-h2); font-weight: var(--font-display); letter-spacing: 2px; margin-bottom: var(--space-md);">
+          THE <span style="color: var(--color-brand);">AGENTIC</span> ECOSYSTEM
+        </div>
+        <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, var(--color-brand), #3B82F6); margin: var(--space-lg) auto; display: flex; align-items: center; justify-content: center;">
+          <span style="font-size: 32px;">🌐</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats Bar -->
+    <section style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-lg); padding: var(--space-xl) 0; border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); margin-bottom: var(--space-2xl);">
+      <div style="text-align: center;">
+        <div style="font-size: var(--text-h1); font-weight: var(--font-display); color: var(--color-brand);">70k+</div>
+        <div style="color: var(--color-text-tertiary); font-size: var(--text-small);">Active Users</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: var(--text-h1); font-weight: var(--font-display); color: var(--color-brand);">5</div>
+        <div style="color: var(--color-text-tertiary); font-size: var(--text-small);">Core Products</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: var(--text-h1); font-weight: var(--font-display); color: var(--color-brand);">100%</div>
+        <div style="color: var(--color-text-tertiary); font-size: var(--text-small);">Agent Native</div>
+      </div>
+    </section>
+
+    <!-- Product Cards -->
+    <section style="margin-bottom: var(--space-2xl);">
+      <h2 style="margin-bottom: var(--space-lg);">Products</h2>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-lg);">
+
+        <div class="card">
+          <div style="color: var(--color-brand); font-size: var(--text-small); font-weight: var(--font-bold); margin-bottom: var(--space-xs);">BRIDGECODE</div>
+          <h3 style="margin-bottom: var(--space-sm);">Vibe Coding</h3>
+          <p style="color: var(--color-text-secondary); font-size: var(--text-small); margin-bottom: var(--space-md);">
+            Speak your intent. Ship the product. AI-native code generation from the terminal with full context awareness.
+          </p>
+          <a href="#" style="color: var(--color-brand); font-size: var(--text-small); text-decoration: none;">View Product →</a>
+        </div>
+
+        <div class="card">
+          <div style="color: var(--color-brand); font-size: var(--text-small); font-weight: var(--font-bold); margin-bottom: var(--space-xs);">BRIDGEMCP</div>
+          <h3 style="margin-bottom: var(--space-sm);">Shared Memory</h3>
+          <p style="color: var(--color-text-secondary); font-size: var(--text-small); margin-bottom: var(--space-md);">
+            Shared memory for every agent. Persistent context that follows your AI across sessions and tools.
+          </p>
+          <a href="#" style="color: var(--color-brand); font-size: var(--text-small); text-decoration: none;">View Product →</a>
+        </div>
+
+        <div class="card">
+          <div style="color: var(--color-brand); font-size: var(--text-small); font-weight: var(--font-bold); margin-bottom: var(--space-xs);">BRIDGEVOICE</div>
+          <h3 style="margin-bottom: var(--space-sm);">Voice Control</h3>
+          <p style="color: var(--color-text-secondary); font-size: var(--text-small); margin-bottom: var(--space-md);">
+            Speak your intent. Ship the product. Natural language interfaces for your entire development workflow.
+          </p>
+          <a href="#" style="color: var(--color-brand); font-size: var(--text-small); text-decoration: none;">View Product →</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Terminal Section -->
+    <section style="margin-bottom: var(--space-2xl);">
+      <div style="text-align: center; margin-bottom: var(--space-lg);">
+        <span class="badge" style="display: inline-block; border: 1px solid var(--color-border); margin-bottom: var(--space-sm);">BRIDGECODE</span>
+        <h2 style="font-size: var(--text-h1);">Vibe coding from the terminal.</h2>
+      </div>
+      <div class="card" style="background: #000; border: 1px solid var(--color-border); padding: 0; overflow: hidden;">
+        <!-- Terminal header -->
+        <div style="display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--color-border);">
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #EF4444;"></span>
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #F59E0B;"></span>
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: var(--color-brand);"></span>
+          <span style="color: var(--color-text-tertiary); font-size: var(--text-small); margin-left: var(--space-sm);">terminal</span>
+        </div>
+        <!-- Terminal body -->
+        <div style="padding: var(--space-lg); font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: var(--text-small); line-height: 1.8;">
+          <div><span style="color: var(--color-brand);">$</span> <span style="color: var(--color-text-secondary);">bridge init my-project</span></div>
+          <div style="color: var(--color-text-tertiary);">Creating project structure...</div>
+          <div style="color: var(--color-text-tertiary);">Installing dependencies...</div>
+          <div><span style="color: var(--color-brand);">✓</span> <span style="color: var(--color-text-primary);">Project ready.</span></div>
+          <div style="margin-top: var(--space-sm);"><span style="color: var(--color-brand);">$</span> <span style="color: var(--color-text-secondary);">bridge voice "add auth with OAuth2"</span></div>
+          <div style="color: var(--color-text-tertiary);">Analyzing codebase... 847 files indexed</div>
+          <div style="color: var(--color-text-tertiary);">Generating auth module...</div>
+          <div><span style="color: var(--color-brand);">✓</span> <span style="color: var(--color-text-primary);">Auth module created: src/auth/</span></div>
+          <div><span style="color: var(--color-brand);">✓</span> <span style="color: var(--color-text-primary);">OAuth2 provider configured</span></div>
+          <div><span style="color: var(--color-brand);">✓</span> <span style="color: var(--color-text-primary);">Routes updated. Tests passing.</span></div>
+          <div style="margin-top: var(--space-sm);"><span style="color: var(--color-brand);">$</span> <span style="color: var(--color-text-secondary); opacity: 0.5;">_</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Feature Grid -->
+    <section style="margin-bottom: var(--space-2xl);">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg);">
+        <div class="card">
+          <div style="color: var(--color-brand); font-size: 24px; margin-bottom: var(--space-sm);">⚡</div>
+          <h3 style="margin-bottom: var(--space-xs);">Instant Agent Deploy</h3>
+          <p style="color: var(--color-text-secondary); font-size: var(--text-small);">
+            Deploy AI agents to production with one command. No infrastructure management. Instant scaling.
+          </p>
+        </div>
+        <div class="card">
+          <div style="color: var(--color-brand); font-size: 24px; margin-bottom: var(--space-sm);">🔗</div>
+          <h3 style="margin-bottom: var(--space-xs);">Full Context Awareness</h3>
+          <p style="color: var(--color-text-secondary); font-size: var(--text-small);">
+            Every agent understands your full codebase. Shared memory across sessions means no more re-explaining.
+          </p>
+        </div>
+        <div class="card">
+          <div style="color: var(--color-brand); font-size: 24px; margin-bottom: var(--space-sm);">🛡️</div>
+          <h3 style="margin-bottom: var(--space-xs);">Enterprise Security</h3>
+          <p style="color: var(--color-text-secondary); font-size: var(--text-small);">
+            SOC2 compliant. Self-hosted options. Your code never leaves your infrastructure.
+          </p>
+        </div>
+        <div class="card">
+          <div style="color: var(--color-brand); font-size: 24px; margin-bottom: var(--space-sm);">🌊</div>
+          <h3 style="margin-bottom: var(--space-xs);">Vibe-First Interface</h3>
+          <p style="color: var(--color-text-secondary); font-size: var(--text-small);">
+            Describe what you want in natural language. The agents handle the implementation details.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Form Section -->
+    <section style="margin-bottom: var(--space-2xl);">
+      <div class="card" style="max-width: 500px; margin: 0 auto;">
+        <h2 style="margin-bottom: var(--space-sm); text-align: center;">Get Early Access</h2>
+        <p style="color: var(--color-text-secondary); font-size: var(--text-small); text-align: center; margin-bottom: var(--space-lg);">
+          Join 70k+ developers shipping faster with AI agents.
+        </p>
+        <div style="margin-bottom: var(--space-md);">
+          <label style="display: block; font-size: var(--text-small); font-weight: var(--font-bold); color: var(--color-text-secondary); margin-bottom: var(--space-xs);">Email</label>
+          <input class="input" type="email" placeholder="you@company.com" />
+        </div>
+        <div style="margin-bottom: var(--space-md);">
+          <label style="display: block; font-size: var(--text-small); font-weight: var(--font-bold); color: var(--color-text-secondary); margin-bottom: var(--space-xs);">Company</label>
+          <input class="input" type="text" placeholder="Acme Corp" />
+        </div>
+        <button class="btn btn-primary" style="width: 100%; padding: var(--space-sm) var(--space-xl);">Request Access</button>
+      </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section style="background: linear-gradient(135deg, rgba(34,197,94,0.1), rgba(59,130,246,0.05)); border: 1px solid var(--color-border); border-radius: var(--radius-base); padding: var(--space-2xl); text-align: center; margin-bottom: var(--space-2xl);">
+      <span class="badge" style="display: inline-block; border: 1px solid var(--color-brand); color: var(--color-brand); margin-bottom: var(--space-md);">BRIDGEVOICE</span>
+      <h2 style="font-size: var(--text-h1); margin-bottom: var(--space-sm);">
+        Speak your intent.<br/>Ship the product.
+      </h2>
+      <p style="color: var(--color-text-secondary); margin-bottom: var(--space-lg); max-width: 500px; margin-left: auto; margin-right: auto;">
+        The most powerful agentic platform for software teams. Start building today.
+      </p>
+      <button class="btn btn-primary" style="padding: var(--space-sm) var(--space-xl); font-size: var(--text-body);">
+        Get Started Free →
+      </button>
+    </section>
+
+    <!-- Footer -->
+    <footer style="text-align: center; padding: var(--space-xl) 0; color: var(--color-text-tertiary); font-size: var(--text-small); border-top: 1px solid var(--color-border);">
+      Generated by Style Set — Screenshot to Astro Theme in seconds.
+    </footer>
+
+  </main>
+</DarkLayout>

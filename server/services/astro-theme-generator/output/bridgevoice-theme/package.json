@@ -1,0 +1,29 @@
+{
+  "name": "@styleset/bridgevoice-dark-theme",
+  "version": "1.0.0",
+  "description": "Dark agentic dev tool theme — extracted from BridgeVoice screenshot",
+  "author": "Style Set (styleset.app)",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./components/*": "./src/components/*.astro",
+    "./styles/*": "./src/styles/*",
+    "./tailwind-preset": "./src/tailwind-preset.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "astro",
+    "astro-integration",
+    "withastro",
+    "theme",
+    "styleset"
+  ],
+  "peerDependencies": {
+    "astro": ">=4.0.0"
+  },
+  "homepage": "https://styleset.app",
+  "license": "MIT"
+}
