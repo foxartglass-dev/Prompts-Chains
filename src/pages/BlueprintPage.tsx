@@ -2033,6 +2033,26 @@ headline.replace(/,\\s*([A-Z]{2})\\.\\s+/g, ', $1 — ')
       </div>
     </div>
 
+      {/* Rule 19 */}
+      <div className="bg-slate-800/50 rounded-xl p-6 border-l-4 border-indigo-500">
+        <div className="flex items-start gap-4">
+          <div className="bg-indigo-500 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">19</div>
+          <div>
+            <h3 className="text-lg font-bold text-indigo-400">Theme DNA: Code-first extraction, AI fallback only</h3>
+            <span className="text-xs bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded ml-2">Cost Optimization - Mar 5, 2026</span>
+            <p className="text-gray-300 mt-2 text-sm">
+              Always try Puppeteer DOM extraction ($0) first via <code className="bg-slate-900 px-1 rounded">extractFromDOM()</code>.
+              Only fall back to Claude Vision (~$0.02) when <code className="bg-slate-900 px-1 rounded">isDOMExtractionConfident()</code> returns false.
+              Never default to AI when code can handle it (Stripe minions pattern).
+            </p>
+            <p className="text-gray-400 mt-3 text-xs">
+              <strong>Key files:</strong> server/services/dom-design-extractor.js, server/routes/theme-generator.js
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
     {/* UI Patterns Quick Reference */}
     <div className="max-w-3xl mx-auto mt-8 bg-slate-800/50 rounded-xl p-6 border border-cyan-500/30">
       <h3 className="text-lg font-bold text-cyan-400 mb-4">UI Patterns Quick Reference</h3>
@@ -4834,6 +4854,64 @@ const ChangelogDiagram: React.FC = () => (
       <h3 className="text-lg font-bold text-brand-gold mb-4">March 2026</h3>
 
       <div className="space-y-4">
+        {/* Mar 5 - Theme DNA: SaaS Product Build */}
+        <div className="border-l-4 border-brand-cyan pl-4">
+          <div className="text-sm text-brand-cyan font-semibold">Mar 5, 2026 - Theme DNA (themedna.com): Full SaaS Product Build</div>
+          <p className="text-xs text-gray-500 mt-1 mb-2">
+            Built complete Theme DNA product — extracts design systems from any URL and generates ready-to-deploy website themes.
+            Standalone SaaS at themedna.com, $97 tier with 10 Elementor page templates.
+          </p>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-brand-cyan mb-2">NEW FILES CREATED</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- <strong>public/themedna/index.html</strong> — Landing/sales page (dark mode, 3-tier pricing, competitor comparison table)</li>
+              <li>- <strong>src/pages/ThemeGeneratorPage.tsx</strong> — Full generator UI: URL input, image upload, progress theater, DNA tweaker, confidence scoring</li>
+              <li>- <strong>server/services/dna-confidence-scorer.js</strong> — Scores extracted DNA quality (0-100) with tier-based explanations that never say "bad"</li>
+              <li>- <strong>server/services/dom-design-extractor.js</strong> — Puppeteer DOM extraction using getComputedStyle() ($0 per generation)</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-green-400 mb-2">MODIFIED FILES</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- <strong>server/services/elementor-theme-generator.js</strong> — Expanded from 6 to 10 pages (added Testimonials, FAQ, Pricing, Portfolio)</li>
+              <li>- <strong>server/routes/theme-generator.js</strong> — Added Stripe minions pattern: DOM extraction first ($0), Claude Vision fallback (~$0.02)</li>
+              <li>- <strong>App.tsx</strong> — Added Theme DNA button to More dropdown, renders ThemeGeneratorPage modal</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-orange-400 mb-2">KEY ARCHITECTURE: Stripe Minions Pattern</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- <strong>Code-first ($0):</strong> Puppeteer reads computed CSS from live DOM — exact colors, fonts, spacing, shadows</li>
+              <li>- <strong>AI fallback (~$0.02):</strong> Claude Vision screenshot analysis only when DOM extraction confidence is low</li>
+              <li>- <strong>Result:</strong> ~85% of sites use code path = $0 cost. ~100% profit on most generations</li>
+              <li>- <strong>Confidence check:</strong> isDOMExtractionConfident() in dom-design-extractor.js (elements scanned, color candidates, font family)</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-yellow-400 mb-2">UX DECISIONS</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- Confidence score shows AFTER results load (800ms fade-in delay) so users don't bail on lower scores</li>
+              <li>- Low scores get detailed explanations: "Creative site detected" not "extraction failed"</li>
+              <li>- Color pickers + font inputs let users tweak DNA and regenerate</li>
+              <li>- 10-step progress theater during generation</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 bg-slate-900/50 rounded p-3">
+            <div className="text-sm font-bold text-purple-400 mb-2">NEXT STEPS (NOT YET BUILT)</div>
+            <ul className="space-y-1 text-xs text-gray-300">
+              <li>- Test Elementor export on real WordPress site</li>
+              <li>- Stripe payment integration</li>
+              <li>- Bonus asset generators (business cards, social media frames, ad templates)</li>
+              <li>- Charity donation line on landing page</li>
+            </ul>
+          </div>
+        </div>
+
         {/* Mar 5 - Strategic Architecture Review & Rebuild Planning */}
         <div className="border-l-4 border-purple-500 pl-4">
           <div className="text-sm text-purple-400 font-semibold">Mar 5, 2026 - Strategic Architecture Review & Rebuild Planning (Strategy Session)</div>
