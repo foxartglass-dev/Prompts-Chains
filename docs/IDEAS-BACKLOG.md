@@ -137,4 +137,20 @@ Capture ideas here without getting distracted. Review weekly to prioritize.
 
 ---
 
+### 2026-03-05 - Standalone Meta Tag/Description Pusher (Non-Competitive Play)
+**Category:** New App
+**Description:** Simple standalone tool that finds new pages on a WordPress site (via cron or manual button push) and auto-generates SEO meta titles and descriptions for them. Reads the article content, runs it through the existing prompt chain system, then pushes meta tags via whichever SEO plugin the site uses (Yoast, RankMath, etc.). Doesn't compete with Caleb's tool -- it complements it by handling the one thing his tool doesn't do (meta tags/descriptions). Can work with any content source, not just Caleb's.
+**Priority:** High
+**Notes:** Already have all the pieces: prompt chain for meta generation, SEO plugin push logic (server/routes/seo.js), WordPress page detection. This is the diplomatic play -- adds value without threatening anyone's territory. Could be offered as a simple add-on or standalone micro-tool.
+
+---
+
+### 2026-03-05 - Anti-Salesman Pricing Strategy
+**Category:** Business Model
+**Description:** Price products to feel like a no-brainer rather than extracting maximum. Instead of $97 (industry standard), go lower -- around $47-48 range for entry packages. Maybe $97 for full package, $147 for everything. Use non-standard numbers ($48 instead of $47) to avoid looking like every other marketer. Goal: top-of-funnel lead gen, not maximum extraction per sale. Build trust and goodwill. The real money is in the ecosystem of tools behind it, not the front door. Avoid "sales breath" -- don't use standard sales tactics, countdown timers, "normally $X now $Y" framing. Just offer genuinely good value and let the product speak.
+**Priority:** High
+**Notes:** This is the email list / lead gen play. Pay bills with front-end sales, make real money on backend tools and upsells. The Caleb comparison is perfect: he didn't raise prices when the tool got 50x better -- that builds massive goodwill and loyalty. Be the person who over-delivers rather than over-charges. Customers who feel they got a deal become evangelists.
+
+---
+
 <!-- Add new ideas above this line -->
