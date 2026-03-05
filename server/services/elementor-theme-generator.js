@@ -737,6 +737,355 @@ function buildLandingPage(dna, options = {}) {
   return wrapPage(sections, 'Landing Page');
 }
 
+function buildTestimonialsPage(dna, options = {}) {
+  const { siteName = 'Brand' } = options;
+  resetIds();
+  const brand = dna.colors?.brandDefault || '#2563eb';
+  const textPrimary = dna.colors?.textPrimary || '#111827';
+  const textSecondary = dna.colors?.textSecondary || '#6b7280';
+  const surfaceBase = dna.colors?.surfaceBase || '#ffffff';
+  const surfaceMuted = dna.colors?.surfaceMuted || '#f9fafb';
+  const fontFamily = dna.typography?.fontFamily || 'Inter';
+  const cardRadius = dna.components?.cards?.radius?.replace('px', '') || '12';
+
+  const testimonials = [
+    { name: 'Sarah M.', role: 'CEO, TechStart', quote: 'Working with this team transformed our online presence. Our traffic increased 300% in just 6 months. The ROI has been incredible.' },
+    { name: 'James K.', role: 'Founder, GreenLeaf Co', quote: 'The design quality is outstanding. They captured our brand perfectly and the site converts like crazy. Best investment we\'ve made.' },
+    { name: 'Maria L.', role: 'Marketing Director, Atlas Corp', quote: 'Professional, responsive, and incredibly talented. They delivered everything on time and the results speak for themselves.' },
+    { name: 'David R.', role: 'Owner, Craft & Co', quote: 'I was skeptical at first, but the results blew me away. Our online sales doubled within the first quarter of launching.' },
+    { name: 'Emily T.', role: 'VP Sales, Horizon Inc', quote: 'The best agency we\'ve ever worked with. They don\'t just build websites — they build growth engines for your business.' },
+    { name: 'Michael P.', role: 'CTO, DataFlow', quote: 'Technical excellence combined with beautiful design. They understood our complex requirements and delivered a flawless solution.' }
+  ];
+
+  const testimonialCards = testimonials.map(t => {
+    const stars = '<span style="color:#f59e0b; font-size:18px;">&#9733;&#9733;&#9733;&#9733;&#9733;</span>';
+    return {
+      title: t.name,
+      description: `${stars}<br><br><em>"${t.quote}"</em><br><br><strong>${t.role}</strong>`
+    };
+  });
+
+  const sections = [
+    buildNavSection(dna, { siteName }),
+
+    buildHeroSection(dna, {
+      title: 'What Our Clients Say',
+      subtitle: 'Real stories from real businesses. See why hundreds of companies trust us with their growth.',
+      layout: 'centered'
+    }),
+
+    // Stats bar
+    buildContainer([
+      buildContainer([
+        buildHeading('500+', 'h2', { align: 'center', color: brand, fontFamily, fontWeight: '700', fontSize: '42' }),
+        buildText('<p style="text-align:center;">Happy Clients</p>', { color: textSecondary, fontFamily })
+      ], { isInner: true, contentWidth: 'full', width: '25' }),
+      buildContainer([
+        buildHeading('4.9/5', 'h2', { align: 'center', color: brand, fontFamily, fontWeight: '700', fontSize: '42' }),
+        buildText('<p style="text-align:center;">Average Rating</p>', { color: textSecondary, fontFamily })
+      ], { isInner: true, contentWidth: 'full', width: '25' }),
+      buildContainer([
+        buildHeading('98%', 'h2', { align: 'center', color: brand, fontFamily, fontWeight: '700', fontSize: '42' }),
+        buildText('<p style="text-align:center;">Client Retention</p>', { color: textSecondary, fontFamily })
+      ], { isInner: true, contentWidth: 'full', width: '25' }),
+      buildContainer([
+        buildHeading('10+', 'h2', { align: 'center', color: brand, fontFamily, fontWeight: '700', fontSize: '42' }),
+        buildText('<p style="text-align:center;">Years of Excellence</p>', { color: textSecondary, fontFamily })
+      ], { isInner: true, contentWidth: 'full', width: '25' })
+    ], {
+      direction: 'row',
+      padding: { top: '50', right: '20', bottom: '50', left: '20' },
+      contentWidth: 'boxed',
+      backgroundColor: surfaceMuted,
+      alignItems: 'center'
+    }),
+
+    // Testimonials grid
+    buildSectionWithHeading(dna, 'Client Testimonials', 'Hear directly from the people we\'ve helped succeed.', [
+      buildCardGrid(dna, testimonialCards.slice(0, 3)),
+      buildSpacer(10),
+      buildCardGrid(dna, testimonialCards.slice(3, 6))
+    ]),
+
+    // CTA
+    buildContainer([
+      buildHeading('Ready to Be Our Next Success Story?', 'h2', { align: 'center', color: '#ffffff', fontFamily, fontWeight: '700', fontSize: '36' }),
+      buildText('<p style="text-align:center; color:rgba(255,255,255,0.9);">Join hundreds of businesses that have transformed their results.</p>'),
+      buildButton('Start Your Project', '#', { backgroundColor: '#ffffff', textColor: brand, borderRadius: '8', size: 'lg' })
+    ], {
+      padding: { top: '80', right: '20', bottom: '80', left: '20' },
+      gap: '20',
+      contentWidth: 'boxed',
+      backgroundColor: brand
+    }),
+
+    buildFooterSection(dna, { siteName })
+  ];
+
+  return wrapPage(sections, 'Testimonials');
+}
+
+function buildFaqPage(dna, options = {}) {
+  const { siteName = 'Brand' } = options;
+  resetIds();
+  const brand = dna.colors?.brandDefault || '#2563eb';
+  const textPrimary = dna.colors?.textPrimary || '#111827';
+  const textSecondary = dna.colors?.textSecondary || '#6b7280';
+  const surfaceBase = dna.colors?.surfaceBase || '#ffffff';
+  const fontFamily = dna.typography?.fontFamily || 'Inter';
+  const cardRadius = dna.components?.cards?.radius?.replace('px', '') || '12';
+
+  const faqs = [
+    { q: 'What services do you offer?', a: 'We provide a full range of digital services including web design, SEO optimization, digital marketing, app development, cloud solutions, and cybersecurity consulting.' },
+    { q: 'How long does a typical project take?', a: 'Project timelines vary based on scope and complexity. A standard website takes 4-6 weeks, while larger projects may take 2-3 months. We\'ll provide a detailed timeline during our initial consultation.' },
+    { q: 'What is your pricing structure?', a: 'We offer flexible pricing based on project requirements. We provide detailed proposals after understanding your needs. Contact us for a free quote tailored to your specific goals.' },
+    { q: 'Do you offer ongoing support?', a: 'Yes! We offer comprehensive maintenance and support packages. All projects include 30 days of post-launch support, with optional monthly retainer plans for ongoing assistance.' },
+    { q: 'Can you work with my existing website?', a: 'Absolutely. We regularly work with existing websites for redesigns, performance optimization, SEO improvements, and feature additions. We\'ll assess your current setup and recommend the best path forward.' },
+    { q: 'What makes you different from other agencies?', a: 'We combine data-driven strategy with creative excellence. Our track record speaks for itself — 500+ happy clients, 98% retention rate, and measurable results that impact your bottom line.' },
+    { q: 'Do you work with small businesses?', a: 'Yes! We work with businesses of all sizes, from startups to enterprises. We have packages and approaches tailored to different budgets and growth stages.' },
+    { q: 'What is your revision policy?', a: 'We include multiple rounds of revisions in every project to ensure you\'re completely satisfied. We believe in collaborative iteration until we get it exactly right.' }
+  ];
+
+  const faqCards = faqs.map(f => buildContainer([
+    buildHeading(f.q, 'h3', { color: textPrimary, fontFamily, fontWeight: '600', fontSize: '18' }),
+    buildText(`<p>${f.a}</p>`, { color: textSecondary, fontFamily })
+  ], {
+    isInner: true,
+    direction: 'column',
+    padding: { top: '25', right: '30', bottom: '25', left: '30' },
+    gap: '10',
+    contentWidth: 'full',
+    backgroundColor: surfaceBase,
+    borderRadius: cardRadius
+  }));
+
+  const sections = [
+    buildNavSection(dna, { siteName }),
+
+    buildHeroSection(dna, {
+      title: 'Frequently Asked Questions',
+      subtitle: 'Find answers to common questions about our services, process, and pricing.',
+      layout: 'centered'
+    }),
+
+    buildContainer(faqCards, {
+      direction: 'column',
+      padding: { top: '60', right: '20', bottom: '60', left: '20' },
+      gap: '16',
+      contentWidth: 'boxed',
+      boxedWidth: 800
+    }),
+
+    // Still have questions CTA
+    buildContainer([
+      buildHeading('Still Have Questions?', 'h2', { align: 'center', color: '#ffffff', fontFamily, fontWeight: '700', fontSize: '36' }),
+      buildText('<p style="text-align:center; color:rgba(255,255,255,0.9);">Our team is ready to help. Reach out and we\'ll get back to you within 24 hours.</p>'),
+      buildButton('Contact Us', '#', { backgroundColor: '#ffffff', textColor: brand, borderRadius: '8', size: 'lg' })
+    ], {
+      padding: { top: '80', right: '20', bottom: '80', left: '20' },
+      gap: '20',
+      contentWidth: 'boxed',
+      backgroundColor: brand
+    }),
+
+    buildFooterSection(dna, { siteName })
+  ];
+
+  return wrapPage(sections, 'FAQ');
+}
+
+function buildPricingPage(dna, options = {}) {
+  const { siteName = 'Brand' } = options;
+  resetIds();
+  const brand = dna.colors?.brandDefault || '#2563eb';
+  const textPrimary = dna.colors?.textPrimary || '#111827';
+  const textSecondary = dna.colors?.textSecondary || '#6b7280';
+  const surfaceBase = dna.colors?.surfaceBase || '#ffffff';
+  const surfaceMuted = dna.colors?.surfaceMuted || '#f9fafb';
+  const fontFamily = dna.typography?.fontFamily || 'Inter';
+  const cardRadius = dna.components?.cards?.radius?.replace('px', '') || '12';
+  const btnRadius = dna.components?.buttons?.radius?.replace('px', '') || '8';
+
+  const tiers = [
+    {
+      name: 'Starter',
+      price: '$499',
+      period: '/month',
+      description: 'Perfect for small businesses just getting started.',
+      features: ['5 Page Website', 'Basic SEO Setup', 'Mobile Responsive', 'Contact Form', '30 Days Support', 'Analytics Setup'],
+      highlighted: false
+    },
+    {
+      name: 'Professional',
+      price: '$999',
+      period: '/month',
+      description: 'For growing businesses that need more power.',
+      features: ['15 Page Website', 'Advanced SEO', 'Custom Design', 'Blog Setup', 'E-commerce Ready', '90 Days Support', 'Monthly Reports', 'Priority Support'],
+      highlighted: true
+    },
+    {
+      name: 'Enterprise',
+      price: '$2,499',
+      period: '/month',
+      description: 'Full-service solution for established businesses.',
+      features: ['Unlimited Pages', 'Full SEO Campaign', 'Custom Integrations', 'App Development', 'Dedicated Manager', 'Ongoing Support', 'Weekly Reports', 'SLA Guarantee', 'Custom Training'],
+      highlighted: false
+    }
+  ];
+
+  const tierCards = tiers.map(tier => {
+    const featureHtml = tier.features.map(f => `<p style="padding:8px 0; border-bottom:1px solid ${dna.colors?.borderSubtle || '#e5e7eb'};">&#10003; ${f}</p>`).join('');
+    const bg = tier.highlighted ? brand : surfaceBase;
+    const textColor = tier.highlighted ? '#ffffff' : textPrimary;
+    const descColor = tier.highlighted ? 'rgba(255,255,255,0.8)' : textSecondary;
+    const btnBg = tier.highlighted ? '#ffffff' : brand;
+    const btnText = tier.highlighted ? brand : '#ffffff';
+
+    return buildContainer([
+      tier.highlighted ? buildText('<p style="text-align:center; font-weight:700; text-transform:uppercase; letter-spacing:2px; font-size:12px; color:rgba(255,255,255,0.7);">Most Popular</p>') : buildSpacer(1),
+      buildHeading(tier.name, 'h3', { align: 'center', color: textColor, fontFamily, fontWeight: '600' }),
+      buildHeading(tier.price, 'h2', { align: 'center', color: textColor, fontFamily, fontWeight: '700', fontSize: '48' }),
+      buildText(`<p style="text-align:center;">${tier.period}</p>`, { color: descColor }),
+      buildText(`<p style="text-align:center;">${tier.description}</p>`, { color: descColor, fontFamily }),
+      buildDivider({ color: tier.highlighted ? 'rgba(255,255,255,0.2)' : (dna.colors?.borderSubtle || '#e5e7eb') }),
+      buildText(featureHtml, { color: tier.highlighted ? 'rgba(255,255,255,0.9)' : textSecondary, fontFamily }),
+      buildSpacer(10),
+      buildButton('Get Started', '#', { backgroundColor: btnBg, textColor: btnText, borderRadius: btnRadius, size: 'lg' })
+    ], {
+      isInner: true,
+      direction: 'column',
+      padding: { top: '40', right: '30', bottom: '40', left: '30' },
+      gap: '10',
+      contentWidth: 'full',
+      width: '33',
+      backgroundColor: bg,
+      borderRadius: cardRadius
+    });
+  });
+
+  const sections = [
+    buildNavSection(dna, { siteName }),
+
+    buildHeroSection(dna, {
+      title: 'Simple, Transparent Pricing',
+      subtitle: 'Choose the plan that fits your business. No hidden fees, no surprises.',
+      layout: 'centered'
+    }),
+
+    buildContainer(tierCards, {
+      direction: 'row',
+      padding: { top: '60', right: '20', bottom: '60', left: '20' },
+      gap: '24',
+      contentWidth: 'boxed',
+      alignItems: 'stretch'
+    }),
+
+    // FAQ mini section
+    buildSectionWithHeading(dna, 'Common Questions', 'Quick answers about our pricing.', [
+      buildCardGrid(dna, [
+        { icon: 'fas fa-credit-card', title: 'Flexible Payment', description: 'We accept all major credit cards and offer monthly or annual billing options.' },
+        { icon: 'fas fa-undo', title: 'Money-Back Guarantee', description: '30-day money-back guarantee on all plans. No questions asked.' },
+        { icon: 'fas fa-arrow-up', title: 'Easy Upgrades', description: 'Upgrade or downgrade your plan anytime. Changes take effect immediately.' }
+      ])
+    ], { backgroundColor: surfaceMuted }),
+
+    buildFooterSection(dna, { siteName })
+  ];
+
+  return wrapPage(sections, 'Pricing');
+}
+
+function buildPortfolioPage(dna, options = {}) {
+  const { siteName = 'Brand' } = options;
+  resetIds();
+  const brand = dna.colors?.brandDefault || '#2563eb';
+  const textPrimary = dna.colors?.textPrimary || '#111827';
+  const textSecondary = dna.colors?.textSecondary || '#6b7280';
+  const surfaceBase = dna.colors?.surfaceBase || '#ffffff';
+  const surfaceMuted = dna.colors?.surfaceMuted || '#f9fafb';
+  const fontFamily = dna.typography?.fontFamily || 'Inter';
+  const cardRadius = dna.components?.cards?.radius?.replace('px', '') || '12';
+
+  const projects = [
+    { title: 'E-Commerce Redesign', description: 'Complete overhaul of an online store resulting in 150% increase in conversions. Modern UI with streamlined checkout flow.', category: 'Web Design' },
+    { title: 'SaaS Dashboard', description: 'Data-rich analytics dashboard for a B2B SaaS platform. Real-time metrics, custom reports, and intuitive navigation.', category: 'App Development' },
+    { title: 'Brand Identity System', description: 'Full brand identity including logo, color system, typography, and brand guidelines for a fintech startup.', category: 'Branding' },
+    { title: 'SEO Campaign', description: 'Organic traffic grew from 5K to 50K monthly visitors in 8 months through targeted content strategy and technical SEO.', category: 'Digital Marketing' },
+    { title: 'Mobile App Launch', description: 'Cross-platform mobile app with 50K+ downloads in the first month. Featured on App Store\'s "New & Noteworthy".', category: 'App Development' },
+    { title: 'Corporate Website', description: 'Enterprise-grade website for a Fortune 500 company with multi-language support and advanced accessibility compliance.', category: 'Web Design' }
+  ];
+
+  const projectCards = projects.map(p => ({
+    title: p.title,
+    description: `<span style="display:inline-block; background:${brand}22; color:${brand}; padding:2px 10px; border-radius:20px; font-size:12px; margin-bottom:8px;">${p.category}</span><br>${p.description}`,
+    ctaText: 'View Case Study',
+    ctaUrl: '#'
+  }));
+
+  const sections = [
+    buildNavSection(dna, { siteName }),
+
+    buildHeroSection(dna, {
+      title: 'Our Work',
+      subtitle: 'A showcase of projects we\'re proud of. Each one tells a story of collaboration, innovation, and results.',
+      layout: 'centered'
+    }),
+
+    // Filter bar (visual placeholder)
+    buildContainer([
+      buildText(`<p style="text-align:center;"><span style="display:inline-block; background:${brand}; color:#fff; padding:8px 20px; border-radius:20px; margin:4px;">All</span> <span style="display:inline-block; background:${surfaceBase}; color:${textSecondary}; padding:8px 20px; border-radius:20px; margin:4px; border:1px solid ${dna.colors?.borderSubtle || '#e5e7eb'}">Web Design</span> <span style="display:inline-block; background:${surfaceBase}; color:${textSecondary}; padding:8px 20px; border-radius:20px; margin:4px; border:1px solid ${dna.colors?.borderSubtle || '#e5e7eb'}">App Development</span> <span style="display:inline-block; background:${surfaceBase}; color:${textSecondary}; padding:8px 20px; border-radius:20px; margin:4px; border:1px solid ${dna.colors?.borderSubtle || '#e5e7eb'}">Branding</span> <span style="display:inline-block; background:${surfaceBase}; color:${textSecondary}; padding:8px 20px; border-radius:20px; margin:4px; border:1px solid ${dna.colors?.borderSubtle || '#e5e7eb'}">Digital Marketing</span></p>`, { fontFamily })
+    ], {
+      padding: { top: '30', right: '20', bottom: '30', left: '20' },
+      contentWidth: 'boxed'
+    }),
+
+    // Projects grid
+    buildSectionWithHeading(dna, 'Featured Projects', 'Explore our latest work across different industries.', [
+      buildCardGrid(dna, projectCards.slice(0, 3)),
+      buildSpacer(10),
+      buildCardGrid(dna, projectCards.slice(3, 6))
+    ]),
+
+    // Results bar
+    buildContainer([
+      buildContainer([
+        buildHeading('150%', 'h2', { align: 'center', color: '#ffffff', fontFamily, fontWeight: '700', fontSize: '42' }),
+        buildText('<p style="text-align:center; color:rgba(255,255,255,0.8);">Avg. Conversion Increase</p>', { fontFamily })
+      ], { isInner: true, contentWidth: 'full', width: '33' }),
+      buildContainer([
+        buildHeading('50K+', 'h2', { align: 'center', color: '#ffffff', fontFamily, fontWeight: '700', fontSize: '42' }),
+        buildText('<p style="text-align:center; color:rgba(255,255,255,0.8);">App Downloads</p>', { fontFamily })
+      ], { isInner: true, contentWidth: 'full', width: '33' }),
+      buildContainer([
+        buildHeading('10x', 'h2', { align: 'center', color: '#ffffff', fontFamily, fontWeight: '700', fontSize: '42' }),
+        buildText('<p style="text-align:center; color:rgba(255,255,255,0.8);">Avg. Traffic Growth</p>', { fontFamily })
+      ], { isInner: true, contentWidth: 'full', width: '33' })
+    ], {
+      direction: 'row',
+      padding: { top: '60', right: '20', bottom: '60', left: '20' },
+      contentWidth: 'boxed',
+      backgroundColor: brand,
+      alignItems: 'center'
+    }),
+
+    // CTA
+    buildContainer([
+      buildHeading('Let\'s Create Something Amazing', 'h2', { align: 'center', color: textPrimary, fontFamily, fontWeight: '700', fontSize: '36' }),
+      buildText(`<p style="text-align:center;">Ready to see your business in our portfolio? Let's talk about your next project.</p>`, { color: textSecondary, fontFamily }),
+      buildButton('Start a Project', '#', { backgroundColor: brand, textColor: '#ffffff', borderRadius: '8', size: 'lg' })
+    ], {
+      padding: { top: '80', right: '20', bottom: '80', left: '20' },
+      gap: '20',
+      contentWidth: 'boxed',
+      backgroundColor: surfaceMuted
+    }),
+
+    buildFooterSection(dna, { siteName })
+  ];
+
+  return wrapPage(sections, 'Portfolio');
+}
+
 // ============================================
 // WRAPPER + EXPORTS
 // ============================================
@@ -773,7 +1122,11 @@ export function generateElementorTheme(designDNA, options = {}) {
     services: buildServicesPage(designDNA, shared),
     contact: buildContactPage(designDNA, shared),
     blog: buildBlogPage(designDNA, shared),
-    landing: buildLandingPage(designDNA, { ...shared, headline: tagline })
+    landing: buildLandingPage(designDNA, { ...shared, headline: tagline }),
+    testimonials: buildTestimonialsPage(designDNA, shared),
+    faq: buildFaqPage(designDNA, shared),
+    pricing: buildPricingPage(designDNA, shared),
+    portfolio: buildPortfolioPage(designDNA, shared)
   };
 }
 
