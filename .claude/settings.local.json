@@ -18,7 +18,8 @@
       "Bash(git add:*)",
       "Bash(git push -u origin claude/explain-codebase-mm30emi7o66xbpke-F0QtL)",
       "WebFetch(domain:docs.astro.build)",
-      "WebFetch(domain:astro.build)"
+      "WebFetch(domain:astro.build)",
+      "WebFetch(domain:www.npmjs.com)"
     ],
     "deny": [],
     "ask": []
